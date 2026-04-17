@@ -1,31 +1,20 @@
 # Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-.venv/
-venv/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
+**/.venv/
+**/__pycache__/
+*.pyc
+*.pyo
 
 # Node
-node_modules/
-dist/
-build/
-.next/
-.vite/
+**/node_modules/
+**/dist/
+*.tsbuildinfo
 
-# Env
+# Env files
 .env
-.env.local
-*.env.local
+.env.*
 
-# Editors / OS
+# macOS
 .DS_Store
-.idea/
-.vscode/
-*.swp
 
 # Logs
 *.log
-npm-debug.log*
