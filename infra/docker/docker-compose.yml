@@ -1,0 +1,31 @@
+services:
+  api:
+    build:
+      context: ../../apps/api
+      dockerfile: Dockerfile
+    container_name: chartnav-api
+    environment:
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - API_ENV=development
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../../apps/api:/app
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ../../apps/web
+      dockerfile: Dockerfile
+    container_name: chartnav-web
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    ports:
+      - "5173:5173"
+    volumes:
+      - ../../apps/web:/app
+      - /app/node_modules
+    depends_on:
+      - api
+    restart: unless-stopped
