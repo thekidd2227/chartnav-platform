@@ -196,6 +196,13 @@ surface, filters. Details in `17-e2e-and-release.md`. Command:
 - Audit log tab has an **Export CSV** button that fetches with the auth header and triggers a local download (must use fetch + blob — a raw `<a href>` can't send `X-User-Email`).
 - New minimal **Invite accept** screen (`apps/web/src/InviteAccept.tsx`) mounted at `/invite?invite=<token>` and `/accept`. On success stores the email into `localStorage.chartnav.devIdentity` so the main app picks it up for header-mode dev use.
 
+## Admin list scaling + feature flags + a11y (phase 15)
+
+- Users + Locations tabs now have a **search input** + **Prev/Next pager** (25/page) + count header, powered by `listUsersPage` / `listLocationsPage` which read `X-Total-Count`/`X-Limit`/`X-Offset` headers and return `{items, total, limit, offset}`. Self-search on either tab resets `offset` to 0 so pagination never strands the user mid-query. Users tab also supports a `role` filter.
+- `featureEnabled(org, flag)` is a new helper in `api.ts` — flags default to `true` when unset so untouched orgs keep full UI. `AdminPanel` loads `getOrganization(identity)` on mount and threads the org object into panes that gate UI. `feature_flags.audit_export=false` hides the **Export CSV** button on the Audit tab; `feature_flags.bulk_import=false` hides the **Bulk import…** button on the Users tab. Server is unchanged — this is a UX toggle, not a security control.
+- `flash` in `AdminPanel` is now a stable `useCallback` — child panes that put it in a `refresh` dep array no longer hit an infinite refresh loop. (Regression landed while wiring feature-flag reloads; fix validated by Vitest + E2E.)
+- Accessibility: event-type `<select>` in the encounter detail composer now carries `aria-label="Event type"`; inline role `<select>`s in the admin Users table carry `aria-label="Role for <email>"`. These were the only `serious`/`critical` axe findings — the suite is now clean.
+
 ## What this phase explicitly does NOT do
 
 - No real login flow — `X-User-Email` is still dev transport.

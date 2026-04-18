@@ -44,6 +44,15 @@ echo "==> building apps/web"
 WEB_TGZ="$OUT_DIR/chartnav-web-$VERSION.tar.gz"
 tar -C apps/web/dist -czf "$WEB_TGZ" .
 
+# ---------- SBOM (minimal, honest) --------------------------------------
+SBOM_JSON="$OUT_DIR/chartnav-sbom-$VERSION.json"
+python3 scripts/sbom.py --version "$VERSION" --out "$SBOM_JSON" || true
+
+# ---------- Image digest capture (best effort) --------------------------
+IMAGE_DIGEST_FILE="$OUT_DIR/chartnav-api-$VERSION.digest.txt"
+docker image inspect "$API_TAG" --format '{{.Id}}' > "$IMAGE_DIGEST_FILE" 2>/dev/null \
+  || echo "unknown" > "$IMAGE_DIGEST_FILE"
+
 # ---------- Staging bundle ----------------------------------------------
 # A tarball of everything an operator needs to stand up staging against
 # this release: the compose file, env template, and runbook scripts.
@@ -69,7 +78,7 @@ tar -czf "$STAGE_TGZ" \
     echo "built_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo ""
     echo "artifacts:"
-    for f in "$API_TAR" "$WEB_TGZ" "$STAGE_TGZ"; do
+    for f in "$API_TAR" "$WEB_TGZ" "$STAGE_TGZ" "$SBOM_JSON" "$IMAGE_DIGEST_FILE"; do
         size=$(du -h "$f" | awk '{print $1}')
         sha=$(shasum -a 256 "$f" | awk '{print $1}')
         echo "  $(basename "$f")  ${size}  sha256=${sha}"

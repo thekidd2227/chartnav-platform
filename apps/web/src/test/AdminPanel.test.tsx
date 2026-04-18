@@ -8,10 +8,12 @@ vi.mock("../api", async () => {
     ...actual,
     API_URL: "http://test",
     listUsers: vi.fn(),
+    listUsersPage: vi.fn(),
     createUser: vi.fn(),
     updateUser: vi.fn(),
     deactivateUser: vi.fn(),
     listLocations: vi.fn(),
+    listLocationsPage: vi.fn(),
     createLocation: vi.fn(),
     updateLocation: vi.fn(),
     deactivateLocation: vi.fn(),
@@ -72,6 +74,12 @@ beforeEach(() => {
   vi.clearAllMocks();
   (api.listUsers as any).mockResolvedValue(USERS);
   (api.listLocations as any).mockResolvedValue(LOCATIONS);
+  (api.listUsersPage as any).mockResolvedValue({
+    items: USERS, total: USERS.length, limit: 25, offset: 0,
+  });
+  (api.listLocationsPage as any).mockResolvedValue({
+    items: LOCATIONS, total: LOCATIONS.length, limit: 25, offset: 0,
+  });
   (api.getOrganization as any).mockResolvedValue({
     id: 1,
     name: "Demo Eye Clinic",
@@ -124,6 +132,12 @@ describe("AdminPanel", () => {
     };
     (api.createUser as any).mockResolvedValueOnce(newUser);
     (api.listUsers as any).mockResolvedValueOnce([...USERS, newUser]);
+    (api.listUsersPage as any).mockResolvedValueOnce({
+      items: [...USERS, newUser],
+      total: USERS.length + 1,
+      limit: 25,
+      offset: 0,
+    });
 
     const user = userEvent.setup();
     render(<AdminPanel identity={ADMIN1.email} me={ADMIN1} onClose={() => {}} />);
@@ -182,6 +196,12 @@ describe("AdminPanel", () => {
     };
     (api.createLocation as any).mockResolvedValueOnce(newLoc);
     (api.listLocations as any).mockResolvedValueOnce([...LOCATIONS, newLoc]);
+    (api.listLocationsPage as any).mockResolvedValueOnce({
+      items: [...LOCATIONS, newLoc],
+      total: LOCATIONS.length + 1,
+      limit: 25,
+      offset: 0,
+    });
 
     const user = userEvent.setup();
     render(<AdminPanel identity={ADMIN1.email} me={ADMIN1} onClose={() => {}} />);
@@ -332,6 +352,46 @@ describe("AdminPanel", () => {
         "admin@chartnav.local",
         { event_type: "unknown_user" }
       );
+    });
+  });
+
+  it("feature flag `audit_export=false` hides the Export CSV button", async () => {
+    (api.getOrganization as any).mockResolvedValue({
+      id: 1,
+      name: "Demo Eye Clinic",
+      slug: "demo-eye-clinic",
+      settings: { feature_flags: { audit_export: false } },
+      created_at: "2026-04-18 01:00:00",
+    });
+    const user = userEvent.setup();
+    render(<AdminPanel identity={ADMIN1.email} me={ADMIN1} onClose={() => {}} />);
+    await user.click(await screen.findByTestId("admin-tab-audit"));
+    await screen.findByTestId("admin-audit-table");
+    expect(screen.queryByTestId("admin-audit-export")).not.toBeInTheDocument();
+    expect(screen.getByTestId("admin-audit-refresh")).toBeInTheDocument();
+  });
+
+  it("feature flag `bulk_import=false` hides the Bulk import button", async () => {
+    (api.getOrganization as any).mockResolvedValue({
+      id: 1,
+      name: "Demo Eye Clinic",
+      slug: "demo-eye-clinic",
+      settings: { feature_flags: { bulk_import: false } },
+      created_at: "2026-04-18 01:00:00",
+    });
+    render(<AdminPanel identity={ADMIN1.email} me={ADMIN1} onClose={() => {}} />);
+    await screen.findByTestId("admin-users-table");
+    expect(screen.queryByTestId("admin-user-bulk-open")).not.toBeInTheDocument();
+  });
+
+  it("admin list search field dispatches listUsersPage with q param", async () => {
+    const user = userEvent.setup();
+    render(<AdminPanel identity={ADMIN1.email} me={ADMIN1} onClose={() => {}} />);
+    await screen.findByTestId("admin-users-table");
+    await user.type(screen.getByTestId("admin-user-search"), "clin");
+    await waitFor(() => {
+      const calls = (api.listUsersPage as any).mock.calls;
+      expect(calls.at(-1)?.[1]?.q).toBe("clin");
     });
   });
 

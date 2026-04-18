@@ -20,10 +20,12 @@ Independent — runs in parallel with the backend/frontend gates.
 A broken compose file or sloppy script lands a red check before anyone runs `staging-up`.
 
 ### `e2e` (needs: `backend-sqlite`, `frontend`)
-Python 3.11 + Node 20 installed. `pip install -e "apps/api[dev,postgres]"` + `npm ci` in `apps/web`. `npx playwright install --with-deps chromium`. Then `npx playwright test --reporter=list` — Playwright boots backend on 8001 (SQLite) and frontend on 5174, runs the 8 browser scenarios, tears both down. On failure, `playwright-report/` and `test-results/` are uploaded as a workflow artifact for triage.
+Python 3.11 + Node 20 installed. `pip install -e "apps/api[dev,postgres]"` + `npm ci` in `apps/web`. `npx playwright install --with-deps chromium`. Then `npx playwright test tests/e2e/workflow.spec.ts tests/e2e/a11y.spec.ts --reporter=list` — Playwright boots backend on 8001 (SQLite, `CHARTNAV_RATE_LIMIT_PER_MINUTE=0` because all traffic comes from 127.0.0.1) and frontend on 5174, runs the 12 workflow scenarios + **5 axe-core a11y scans** (hard gate — `serious`/`critical` findings fail CI), tears both down. On failure, `playwright-report/` and `test-results/` are uploaded as a workflow artifact for triage.
+
+**Visual regression is intentionally excluded from CI** (`tests/e2e/visual.spec.ts`, 4 snapshots) — baselines are OS-specific (`*-chromium-darwin.png`) and CI runs on Linux; running visual there would fail first-run. Visual is a local-only gate (`make e2e-visual`). Honest limitation, documented in `25-enterprise-quality-and-compliance.md`.
 
 ### `release.yml` (separate workflow)
-Triggers on `v*.*.*` tag push and manual dispatch. Builds + pushes `ghcr.io/<owner>/chartnav-api:<version>` (+ `:latest`), runs `scripts/release_build.sh` to produce `dist/release/<version>/` (docker-saved image tar, web bundle tar.gz, MANIFEST with sha256s), uploads the directory as an artifact, and on tag pushes attaches the files to a GitHub Release with auto-generated notes. Full reference in `17-e2e-and-release.md`.
+Triggers on `v*.*.*` tag push and manual dispatch. Builds + pushes `ghcr.io/<owner>/chartnav-api:<version>` (+ `:latest`), runs `scripts/release_build.sh` to produce `dist/release/<version>/` (docker-saved image tar, web bundle tar.gz, MANIFEST with sha256s, **SBOM JSON `chartnav-sbom-<v>.json`**, and **image digest `chartnav-api-<v>.digest.txt`** — both added in phase 15), uploads the directory as an artifact, and on tag pushes attaches the files (including SBOM + digest) to a GitHub Release with auto-generated notes. Full reference in `17-e2e-and-release.md`.
 
 ### `docker-build` (needs: `backend-sqlite`)
 Buildx → build `chartnav-api:ci` from `apps/api/` → run the container with `DATABASE_URL=sqlite:///./chartnav.db` and `CHARTNAV_RUN_SEED=1` → poll `/health` → run `scripts/smoke.sh` against the live container. Proves the production image boots end-to-end.

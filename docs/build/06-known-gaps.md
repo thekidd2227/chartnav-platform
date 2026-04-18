@@ -39,6 +39,15 @@
 Adds "admin can issue an invitation and download audit CSV" on top of
 the 11 scenarios shipped through phase 13.
 
+## Phase-15 additions
+
+- **a11y**: 5 axe-core scenarios in CI (`serious`/`critical` blocking). Fixed: event-type `<select>` and inline admin role `<select>` now have aria-labels.
+- **Visual regression**: 4 macOS baselines; `make e2e-visual` locally; not in CI (see below).
+- **Admin list scaling**: `GET /users`/`/locations` gained `limit`/`offset`/`q`/`role`; UI adds search + pager.
+- **Feature flags**: `audit_export` and `bulk_import` in `feature_flags` actually hide the corresponding admin UI buttons (frontend-tested).
+- **Retention**: `scripts/audit_retention.py` + `CHARTNAV_AUDIT_RETENTION_DAYS` env; backend tests cover disabled / dry-run / delete.
+- **Release compliance**: `chartnav-sbom-<v>.json` + `chartnav-api-<v>.digest.txt` are produced by `release_build.sh` and attached to the GitHub Release.
+
 ## Real gaps (prioritized for next phase)
 
 1. **No email delivery** for invitations — admin manually shares the token.

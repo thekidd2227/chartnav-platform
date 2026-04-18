@@ -101,7 +101,40 @@ two suites never cross-contaminate.
 - `src/test/App.test.tsx` — added 1 test asserting the Admin button is visible to admins only.
 - E2E `workflow.spec.ts` — 2 new scenarios: admin creates a user + a location end-to-end; clinician never sees the Admin button.
 
+## Enterprise quality tests (phase 15)
+
+- `AdminPanel.test.tsx` extends to **12 tests** (+3). New mocks:
+  `listUsersPage`, `listLocationsPage`, `getOrganization`, `inviteUser`,
+  `bulkCreateUsers`, `downloadAuditExport` — all required because
+  AdminPanel now holds feature-flag-aware org state and calls the
+  paginated list endpoints.
+  - `audit_export=false` → `admin-audit-export` absent, `admin-audit-refresh` still present.
+  - `bulk_import=false` → `admin-user-bulk-open` absent.
+  - Users-tab search input dispatches `listUsersPage({ q })`.
+- Playwright grows to **21 tests**:
+  - `workflow.spec.ts` — 12 (unchanged).
+  - `a11y.spec.ts` — **5 axe-core scans** across app shell, encounter
+    list, encounter detail, admin Users tab, admin Audit tab, invite
+    accept. `serious`/`critical` findings are blocking. Fixes landed
+    with the baseline: `aria-label="Event type"` on the composer
+    `<select>`; `aria-label="Role for <email>"` on each inline role
+    `<select>`.
+  - `visual.spec.ts` — **4 Playwright screenshots** (encounter list,
+    admin Users, admin Audit, invite accept). Viewport 1280×820,
+    animations disabled via injected stylesheet,
+    `maxDiffPixelRatio: 0.02`. Baselines are OS-specific and shipped
+    for macOS only (`*-chromium-darwin.png`). **Local-only** gate:
+    `make e2e-visual` / `make e2e-visual-update`. CI skips visual
+    because Linux Chromium renders slightly differently.
+- Rate limiter: Playwright's backend webServer sets
+  `CHARTNAV_RATE_LIMIT_PER_MINUTE=0` — the full suite (workflow +
+  a11y + visual) runs many requests from 127.0.0.1 and would
+  otherwise hit the 120/min limit. Safe because the E2E DB is
+  always ephemeral.
+
 ## Gaps not yet covered
-- No visual regression / accessibility audits.
+- Visual regression not in CI (documented; OS-specific baselines).
+- No keyboard-only / screen-reader manual QA pass beyond axe's
+  automated ruleset.
 - The create modal doesn't exercise location-list errors yet.
 - Loading skeletons / spinner content not asserted.

@@ -16,11 +16,12 @@ import {
   deactivateLocation,
   deactivateUser,
   downloadAuditExport,
+  featureEnabled,
   getOrganization,
   inviteUser,
   listAuditEvents,
-  listLocations,
-  listUsers,
+  listLocationsPage,
+  listUsersPage,
   updateLocation,
   updateOrganization,
   updateUser,
@@ -35,9 +36,16 @@ export function AdminPanel({ identity, me, onClose }: {
 }) {
   const [tab, setTab] = useState<Tab>("users");
   const [banner, setBanner] = useState<{ kind: "ok" | "error"; msg: string } | null>(null);
+  const [org, setOrg] = useState<Organization | null>(null);
 
-  const flash = (kind: "ok" | "error", msg: string) =>
-    setBanner({ kind, msg });
+  useEffect(() => {
+    getOrganization(identity).then(setOrg).catch(() => setOrg(null));
+  }, [identity]);
+
+  const flash = useCallback(
+    (kind: "ok" | "error", msg: string) => setBanner({ kind, msg }),
+    []
+  );
 
   return (
     <div
@@ -99,10 +107,16 @@ export function AdminPanel({ identity, me, onClose }: {
           </div>
         )}
         <div className="modal__body">
-          {tab === "users" && <UsersPane identity={identity} me={me} flash={flash} />}
+          {tab === "users" && <UsersPane identity={identity} me={me} org={org} flash={flash} />}
           {tab === "locations" && <LocationsPane identity={identity} flash={flash} />}
-          {tab === "organization" && <OrganizationPane identity={identity} flash={flash} />}
-          {tab === "audit" && <AuditPane identity={identity} flash={flash} />}
+          {tab === "organization" && (
+            <OrganizationPane
+              identity={identity}
+              flash={flash}
+              onSaved={(next) => setOrg(next)}
+            />
+          )}
+          {tab === "audit" && <AuditPane identity={identity} org={org} flash={flash} />}
         </div>
       </div>
     </div>
@@ -114,18 +128,26 @@ export function AdminPanel({ identity, me, onClose }: {
 function UsersPane({
   identity,
   me,
+  org,
   flash,
 }: {
   identity: string;
   me: Me;
+  org: Organization | null;
   flash: (kind: "ok" | "error", msg: string) => void;
 }) {
   const [users, setUsers] = useState<User[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [includeInactive, setIncludeInactive] = useState(false);
+  const [query, setQuery] = useState("");
+  const [offset, setOffset] = useState(0);
+  const PAGE = 25;
   const [creating, setCreating] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
   const [invite, setInvite] = useState<{ userId: number; token: string; expiresAt: string } | null>(null);
+
+  const bulkEnabled = featureEnabled(org, "bulk_import");
 
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
@@ -134,13 +156,20 @@ function UsersPane({
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      setUsers(await listUsers(identity, { includeInactive }));
+      const res = await listUsersPage(identity, {
+        includeInactive,
+        q: query.trim() || undefined,
+        limit: PAGE,
+        offset,
+      });
+      setUsers(res.items);
+      setTotal(res.total);
     } catch (e) {
       flash("error", friendly(e));
     } finally {
       setLoading(false);
     }
-  }, [identity, includeInactive, flash]);
+  }, [identity, includeInactive, query, offset, flash]);
 
   useEffect(() => {
     refresh();
@@ -246,20 +275,40 @@ function UsersPane({
       </form>
 
       <div className="admin-list-head">
-        <h3>Users ({users.length})</h3>
+        <h3>
+          Users ({total}
+          {total > PAGE ? `, showing ${offset + 1}-${Math.min(offset + PAGE, total)}` : ""})
+        </h3>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <button
-            className="btn"
-            data-testid="admin-user-bulk-open"
-            onClick={() => setShowBulk(true)}
-          >
-            Bulk import…
-          </button>
+          <input
+            type="search"
+            aria-label="Search users"
+            data-testid="admin-user-search"
+            placeholder="Search email or name"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setOffset(0);
+            }}
+            style={{ padding: "5px 7px", border: "1px solid var(--line-strong)", borderRadius: 6, background: "#fff" }}
+          />
+          {bulkEnabled && (
+            <button
+              className="btn"
+              data-testid="admin-user-bulk-open"
+              onClick={() => setShowBulk(true)}
+            >
+              Bulk import…
+            </button>
+          )}
           <label className="subtle-note">
             <input
               type="checkbox"
               checked={includeInactive}
-              onChange={(e) => setIncludeInactive(e.target.checked)}
+              onChange={(e) => {
+                setIncludeInactive(e.target.checked);
+                setOffset(0);
+              }}
             />{" "}
             include inactive
           </label>
@@ -279,6 +328,7 @@ function UsersPane({
                 <td>{u.full_name ?? "—"}</td>
                 <td>
                   <select
+                    aria-label={`Role for ${u.email}`}
                     value={u.role}
                     disabled={u.id === me.user_id}
                     data-testid={`admin-user-role-${u.id}`}
@@ -337,6 +387,29 @@ function UsersPane({
             ))}
           </tbody>
         </table>
+      )}
+      {total > PAGE && (
+        <div className="pagination" data-testid="admin-users-pager" style={{ marginTop: 10 }}>
+          <button
+            className="btn"
+            disabled={offset === 0}
+            data-testid="admin-users-prev"
+            onClick={() => setOffset(Math.max(0, offset - PAGE))}
+          >
+            ← Prev
+          </button>
+          <span className="subtle-note">
+            {offset + 1}–{Math.min(offset + PAGE, total)} of {total}
+          </span>
+          <button
+            className="btn"
+            disabled={offset + PAGE >= total}
+            data-testid="admin-users-next"
+            onClick={() => setOffset(offset + PAGE)}
+          >
+            Next →
+          </button>
+        </div>
       )}
       {invite && (
         <div
@@ -514,9 +587,11 @@ function BulkUserDialog({
 function OrganizationPane({
   identity,
   flash,
+  onSaved,
 }: {
   identity: string;
   flash: (kind: "ok" | "error", msg: string) => void;
+  onSaved?: (o: Organization) => void;
 }) {
   const [org, setOrg] = useState<Organization | null>(null);
   const [loading, setLoading] = useState(true);
@@ -612,6 +687,7 @@ function OrganizationPane({
 
       const updated = await updateOrganization(identity, patch);
       setOrg(updated);
+      if (onSaved) onSaved(updated);
       flash("ok", `Organization saved`);
     } catch (err) {
       flash("error", friendly(err));
@@ -699,11 +775,14 @@ function OrganizationPane({
 
 function AuditPane({
   identity,
+  org,
   flash,
 }: {
   identity: string;
+  org: Organization | null;
   flash: (kind: "ok" | "error", msg: string) => void;
 }) {
+  const exportEnabled = featureEnabled(org, "audit_export");
   const [rows, setRows] = useState<SecurityAuditEvent[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -778,6 +857,7 @@ function AuditPane({
           {total > PAGE_SIZE ? `, showing ${offset + 1}-${Math.min(offset + PAGE_SIZE, total)}` : ""})
         </h3>
         <div style={{ display: "flex", gap: 8 }}>
+          {exportEnabled && (
           <button
             className="btn"
             data-testid="admin-audit-export"
@@ -792,6 +872,7 @@ function AuditPane({
           >
             Export CSV
           </button>
+          )}
           <button className="btn" onClick={refresh} data-testid="admin-audit-refresh">
             Refresh
           </button>
@@ -882,21 +963,32 @@ function LocationsPane({
   flash: (kind: "ok" | "error", msg: string) => void;
 }) {
   const [locations, setLocations] = useState<Location[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [includeInactive, setIncludeInactive] = useState(false);
+  const [query, setQuery] = useState("");
+  const [offset, setOffset] = useState(0);
+  const PAGE = 25;
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      setLocations(await listLocations(identity, { includeInactive }));
+      const res = await listLocationsPage(identity, {
+        includeInactive,
+        q: query.trim() || undefined,
+        limit: PAGE,
+        offset,
+      });
+      setLocations(res.items);
+      setTotal(res.total);
     } catch (e) {
       flash("error", friendly(e));
     } finally {
       setLoading(false);
     }
-  }, [identity, includeInactive, flash]);
+  }, [identity, includeInactive, query, offset, flash]);
 
   useEffect(() => {
     refresh();
@@ -964,15 +1056,35 @@ function LocationsPane({
       </form>
 
       <div className="admin-list-head">
-        <h3>Locations ({locations.length})</h3>
-        <label className="subtle-note">
+        <h3>
+          Locations ({total}
+          {total > PAGE ? `, showing ${offset + 1}-${Math.min(offset + PAGE, total)}` : ""})
+        </h3>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <input
-            type="checkbox"
-            checked={includeInactive}
-            onChange={(e) => setIncludeInactive(e.target.checked)}
-          />{" "}
-          include inactive
-        </label>
+            type="search"
+            aria-label="Search locations"
+            data-testid="admin-loc-search"
+            placeholder="Search name"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setOffset(0);
+            }}
+            style={{ padding: "5px 7px", border: "1px solid var(--line-strong)", borderRadius: 6, background: "#fff" }}
+          />
+          <label className="subtle-note">
+            <input
+              type="checkbox"
+              checked={includeInactive}
+              onChange={(e) => {
+                setIncludeInactive(e.target.checked);
+                setOffset(0);
+              }}
+            />{" "}
+            include inactive
+          </label>
+        </div>
       </div>
       {loading ? (
         <div className="subtle-note">Loading…</div>
@@ -1007,6 +1119,29 @@ function LocationsPane({
             ))}
           </tbody>
         </table>
+      )}
+      {total > PAGE && (
+        <div className="pagination" data-testid="admin-locations-pager" style={{ marginTop: 10 }}>
+          <button
+            className="btn"
+            disabled={offset === 0}
+            data-testid="admin-locations-prev"
+            onClick={() => setOffset(Math.max(0, offset - PAGE))}
+          >
+            ← Prev
+          </button>
+          <span className="subtle-note">
+            {offset + 1}–{Math.min(offset + PAGE, total)} of {total}
+          </span>
+          <button
+            className="btn"
+            disabled={offset + PAGE >= total}
+            data-testid="admin-locations-next"
+            onClick={() => setOffset(offset + PAGE)}
+          >
+            Next →
+          </button>
+        </div>
       )}
     </div>
   );

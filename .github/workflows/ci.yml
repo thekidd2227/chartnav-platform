@@ -203,11 +203,21 @@ jobs:
       - name: Install Playwright browsers
         working-directory: apps/web
         run: npx playwright install --with-deps chromium
-      - name: Run E2E (Playwright manages backend + frontend)
+      # Functional + a11y specs run as hard gates. Visual-regression
+      # specs are excluded here because Chromium rendering differs
+      # subtly between macOS (dev machines) and Linux (CI); running
+      # visual against mac-generated baselines would fail first-run.
+      # Visual runs local-only via `make e2e-visual` and is documented
+      # in 25-enterprise-quality-and-compliance.md.
+      - name: Run E2E (workflow + a11y)
         working-directory: apps/web
         env:
           CI: "1"
-        run: npx playwright test --reporter=list
+        run: |
+          npx playwright test \
+            tests/e2e/workflow.spec.ts \
+            tests/e2e/a11y.spec.ts \
+            --reporter=list
       - name: Upload Playwright report on failure
         if: failure()
         uses: actions/upload-artifact@v4

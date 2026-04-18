@@ -11,7 +11,7 @@ SQLite (local dev). Schema produced by Alembic migrations
 | id | INTEGER | PK |
 | name | VARCHAR(255) | NOT NULL |
 | slug | VARCHAR(255) | NOT NULL, UNIQUE — **immutable via API** |
-| settings | TEXT | NULL — JSON object, ≤ 16 KB (phase 13, `d4e5f6a7b8c9`) |
+| settings | TEXT | NULL — JSON object, ≤ 16 KB (phase 13, `d4e5f6a7b8c9`). Typed schema as of phase 14 (`OrganizationSettings` — `retention_days`, `default_location_id`, `feature_flags`, `extensions`). Phase 15 wires two `feature_flags` consumers in the frontend — `audit_export` and `bulk_import` (see `25-enterprise-quality-and-compliance.md`). |
 | created_at | DATETIME | NOT NULL default now() |
 
 ### `locations`
@@ -74,6 +74,11 @@ gated at the API layer by `EVENT_SCHEMAS` (see
 No FKs — audit rows must survive user/org deletion. Populated only on
 denied or suspicious access (see `18-operational-hardening.md`).
 Migration: `b2c3d4e5f6a7`.
+
+**Retention (phase 15):** `scripts/audit_retention.py` (operator-invoked
+only) deletes rows older than `CHARTNAV_AUDIT_RETENTION_DAYS` — the app
+never silently prunes. See `25-enterprise-quality-and-compliance.md` and
+the retention runbook in `21-staging-runbook.md`.
 
 ## Seeded tenants (two, with full role coverage)
 

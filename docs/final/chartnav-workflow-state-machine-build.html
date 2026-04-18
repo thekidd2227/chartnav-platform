@@ -36,10 +36,10 @@
 <body>
 <header class="cover">
   <h1>ChartNav — Consolidated Build</h1>
-  <div class="sub">Backend phases 1–5: spine → state machine → auth → RBAC → CI/hardening<br>
+  <div class="sub">Backend phases 1–15: spine → state machine → auth → RBAC → CI → production seam → Postgres → frontend → E2E → JWT + ops → staging → governance → control plane → invitations → enterprise quality &amp; compliance<br>
   Repo: <code>thekidd2227/chartnav-platform</code></div>
 </header>
-<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth, org scoping, RBAC</a></li><li><a href="#sec-9">08 — Test strategy</a></li><li><a href="#sec-10">09 — CI & deploy hardening</a></li><li><a href="#sec-11">10 — Doc artifact pipeline</a></li><li><a href="#sec-12">11 — Production-auth seam</a></li><li><a href="#sec-13">12 — Runtime config</a></li><li><a href="#sec-14">13 — Deploy target</a></li><li><a href="#sec-15">14 — Postgres parity</a></li><li><a href="#sec-16">15 — Frontend integration</a></li><li><a href="#sec-17">16 — Frontend test strategy</a></li><li><a href="#sec-18">17 — E2E & release</a></li><li><a href="#sec-19">18 — Operational hardening</a></li><li><a href="#sec-20">19 — Staging deployment</a></li><li><a href="#sec-21">20 — Observability</a></li><li><a href="#sec-22">21 — Staging runbook</a></li><li><a href="#sec-23">22 — Admin governance</a></li><li><a href="#sec-24">23 — Operator control plane</a></li><li><a href="#sec-25">24 — Invitations & governance</a></li><li><a href="#sec-26">Diagram — System architecture</a></li><li><a href="#sec-27">Diagram — Encounter status machine</a></li><li><a href="#sec-28">Diagram — ER</a></li><li><a href="#sec-29">Diagram — API / data flow</a></li></ol></nav>
+<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth, org scoping, RBAC</a></li><li><a href="#sec-9">08 — Test strategy</a></li><li><a href="#sec-10">09 — CI & deploy hardening</a></li><li><a href="#sec-11">10 — Doc artifact pipeline</a></li><li><a href="#sec-12">11 — Production-auth seam</a></li><li><a href="#sec-13">12 — Runtime config</a></li><li><a href="#sec-14">13 — Deploy target</a></li><li><a href="#sec-15">14 — Postgres parity</a></li><li><a href="#sec-16">15 — Frontend integration</a></li><li><a href="#sec-17">16 — Frontend test strategy</a></li><li><a href="#sec-18">17 — E2E & release</a></li><li><a href="#sec-19">18 — Operational hardening</a></li><li><a href="#sec-20">19 — Staging deployment</a></li><li><a href="#sec-21">20 — Observability</a></li><li><a href="#sec-22">21 — Staging runbook</a></li><li><a href="#sec-23">22 — Admin governance</a></li><li><a href="#sec-24">23 — Operator control plane</a></li><li><a href="#sec-25">24 — Invitations & governance</a></li><li><a href="#sec-26">25 — Enterprise quality & compliance</a></li><li><a href="#sec-27">Diagram — System architecture</a></li><li><a href="#sec-28">Diagram — Encounter status machine</a></li><li><a href="#sec-29">Diagram — ER</a></li><li><a href="#sec-30">Diagram — API / data flow</a></li></ol></nav>
 <section id="sec-1"><h2>Executive summary</h2>
 <p>This document consolidates <strong>all</strong> ChartNav backend phases delivered to</p>
 <p>date.</p>
@@ -56,75 +56,81 @@
 <p><strong>Phase 11 — Staging deployment + observability.</strong> New <code>/ready</code> + <code>/metrics</code> surfaces. Pinned-image staging compose + runbook scripts + release-bundled staging tarball. <code>deploy-config</code> CI job validates compose + shellcheck.</p>
 <p><strong>Phase 12 — Admin governance + event discipline + pagination.</strong> DB CHECK on <code>users.role</code>, <code>is_active</code> soft-delete flags, admin CRUD for users + locations, <code>EVENT_SCHEMAS</code> allowlist, encounter pagination via <code>limit</code>/<code>offset</code> + <code>X-Total-Count</code>. <code>AdminPanel</code> modal with Users + Locations tabs.</p>
 <p><strong>Phase 13 — Operator control plane.</strong> <code>GET/PATCH /organization</code> + <code>GET /security-audit-events</code> + admin panel Organization &amp; Audit tabs. <code>invited_at</code> stamping on admin create.</p>
-<p><strong>Phase 14 — Invitations, settings schema, audit export, event hardening, bulk users (this phase).</strong> Migration <code>e5f6a7b8c9d0</code> adds <code>invitation_token_hash</code> (sha256-only), <code>invitation_expires_at</code>, <code>invitation_accepted_at</code>. New endpoints: <code>POST /users/{id}/invite</code>, <code>POST /invites/accept</code>, <code>POST /users/bulk</code>, <code>GET /security-audit-events/export</code>. Organization settings becomes a typed <code>OrganizationSettings</code> pydantic model (extra=forbid) with dedicated fields + an <code>extensions</code> forward-compat bucket. Event payloads enforce per-type value discipline (status enums, non-empty strings, non-negative ints). Admin UI adds per-user <strong>Invite</strong> with a one-shot raw-token banner, a <strong>Bulk import…</strong> dialog, an <strong>Export CSV</strong> button on the audit tab, typed inputs on the Organization tab, and a minimal <code>/invite?invite=&lt;token&gt;</code> accept screen. Suites grow to <strong>110 pytest / 25 Vitest / 12 Playwright</strong>.</p>
+<p><strong>Phase 14 — Invitations, settings schema, audit export, event hardening, bulk users.</strong> Migration <code>e5f6a7b8c9d0</code> adds <code>invitation_token_hash</code> (sha256-only), <code>invitation_expires_at</code>, <code>invitation_accepted_at</code>. New endpoints: <code>POST /users/{id}/invite</code>, <code>POST /invites/accept</code>, <code>POST /users/bulk</code>, <code>GET /security-audit-events/export</code>. Organization settings becomes a typed <code>OrganizationSettings</code> pydantic model (extra=forbid) with dedicated fields + an <code>extensions</code> forward-compat bucket. Event payloads enforce per-type value discipline (status enums, non-empty strings, non-negative ints). Admin UI adds per-user <strong>Invite</strong> with a one-shot raw-token banner, a <strong>Bulk import…</strong> dialog, an <strong>Export CSV</strong> button on the audit tab, typed inputs on the Organization tab, and a minimal <code>/invite?invite=&lt;token&gt;</code> accept screen. Suites grow to <strong>110 pytest / 25 Vitest / 12 Playwright</strong>.</p>
+<p><strong>Phase 15 — Enterprise quality + compliance (this phase).</strong> Five real enterprise-credibility guarantees land together. (1) <strong>Accessibility baseline</strong>: <code>@axe-core/playwright</code> over Chromium, 5 scans covering app shell + encounter list/detail + admin users/audit + invite accept; <code>serious</code>/<code>critical</code> findings are blocking; established fixes land <code>aria-label</code> on the event-type and inline role <code>&lt;select&gt;</code>s. (2) <strong>Visual regression baseline</strong>: 4 Playwright screenshots (encounter list, admin users, admin audit, invite accept) at 1280×820 with animations disabled and <code>maxDiffPixelRatio: 0.02</code>; macOS baselines committed for local dev; CI intentionally skips because Chromium renders differently on Linux (documented gap). (3) <strong>Admin list scaling</strong>: <code>GET /users</code> and <code>GET /locations</code> gain <code>limit</code>, <code>offset</code>, <code>q</code>, and (users) <code>role</code> query params with <code>X-Total-Count</code>/<code>X-Limit</code>/<code>X-Offset</code> headers; UI adds search + Prev/Next pager (25/page) on both tabs. (4) <strong>Feature-flag consumption</strong>: <code>organization.settings.feature_flags.audit_export</code> and <code>.bulk_import</code> now actually hide the <strong>Export CSV</strong> / <strong>Bulk import…</strong> buttons; defaults stay <code>true</code>; documented as a UX toggle, not a security control. (5) <strong>Release compliance signals</strong>: <code>scripts/sbom.py</code> captures project + git sha/tag/dirty + image tag + <code>pip list</code> + <code>npm list</code>; <code>scripts/release_build.sh</code> also emits <code>chartnav-api-&lt;v&gt;.digest.txt</code> via <code>docker image inspect</code>; both are attached to GitHub Releases and included in <code>MANIFEST.txt</code>. (6) <strong>Audit retention scaffolding</strong>: <code>apps/api/app/retention.py::prune_audit_events</code> + <code>scripts/audit_retention.py</code> CLI + <code>CHARTNAV_AUDIT_RETENTION_DAYS</code> env (default <code>0</code> = never); the app never silently prunes. Suites grow to <strong>118 pytest / 28 Vitest / 21 Playwright</strong> (12 workflow + 5 a11y + 4 visual-local).</p>
 <p>Preserved untouched: <code>/health</code>, <code>/</code>, SQLite dev workflow, state machine + filtering surface, workflow_events model, existing endpoint contracts.</p>
 </section>
 <section id="sec-2"><h2>01 — Current state</h2>
 <h1>ChartNav — Current State</h1>
-<p><strong>As of:</strong> 2026-04-18 (phase: invitations + settings schema + audit export + bulk)</p>
+<p><strong>As of:</strong> 2026-04-18 (phase: enterprise quality + compliance signals)</p>
 <h2>Repo layout (relevant)</h2>
 <pre class="code lang-"><code>
 chartnav-platform/
 ├── .github/workflows/{ci.yml,release.yml}
 ├── Makefile
 ├── scripts/                 # build_docs · verify · pg_verify · release_build · staging_*
+│                            # audit_retention · sbom
 ├── apps/
 │   ├── api/
-│   │   ├── app/             # main · config · db · auth · authz · audit · logging_config · middleware · metrics
-│   │   │   └── api/routes.py  # + /users/{id}/invite · /invites/accept · audit export · /users/bulk · typed settings
-│   │   ├── alembic/versions/  # 6 migrations through e5f6a7b8c9d0
-│   │   ├── tests/             # 110 pytest (+20 invitations/bulk/export)
+│   │   ├── app/
+│   │   │   ├── main.py · config.py · db.py · auth.py · authz.py
+│   │   │   ├── audit.py · retention.py · logging_config.py · middleware.py · metrics.py
+│   │   │   └── api/routes.py    # + list pagination + search on /users, /locations
+│   │   ├── alembic/versions/    # 6 migrations through e5f6a7b8c9d0
+│   │   ├── tests/               # 118 pytest (+8 test_enterprise)
 │   │   └── Dockerfile · entrypoint.sh · .env.example
 │   └── web/
 │       ├── src/
 │       │   ├── App.tsx · AdminPanel.tsx · InviteAccept.tsx · api.ts
 │       │   ├── identity.ts · styles.css · main.tsx
-│       │   └── test/          # 25 Vitest
-│       └── tests/e2e/         # 12 Playwright
+│       │   └── test/            # 28 Vitest (+3 feature-flag + search)
+│       └── tests/e2e/
+│           ├── workflow.spec.ts (12)
+│           ├── a11y.spec.ts (5)   # axe-core — hard gate in CI
+│           └── visual.spec.ts (4) # screenshot regression — local only
 ├── infra/docker/{dev,prod,staging}.yml
-└── docs/build/ 01 … 24
+└── docs/build/ 01 … 25
 </code></pre>
 <h2>Runtime baseline</h2>
 <ul>
 <li>Backend: FastAPI + SQLAlchemy Core + PyJWT.</li>
 <li>Frontend: Vite 5 + React 18 + TypeScript + Vitest + Playwright.</li>
 <li>Auth: <code>header</code> (dev) or <code>bearer</code> (prod JWT via JWKS).</li>
-<li>RBAC: <code>admin</code> / <code>clinician</code> / <code>reviewer</code> (CHECK-constrained at DB level).</li>
+<li>RBAC: <code>admin</code> / <code>clinician</code> / <code>reviewer</code> (CHECK-constrained).</li>
 <li>Error envelope: <code>{&quot;detail&quot;: {&quot;error_code&quot;: &quot;...&quot;, &quot;reason&quot;: &quot;...&quot;}}</code>.</li>
-<li><strong>Invitations</strong> (phase 14): admin issues 7-day tokens via <code>POST /users/{id}/invite</code>; only sha256 hash stored; accept via <code>POST /invites/accept</code>; re-issue revokes prior token; frontend has a minimal <code>/invite?invite=&lt;token&gt;</code> accept screen.</li>
-<li><strong>Org settings</strong>: typed <code>OrganizationSettings</code> pydantic model (extra=forbid) with <code>default_provider_name</code>, <code>encounter_page_size</code>, <code>audit_page_size</code>, <code>feature_flags</code>, <code>extensions</code>. 16 KB cap. UI edits each field with dedicated inputs.</li>
-<li><strong>Audit export</strong>: <code>GET /security-audit-events/export</code> → CSV, honors existing filters + org scoping.</li>
-<li><strong>Event payload hardening</strong> (phase 14): per-type value discipline (status enum, non-empty strings, non-negative ints).</li>
-<li><strong>Bulk user import</strong>: <code>POST /users/bulk</code> with per-row pass/fail summary; UI exposes a CSV-like textarea dialog.</li>
+<li><strong>a11y</strong>: axe-core baseline covering app shell, encounter list/detail, admin panel, invite page. <code>serious</code>/<code>critical</code> violations are blocking.</li>
+<li><strong>Visual regression</strong>: 4 macOS-baseline screenshots; <code>maxDiffPixelRatio: 0.02</code>. Local gate; CI skips (OS-specific pixels).</li>
+<li><strong>Admin list scaling</strong>: <code>GET /users</code>/<code>/locations</code> now take <code>limit</code>, <code>offset</code>, <code>q</code>, role (+users). <code>X-Total-Count</code> headers. UI has search + Prev/Next pagers on Users + Locations tabs.</li>
+<li><strong>Feature flags</strong>: <code>organization.settings.feature_flags.audit_export</code> and <code>.bulk_import</code> actually gate the corresponding admin buttons.</li>
+<li><strong>Audit retention</strong>: <code>scripts/audit_retention.py</code> prunes old rows per <code>CHARTNAV_AUDIT_RETENTION_DAYS</code>; the app never silently prunes.</li>
+<li><strong>Release compliance</strong>: SBOM (<code>chartnav-sbom-&lt;v&gt;.json</code>) + image digest (<code>chartnav-api-&lt;v&gt;.digest.txt</code>) in every release bundle, attached to the GitHub Release.</li>
 <li>Alembic head: <code>e5f6a7b8c9d0</code>.</li>
 </ul>
 <h2>Testing layers</h2>
 <table><thead><tr><th>Layer</th><th>Tool</th><th>Count</th><th>Notes</th></tr></thead><tbody>
-<tr><td>pytest</td><td>pytest</td><td>110</td><td>+20 invitations/bulk/export/event-hardening</td></tr>
+<tr><td>pytest</td><td>pytest</td><td>118</td><td>+8 enterprise quality (pagination, retention, flags)</td></tr>
 <tr><td>shell smoke</td><td>smoke.sh</td><td>9</td><td>unchanged</td></tr>
-<tr><td>vitest</td><td>vitest</td><td>25</td><td>+3 admin-panel (invite/bulk/export)</td></tr>
-<tr><td>Playwright</td><td>@playwright</td><td>12</td><td>+1 admin invite + audit CSV download E2E</td></tr>
+<tr><td>Vitest</td><td>vitest</td><td>28</td><td>+3 feature flags + search</td></tr>
+<tr><td>Playwright workflow</td><td>@playwright</td><td>12</td><td>unchanged contract</td></tr>
+<tr><td>Playwright a11y</td><td>@axe-core/playwright</td><td>5</td><td>NEW</td></tr>
+<tr><td>Playwright visual</td><td>Playwright snapshots</td><td>4</td><td>NEW (local only)</td></tr>
 <tr><td>staging</td><td>staging_verify.sh</td><td>9</td><td>unchanged</td></tr>
 </tbody></table>
 <h2>Verified working endpoints</h2>
-<p>Additions this phase:</p>
-<ul>
-<li><code>POST /users/{id}/invite</code></li>
-<li><code>POST /invites/accept</code></li>
-<li><code>POST /users/bulk</code></li>
-<li><code>GET /security-audit-events/export</code></li>
-</ul>
-<p>Unchanged surfaces from phases 1–13 are all still green.</p>
+<p>No new endpoints this phase. <code>GET /users</code> and <code>GET /locations</code> gained</p>
+<p><code>q</code>/<code>role</code>/<code>limit</code>/<code>offset</code> query parameters + pagination headers;</p>
+<p>older callers that pass no params still see the first 100 rows.</p>
 <h2>Automation</h2>
 <ul>
-<li><code>make verify</code> → 110 pytest + 9 smoke</li>
-<li><code>make web-verify</code> → 25 vitest + typecheck + build</li>
-<li><code>make e2e</code> → 12 Playwright</li>
-<li><code>make pg-verify</code> — Postgres parity</li>
-<li><code>make staging-up / staging-verify / staging-rollback / staging-down</code></li>
-<li><code>make release-build VERSION=v0.1.0</code></li>
-<li><code>make dev</code> — backend + frontend</li>
-<li>CI gates unchanged (backend / frontend / e2e / backend-postgres / docker-build / docs / deploy-config).</li>
+<li><code>make verify</code> → 118 pytest + 9 smoke</li>
+<li><code>make web-verify</code> → 28 vitest + typecheck + build</li>
+<li><code>make e2e</code> → 12 workflow + 5 a11y + 4 visual (local)</li>
+<li><code>make e2e-a11y</code> / <code>make e2e-visual</code> / <code>make e2e-visual-update</code></li>
+<li><code>make audit-prune ARGS=&quot;--days 90 --dry-run&quot;</code></li>
+<li><code>make sbom</code> → <code>dist/release/_sbom.json</code></li>
+<li><code>make pg-verify</code> / <code>make staging-*</code> / <code>make release-build VERSION=v0.1.0</code></li>
+<li><code>make dev</code> — backend + frontend together</li>
+<li>CI: backend-sqlite + frontend + deploy-config in parallel; e2e (workflow + a11y) gates on backend + frontend; backend-postgres + docker-build + docs chain on backend-sqlite.</li>
 </ul>
 </section>
 <section id="sec-3"><h2>02 — Workflow state machine</h2>
@@ -215,8 +221,8 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <h2>Org metadata (🔒, org-scoped)</h2>
 <table><thead><tr><th>Method</th><th>Path</th><th>Behavior</th></tr></thead><tbody>
 <tr><td>GET</td><td><code>/organizations</code></td><td>Returns only caller&#x27;s org row.</td></tr>
-<tr><td>GET</td><td><code>/locations</code></td><td><code>WHERE organization_id = caller.org</code>.</td></tr>
-<tr><td>GET</td><td><code>/users</code></td><td><code>WHERE organization_id = caller.org</code>.</td></tr>
+<tr><td>GET</td><td><code>/locations</code></td><td><code>WHERE organization_id = caller.org</code>. Supports <code>limit</code> (1..500, default 100), <code>offset</code> (≥0), <code>q</code> (substring search on <code>name</code>), plus <code>include_inactive</code> (admin). Emits <code>X-Total-Count</code>, <code>X-Limit</code>, <code>X-Offset</code> headers.</td></tr>
+<tr><td>GET</td><td><code>/users</code></td><td><code>WHERE organization_id = caller.org</code>. Supports <code>limit</code>, <code>offset</code>, <code>q</code> (substring on <code>email</code> or <code>full_name</code>), <code>role</code> (valid roles only — invalid → 400 <code>invalid_role</code>), <code>include_inactive</code> (admin). Emits <code>X-Total-Count</code>, <code>X-Limit</code>, <code>X-Offset</code> headers.</td></tr>
 </tbody></table>
 <h2>Encounters (🔒, org-scoped + RBAC)</h2>
 <h3>GET <code>/encounters</code></h3>
@@ -374,7 +380,7 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <tr><td>id</td><td>INTEGER</td><td>PK</td></tr>
 <tr><td>name</td><td>VARCHAR(255)</td><td>NOT NULL</td></tr>
 <tr><td>slug</td><td>VARCHAR(255)</td><td>NOT NULL, UNIQUE — <strong>immutable via API</strong></td></tr>
-<tr><td>settings</td><td>TEXT</td><td>NULL — JSON object, ≤ 16 KB (phase 13, <code>d4e5f6a7b8c9</code>)</td></tr>
+<tr><td>settings</td><td>TEXT</td><td>NULL — JSON object, ≤ 16 KB (phase 13, <code>d4e5f6a7b8c9</code>). Typed schema as of phase 14 (<code>OrganizationSettings</code> — <code>retention_days</code>, <code>default_location_id</code>, <code>feature_flags</code>, <code>extensions</code>). Phase 15 wires two <code>feature_flags</code> consumers in the frontend — <code>audit_export</code> and <code>bulk_import</code> (see <code>25-enterprise-quality-and-compliance.md</code>).</td></tr>
 <tr><td>created_at</td><td>DATETIME</td><td>NOT NULL default now()</td></tr>
 </tbody></table>
 <h3><code>locations</code></h3>
@@ -431,6 +437,10 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <p>No FKs — audit rows must survive user/org deletion. Populated only on</p>
 <p>denied or suspicious access (see <code>18-operational-hardening.md</code>).</p>
 <p>Migration: <code>b2c3d4e5f6a7</code>.</p>
+<p><strong>Retention (phase 15):</strong> <code>scripts/audit_retention.py</code> (operator-invoked</p>
+<p>only) deletes rows older than <code>CHARTNAV_AUDIT_RETENTION_DAYS</code> — the app</p>
+<p>never silently prunes. See <code>25-enterprise-quality-and-compliance.md</code> and</p>
+<p>the retention runbook in <code>21-staging-runbook.md</code>.</p>
 <h2>Seeded tenants (two, with full role coverage)</h2>
 <h3>Org 1 — <code>demo-eye-clinic</code> (id=1)</h3>
 <p>Location: <code>Main Clinic</code> (id=1).</p>
@@ -467,96 +477,176 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <h1>Build Log</h1>
 <p>Reverse-chronological.</p>
 <p>---</p>
-<h2>2026-04-18 — Phase 14: invitations, settings schema, audit export, event hardening, bulk users</h2>
+<h2>2026-04-18 — Phase 15: enterprise quality + compliance signals</h2>
 <h3>Step 1 — Baseline</h3>
 <ul>
-<li>Head: <code>5a5d846</code> (operator control plane).</li>
-<li>88 pytest + 22 vitest + 11 Playwright green.</li>
+<li>Head: <code>3be3933</code> (invitations + settings schema + audit export + event hardening + bulk users).</li>
+<li>110 pytest + 25 Vitest + 12 Playwright + 9 smoke green.</li>
 </ul>
-<h3>Step 2 — Migration <code>e5f6a7b8c9d0</code></h3>
+<h3>Step 2 — Admin list scaling</h3>
 <ul>
-<li><code>users.invitation_token_hash TEXT NULL</code> (indexed).</li>
-<li><code>users.invitation_expires_at DATETIME NULL</code>.</li>
-<li><code>users.invitation_accepted_at DATETIME NULL</code>.</li>
+<li>Backend: <code>GET /users</code> and <code>GET /locations</code> now accept <code>limit</code></li>
 </ul>
-<h3>Step 3 — Backend endpoints</h3>
+<p>(1..500, default 100), <code>offset</code> (≥0), <code>q</code> substring search, and</p>
+<p><code>role</code> (users only). Both endpoints emit <code>X-Total-Count</code>, <code>X-Limit</code>,</p>
+<p><code>X-Offset</code> headers. <code>include_inactive</code> continues to work.</p>
 <ul>
-<li><code>POST /users/{id}/invite</code> — admin-only. Generates <code>secrets.token_urlsafe(32)</code>, stores only <code>sha256(token)</code>, returns the raw token once. 7-day expiry. Cross-org → 404 <code>user_not_found</code>; inactive → 400 <code>user_inactive</code>; already accepted → 400 <code>user_already_accepted</code>. Re-issue overwrites the hash.</li>
-<li><code>POST /invites/accept</code> — unauth. Hashes the provided token, validates presence + active target + not-yet-accepted + not-expired. Clears the hash on success (idempotent in the wrong direction). Added <code>/invites</code> to the rate-limit protected prefixes.</li>
-<li><code>GET /security-audit-events/export</code> — admin-only CSV; same filters as the read endpoint; same org-scoping (<code>caller.org OR organization_id IS NULL</code>); Content-Disposition attachment with timestamped filename.</li>
-<li><code>POST /users/bulk</code> — admin-only. Per-row validation with <code>summary: {requested, created, skipped, errors}</code>. 500-row cap at pydantic layer. One bad row never aborts the batch. Stamps <code>invited_at</code> on every created row.</li>
-<li>Typed <code>OrganizationSettings</code> (pydantic <code>extra=forbid</code>) with fields <code>default_provider_name</code>, <code>encounter_page_size (10..200)</code>, <code>audit_page_size (10..200)</code>, <code>feature_flags</code>, <code>extensions</code>. <code>PATCH /organization</code> now validates against the model; persists <code>model_dump(exclude_none=True)</code> JSON.</li>
-<li>Per-type event-data hardening in <code>_validate_event</code>:</li>
-<li><code>status_changed</code> — both statuses must be in <code>ALLOWED_STATUSES</code>.</li>
-<li><code>encounter_created</code> — status must be in <code>ALLOWED_STATUSES</code>.</li>
-<li><code>manual_note.note</code> — non-empty string ≤ 4000 chars.</li>
-<li><code>note_draft_requested.requested_by</code> — non-empty string; optional <code>template</code> non-empty string.</li>
-<li><code>note_draft_completed.template</code> — non-empty string; optional <code>length_words</code> non-negative int.</li>
-<li><code>note_reviewed.reviewer</code> — non-empty string ≤ 255.</li>
-<li><code>USER_COLUMNS</code> now includes <code>invitation_expires_at</code> + <code>invitation_accepted_at</code> (raw token hash is not returned by any endpoint).</li>
+<li>Invalid role filter → 400 <code>invalid_role</code>.</li>
+<li>Frontend: <code>api.ts</code> gains <code>listUsersPage</code> / <code>listLocationsPage</code> that</li>
 </ul>
-<h3>Step 4 — Backend tests (<code>test_invitations.py</code>, 20 new)</h3>
+<p>return <code>{items, total, limit, offset}</code> by reading the headers.</p>
 <ul>
-<li>Invite: issue returns raw token, non-admin 403, cross-org 404, inactive-user 400, already-accepted 400, re-issue revokes prior token.</li>
-<li>Accept: happy path, invalid token, replay, expired (via direct DB time rewind).</li>
-<li>Audit export: CSV content-type + filename + respects filters + admin-only.</li>
-<li>Event hardening: bogus status values, empty/non-string <code>note</code>, empty <code>requested_by</code>.</li>
-<li>Bulk import: mixed happy/dup/bad-role returns correct summary; admin-only; empty body 422; org-scoped.</li>
-<li>Also updated <code>test_control_plane.py</code> settings tests to match the new typed schema (extra-forbid, extensions bucket for forward compat, size limit via <code>extensions</code>).</li>
-<li>Full backend suite: <strong>110/110 passed</strong>.</li>
+<li><code>AdminPanel.tsx</code>: Users + Locations tabs each get a search input +</li>
 </ul>
-<h3>Step 5 — Frontend</h3>
+<p>Prev/Next pager (25/page) + count header. Self-search resets offset</p>
+<p>on every change.</p>
+<h3>Step 3 — Feature-flag consumption</h3>
 <ul>
-<li><code>api.ts</code>:</li>
-<li><code>OrganizationSettings</code> typed interface; <code>Organization.settings</code> is now typed.</li>
-<li><code>UserInvite</code>, <code>BulkImportSummary</code>, <code>BulkUserResult</code> interfaces.</li>
-<li><code>inviteUser</code>, <code>acceptInvite</code>, <code>bulkCreateUsers</code> functions.</li>
-<li><code>auditExportUrl(filters)</code> + <code>downloadAuditExport(email, filters)</code> — the download helper fetches with the auth header and triggers a local blob download (a plain <code>&lt;a href&gt;</code> can&#x27;t send <code>X-User-Email</code>).</li>
-<li><code>AdminPanel.tsx</code>:</li>
-<li>Users tab — <strong>Invite</strong> button per active user row (hidden on self); one-shot banner with the raw token + timestamp + &quot;Dismiss&quot;. <strong>Bulk import…</strong> button opens a dialog with a CSV-like textarea; inline summary on submit.</li>
-<li>Organization tab — typed inputs for <code>name</code>, <code>default_provider_name</code>, <code>encounter_page_size</code>, <code>audit_page_size</code> + an <strong>Extensions</strong> JSON textarea for forward-compat.</li>
-<li>Audit tab — <strong>Export CSV</strong> button next to <strong>Refresh</strong>; honors current filters.</li>
-<li>New <code>InviteAccept.tsx</code> + branch in <code>main.tsx</code> — minimal hash-split routing so <code>/invite?invite=&lt;token&gt;</code> and <code>/accept</code> render the accept screen. On success it stores the email into <code>localStorage.chartnav.devIdentity</code> so the main app picks it up for header-mode dev use.</li>
-<li>Typecheck clean; <code>vite build</code> emits 184 KB JS / 8.2 KB CSS.</li>
+<li>New <code>featureEnabled(org, flag)</code> helper in <code>api.ts</code> — flags default</li>
 </ul>
-<h3>Step 6 — Frontend tests</h3>
+<p>to <code>true</code> when unset so the UI doesn&#x27;t silently strip features for</p>
+<p>orgs that haven&#x27;t touched settings.</p>
 <ul>
-<li><code>AdminPanel.test.tsx</code>:</li>
-<li><code>admin-user-invite-&lt;id&gt;</code> produces the one-shot token banner.</li>
-<li>Bulk import renders the created/skipped/errors summary.</li>
-<li>Audit Export CSV button wires <code>downloadAuditExport</code> with current filters.</li>
-<li>Updated the phase-13 &quot;local JSON parse error&quot; assertion from &quot;settings JSON&quot; → &quot;extensions JSON&quot; to match the new typed form.</li>
-<li><code>App.test.tsx</code> unchanged.</li>
-<li>Vitest: <strong>25/25 passed</strong>.</li>
+<li>AdminPanel loads <code>getOrganization(identity)</code> on mount, holds the</li>
 </ul>
-<h3>Step 7 — E2E</h3>
+<p>result in state, and passes it into panes that gate UI.</p>
 <ul>
-<li>New scenario &quot;admin can issue an invitation and download audit CSV&quot;:</li>
-<li>Creates a user, clicks <strong>Invite</strong>, asserts the token box is visible and non-empty.</li>
-<li>Clicks <strong>Export CSV</strong> on the Audit tab and waits for the browser download event; asserts the filename matches <code>chartnav-audit-*.csv</code>.</li>
-<li>Existing event-composer E2E still uses the dropdown + <code>manual_note</code> + <code>{note: ...}</code> payload, which the hardened validator accepts.</li>
-<li>Playwright: <strong>12/12 passed</strong> in ~15s.</li>
+<li><code>audit_export=false</code> hides the <strong>Export CSV</strong> button. <code>bulk_import=false</code></li>
 </ul>
-<h3>Step 8 — Docs</h3>
+<p>hides the <strong>Bulk import…</strong> button. Both default-on.</p>
 <ul>
-<li>New <code>docs/build/24-invitations-and-governance.md</code>.</li>
-<li>Updated <code>01-current-state</code>, <code>05-build-log</code>, <code>06-known-gaps</code>, <code>02-workflow-state-machine</code> (event hardening), <code>03-api-endpoints</code> (4 new endpoints + error codes), <code>04-data-model</code> (invitation columns), <code>08-test-strategy</code>, <code>15-frontend-integration</code> (invite/accept/bulk/export UI), <code>16-frontend-test-strategy</code>, <code>18-operational-hardening</code> (audit export surface), <code>22-admin-governance</code> (invitations done).</li>
-<li><code>scripts/build_docs.py</code> picks up section 24.</li>
+<li><code>flash</code> in AdminPanel is now <code>useCallback</code>-stable, avoiding an</li>
+</ul>
+<p>infinite refresh loop that showed up once children started holding</p>
+<p>it in <code>refresh</code> dependency arrays.</p>
+<h3>Step 4 — Audit retention helper</h3>
+<ul>
+<li>New <code>apps/api/app/retention.py::prune_audit_events(retention_days, dry_run)</code>.</li>
+</ul>
+<p>App never silently prunes; operators invoke the helper.</p>
+<ul>
+<li>New <code>CHARTNAV_AUDIT_RETENTION_DAYS</code> (default 0 = never) in <code>app/config.py</code>.</li>
+<li>New <code>scripts/audit_retention.py</code> CLI: supports <code>--days</code>, <code>--dry-run</code>;</li>
+</ul>
+<p>prints a JSON summary.</p>
+<ul>
+<li>New Makefile target <code>audit-prune ARGS=&quot;...&quot;</code>.</li>
+</ul>
+<h3>Step 5 — SBOM + image digest</h3>
+<ul>
+<li>New <code>scripts/sbom.py</code>: captures project + git sha/tag/dirty + image</li>
+</ul>
+<p>tag (when set) + <code>pip list --format json</code> (API venv) + `npm list</p>
+<p>--all --json<code> (falls back to </code>package-lock.json` summary). Honest</p>
+<p><code>.notes</code> field calls out that this is not a signed CycloneDX doc.</p>
+<ul>
+<li><code>scripts/release_build.sh</code> now writes <code>chartnav-sbom-&lt;v&gt;.json</code> and</li>
+</ul>
+<p><code>chartnav-api-&lt;v&gt;.digest.txt</code> (from <code>docker image inspect</code>).</p>
+<ul>
+<li><code>MANIFEST.txt</code> sha256s both. <code>release.yml</code> attaches both to tag-based</li>
+</ul>
+<p>GitHub Releases.</p>
+<h3>Step 6 — Accessibility baseline</h3>
+<ul>
+<li>Installed <code>@axe-core/playwright</code>.</li>
+<li>New <code>apps/web/tests/e2e/a11y.spec.ts</code>: scans app shell + encounter</li>
+</ul>
+<p>list + encounter detail + admin panel (users, audit) + invite</p>
+<p>accept. <code>serious</code>/<code>critical</code> axe findings are blocking.</p>
+<ul>
+<li>Fixes landed while running the baseline:</li>
+<li><code>aria-label=&quot;Event type&quot;</code> on the composer <code>&lt;select&gt;</code> in App.tsx.</li>
+<li><code>aria-label=&quot;Role for &lt;email&gt;&quot;</code> on each inline role <code>&lt;select&gt;</code></li>
+</ul>
+<p>in the admin Users table.</p>
+<h3>Step 7 — Visual regression baseline</h3>
+<ul>
+<li>New <code>apps/web/tests/e2e/visual.spec.ts</code>: 4 snapshots (encounter list,</li>
+</ul>
+<p>admin Users tab, admin Audit tab, invite accept). 1280×820 viewport,</p>
+<p>animations disabled via injected stylesheet, <code>maxDiffPixelRatio: 0.02</code>.</p>
+<ul>
+<li>Baselines committed for macOS only (<code>*-chromium-darwin.png</code>). CI</li>
+</ul>
+<p>does NOT run visual — Linux Chromium renders slightly differently.</p>
+<p>Honest limitation: documented in <code>25-enterprise-quality-and-compliance.md</code>.</p>
+<ul>
+<li>New <code>e2e-visual</code> / <code>e2e-visual-update</code> Make targets.</li>
+</ul>
+<h3>Step 8 — CI wiring</h3>
+<ul>
+<li>Existing <code>e2e</code> job now runs <code>workflow.spec.ts</code> + <code>a11y.spec.ts</code> (hard</li>
+</ul>
+<p>gate). Visual is excluded with a comment explaining why.</p>
+<ul>
+<li>Release workflow picks up SBOM + image digest automatically via the</li>
+</ul>
+<p>updated <code>scripts/release_build.sh</code>.</p>
+<h3>Step 9 — Playwright rate-limit bugfix</h3>
+<ul>
+<li>Running the full E2E suite (workflow + a11y + visual) was hitting</li>
+</ul>
+<p>the rate limiter (<code>CHARTNAV_RATE_LIMIT_PER_MINUTE=120</code> default)</p>
+<p>because all requests come from 127.0.0.1. Fix: set the env to <code>0</code></p>
+<p>in <code>playwright.config.ts</code>&#x27;s backend webServer command, which is</p>
+<p>safe because the E2E DB is always ephemeral.</p>
+<h3>Step 10 — Backend tests</h3>
+<ul>
+<li>New <code>apps/api/tests/test_enterprise.py</code> (8 tests): pagination</li>
+</ul>
+<p>headers + offset + q + role filter + cross-org isolation; role</p>
+<p>filter 400; retention disabled / dry-run / actual delete; feature</p>
+<p>flags JSON round-trip.</p>
+<ul>
+<li>Full suite: <strong>118/118 passed</strong>.</li>
+</ul>
+<h3>Step 11 — Frontend tests</h3>
+<ul>
+<li><code>AdminPanel.test.tsx</code> mocks extended for <code>listUsersPage</code>,</li>
+</ul>
+<p><code>listLocationsPage</code>, <code>getOrganization</code> feature-flag variants.</p>
+<ul>
+<li>+3 Vitest tests: <code>audit_export=false</code> hides export button;</li>
+</ul>
+<p><code>bulk_import=false</code> hides bulk button; user-search dispatches</p>
+<p><code>listUsersPage({q})</code>.</p>
+<ul>
+<li>Vitest: <strong>28/28 passed</strong>.</li>
+</ul>
+<h3>Step 12 — E2E</h3>
+<ul>
+<li>a11y: <strong>5/5 passed</strong>.</li>
+<li>Visual: <strong>4/4 passed</strong> against freshly-generated macOS baselines.</li>
+<li>Workflow: <strong>12/12 passed</strong>.</li>
+<li>Total: <strong>21/21 Playwright passed</strong> in ~18s.</li>
+</ul>
+<h3>Step 13 — Docs</h3>
+<ul>
+<li>New <code>docs/build/25-enterprise-quality-and-compliance.md</code>.</li>
+<li>Updated <code>01-current-state</code>, <code>05-build-log</code>, <code>06-known-gaps</code>,</li>
+</ul>
+<p><code>03-api-endpoints</code> (list pagination/search), <code>04-data-model</code></p>
+<p>(feature_flags consumer note), <code>08-test-strategy</code>,</p>
+<p><code>09-ci-and-deploy-hardening</code> (a11y lane + visual skipped reason),</p>
+<p><code>15-frontend-integration</code> (search + pager + flag gating),</p>
+<p><code>16-frontend-test-strategy</code> (a11y + visual), <code>17-e2e-and-release</code></p>
+<p>(SBOM + digest bundle), <code>18-operational-hardening</code> + <code>20-observability</code></p>
+<p>(retention notes), <code>21-staging-runbook</code> (retention runbook).</p>
+<ul>
+<li><code>scripts/build_docs.py</code> picks up section 25.</li>
 <li>Final HTML + PDF regenerated.</li>
 </ul>
-<h3>Step 9 — CI</h3>
-<ul>
-<li><strong>No workflow YAML changes.</strong> New tests live in paths <code>backend-sqlite</code> / <code>frontend</code> / <code>e2e</code> already collect. New migration runs via each backend job&#x27;s existing <code>alembic upgrade head</code>.</li>
-<li>Same <code>deploy-config</code> (compose + shellcheck) lane still covers all scripts.</li>
-</ul>
-<h3>Step 10 — Hygiene</h3>
+<h3>Step 14 — Hygiene</h3>
 <ul>
 <li>Dev DB reset to pristine seeded state before commit.</li>
-<li><code>.gitignore</code> unchanged (already excludes caches, <code>.db</code>, dist, etc.).</li>
+<li>Visual baselines committed under <code>apps/web/tests/e2e/visual.spec.ts-snapshots/</code>.</li>
+<li><code>.gitignore</code> already excludes caches, <code>.db</code>, release dist.</li>
 </ul>
 <p>---</p>
 <h2>Prior phases</h2>
 <ul>
+<li><strong>Phase 14 — Invitations + schema + audit export + bulk</strong> (<code>3be3933</code>)</li>
 <li><strong>Phase 13 — Operator control plane</strong> (<code>5a5d846</code>)</li>
 <li><strong>Phase 12 — Admin governance</strong> (<code>4ff4e28</code>)</li>
 <li><strong>Phase 11 — Staging deployment + observability</strong> (<code>ee7cf43</code>)</li>
@@ -604,6 +694,15 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <h3>Playwright summary (12)</h3>
 <p>Adds &quot;admin can issue an invitation and download audit CSV&quot; on top of</p>
 <p>the 11 scenarios shipped through phase 13.</p>
+<h2>Phase-15 additions</h2>
+<ul>
+<li><strong>a11y</strong>: 5 axe-core scenarios in CI (<code>serious</code>/<code>critical</code> blocking). Fixed: event-type <code>&lt;select&gt;</code> and inline admin role <code>&lt;select&gt;</code> now have aria-labels.</li>
+<li><strong>Visual regression</strong>: 4 macOS baselines; <code>make e2e-visual</code> locally; not in CI (see below).</li>
+<li><strong>Admin list scaling</strong>: <code>GET /users</code>/<code>/locations</code> gained <code>limit</code>/<code>offset</code>/<code>q</code>/<code>role</code>; UI adds search + pager.</li>
+<li><strong>Feature flags</strong>: <code>audit_export</code> and <code>bulk_import</code> in <code>feature_flags</code> actually hide the corresponding admin UI buttons (frontend-tested).</li>
+<li><strong>Retention</strong>: <code>scripts/audit_retention.py</code> + <code>CHARTNAV_AUDIT_RETENTION_DAYS</code> env; backend tests cover disabled / dry-run / delete.</li>
+<li><strong>Release compliance</strong>: <code>chartnav-sbom-&lt;v&gt;.json</code> + <code>chartnav-api-&lt;v&gt;.digest.txt</code> are produced by <code>release_build.sh</code> and attached to the GitHub Release.</li>
+</ul>
 <h2>Real gaps (prioritized for next phase)</h2>
 <p>1. <strong>No email delivery</strong> for invitations — admin manually shares the token.</p>
 <p>2. <strong>No SSO → users mapping change</strong> (still by <code>CHARTNAV_JWT_USER_CLAIM</code>).</p>
@@ -818,6 +917,26 @@ make docker-build
 <li><code>make verify</code> (SQLite): 28 pytest + 9 smoke — all green</li>
 <li><code>scripts/pg_verify.sh</code>: migrations + seed (x2) + smoke + status transition + event write — <strong>PASS</strong></li>
 </ul>
+<h2>Backend coverage (phase 15)</h2>
+<ul>
+<li>118 pytest. <code>test_enterprise.py</code> (8) covers admin list pagination</li>
+</ul>
+<p>(<code>limit</code>/<code>offset</code>/<code>X-Total-Count</code>), <code>q</code> substring search on</p>
+<p><code>/users</code> + <code>/locations</code>, valid + invalid <code>role</code> filter on <code>/users</code></p>
+<p>(400 <code>invalid_role</code>), cross-org isolation of paginated listings,</p>
+<p>retention helper (<code>disabled</code> / <code>dry_run</code> / actual delete paths),</p>
+<p>and feature-flag JSON round-trip through <code>PATCH /organization</code>.</p>
+<ul>
+<li>Frontend: 28 Vitest. <code>AdminPanel.test.tsx</code> adds 3 tests —</li>
+</ul>
+<p><code>audit_export=false</code> hides <strong>Export CSV</strong>, <code>bulk_import=false</code></p>
+<p>hides <strong>Bulk import…</strong>, search input dispatches</p>
+<p><code>listUsersPage({q})</code>.</p>
+<ul>
+<li>E2E: 21 Playwright = 12 workflow + <strong>5 a11y</strong> (axe-core;</li>
+</ul>
+<p><code>serious</code>/<code>critical</code> blocking) + <strong>4 visual</strong> (local only; macOS</p>
+<p>baselines; CI skips due to OS-specific pixel rendering).</p>
 <h2>Backend coverage (phase 14)</h2>
 <ul>
 <li>110 pytest. <code>test_invitations.py</code> (20) covers invite issue / accept happy path / invalid / expired / reused / reissued tokens, cross-org denial, inactive / already-accepted denial, CSV export (admin-only, filters honored, shape), event-hardening rejection cases, and bulk import summary + org scoping + admin-only.</li>
@@ -872,9 +991,10 @@ make docker-build
 </ul>
 <p>A broken compose file or sloppy script lands a red check before anyone runs <code>staging-up</code>.</p>
 <h3><code>e2e</code> (needs: <code>backend-sqlite</code>, <code>frontend</code>)</h3>
-<p>Python 3.11 + Node 20 installed. <code>pip install -e &quot;apps/api[dev,postgres]&quot;</code> + <code>npm ci</code> in <code>apps/web</code>. <code>npx playwright install --with-deps chromium</code>. Then <code>npx playwright test --reporter=list</code> — Playwright boots backend on 8001 (SQLite) and frontend on 5174, runs the 8 browser scenarios, tears both down. On failure, <code>playwright-report/</code> and <code>test-results/</code> are uploaded as a workflow artifact for triage.</p>
+<p>Python 3.11 + Node 20 installed. <code>pip install -e &quot;apps/api[dev,postgres]&quot;</code> + <code>npm ci</code> in <code>apps/web</code>. <code>npx playwright install --with-deps chromium</code>. Then <code>npx playwright test tests/e2e/workflow.spec.ts tests/e2e/a11y.spec.ts --reporter=list</code> — Playwright boots backend on 8001 (SQLite, <code>CHARTNAV_RATE_LIMIT_PER_MINUTE=0</code> because all traffic comes from 127.0.0.1) and frontend on 5174, runs the 12 workflow scenarios + <strong>5 axe-core a11y scans</strong> (hard gate — <code>serious</code>/<code>critical</code> findings fail CI), tears both down. On failure, <code>playwright-report/</code> and <code>test-results/</code> are uploaded as a workflow artifact for triage.</p>
+<p><strong>Visual regression is intentionally excluded from CI</strong> (<code>tests/e2e/visual.spec.ts</code>, 4 snapshots) — baselines are OS-specific (<code>*-chromium-darwin.png</code>) and CI runs on Linux; running visual there would fail first-run. Visual is a local-only gate (<code>make e2e-visual</code>). Honest limitation, documented in <code>25-enterprise-quality-and-compliance.md</code>.</p>
 <h3><code>release.yml</code> (separate workflow)</h3>
-<p>Triggers on <code>v*.*.*</code> tag push and manual dispatch. Builds + pushes <code>ghcr.io/&lt;owner&gt;/chartnav-api:&lt;version&gt;</code> (+ <code>:latest</code>), runs <code>scripts/release_build.sh</code> to produce <code>dist/release/&lt;version&gt;/</code> (docker-saved image tar, web bundle tar.gz, MANIFEST with sha256s), uploads the directory as an artifact, and on tag pushes attaches the files to a GitHub Release with auto-generated notes. Full reference in <code>17-e2e-and-release.md</code>.</p>
+<p>Triggers on <code>v*.*.*</code> tag push and manual dispatch. Builds + pushes <code>ghcr.io/&lt;owner&gt;/chartnav-api:&lt;version&gt;</code> (+ <code>:latest</code>), runs <code>scripts/release_build.sh</code> to produce <code>dist/release/&lt;version&gt;/</code> (docker-saved image tar, web bundle tar.gz, MANIFEST with sha256s, <strong>SBOM JSON <code>chartnav-sbom-&lt;v&gt;.json</code></strong>, and <strong>image digest <code>chartnav-api-&lt;v&gt;.digest.txt</code></strong> — both added in phase 15), uploads the directory as an artifact, and on tag pushes attaches the files (including SBOM + digest) to a GitHub Release with auto-generated notes. Full reference in <code>17-e2e-and-release.md</code>.</p>
 <h3><code>docker-build</code> (needs: <code>backend-sqlite</code>)</h3>
 <p>Buildx → build <code>chartnav-api:ci</code> from <code>apps/api/</code> → run the container with <code>DATABASE_URL=sqlite:///./chartnav.db</code> and <code>CHARTNAV_RUN_SEED=1</code> → poll <code>/health</code> → run <code>scripts/smoke.sh</code> against the live container. Proves the production image boots end-to-end.</p>
 <h3><code>docs</code> (needs: <code>backend-sqlite</code>)</h3>
@@ -1559,6 +1679,13 @@ make web-build        # vite build -&gt; apps/web/dist
 <li>Audit log tab has an <strong>Export CSV</strong> button that fetches with the auth header and triggers a local download (must use fetch + blob — a raw <code>&lt;a href&gt;</code> can&#x27;t send <code>X-User-Email</code>).</li>
 <li>New minimal <strong>Invite accept</strong> screen (<code>apps/web/src/InviteAccept.tsx</code>) mounted at <code>/invite?invite=&lt;token&gt;</code> and <code>/accept</code>. On success stores the email into <code>localStorage.chartnav.devIdentity</code> so the main app picks it up for header-mode dev use.</li>
 </ul>
+<h2>Admin list scaling + feature flags + a11y (phase 15)</h2>
+<ul>
+<li>Users + Locations tabs now have a <strong>search input</strong> + <strong>Prev/Next pager</strong> (25/page) + count header, powered by <code>listUsersPage</code> / <code>listLocationsPage</code> which read <code>X-Total-Count</code>/<code>X-Limit</code>/<code>X-Offset</code> headers and return <code>{items, total, limit, offset}</code>. Self-search on either tab resets <code>offset</code> to 0 so pagination never strands the user mid-query. Users tab also supports a <code>role</code> filter.</li>
+<li><code>featureEnabled(org, flag)</code> is a new helper in <code>api.ts</code> — flags default to <code>true</code> when unset so untouched orgs keep full UI. <code>AdminPanel</code> loads <code>getOrganization(identity)</code> on mount and threads the org object into panes that gate UI. <code>feature_flags.audit_export=false</code> hides the <strong>Export CSV</strong> button on the Audit tab; <code>feature_flags.bulk_import=false</code> hides the <strong>Bulk import…</strong> button on the Users tab. Server is unchanged — this is a UX toggle, not a security control.</li>
+<li><code>flash</code> in <code>AdminPanel</code> is now a stable <code>useCallback</code> — child panes that put it in a <code>refresh</code> dep array no longer hit an infinite refresh loop. (Regression landed while wiring feature-flag reloads; fix validated by Vitest + E2E.)</li>
+<li>Accessibility: event-type <code>&lt;select&gt;</code> in the encounter detail composer now carries <code>aria-label=&quot;Event type&quot;</code>; inline role <code>&lt;select&gt;</code>s in the admin Users table carry <code>aria-label=&quot;Role for &lt;email&gt;&quot;</code>. These were the only <code>serious</code>/<code>critical</code> axe findings — the suite is now clean.</li>
+</ul>
 <h2>What this phase explicitly does NOT do</h2>
 <ul>
 <li>No real login flow — <code>X-User-Email</code> is still dev transport.</li>
@@ -1664,9 +1791,50 @@ make web-verify      # typecheck + test + build
 <li><code>src/test/App.test.tsx</code> — added 1 test asserting the Admin button is visible to admins only.</li>
 <li>E2E <code>workflow.spec.ts</code> — 2 new scenarios: admin creates a user + a location end-to-end; clinician never sees the Admin button.</li>
 </ul>
+<h2>Enterprise quality tests (phase 15)</h2>
+<ul>
+<li><code>AdminPanel.test.tsx</code> extends to <strong>12 tests</strong> (+3). New mocks:</li>
+</ul>
+<p><code>listUsersPage</code>, <code>listLocationsPage</code>, <code>getOrganization</code>, <code>inviteUser</code>,</p>
+<p><code>bulkCreateUsers</code>, <code>downloadAuditExport</code> — all required because</p>
+<p>AdminPanel now holds feature-flag-aware org state and calls the</p>
+<p>paginated list endpoints.</p>
+<ul>
+<li><code>audit_export=false</code> → <code>admin-audit-export</code> absent, <code>admin-audit-refresh</code> still present.</li>
+<li><code>bulk_import=false</code> → <code>admin-user-bulk-open</code> absent.</li>
+<li>Users-tab search input dispatches <code>listUsersPage({ q })</code>.</li>
+<li>Playwright grows to <strong>21 tests</strong>:</li>
+<li><code>workflow.spec.ts</code> — 12 (unchanged).</li>
+<li><code>a11y.spec.ts</code> — <strong>5 axe-core scans</strong> across app shell, encounter</li>
+</ul>
+<p>list, encounter detail, admin Users tab, admin Audit tab, invite</p>
+<p>accept. <code>serious</code>/<code>critical</code> findings are blocking. Fixes landed</p>
+<p>with the baseline: <code>aria-label=&quot;Event type&quot;</code> on the composer</p>
+<p><code>&lt;select&gt;</code>; <code>aria-label=&quot;Role for &lt;email&gt;&quot;</code> on each inline role</p>
+<p><code>&lt;select&gt;</code>.</p>
+<ul>
+<li><code>visual.spec.ts</code> — <strong>4 Playwright screenshots</strong> (encounter list,</li>
+</ul>
+<p>admin Users, admin Audit, invite accept). Viewport 1280×820,</p>
+<p>animations disabled via injected stylesheet,</p>
+<p><code>maxDiffPixelRatio: 0.02</code>. Baselines are OS-specific and shipped</p>
+<p>for macOS only (<code>*-chromium-darwin.png</code>). <strong>Local-only</strong> gate:</p>
+<p><code>make e2e-visual</code> / <code>make e2e-visual-update</code>. CI skips visual</p>
+<p>because Linux Chromium renders slightly differently.</p>
+<ul>
+<li>Rate limiter: Playwright&#x27;s backend webServer sets</li>
+</ul>
+<p><code>CHARTNAV_RATE_LIMIT_PER_MINUTE=0</code> — the full suite (workflow +</p>
+<p>a11y + visual) runs many requests from 127.0.0.1 and would</p>
+<p>otherwise hit the 120/min limit. Safe because the E2E DB is</p>
+<p>always ephemeral.</p>
 <h2>Gaps not yet covered</h2>
 <ul>
-<li>No visual regression / accessibility audits.</li>
+<li>Visual regression not in CI (documented; OS-specific baselines).</li>
+<li>No keyboard-only / screen-reader manual QA pass beyond axe&#x27;s</li>
+</ul>
+<p>automated ruleset.</p>
+<ul>
 <li>The create modal doesn&#x27;t exercise location-list errors yet.</li>
 <li>Loading skeletons / spinner content not asserted.</li>
 </ul>
@@ -1794,12 +1962,49 @@ docker compose -f infra/docker/docker-compose.prod.yml up -d
 <p>tarball to the GitHub Release alongside the API image tar and web</p>
 <p>bundle, so a staging operator can <code>curl</code> one archive and be ready to</p>
 <p>run against the pinned image tag.</p>
+<h2>SBOM + image digest (phase 15)</h2>
+<p><code>scripts/release_build.sh</code> now emits <strong>two additional files</strong> per</p>
+<p>release:</p>
+<ul>
+<li><code>chartnav-sbom-&lt;version&gt;.json</code> — produced by <code>scripts/sbom.py</code>.</li>
+</ul>
+<p>Captures project + version, git sha/ref/tag/dirty, image owner +</p>
+<p>tag (when <code>CHARTNAV_IMAGE_TAG</code> is set), full `pip list --format</p>
+<p>json<code> (API venv), full </code>npm list --all --json<code> tree of </code>apps/web`</p>
+<p>(falls back to <code>package-lock.json</code> summary if <code>node_modules</code> isn&#x27;t</p>
+<p>installed). The <code>.notes</code> field is explicit that this is a plain</p>
+<p>JSON inventory — <strong>not</strong> a signed CycloneDX document. Upgrading to</p>
+<p><code>cyclonedx-py</code> + <code>cyclonedx-npm</code> is the obvious next step.</p>
+<ul>
+<li><code>chartnav-api-&lt;version&gt;.digest.txt</code> — `docker image inspect</li>
+</ul>
+<p>--format &#x27;{{.Id}}&#x27;` of the release image. Deployers can diff the</p>
+<p>digest of what they pulled from GHCR against what was released.</p>
+<p>Both files are sha256&#x27;d in <code>MANIFEST.txt</code> (the manifest is still the</p>
+<p>integrity anchor) and both are attached to the GitHub Release by</p>
+<p><code>release.yml</code>. Full reference in</p>
+<p><code>25-enterprise-quality-and-compliance.md</code>.</p>
+<h2>E2E coverage (phase 15 addendum)</h2>
+<p>Playwright now runs 21 tests across 3 spec files:</p>
+<ul>
+<li><code>workflow.spec.ts</code> — 12 (unchanged contract).</li>
+<li><code>a11y.spec.ts</code> — 5 axe-core scans (hard gate — <code>serious</code>/<code>critical</code></li>
+</ul>
+<p>findings fail CI).</p>
+<ul>
+<li><code>visual.spec.ts</code> — 4 Playwright screenshots. <strong>Local only</strong>:</li>
+</ul>
+<p>baselines are macOS-specific (<code>*-chromium-darwin.png</code>); CI runs on</p>
+<p>Linux and would fail first-run. Documented honestly.</p>
+<p><code>playwright.config.ts</code>&#x27;s backend webServer sets</p>
+<p><code>CHARTNAV_RATE_LIMIT_PER_MINUTE=0</code> so the full suite doesn&#x27;t trip</p>
+<p>the per-IP rate limiter when every request comes from 127.0.0.1.</p>
 <h2>What this phase does NOT do</h2>
 <ul>
 <li>No staging / production deploy target is connected — the release workflow builds and publishes, operators still run <code>docker compose</code> wherever they host it.</li>
 <li>No automated Postgres E2E — Playwright&#x27;s webServer uses SQLite for speed + isolation. Postgres parity is still proven by <code>backend-postgres</code>.</li>
 <li>No rollback automation — rollbacks are <code>docker pull</code> of the previous tag.</li>
-<li>No signing / SBOM yet. Those are safe to add on top of this pipeline.</li>
+<li>No cosign / Sigstore signing, no CycloneDX / SPDX, no SLSA provenance. The SBOM is the input to those next steps.</li>
 </ul>
 </section>
 <section id="sec-19"><h2>18 — Operational hardening</h2>
@@ -1914,12 +2119,42 @@ docker compose -f infra/docker/docker-compose.prod.yml up -d
 <p>same filters as the read endpoint. Operator use case: spot-check or</p>
 <p>ship into a longer-lived SIEM. No column contains secrets or raw</p>
 <p>tokens by construction.</p>
+<h2>Audit retention helper (phase 15)</h2>
+<p>Rather than silently pruning in-app (which hides data loss behind a</p>
+<p>side effect), ChartNav ships an <strong>operator-invoked</strong> helper:</p>
+<ul>
+<li><code>apps/api/app/retention.py::prune_audit_events(retention_days, dry_run)</code></li>
+</ul>
+<p>deletes <code>security_audit_events</code> rows older than <code>retention_days</code>.</p>
+<p>The app never calls this from a request path; it runs only when an</p>
+<p>operator invokes the CLI.</p>
+<ul>
+<li><code>scripts/audit_retention.py</code> — <code>--days</code>, <code>--dry-run</code>; JSON summary</li>
+</ul>
+<p>(<code>status</code>, <code>retention_days</code>, <code>cutoff</code>, <code>matched</code>, <code>deleted</code>,</p>
+<p><code>dry_run</code>). Also callable via <code>make audit-prune ARGS=&quot;...&quot;</code>.</p>
+<ul>
+<li><code>CHARTNAV_AUDIT_RETENTION_DAYS</code> (default <code>0</code>) supplies the</li>
+</ul>
+<p>threshold; <code>0</code> disables the helper even if invoked.</p>
+<p>Pairing: a typical deployment runs this nightly via cron against the</p>
+<p>API pod&#x27;s venv. Runbook notes live in <code>21-staging-runbook.md</code>;</p>
+<p>compliance framing in <code>25-enterprise-quality-and-compliance.md</code>.</p>
+<h2>Admin list scaling (phase 15)</h2>
+<p><code>GET /users</code> and <code>GET /locations</code> gained <code>limit</code>/<code>offset</code>/<code>q</code> (+ <code>role</code></p>
+<p>on users) query parameters with <code>X-Total-Count</code>/<code>X-Limit</code>/<code>X-Offset</code></p>
+<p>response headers. Invalid <code>role</code> → 400 <code>invalid_role</code>. <code>include_inactive</code></p>
+<p>still works. Defaults remain backward-compatible (no params →</p>
+<p>first 100 rows).</p>
 <h2>Remaining gaps</h2>
 <ul>
 <li>Rate limiter is in-memory per process — same caveat applies to the new metrics.</li>
 <li>Distributed tracing (OpenTelemetry) not wired yet.</li>
 <li>No log shipping / retention policy defined.</li>
-<li>Audit table has no retention/archival yet.</li>
+<li>Audit retention helper exists, but no in-app scheduler and no</li>
+</ul>
+<p>archival-to-S3 flow — operator cron is the contract.</p>
+<ul>
 <li>No dashboards/alerts are shipped — <code>20-observability.md</code> documents the alert points, wiring is the operator&#x27;s responsibility.</li>
 </ul>
 </section>
@@ -2138,11 +2373,24 @@ HAVING COUNT(*) &gt;= 3;
 <tr><td>Audit table growth rate ≫ steady-state</td><td>Investigate; correlate with the two metrics above via request_id.</td></tr>
 </tbody></table>
 <p>This phase does not ship dashboards or alert rules. The plumbing is in place; wire them in your observability platform of choice (Grafana/Datadog/CloudWatch/etc.).</p>
+<h2>Audit retention (phase 15)</h2>
+<p>The app no longer has to silently prune old audit rows to stay bounded.</p>
+<p>Operators run <code>scripts/audit_retention.py</code> (or <code>make audit-prune</code>)</p>
+<p>against the API venv; the script honors <code>CHARTNAV_AUDIT_RETENTION_DAYS</code></p>
+<p>(default <code>0</code> = never prune) and can be invoked with <code>--dry-run</code> for a</p>
+<p>report-only pass. JSON output covers <code>matched</code> / <code>deleted</code> / <code>cutoff</code>.</p>
+<p>A nightly cron is the expected wiring. Full framing in</p>
+<p><code>25-enterprise-quality-and-compliance.md</code>; cron example in</p>
+<p><code>21-staging-runbook.md</code>.</p>
+<p>This keeps two concerns explicit: (1) the app never changes audit</p>
+<p>state outside of a request-scoped write path, and (2)</p>
+<p>compliance-facing retention lives in ops with a scripted contract</p>
+<p>instead of hidden behavior.</p>
 <h2>Remaining gaps</h2>
 <ul>
 <li>No tracing / span propagation yet (OpenTelemetry is the natural next layer).</li>
 <li>Metrics are per-process.</li>
-<li>No log retention or audit-table retention/archival policy in the app; that&#x27;s ops infra&#x27;s job.</li>
+<li>Retention is handled by an operator-invoked helper, archival-to-S3 and SIEM shipping are still ops infra&#x27;s job.</li>
 </ul>
 </section>
 <section id="sec-22"><h2>21 — Staging runbook</h2>
@@ -2259,7 +2507,33 @@ cd infra/docker &amp;&amp; docker compose \
 <tr><td>429 everywhere</td><td><code>CHARTNAV_RATE_LIMIT_PER_MINUTE</code> too low for a load test</td><td>Temporarily raise; remember it&#x27;s per-process, per-path, per-IP.</td></tr>
 <tr><td><code>invalid_issuer</code>/<code>invalid_audience</code> flood</td><td>Wrong <code>CHARTNAV_JWT_ISSUER</code> or <code>_AUDIENCE</code> vs. the IdP&#x27;s tokens</td><td>Inspect a sample token&#x27;s <code>iss</code> / <code>aud</code>; align env.</td></tr>
 </tbody></table>
-<h2>8. What this runbook intentionally does not cover</h2>
+<h2>8. Audit retention cron (phase 15)</h2>
+<p>ChartNav never silently prunes audit rows. Retention is explicit,</p>
+<p>operator-invoked, and scripted:</p>
+<pre class="code lang-bash"><code>
+# dry-run against current env default
+make audit-prune ARGS=&quot;--dry-run&quot;
+
+# explicit threshold, report-only
+python scripts/audit_retention.py --days 90 --dry-run
+
+# actually delete
+python scripts/audit_retention.py --days 90
+</code></pre>
+<p>The helper reads <code>CHARTNAV_AUDIT_RETENTION_DAYS</code> (default <code>0</code> =</p>
+<p>never) when <code>--days</code> is omitted. Output is JSON: <code>status</code>,</p>
+<p><code>retention_days</code>, <code>cutoff</code>, <code>matched</code>, <code>deleted</code>, <code>dry_run</code>.</p>
+<p>A typical cron hook on the staging host:</p>
+<pre class="code lang-cron"><code>
+# every day at 02:30 UTC, prune anything older than 90 days
+30 2 * * *  cd /srv/chartnav &amp;&amp; \
+  apps/api/.venv/bin/python scripts/audit_retention.py --days 90 \
+    &gt;&gt; /var/log/chartnav/audit-prune.jsonl 2&gt;&amp;1
+</code></pre>
+<p>Check the last run by tailing the log or by inspecting the</p>
+<p><code>security_audit_events</code> row count. Full framing in</p>
+<p><code>25-enterprise-quality-and-compliance.md</code> and <code>20-observability.md</code>.</p>
+<h2>9. What this runbook intentionally does not cover</h2>
 <ul>
 <li>Backup &amp; restore. That&#x27;s your infra concern; the app is stateless beyond Postgres.</li>
 <li>DNS / TLS / edge routing.</li>
@@ -2756,7 +3030,193 @@ organization_id, method, path, request_id, remote_addr, detail
 <li>No CRUD for the <code>security_audit_events</code> table from the API — read + export only.</li>
 </ul>
 </section>
-<section id="sec-26"><h2>Diagram — System architecture</h2>
+<section id="sec-26"><h2>25 — Enterprise quality & compliance</h2>
+<h1>Enterprise Quality &amp; Compliance</h1>
+<p>Phase 15 turns ChartNav from &quot;enterprise-shaped&quot; into</p>
+<p>&quot;enterprise-credible&quot; by landing five real guarantees: an a11y floor, a</p>
+<p>visual-regression baseline, a release SBOM + image digest, an audit</p>
+<p>retention helper, and admin-list pagination/search — plus two feature</p>
+<p>flags that actually gate UI behavior.</p>
+<h2>1. Accessibility baseline</h2>
+<p>Stack: <code>@axe-core/playwright</code> over Chromium.</p>
+<p>Scope: app shell + encounter list + encounter detail + admin panel</p>
+<p>(users + audit tabs) + invite accept screen.</p>
+<p>Tests: <code>apps/web/tests/e2e/a11y.spec.ts</code> (5 scenarios). The floor is</p>
+<p>the set of <code>serious</code> and <code>critical</code> axe findings — minor ones are</p>
+<p>logged but not blocking. Local + CI.</p>
+<p>Fixes landed while establishing the baseline:</p>
+<ul>
+<li><code>aria-label=&quot;Event type&quot;</code> on the event-composer <code>&lt;select&gt;</code> in</li>
+</ul>
+<p>encounter detail.</p>
+<ul>
+<li><code>aria-label=&quot;Role for &lt;email&gt;&quot;</code> on each inline role <code>&lt;select&gt;</code> in</li>
+</ul>
+<p>the admin users table.</p>
+<p>Commands:</p>
+<pre class="code lang-bash"><code>
+make e2e-a11y          # only axe scans
+make e2e               # full suite including a11y
+</code></pre>
+<p>Gaps intentionally left:</p>
+<ul>
+<li>No color-contrast audit beyond axe&#x27;s automated rules (manual pass</li>
+</ul>
+<p>not done).</p>
+<ul>
+<li>No keyboard-only walkthrough of every modal (would warrant a</li>
+</ul>
+<p>dedicated QA sweep).</p>
+<h2>2. Visual regression baseline</h2>
+<p>Stack: Playwright <code>toHaveScreenshot</code>.</p>
+<p>Scope: <code>apps/web/tests/e2e/visual.spec.ts</code> — 4 anchor views</p>
+<p>(encounter list, admin users tab, admin audit tab, invite accept).</p>
+<p>Setup notes:</p>
+<ul>
+<li>Viewport pinned to 1280×820.</li>
+<li>Animations + transitions disabled via an injected stylesheet.</li>
+<li>Identity seeded to <code>admin@chartnav.local</code> before each snapshot.</li>
+<li><code>maxDiffPixelRatio: 0.02</code> — small renderer drift shouldn&#x27;t break a</li>
+</ul>
+<p>run, but a real layout regression will cross it.</p>
+<p>Baselines are <strong>OS-specific</strong> (Chromium renders subtly differently on</p>
+<p>macOS vs. Linux). We ship macOS baselines under</p>
+<p><code>apps/web/tests/e2e/visual.spec.ts-snapshots/*-chromium-darwin.png</code></p>
+<p>for local dev. CI does <strong>not</strong> run visual regression (it would fail</p>
+<p>first-run against mismatched-OS baselines); it is a local-only gate</p>
+<p>for now. Documented honestly as a remaining gap.</p>
+<p>Commands:</p>
+<pre class="code lang-bash"><code>
+make e2e-visual          # run against current baselines
+make e2e-visual-update   # intentional UI change → refresh baselines
+</code></pre>
+<h2>3. Admin list scaling</h2>
+<p>Backend: <code>GET /users</code> and <code>GET /locations</code> now accept</p>
+<p><code>limit</code> (1..500, default 100), <code>offset</code> (≥ 0), <code>q</code> (substring</p>
+<p>search), plus <code>role</code> on <code>/users</code>. They emit <code>X-Total-Count</code>,</p>
+<p><code>X-Limit</code>, <code>X-Offset</code> headers. All filters combine with the existing</p>
+<p><code>include_inactive</code> lens.</p>
+<p>Frontend: the Users and Locations tabs have a search box + Prev/Next</p>
+<p>pager (25/page) + count header. Org scope is preserved — pagination</p>
+<p>never leaks cross-org rows.</p>
+<p>Tests: <code>test_enterprise.py</code> covers pagination headers, offset</p>
+<p>movement, <code>q</code> substring match, role filter (valid + invalid),</p>
+<p>cross-org isolation.</p>
+<h2>4. Feature-flag consumption</h2>
+<p><code>organization.settings.feature_flags</code> is now consumed by the</p>
+<p>frontend. Two flags ship wired:</p>
+<table><thead><tr><th>flag</th><th>behavior when <code>false</code></th></tr></thead><tbody>
+<tr><td><code>audit_export</code></td><td>Hides the <strong>Export CSV</strong> button on the Audit tab</td></tr>
+<tr><td><code>bulk_import</code></td><td>Hides the <strong>Bulk import…</strong> button on Users tab</td></tr>
+</tbody></table>
+<p>Both default to <code>true</code> (absent → on). Admins flip them from the</p>
+<p>Organization tab. Server is unchanged — the endpoints still accept</p>
+<p>requests from admins regardless of flag state. Flags only affect the</p>
+<p>UI surface; a sophisticated attacker with an admin role could still</p>
+<p>hit the endpoint directly. That&#x27;s the point of feature flags as UX</p>
+<p>toggles, not security controls, and it&#x27;s documented that way.</p>
+<p>Frontend test coverage (<code>AdminPanel.test.tsx</code>):</p>
+<ul>
+<li><code>audit_export=false</code> → <code>admin-audit-export</code> absent, <code>admin-audit-refresh</code> present.</li>
+<li><code>bulk_import=false</code> → <code>admin-user-bulk-open</code> absent.</li>
+<li>Search field dispatches <code>listUsersPage({ q: ... })</code>.</li>
+</ul>
+<h2>5. Release compliance signals</h2>
+<h3>SBOM</h3>
+<p><code>scripts/sbom.py</code> writes a JSON document with:</p>
+<ul>
+<li>project + version + git sha/ref/tag/dirty-flag,</li>
+<li>image owner + tag (when <code>CHARTNAV_IMAGE_TAG</code> is set),</li>
+<li>full <code>pip list --format json</code> of the API venv,</li>
+<li>full <code>npm list --all --json</code> tree of <code>apps/web</code> (falls back to</li>
+</ul>
+<p><code>package-lock.json</code> summary if node_modules isn&#x27;t installed).</p>
+<p>Explicit note on the file itself: this is <strong>not</strong> a signed CycloneDX</p>
+<p>document. It&#x27;s a real inventory, honest about its shape. Sufficient</p>
+<p>for audit questions about dep versions + git provenance; upgrading to</p>
+<p>signed CycloneDX (<code>cyclonedx-py</code> + <code>cyclonedx-npm</code>) is the obvious</p>
+<p>next step and the <code>.notes</code> field in the SBOM says so.</p>
+<h3>Image digest capture</h3>
+<p><code>scripts/release_build.sh</code> writes <code>chartnav-api-&lt;version&gt;.digest.txt</code></p>
+<p>via <code>docker image inspect --format &#x27;{{.Id}}&#x27;</code>. The digest is attached</p>
+<p>to GitHub Releases alongside the tarballs so deployers can verify the</p>
+<p>pulled image id against what was released.</p>
+<h3>Release bundle contents (phase 15)</h3>
+<p><code>dist/release/&lt;version&gt;/</code>:</p>
+<ul>
+<li><code>chartnav-api-&lt;version&gt;.tar</code>           (docker save)</li>
+<li><code>chartnav-web-&lt;version&gt;.tar.gz</code>        (vite build)</li>
+<li><code>chartnav-staging-&lt;version&gt;.tar.gz</code>    (compose + scripts + docs)</li>
+<li><code>chartnav-sbom-&lt;version&gt;.json</code>         <strong>NEW</strong></li>
+<li><code>chartnav-api-&lt;version&gt;.digest.txt</code>    <strong>NEW</strong></li>
+<li><code>MANIFEST.txt</code>                         (sha256 of every file)</li>
+</ul>
+<p><code>MANIFEST.txt</code> now sha256s every artifact including the SBOM + digest</p>
+<p>file, so the manifest itself is the integrity anchor.</p>
+<h2>6. Retention / compliance scaffolding</h2>
+<h3>Audit retention helper</h3>
+<p><code>apps/api/app/retention.py::prune_audit_events(retention_days, dry_run)</code></p>
+<p>deletes rows from <code>security_audit_events</code> older than <code>retention_days</code>.</p>
+<p>The app itself <strong>never</strong> silently prunes — the helper runs only when</p>
+<p>an operator invokes it. Retention is driven by</p>
+<p><code>CHARTNAV_AUDIT_RETENTION_DAYS</code> (default <code>0</code> = never prune).</p>
+<h3>Operator CLI</h3>
+<pre class="code lang-bash"><code>
+# use env default
+python scripts/audit_retention.py
+# explicit threshold
+python scripts/audit_retention.py --days 90
+# report without deleting
+python scripts/audit_retention.py --days 90 --dry-run
+# via Make
+make audit-prune ARGS=&quot;--days 90 --dry-run&quot;
+</code></pre>
+<p>Output is a JSON summary: <code>status</code>, <code>retention_days</code>, <code>cutoff</code>,</p>
+<p><code>matched</code>, <code>deleted</code>, <code>dry_run</code>. Backend tests (<code>test_enterprise.py</code>)</p>
+<p>cover disabled (<code>0</code>), dry-run, and real deletion paths.</p>
+<h3>Runbook notes</h3>
+<p>See <code>21-staging-runbook.md</code> for the cron-friendly invocation and the</p>
+<p>compliance-facing retention discussion in <code>20-observability.md</code>.</p>
+<h3>What this scaffold does NOT do</h3>
+<ul>
+<li>No SIEM shipping / archival-to-S3 out of the box.</li>
+<li>No regulated-industry attestation (HIPAA/SOC2/ISO) — documentation</li>
+</ul>
+<p>only. Those belong to a real audit workstream.</p>
+<ul>
+<li>No row-level &quot;legal hold&quot; mechanism.</li>
+</ul>
+<h2>7. Test + CI summary</h2>
+<table><thead><tr><th>Layer</th><th>Count</th><th>Notes</th></tr></thead><tbody>
+<tr><td>pytest (backend)</td><td>118</td><td>+8 <code>test_enterprise.py</code> (admin list + retention + feature-flag round-trip)</td></tr>
+<tr><td>Vitest (frontend)</td><td>28</td><td>+3 AdminPanel (flags, search dispatch)</td></tr>
+<tr><td>Playwright E2E</td><td>21</td><td>+5 a11y (axe) + 4 visual regression + 12 workflow</td></tr>
+</tbody></table>
+<p>CI (<code>.github/workflows/ci.yml</code>):</p>
+<ul>
+<li>The existing <code>e2e</code> job now runs <code>workflow.spec.ts</code> <strong>and</strong></li>
+</ul>
+<p><code>a11y.spec.ts</code> (hard gate).</p>
+<ul>
+<li>Visual regression is local-only (see above).</li>
+<li>Release workflow (<code>release.yml</code>) bundles SBOM + image digest;</li>
+</ul>
+<p>operators receive them in every GitHub Release.</p>
+<h2>8. What this phase explicitly does NOT do</h2>
+<ul>
+<li>No Sigstore/cosign signing of images or artifacts.</li>
+<li>No CycloneDX / SPDX standardized SBOM.</li>
+<li>No attested provenance (SLSA, in-toto).</li>
+<li>No automated dependency-vulnerability scan (depends on the</li>
+</ul>
+<p>organization&#x27;s chosen scanner — the SBOM is the input).</p>
+<ul>
+<li>Visual regression does not run in CI.</li>
+<li>Retention helper is not scheduled in the app itself — operator cron</li>
+</ul>
+<p>is expected.</p>
+</section>
+<section id="sec-27"><h2>Diagram — System architecture</h2>
 <h1>System Architecture</h1>
 <div class="mermaid">
 flowchart LR
@@ -2857,7 +3317,7 @@ flowchart LR
   Compose --> PG
 </div>
 </section>
-<section id="sec-27"><h2>Diagram — Encounter status machine</h2>
+<section id="sec-28"><h2>Diagram — Encounter status machine</h2>
 <h1>Encounter Status State Machine</h1>
 <div class="mermaid">
 stateDiagram-v2
@@ -2879,7 +3339,7 @@ stateDiagram-v2
 <p>Legend: any edge not shown is rejected at <code>POST /encounters/{id}/status</code></p>
 <p>with HTTP 400 <code>invalid_transition</code>.</p>
 </section>
-<section id="sec-28"><h2>Diagram — ER</h2>
+<section id="sec-29"><h2>Diagram — ER</h2>
 <h1>ER Diagram</h1>
 <div class="mermaid">
 erDiagram
@@ -2964,7 +3424,7 @@ erDiagram
 <p><code>users.organization_id</code> is the authoritative source of scope; never</p>
 <p>derived from client input.</p>
 </section>
-<section id="sec-29"><h2>Diagram — API / data flow</h2>
+<section id="sec-30"><h2>Diagram — API / data flow</h2>
 <h1>API / Data Flow &amp; CI</h1>
 <h2>UI → Backend request path</h2>
 <div class="mermaid">

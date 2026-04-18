@@ -48,6 +48,7 @@ SECTIONS = [
     ("22 — Admin governance", BUILD / "22-admin-governance.md"),
     ("23 — Operator control plane", BUILD / "23-operator-control-plane.md"),
     ("24 — Invitations & governance", BUILD / "24-invitations-and-governance.md"),
+    ("25 — Enterprise quality & compliance", BUILD / "25-enterprise-quality-and-compliance.md"),
     ("Diagram — System architecture", DIAGR / "system-architecture.md"),
     ("Diagram — Encounter status machine", DIAGR / "encounter-status-machine.md"),
     ("Diagram — ER", DIAGR / "er-diagram.md"),
@@ -84,7 +85,9 @@ date.
 
 **Phase 13 — Operator control plane.** `GET/PATCH /organization` + `GET /security-audit-events` + admin panel Organization & Audit tabs. `invited_at` stamping on admin create.
 
-**Phase 14 — Invitations, settings schema, audit export, event hardening, bulk users (this phase).** Migration `e5f6a7b8c9d0` adds `invitation_token_hash` (sha256-only), `invitation_expires_at`, `invitation_accepted_at`. New endpoints: `POST /users/{id}/invite`, `POST /invites/accept`, `POST /users/bulk`, `GET /security-audit-events/export`. Organization settings becomes a typed `OrganizationSettings` pydantic model (extra=forbid) with dedicated fields + an `extensions` forward-compat bucket. Event payloads enforce per-type value discipline (status enums, non-empty strings, non-negative ints). Admin UI adds per-user **Invite** with a one-shot raw-token banner, a **Bulk import…** dialog, an **Export CSV** button on the audit tab, typed inputs on the Organization tab, and a minimal `/invite?invite=<token>` accept screen. Suites grow to **110 pytest / 25 Vitest / 12 Playwright**.
+**Phase 14 — Invitations, settings schema, audit export, event hardening, bulk users.** Migration `e5f6a7b8c9d0` adds `invitation_token_hash` (sha256-only), `invitation_expires_at`, `invitation_accepted_at`. New endpoints: `POST /users/{id}/invite`, `POST /invites/accept`, `POST /users/bulk`, `GET /security-audit-events/export`. Organization settings becomes a typed `OrganizationSettings` pydantic model (extra=forbid) with dedicated fields + an `extensions` forward-compat bucket. Event payloads enforce per-type value discipline (status enums, non-empty strings, non-negative ints). Admin UI adds per-user **Invite** with a one-shot raw-token banner, a **Bulk import…** dialog, an **Export CSV** button on the audit tab, typed inputs on the Organization tab, and a minimal `/invite?invite=<token>` accept screen. Suites grow to **110 pytest / 25 Vitest / 12 Playwright**.
+
+**Phase 15 — Enterprise quality + compliance (this phase).** Five real enterprise-credibility guarantees land together. (1) **Accessibility baseline**: `@axe-core/playwright` over Chromium, 5 scans covering app shell + encounter list/detail + admin users/audit + invite accept; `serious`/`critical` findings are blocking; established fixes land `aria-label` on the event-type and inline role `<select>`s. (2) **Visual regression baseline**: 4 Playwright screenshots (encounter list, admin users, admin audit, invite accept) at 1280×820 with animations disabled and `maxDiffPixelRatio: 0.02`; macOS baselines committed for local dev; CI intentionally skips because Chromium renders differently on Linux (documented gap). (3) **Admin list scaling**: `GET /users` and `GET /locations` gain `limit`, `offset`, `q`, and (users) `role` query params with `X-Total-Count`/`X-Limit`/`X-Offset` headers; UI adds search + Prev/Next pager (25/page) on both tabs. (4) **Feature-flag consumption**: `organization.settings.feature_flags.audit_export` and `.bulk_import` now actually hide the **Export CSV** / **Bulk import…** buttons; defaults stay `true`; documented as a UX toggle, not a security control. (5) **Release compliance signals**: `scripts/sbom.py` captures project + git sha/tag/dirty + image tag + `pip list` + `npm list`; `scripts/release_build.sh` also emits `chartnav-api-<v>.digest.txt` via `docker image inspect`; both are attached to GitHub Releases and included in `MANIFEST.txt`. (6) **Audit retention scaffolding**: `apps/api/app/retention.py::prune_audit_events` + `scripts/audit_retention.py` CLI + `CHARTNAV_AUDIT_RETENTION_DAYS` env (default `0` = never); the app never silently prunes. Suites grow to **118 pytest / 28 Vitest / 21 Playwright** (12 workflow + 5 a11y + 4 visual-local).
 
 Preserved untouched: `/health`, `/`, SQLite dev workflow, state machine + filtering surface, workflow_events model, existing endpoint contracts.
 """
@@ -251,7 +254,7 @@ def build_html() -> str:
 <body>
 <header class="cover">
   <h1>ChartNav — Consolidated Build</h1>
-  <div class="sub">Backend phases 1–5: spine → state machine → auth → RBAC → CI/hardening<br>
+  <div class="sub">Backend phases 1–15: spine → state machine → auth → RBAC → CI → production seam → Postgres → frontend → E2E → JWT + ops → staging → governance → control plane → invitations → enterprise quality &amp; compliance<br>
   Repo: <code>thekidd2227/chartnav-platform</code></div>
 </header>
 <nav class="toc"><strong>Contents</strong>{toc_html}</nav>

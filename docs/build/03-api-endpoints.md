@@ -21,8 +21,8 @@ Base URL (local dev): `http://127.0.0.1:8000`. All error bodies use
 | Method | Path             | Behavior                                       |
 |--------|------------------|------------------------------------------------|
 | GET    | `/organizations` | Returns only caller's org row.                 |
-| GET    | `/locations`     | `WHERE organization_id = caller.org`.          |
-| GET    | `/users`         | `WHERE organization_id = caller.org`.          |
+| GET    | `/locations`     | `WHERE organization_id = caller.org`. Supports `limit` (1..500, default 100), `offset` (≥0), `q` (substring search on `name`), plus `include_inactive` (admin). Emits `X-Total-Count`, `X-Limit`, `X-Offset` headers. |
+| GET    | `/users`         | `WHERE organization_id = caller.org`. Supports `limit`, `offset`, `q` (substring on `email` or `full_name`), `role` (valid roles only — invalid → 400 `invalid_role`), `include_inactive` (admin). Emits `X-Total-Count`, `X-Limit`, `X-Offset` headers. |
 
 ## Encounters (🔒, org-scoped + RBAC)
 

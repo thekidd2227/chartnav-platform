@@ -147,8 +147,24 @@ When an operator wires alerting, these are the knobs that carry real meaning:
 
 This phase does not ship dashboards or alert rules. The plumbing is in place; wire them in your observability platform of choice (Grafana/Datadog/CloudWatch/etc.).
 
+## Audit retention (phase 15)
+
+The app no longer has to silently prune old audit rows to stay bounded.
+Operators run `scripts/audit_retention.py` (or `make audit-prune`)
+against the API venv; the script honors `CHARTNAV_AUDIT_RETENTION_DAYS`
+(default `0` = never prune) and can be invoked with `--dry-run` for a
+report-only pass. JSON output covers `matched` / `deleted` / `cutoff`.
+A nightly cron is the expected wiring. Full framing in
+`25-enterprise-quality-and-compliance.md`; cron example in
+`21-staging-runbook.md`.
+
+This keeps two concerns explicit: (1) the app never changes audit
+state outside of a request-scoped write path, and (2)
+compliance-facing retention lives in ops with a scripted contract
+instead of hidden behavior.
+
 ## Remaining gaps
 
 - No tracing / span propagation yet (OpenTelemetry is the natural next layer).
 - Metrics are per-process.
-- No log retention or audit-table retention/archival policy in the app; that's ops infra's job.
+- Retention is handled by an operator-invoked helper, archival-to-S3 and SIEM shipping are still ops infra's job.

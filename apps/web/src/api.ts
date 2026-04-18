@@ -295,8 +295,64 @@ export function listUsers(
   email: string,
   opts: { includeInactive?: boolean } = {}
 ): Promise<User[]> {
-  const qs = opts.includeInactive ? "?include_inactive=1" : "";
+  const qs = opts.includeInactive ? "?include_inactive=1&limit=500" : "?limit=500";
   return request(`/users${qs}`, { email });
+}
+
+export async function listUsersPage(
+  email: string,
+  opts: {
+    includeInactive?: boolean;
+    q?: string;
+    role?: Role;
+    limit?: number;
+    offset?: number;
+  } = {}
+): Promise<{ items: User[]; total: number; limit: number; offset: number }> {
+  const qs = new URLSearchParams();
+  if (opts.includeInactive) qs.set("include_inactive", "1");
+  if (opts.q) qs.set("q", opts.q);
+  if (opts.role) qs.set("role", opts.role);
+  if (typeof opts.limit === "number") qs.set("limit", String(opts.limit));
+  if (typeof opts.offset === "number") qs.set("offset", String(opts.offset));
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  const { body, response } = await requestWithResponse<User[]>(
+    `/users${suffix}`,
+    { email }
+  );
+  return {
+    items: body,
+    total: parseInt(response.headers.get("X-Total-Count") || "0", 10),
+    limit: parseInt(response.headers.get("X-Limit") || String(body.length), 10),
+    offset: parseInt(response.headers.get("X-Offset") || "0", 10),
+  };
+}
+
+export async function listLocationsPage(
+  email: string,
+  opts: {
+    includeInactive?: boolean;
+    q?: string;
+    limit?: number;
+    offset?: number;
+  } = {}
+): Promise<{ items: Location[]; total: number; limit: number; offset: number }> {
+  const qs = new URLSearchParams();
+  if (opts.includeInactive) qs.set("include_inactive", "1");
+  if (opts.q) qs.set("q", opts.q);
+  if (typeof opts.limit === "number") qs.set("limit", String(opts.limit));
+  if (typeof opts.offset === "number") qs.set("offset", String(opts.offset));
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  const { body, response } = await requestWithResponse<Location[]>(
+    `/locations${suffix}`,
+    { email }
+  );
+  return {
+    items: body,
+    total: parseInt(response.headers.get("X-Total-Count") || "0", 10),
+    limit: parseInt(response.headers.get("X-Limit") || String(body.length), 10),
+    offset: parseInt(response.headers.get("X-Offset") || "0", 10),
+  };
 }
 
 export function createUser(
@@ -515,6 +571,19 @@ export function canCreateEncounter(role: Role): boolean {
 
 export function isAdmin(role: Role): boolean {
   return role === "admin";
+}
+
+/**
+ * Resolve a named feature flag from org settings. Flags are default-on
+ * unless explicitly set to `false`. Rationale: the server returns `null`
+ * settings for orgs that have never touched them — the UI should not
+ * silently strip features in that state.
+ */
+export function featureEnabled(org: Organization | null, flag: string): boolean {
+  const flags = org?.settings?.feature_flags;
+  if (!flags) return true;
+  const v = flags[flag];
+  return v === undefined ? true : !!v;
 }
 
 // Event type allowlist — mirrors apps/api/app/api/routes.py::EVENT_SCHEMAS.

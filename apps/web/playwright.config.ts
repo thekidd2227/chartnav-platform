@@ -50,6 +50,7 @@ export default defineConfig({
         + `PATH="$PWD/.venv/bin:$PATH" `
         + `python scripts_seed.py && `
         + `DATABASE_URL="sqlite:///${E2E_DB}" `
+        + `CHARTNAV_RATE_LIMIT_PER_MINUTE=0 `
         + `PATH="$PWD/.venv/bin:$PATH" `
         + `uvicorn app.main:app --host 127.0.0.1 --port ${API_PORT} --log-level warning'`,
       ].join(" "),

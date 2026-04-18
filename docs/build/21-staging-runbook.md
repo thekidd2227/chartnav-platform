@@ -141,7 +141,40 @@ Never run the hard teardown on a shared staging host without confirming with who
 | 429 everywhere                                     | `CHARTNAV_RATE_LIMIT_PER_MINUTE` too low for a load test          | Temporarily raise; remember it's per-process, per-path, per-IP. |
 | `invalid_issuer`/`invalid_audience` flood          | Wrong `CHARTNAV_JWT_ISSUER` or `_AUDIENCE` vs. the IdP's tokens   | Inspect a sample token's `iss` / `aud`; align env.              |
 
-## 8. What this runbook intentionally does not cover
+## 8. Audit retention cron (phase 15)
+
+ChartNav never silently prunes audit rows. Retention is explicit,
+operator-invoked, and scripted:
+
+```bash
+# dry-run against current env default
+make audit-prune ARGS="--dry-run"
+
+# explicit threshold, report-only
+python scripts/audit_retention.py --days 90 --dry-run
+
+# actually delete
+python scripts/audit_retention.py --days 90
+```
+
+The helper reads `CHARTNAV_AUDIT_RETENTION_DAYS` (default `0` =
+never) when `--days` is omitted. Output is JSON: `status`,
+`retention_days`, `cutoff`, `matched`, `deleted`, `dry_run`.
+
+A typical cron hook on the staging host:
+
+```cron
+# every day at 02:30 UTC, prune anything older than 90 days
+30 2 * * *  cd /srv/chartnav && \
+  apps/api/.venv/bin/python scripts/audit_retention.py --days 90 \
+    >> /var/log/chartnav/audit-prune.jsonl 2>&1
+```
+
+Check the last run by tailing the log or by inspecting the
+`security_audit_events` row count. Full framing in
+`25-enterprise-quality-and-compliance.md` and `20-observability.md`.
+
+## 9. What this runbook intentionally does not cover
 
 - Backup & restore. That's your infra concern; the app is stateless beyond Postgres.
 - DNS / TLS / edge routing.

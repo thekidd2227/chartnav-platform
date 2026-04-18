@@ -138,9 +138,46 @@ tarball to the GitHub Release alongside the API image tar and web
 bundle, so a staging operator can `curl` one archive and be ready to
 run against the pinned image tag.
 
+## SBOM + image digest (phase 15)
+
+`scripts/release_build.sh` now emits **two additional files** per
+release:
+
+- `chartnav-sbom-<version>.json` — produced by `scripts/sbom.py`.
+  Captures project + version, git sha/ref/tag/dirty, image owner +
+  tag (when `CHARTNAV_IMAGE_TAG` is set), full `pip list --format
+  json` (API venv), full `npm list --all --json` tree of `apps/web`
+  (falls back to `package-lock.json` summary if `node_modules` isn't
+  installed). The `.notes` field is explicit that this is a plain
+  JSON inventory — **not** a signed CycloneDX document. Upgrading to
+  `cyclonedx-py` + `cyclonedx-npm` is the obvious next step.
+- `chartnav-api-<version>.digest.txt` — `docker image inspect
+  --format '{{.Id}}'` of the release image. Deployers can diff the
+  digest of what they pulled from GHCR against what was released.
+
+Both files are sha256'd in `MANIFEST.txt` (the manifest is still the
+integrity anchor) and both are attached to the GitHub Release by
+`release.yml`. Full reference in
+`25-enterprise-quality-and-compliance.md`.
+
+## E2E coverage (phase 15 addendum)
+
+Playwright now runs 21 tests across 3 spec files:
+
+- `workflow.spec.ts` — 12 (unchanged contract).
+- `a11y.spec.ts` — 5 axe-core scans (hard gate — `serious`/`critical`
+  findings fail CI).
+- `visual.spec.ts` — 4 Playwright screenshots. **Local only**:
+  baselines are macOS-specific (`*-chromium-darwin.png`); CI runs on
+  Linux and would fail first-run. Documented honestly.
+
+`playwright.config.ts`'s backend webServer sets
+`CHARTNAV_RATE_LIMIT_PER_MINUTE=0` so the full suite doesn't trip
+the per-IP rate limiter when every request comes from 127.0.0.1.
+
 ## What this phase does NOT do
 
 - No staging / production deploy target is connected — the release workflow builds and publishes, operators still run `docker compose` wherever they host it.
 - No automated Postgres E2E — Playwright's webServer uses SQLite for speed + isolation. Postgres parity is still proven by `backend-postgres`.
 - No rollback automation — rollbacks are `docker pull` of the previous tag.
-- No signing / SBOM yet. Those are safe to add on top of this pipeline.
+- No cosign / Sigstore signing, no CycloneDX / SPDX, no SLSA provenance. The SBOM is the input to those next steps.

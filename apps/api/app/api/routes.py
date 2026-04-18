@@ -330,40 +330,77 @@ def list_organizations(caller: Caller = Depends(require_caller)) -> list[dict]:
 
 @router.get("/locations")
 def list_locations(
+    response: Response,
     caller: Caller = Depends(require_caller),
     include_inactive: bool = Query(default=False),
+    q: Optional[str] = Query(default=None, max_length=200),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
 ) -> list[dict]:
-    if include_inactive:
-        return fetch_all(
-            "SELECT id, organization_id, name, is_active, created_at "
-            "FROM locations WHERE organization_id = :org ORDER BY id",
-            {"org": caller.organization_id},
-        )
-    return fetch_all(
+    clauses = ["organization_id = :org"]
+    params: dict[str, Any] = {"org": caller.organization_id}
+    if not include_inactive:
+        clauses.append("is_active = 1")
+    if q:
+        clauses.append("name LIKE :q")
+        params["q"] = f"%{q}%"
+    where = " WHERE " + " AND ".join(clauses)
+
+    total_row = fetch_one(f"SELECT COUNT(*) AS n FROM locations{where}", params)
+    total = int(total_row["n"]) if total_row else 0
+
+    rows = fetch_all(
         "SELECT id, organization_id, name, is_active, created_at "
-        "FROM locations WHERE organization_id = :org AND is_active = 1 "
-        "ORDER BY id",
-        {"org": caller.organization_id},
+        f"FROM locations{where} ORDER BY id LIMIT :limit OFFSET :offset",
+        {**params, "limit": limit, "offset": offset},
     )
+    response.headers["X-Total-Count"] = str(total)
+    response.headers["X-Limit"] = str(limit)
+    response.headers["X-Offset"] = str(offset)
+    return rows
 
 
 @router.get("/users")
 def list_users(
+    response: Response,
     caller: Caller = Depends(require_caller),
     include_inactive: bool = Query(default=False),
+    q: Optional[str] = Query(default=None, max_length=200),
+    role: Optional[str] = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
 ) -> list[dict]:
-    if include_inactive:
-        return fetch_all(
-            "SELECT id, organization_id, email, full_name, role, is_active, "
-            "invited_at, created_at FROM users WHERE organization_id = :org ORDER BY id",
-            {"org": caller.organization_id},
-        )
-    return fetch_all(
+    clauses = ["organization_id = :org"]
+    params: dict[str, Any] = {"org": caller.organization_id}
+    if not include_inactive:
+        clauses.append("is_active = 1")
+    if q:
+        clauses.append("(email LIKE :q OR full_name LIKE :q)")
+        params["q"] = f"%{q}%"
+    if role:
+        if role not in KNOWN_ROLES:
+            raise _err(
+                "invalid_role",
+                f"role must be one of {sorted(KNOWN_ROLES)}",
+                400,
+            )
+        clauses.append("role = :role")
+        params["role"] = role
+    where = " WHERE " + " AND ".join(clauses)
+
+    total_row = fetch_one(f"SELECT COUNT(*) AS n FROM users{where}", params)
+    total = int(total_row["n"]) if total_row else 0
+
+    rows = fetch_all(
         "SELECT id, organization_id, email, full_name, role, is_active, "
-        "invited_at, created_at FROM users WHERE organization_id = :org "
-        "AND is_active = 1 ORDER BY id",
-        {"org": caller.organization_id},
+        f"invited_at, created_at FROM users{where} "
+        "ORDER BY id LIMIT :limit OFFSET :offset",
+        {**params, "limit": limit, "offset": offset},
     )
+    response.headers["X-Total-Count"] = str(total)
+    response.headers["X-Limit"] = str(limit)
+    response.headers["X-Offset"] = str(offset)
+    return rows
 
 
 # ---------- Encounters (authed + org-scoped + RBAC) ----------

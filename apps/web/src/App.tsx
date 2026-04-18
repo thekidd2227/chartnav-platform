@@ -717,6 +717,7 @@ function EventComposer({
       }}
     >
       <select
+        aria-label="Event type"
         data-testid="event-type"
         value={type}
         onChange={(e) => setType(e.target.value)}

@@ -65,6 +65,22 @@ make docker-build
 - `make verify` (SQLite): 28 pytest + 9 smoke — all green
 - `scripts/pg_verify.sh`: migrations + seed (x2) + smoke + status transition + event write — **PASS**
 
+## Backend coverage (phase 15)
+
+- 118 pytest. `test_enterprise.py` (8) covers admin list pagination
+  (`limit`/`offset`/`X-Total-Count`), `q` substring search on
+  `/users` + `/locations`, valid + invalid `role` filter on `/users`
+  (400 `invalid_role`), cross-org isolation of paginated listings,
+  retention helper (`disabled` / `dry_run` / actual delete paths),
+  and feature-flag JSON round-trip through `PATCH /organization`.
+- Frontend: 28 Vitest. `AdminPanel.test.tsx` adds 3 tests —
+  `audit_export=false` hides **Export CSV**, `bulk_import=false`
+  hides **Bulk import…**, search input dispatches
+  `listUsersPage({q})`.
+- E2E: 21 Playwright = 12 workflow + **5 a11y** (axe-core;
+  `serious`/`critical` blocking) + **4 visual** (local only; macOS
+  baselines; CI skips due to OS-specific pixel rendering).
+
 ## Backend coverage (phase 14)
 
 - 110 pytest. `test_invitations.py` (20) covers invite issue / accept happy path / invalid / expired / reused / reissued tokens, cross-org denial, inactive / already-accepted denial, CSV export (admin-only, filters honored, shape), event-hardening rejection cases, and bulk import summary + org scoping + admin-only.

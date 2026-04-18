@@ -58,6 +58,12 @@ class Settings:
     # client (remote addr + path). 0 disables.
     rate_limit_per_minute: int
 
+    # Audit retention (days). 0 disables the retention helper entirely
+    # (rows live forever). When non-zero, `scripts/audit_retention.py`
+    # deletes rows older than this threshold. The app itself never
+    # silently prunes — retention runs on an operator cadence.
+    audit_retention_days: int
+
 
 _DEFAULT_CORS = (
     "http://localhost:5173,http://127.0.0.1:5173,"
@@ -85,6 +91,15 @@ def _load() -> Settings:
         )
     except ValueError:
         raise RuntimeError("CHARTNAV_RATE_LIMIT_PER_MINUTE must be an integer")
+
+    try:
+        audit_retention_days = int(
+            _env("CHARTNAV_AUDIT_RETENTION_DAYS", "0") or "0"
+        )
+    except ValueError:
+        raise RuntimeError("CHARTNAV_AUDIT_RETENTION_DAYS must be an integer")
+    if audit_retention_days < 0:
+        raise RuntimeError("CHARTNAV_AUDIT_RETENTION_DAYS must be >= 0")
 
     # Validate combinations. Fail loudly at import time rather than
     # silently accepting half-configured production auth.
@@ -117,6 +132,7 @@ def _load() -> Settings:
         jwt_user_claim=jwt_user_claim,
         cors_allow_origins=cors_allow_origins,
         rate_limit_per_minute=rate_limit_per_minute,
+        audit_retention_days=audit_retention_days,
     )
 
 

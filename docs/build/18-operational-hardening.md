@@ -126,10 +126,38 @@ same filters as the read endpoint. Operator use case: spot-check or
 ship into a longer-lived SIEM. No column contains secrets or raw
 tokens by construction.
 
+## Audit retention helper (phase 15)
+
+Rather than silently pruning in-app (which hides data loss behind a
+side effect), ChartNav ships an **operator-invoked** helper:
+
+- `apps/api/app/retention.py::prune_audit_events(retention_days, dry_run)`
+  deletes `security_audit_events` rows older than `retention_days`.
+  The app never calls this from a request path; it runs only when an
+  operator invokes the CLI.
+- `scripts/audit_retention.py` — `--days`, `--dry-run`; JSON summary
+  (`status`, `retention_days`, `cutoff`, `matched`, `deleted`,
+  `dry_run`). Also callable via `make audit-prune ARGS="..."`.
+- `CHARTNAV_AUDIT_RETENTION_DAYS` (default `0`) supplies the
+  threshold; `0` disables the helper even if invoked.
+
+Pairing: a typical deployment runs this nightly via cron against the
+API pod's venv. Runbook notes live in `21-staging-runbook.md`;
+compliance framing in `25-enterprise-quality-and-compliance.md`.
+
+## Admin list scaling (phase 15)
+
+`GET /users` and `GET /locations` gained `limit`/`offset`/`q` (+ `role`
+on users) query parameters with `X-Total-Count`/`X-Limit`/`X-Offset`
+response headers. Invalid `role` → 400 `invalid_role`. `include_inactive`
+still works. Defaults remain backward-compatible (no params →
+first 100 rows).
+
 ## Remaining gaps
 
 - Rate limiter is in-memory per process — same caveat applies to the new metrics.
 - Distributed tracing (OpenTelemetry) not wired yet.
 - No log shipping / retention policy defined.
-- Audit table has no retention/archival yet.
+- Audit retention helper exists, but no in-app scheduler and no
+  archival-to-S3 flow — operator cron is the contract.
 - No dashboards/alerts are shipped — `20-observability.md` documents the alert points, wiring is the operator's responsibility.

@@ -13,7 +13,7 @@ PIP     := $(VENV)/bin/pip
 DEV_DB  := $(API_DIR)/chartnav.db
 PORT    := 8765
 
-.PHONY: help install migrate seed test boot smoke docs verify clean reset-db pg-verify docker-build docker-up docker-down web-install web-dev web-build web-typecheck web-test web-verify e2e e2e-headed e2e-ui release-build staging-up staging-verify staging-rollback staging-down dev
+.PHONY: help install migrate seed test boot smoke docs verify clean reset-db pg-verify docker-build docker-up docker-down web-install web-dev web-build web-typecheck web-test web-verify e2e e2e-headed e2e-ui e2e-a11y e2e-visual e2e-visual-update audit-prune sbom release-build staging-up staging-verify staging-rollback staging-down dev
 
 help:
 	@awk 'BEGIN{FS=":.*?## "} /^[a-zA-Z_-]+:.*?## /{printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -81,6 +81,23 @@ e2e-headed: ## Playwright E2E in a visible browser
 
 e2e-ui: ## Playwright interactive UI mode
 	cd apps/web && npx playwright test --ui
+
+e2e-a11y: ## axe-core accessibility sweep only
+	cd apps/web && npx playwright test tests/e2e/a11y.spec.ts --reporter=list
+
+e2e-visual: ## visual regression baseline (local only; baselines are OS-specific)
+	cd apps/web && npx playwright test tests/e2e/visual.spec.ts --reporter=list
+
+e2e-visual-update: ## refresh visual baselines after an intentional UI change
+	cd apps/web && npx playwright test tests/e2e/visual.spec.ts --update-snapshots --reporter=list
+
+audit-prune: ## Prune security_audit_events older than CHARTNAV_AUDIT_RETENTION_DAYS (override with --days via ARGS=...)
+	$(PY) scripts/audit_retention.py $(ARGS)
+
+sbom: ## Generate the release SBOM JSON into dist/release/_sbom.json
+	mkdir -p dist/release
+	$(PY) scripts/sbom.py --out dist/release/_sbom.json
+	@echo "wrote dist/release/_sbom.json"
 
 release-build: ## Build release artifacts into dist/release/<version>/ (usage: make release-build VERSION=v0.1.0)
 	bash scripts/release_build.sh $(VERSION)
