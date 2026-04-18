@@ -45,6 +45,7 @@ SECTIONS = [
     ("19 — Staging deployment", BUILD / "19-staging-deployment.md"),
     ("20 — Observability", BUILD / "20-observability.md"),
     ("21 — Staging runbook", BUILD / "21-staging-runbook.md"),
+    ("22 — Admin governance", BUILD / "22-admin-governance.md"),
     ("Diagram — System architecture", DIAGR / "system-architecture.md"),
     ("Diagram — Encounter status machine", DIAGR / "encounter-status-machine.md"),
     ("Diagram — ER", DIAGR / "er-diagram.md"),
@@ -75,7 +76,9 @@ date.
 
 **Phase 10 — Real JWT bearer auth + operational hardening.** Real PyJWT validation against a JWKS URL (signature + iss + aud + exp + claim mapping). Request correlation (`X-Request-ID`), structured JSON logs, `security_audit_events` table (`b2c3d4e5f6a7`), CORS driven by config, per-process rate limiter.
 
-**Phase 11 — Staging deployment + observability (this phase).** New `GET /ready` (DB-aware readiness) and `GET /metrics` (Prometheus text) surface request, auth-denied, rate-limited, audit-event, and latency counters. Staging is a pinned-image compose deploy: `infra/docker/docker-compose.staging.yml` + `.env.staging.example`, driven by `staging_up.sh`/`staging_verify.sh`/`staging_rollback.sh`. Release bundle now ships a `chartnav-staging-<version>.tar.gz`. New CI `deploy-config` job validates compose files + shellchecks every script. Runbook + observability docs are operator-grade (19/20/21). 51 pytest tests including 3 observability scenarios; 9-assertion staging verify runs live against a locally-booted API.
+**Phase 11 — Staging deployment + observability.** New `/ready` + `/metrics` surfaces. Pinned-image staging compose + runbook scripts + release-bundled staging tarball. `deploy-config` CI job validates compose + shellcheck.
+
+**Phase 12 — Admin governance + event discipline + pagination (this phase).** Migration `c3d4e5f6a7b8` adds a CHECK constraint on `users.role` (DB-level rejection of anything outside `{admin, clinician, reviewer}`) plus `is_active` flags on `users` and `locations` for soft-delete. Admin CRUD arrives: `POST/PATCH/DELETE /users` and `POST/PATCH/DELETE /locations`, admin-only, strictly org-scoped, with self-protection against demote/deactivate. `EVENT_SCHEMAS` makes workflow events schema-bound (invalid type or payload → 400). `GET /encounters` paginates via `limit`+`offset` query params with `X-Total-Count`/`X-Limit`/`X-Offset` headers — backward-compatible array body. Frontend gains an `AdminPanel` modal (Users + Locations tabs), an Admin button gated on `isAdmin(role)`, a Prev/Next pager, and an event-type `<select>` wired to the backend allowlist. Backend suite jumps to 91 tests (+20 admin/governance), Vitest to 18 (+6 admin UI), Playwright to 10 (+2 admin scenarios).
 
 Preserved untouched: `/health`, `/`, SQLite dev workflow, state machine + filtering surface, workflow_events model, existing endpoint contracts.
 """

@@ -260,3 +260,21 @@ body {
   color: var(--fg);
 }
 .modal__body .row { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+
+.admin-modal { width: 760px; max-width: 96vw; }
+.admin-tabs { display: flex; gap: 8px; padding: 0 18px 12px; }
+.admin-list-head { display: flex; justify-content: space-between; align-items: flex-end; margin: 14px 0 8px; }
+.admin-list-head h3 { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.admin-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.admin-table th, .admin-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.admin-table th { background: var(--bg-alt); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.admin-table select, .admin-table input { font: inherit; padding: 3px 6px; border: 1px solid var(--line-strong); border-radius: 4px; }
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+  background: #fff;
+}

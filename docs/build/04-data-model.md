@@ -28,16 +28,26 @@ SQLite (local dev). Schema produced by Alembic migrations
 | organization_id | INTEGER | NOT NULL, FK → organizations(id) |
 | email | VARCHAR | NOT NULL, UNIQUE |
 | full_name | VARCHAR | NULL |
-| role | VARCHAR | NOT NULL default `"admin"` |
+| role | VARCHAR | NOT NULL default `"admin"`, **CHECK (`admin`/`clinician`/`reviewer`)** |
+| is_active | BOOLEAN | NOT NULL default `true` |
 | created_at | DATETIME | NOT NULL default now() |
 
-**Application-level role vocabulary** (enforced by `app/authz.py`):
-`admin`, `clinician`, `reviewer`. The column remains a free VARCHAR in
-SQL; constraint is enforced at the app layer. If you need a DB-level
-CHECK constraint, add it in a future migration.
+**Role vocabulary** is enforced at BOTH layers since phase 12:
+- App: `app/authz.py::KNOWN_ROLES`.
+- DB: CHECK constraint installed by migration `c3d4e5f6a7b8`.
+
+Rows with `is_active = 0` are hidden from the default `GET /users`.
+Admins can list them with `?include_inactive=1`. Soft-delete preserves
+FK integrity for audit rows, workflow events, and encounters.
+
+### `locations`
+Unchanged except for the `is_active` column added in migration
+`c3d4e5f6a7b8` (same semantics as `users.is_active`).
 
 ### `encounters` and `workflow_events`
-Unchanged.
+Unchanged. `event_data` is still stored as JSON text; the shape is now
+gated at the API layer by `EVENT_SCHEMAS` (see
+`22-admin-governance.md`).
 
 ### `security_audit_events` (added in phase 10)
 

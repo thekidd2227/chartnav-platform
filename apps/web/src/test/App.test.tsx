@@ -11,6 +11,7 @@ vi.mock("../api", async () => {
     API_URL: "http://test",
     getMe: vi.fn(),
     listEncounters: vi.fn(),
+    listEncountersPage: vi.fn(),
     getEncounter: vi.fn(),
     getEncounterEvents: vi.fn(),
     createEncounterEvent: vi.fn(),
@@ -106,6 +107,18 @@ function listMock() {
       return rows;
     }
   );
+  (api.listEncountersPage as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+    async (email: string, filters: api.EncounterFilters = {}, page: { limit?: number; offset?: number } = {}) => {
+      const base = email.endsWith("@northside.local") ? ORG2_ENCOUNTERS : ORG1_ENCOUNTERS;
+      let rows = [...base];
+      if (filters.status) rows = rows.filter((r) => r.status === filters.status);
+      if (filters.provider_name) rows = rows.filter((r) => r.provider_name === filters.provider_name);
+      const total = rows.length;
+      const limit = page.limit ?? 25;
+      const offset = page.offset ?? 0;
+      return { items: rows.slice(offset, offset + limit), total, limit, offset };
+    }
+  );
 }
 
 function detailMock() {
@@ -164,7 +177,7 @@ describe("ChartNav frontend", () => {
     await user.selectOptions(screen.getByTestId("filter-status"), "in_progress");
 
     await waitFor(() => {
-      const calls = (api.listEncounters as any).mock.calls;
+      const calls = (api.listEncountersPage as any).mock.calls;
       expect(calls.at(-1)?.[1]).toEqual({ status: "in_progress" });
     });
     const list = await screen.findByTestId("enc-list");
@@ -223,6 +236,30 @@ describe("ChartNav frontend", () => {
     expect(screen.queryByTestId("event-form")).not.toBeInTheDocument();
   });
 
+  it("admin sees the Admin button; clinician/reviewer do not", async () => {
+    const user = userEvent.setup();
+    await waitForAdminLoaded();
+    expect(screen.getByTestId("open-admin-panel")).toBeInTheDocument();
+
+    await user.selectOptions(
+      screen.getByTestId("identity-select"),
+      "clin@chartnav.local"
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("identity-badge")).toHaveTextContent("clinician")
+    );
+    expect(screen.queryByTestId("open-admin-panel")).not.toBeInTheDocument();
+
+    await user.selectOptions(
+      screen.getByTestId("identity-select"),
+      "rev@chartnav.local"
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("identity-badge")).toHaveTextContent("reviewer")
+    );
+    expect(screen.queryByTestId("open-admin-panel")).not.toBeInTheDocument();
+  });
+
   it("reviewer cannot see the create-encounter button", async () => {
     const user = userEvent.setup();
     await waitForAdminLoaded();
@@ -254,7 +291,9 @@ describe("ChartNav frontend", () => {
     };
     (api.createEncounter as any).mockResolvedValueOnce(created);
     // After create, the list should include the new row.
-    (api.listEncounters as any).mockImplementation(async () => [...ORG1_ENCOUNTERS, created]);
+    (api.listEncountersPage as any).mockImplementation(async () => ({
+      items: [...ORG1_ENCOUNTERS, created], total: 3, limit: 25, offset: 0,
+    }));
     (api.getEncounter as any).mockImplementation(async (_: string, id: number) => {
       if (id === 99) return created;
       const all = [...ORG1_ENCOUNTERS, ...ORG2_ENCOUNTERS];

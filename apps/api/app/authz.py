@@ -82,6 +82,16 @@ def require_roles(*roles: str):
     return _dep
 
 
+def require_admin(caller: Caller = Depends(require_caller)) -> Caller:
+    """Admin-only actions (metadata management)."""
+    if caller.role != ROLE_ADMIN:
+        raise forbidden(
+            "role_admin_required",
+            f"role '{caller.role}' is not permitted; requires 'admin'",
+        )
+    return caller
+
+
 def require_create_encounter(caller: Caller = Depends(require_caller)) -> Caller:
     if caller.role not in CAN_CREATE_ENCOUNTER:
         raise forbidden(

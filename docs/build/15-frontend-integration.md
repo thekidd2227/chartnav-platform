@@ -171,6 +171,16 @@ role-aware transitions, reviewer restrictions, unknown-email auth
 surface, filters. Details in `17-e2e-and-release.md`. Command:
 `make e2e`.
 
+## Admin governance (phase 12)
+
+- **Admin button** in the header renders only when `isAdmin(role)`. Clinician / reviewer never see it.
+- Opens `<AdminPanel />` — a modal with **Users** and **Locations** tabs.
+  - Users: create form (email / full name / role), table with inline role change + deactivate/reactivate. Self-row is disabled so admins can't lock themselves out.
+  - Locations: create form + inline rename (click-to-edit) + deactivate.
+- Every mutating control disables in flight and surfaces backend `{error_code, reason}` in a per-tab banner on failure.
+- The event composer's event_type is now a `<select>` wired to the backend allowlist (`EVENT_TYPES`), so the UI can't submit invalid types.
+- Encounter list paginates 25 rows at a time via `listEncountersPage`, rendering Prev/Next + "N-M of T" when `total > 25`.
+
 ## What this phase explicitly does NOT do
 
 - No real login flow — `X-User-Email` is still dev transport.

@@ -89,11 +89,13 @@ test.describe("ChartNav end-to-end", () => {
     await expect(page.getByTestId("encounter-detail")).toBeVisible();
 
     const marker = `note-${Date.now()}`;
-    await page.getByTestId("event-type").fill(`e2e_${marker}`);
+    await page.getByTestId("event-type").selectOption("manual_note");
+    await page.getByTestId("event-data").fill(`{"note":"${marker}"}`);
     await page.getByTestId("event-submit").click();
-    await expect(page.getByTestId("banner-ok")).toContainText(`e2e_${marker}`);
+    await expect(page.getByTestId("banner-ok")).toContainText("manual_note");
     // Event appears in timeline.
-    await expect(page.locator(`.event-item__type >> text=e2e_${marker}`)).toBeVisible();
+    await expect(page.locator(`.event-item__type >> text=manual_note`)).toBeVisible();
+    await expect(page.locator(`.event-item__data >> text=${marker}`)).toBeVisible();
   });
 
   test("clinician performs operational transition; review edge is not offered", async ({ page }) => {
@@ -149,6 +151,37 @@ test.describe("ChartNav end-to-end", () => {
     await switchIdentity(page, "ghost@nowhere.test");
     await expect(page.getByTestId("identity-error")).toBeVisible();
     await expect(page.getByTestId("identity-error")).toContainText("unknown_user");
+  });
+
+  test("admin can create a user and a location from the admin panel", async ({ page }) => {
+    await waitForIdentity(page, "admin");
+    await page.getByTestId("open-admin-panel").click();
+    await expect(page.getByTestId("admin-panel")).toBeVisible();
+
+    // Users tab (default)
+    const email = `e2e-${Date.now()}@chartnav.local`;
+    await page.getByTestId("admin-user-email").fill(email);
+    await page.getByTestId("admin-user-name").fill("E2E User");
+    await page.getByTestId("admin-user-role").selectOption("reviewer");
+    await page.getByTestId("admin-user-submit").click();
+    await expect(page.getByTestId("admin-banner-ok")).toContainText(email);
+    await expect(page.getByTestId("admin-users-table")).toContainText(email);
+
+    // Locations tab
+    await page.getByTestId("admin-tab-locations").click();
+    await expect(page.getByTestId("admin-locations-table")).toBeVisible();
+    const locName = `E2E-Loc-${Date.now()}`;
+    await page.getByTestId("admin-loc-name").fill(locName);
+    await page.getByTestId("admin-loc-submit").click();
+    await expect(page.getByTestId("admin-banner-ok")).toContainText(/Location created/);
+    await expect(page.getByTestId("admin-locations-table")).toContainText(locName);
+  });
+
+  test("non-admin cannot see the admin button", async ({ page }) => {
+    await waitForIdentity(page, "admin");
+    await switchIdentity(page, CLIN1);
+    await waitForIdentity(page, "clinician");
+    await expect(page.getByTestId("open-admin-panel")).toHaveCount(0);
   });
 
   test("status filter narrows the list", async ({ page }) => {

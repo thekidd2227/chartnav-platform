@@ -39,7 +39,7 @@
   <div class="sub">Backend phases 1–5: spine → state machine → auth → RBAC → CI/hardening<br>
   Repo: <code>thekidd2227/chartnav-platform</code></div>
 </header>
-<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth, org scoping, RBAC</a></li><li><a href="#sec-9">08 — Test strategy</a></li><li><a href="#sec-10">09 — CI & deploy hardening</a></li><li><a href="#sec-11">10 — Doc artifact pipeline</a></li><li><a href="#sec-12">11 — Production-auth seam</a></li><li><a href="#sec-13">12 — Runtime config</a></li><li><a href="#sec-14">13 — Deploy target</a></li><li><a href="#sec-15">14 — Postgres parity</a></li><li><a href="#sec-16">15 — Frontend integration</a></li><li><a href="#sec-17">16 — Frontend test strategy</a></li><li><a href="#sec-18">17 — E2E & release</a></li><li><a href="#sec-19">18 — Operational hardening</a></li><li><a href="#sec-20">19 — Staging deployment</a></li><li><a href="#sec-21">20 — Observability</a></li><li><a href="#sec-22">21 — Staging runbook</a></li><li><a href="#sec-23">Diagram — System architecture</a></li><li><a href="#sec-24">Diagram — Encounter status machine</a></li><li><a href="#sec-25">Diagram — ER</a></li><li><a href="#sec-26">Diagram — API / data flow</a></li></ol></nav>
+<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth, org scoping, RBAC</a></li><li><a href="#sec-9">08 — Test strategy</a></li><li><a href="#sec-10">09 — CI & deploy hardening</a></li><li><a href="#sec-11">10 — Doc artifact pipeline</a></li><li><a href="#sec-12">11 — Production-auth seam</a></li><li><a href="#sec-13">12 — Runtime config</a></li><li><a href="#sec-14">13 — Deploy target</a></li><li><a href="#sec-15">14 — Postgres parity</a></li><li><a href="#sec-16">15 — Frontend integration</a></li><li><a href="#sec-17">16 — Frontend test strategy</a></li><li><a href="#sec-18">17 — E2E & release</a></li><li><a href="#sec-19">18 — Operational hardening</a></li><li><a href="#sec-20">19 — Staging deployment</a></li><li><a href="#sec-21">20 — Observability</a></li><li><a href="#sec-22">21 — Staging runbook</a></li><li><a href="#sec-23">22 — Admin governance</a></li><li><a href="#sec-24">Diagram — System architecture</a></li><li><a href="#sec-25">Diagram — Encounter status machine</a></li><li><a href="#sec-26">Diagram — ER</a></li><li><a href="#sec-27">Diagram — API / data flow</a></li></ol></nav>
 <section id="sec-1"><h2>Executive summary</h2>
 <p>This document consolidates <strong>all</strong> ChartNav backend phases delivered to</p>
 <p>date.</p>
@@ -53,85 +53,97 @@
 <p><strong>Phase 8 — Create UI + frontend tests + frontend CI.</strong> Admin/clinician can create encounters through a modal; Vitest + Testing Library harness (12 tests) locks the UI down; dedicated <code>frontend</code> CI job runs typecheck + tests + build on every push/PR.</p>
 <p><strong>Phase 9 — Playwright E2E + release pipeline.</strong> Playwright boots backend + frontend together, 8 Chromium scenarios, new <code>e2e</code> CI job. <code>release.yml</code> workflow on <code>v*.*.*</code> tags: GHCR push + release bundle + GitHub Release with tarballs and MANIFEST.</p>
 <p><strong>Phase 10 — Real JWT bearer auth + operational hardening.</strong> Real PyJWT validation against a JWKS URL (signature + iss + aud + exp + claim mapping). Request correlation (<code>X-Request-ID</code>), structured JSON logs, <code>security_audit_events</code> table (<code>b2c3d4e5f6a7</code>), CORS driven by config, per-process rate limiter.</p>
-<p><strong>Phase 11 — Staging deployment + observability (this phase).</strong> New <code>GET /ready</code> (DB-aware readiness) and <code>GET /metrics</code> (Prometheus text) surface request, auth-denied, rate-limited, audit-event, and latency counters. Staging is a pinned-image compose deploy: <code>infra/docker/docker-compose.staging.yml</code> + <code>.env.staging.example</code>, driven by <code>staging_up.sh</code>/<code>staging_verify.sh</code>/<code>staging_rollback.sh</code>. Release bundle now ships a <code>chartnav-staging-&lt;version&gt;.tar.gz</code>. New CI <code>deploy-config</code> job validates compose files + shellchecks every script. Runbook + observability docs are operator-grade (19/20/21). 51 pytest tests including 3 observability scenarios; 9-assertion staging verify runs live against a locally-booted API.</p>
+<p><strong>Phase 11 — Staging deployment + observability.</strong> New <code>/ready</code> + <code>/metrics</code> surfaces. Pinned-image staging compose + runbook scripts + release-bundled staging tarball. <code>deploy-config</code> CI job validates compose + shellcheck.</p>
+<p><strong>Phase 12 — Admin governance + event discipline + pagination (this phase).</strong> Migration <code>c3d4e5f6a7b8</code> adds a CHECK constraint on <code>users.role</code> (DB-level rejection of anything outside <code>{admin, clinician, reviewer}</code>) plus <code>is_active</code> flags on <code>users</code> and <code>locations</code> for soft-delete. Admin CRUD arrives: <code>POST/PATCH/DELETE /users</code> and <code>POST/PATCH/DELETE /locations</code>, admin-only, strictly org-scoped, with self-protection against demote/deactivate. <code>EVENT_SCHEMAS</code> makes workflow events schema-bound (invalid type or payload → 400). <code>GET /encounters</code> paginates via <code>limit</code>+<code>offset</code> query params with <code>X-Total-Count</code>/<code>X-Limit</code>/<code>X-Offset</code> headers — backward-compatible array body. Frontend gains an <code>AdminPanel</code> modal (Users + Locations tabs), an Admin button gated on <code>isAdmin(role)</code>, a Prev/Next pager, and an event-type <code>&lt;select&gt;</code> wired to the backend allowlist. Backend suite jumps to 91 tests (+20 admin/governance), Vitest to 18 (+6 admin UI), Playwright to 10 (+2 admin scenarios).</p>
 <p>Preserved untouched: <code>/health</code>, <code>/</code>, SQLite dev workflow, state machine + filtering surface, workflow_events model, existing endpoint contracts.</p>
 </section>
 <section id="sec-2"><h2>01 — Current state</h2>
 <h1>ChartNav — Current State</h1>
-<p><strong>As of:</strong> 2026-04-18 (phase: staging deployment + observability)</p>
+<p><strong>As of:</strong> 2026-04-18 (phase: admin governance + event discipline + pagination)</p>
 <h2>Repo layout (relevant)</h2>
 <pre class="code lang-"><code>
 chartnav-platform/
 ├── .github/workflows/
 │   ├── ci.yml            # backend-sqlite · backend-postgres · frontend · e2e · docker-build · deploy-config · docs
-│   └── release.yml       # now also bundles the staging artifact tar
-├── Makefile              # + staging-up · staging-verify · staging-rollback · staging-down
-├── scripts/
-│   ├── build_docs.py
-│   ├── verify.sh · pg_verify.sh · release_build.sh
-│   └── staging_up.sh · staging_verify.sh · staging_rollback.sh
+│   └── release.yml
+├── Makefile              # staging-up/verify/rollback · web-* · e2e · release-build · dev
+├── scripts/              # build_docs.py · verify.sh · pg_verify.sh · release_build.sh · staging_*.sh
 ├── apps/
 │   ├── api/
 │   │   ├── app/
-│   │   │   ├── main.py              # CORS + middleware + exception-handler audit
-│   │   │   ├── config.py
-│   │   │   ├── db.py
-│   │   │   ├── auth.py              # real JWT bearer
-│   │   │   ├── authz.py
-│   │   │   ├── audit.py
-│   │   │   ├── logging_config.py
-│   │   │   ├── middleware.py        # request-id · access log · rate limit
-│   │   │   ├── metrics.py           # NEW — in-process Prometheus counters
-│   │   │   └── api/routes.py        # adds /ready, /metrics
-│   │   ├── alembic/versions/        # 3 migrations through b2c3d4e5f6a7
-│   │   ├── scripts_seed.py · scripts/smoke.sh
-│   │   ├── tests/                   # 51 pytest (+ 3 observability)
+│   │   │   ├── main.py · config.py · db.py · auth.py · authz.py
+│   │   │   ├── audit.py · logging_config.py · middleware.py · metrics.py
+│   │   │   └── api/routes.py    # + admin CRUD, event schemas, pagination
+│   │   ├── alembic/versions/    # 4 migrations through c3d4e5f6a7b8
+│   │   ├── scripts_seed.py
+│   │   ├── scripts/smoke.sh
+│   │   ├── tests/               # 91 pytest (+20 admin, +3 observability)
 │   │   └── Dockerfile · entrypoint.sh · .env.example
 │   └── web/
-│       └── (unchanged this phase)
-├── infra/docker/
-│   ├── docker-compose.yml           # dev
-│   ├── docker-compose.prod.yml      # generic prod
-│   ├── docker-compose.staging.yml   # NEW — pinned image, /ready healthcheck, volumes
-│   └── .env.staging.example         # NEW — explicit staging contract
-└── docs/build/ 01 … 21
+│       ├── package.json · playwright.config.ts · vite.config.ts · tsconfig.json
+│       ├── src/
+│       │   ├── App.tsx          # + Admin button, pagination, event-type dropdown
+│       │   ├── AdminPanel.tsx   # NEW — users + locations tabs
+│       │   ├── api.ts           # + admin methods + listEncountersPage
+│       │   ├── identity.ts · styles.css · main.tsx
+│       │   └── test/            # 18 Vitest (+6 admin, +1 app)
+│       └── tests/e2e/           # 10 Playwright (+2 admin)
+├── infra/docker/{docker-compose,docker-compose.prod,docker-compose.staging}.yml
+└── docs/build/ 01 … 22
 </code></pre>
 <h2>Runtime baseline</h2>
 <ul>
 <li>Backend: FastAPI + SQLAlchemy Core + PyJWT.</li>
 <li>Frontend: Vite 5 + React 18 + TypeScript + Vitest + Playwright.</li>
-<li>Auth: <code>header</code> (dev) or <code>bearer</code> (prod, real JWT with JWKS cache).</li>
-<li>RBAC: <code>admin</code> / <code>clinician</code> / <code>reviewer</code>.</li>
+<li>Auth: <code>header</code> (dev) or <code>bearer</code> (prod JWT via JWKS).</li>
+<li>RBAC: <code>admin</code> / <code>clinician</code> / <code>reviewer</code>. Enforced at <strong>app level AND DB level</strong> via CHECK constraint (migration <code>c3d4e5f6a7b8</code>).</li>
 <li>Error envelope: <code>{&quot;detail&quot;: {&quot;error_code&quot;: &quot;...&quot;, &quot;reason&quot;: &quot;...&quot;}}</code>.</li>
-<li><strong>Observability</strong>: <code>/health</code> (liveness), <code>/ready</code> (DB-aware), <code>/metrics</code> (Prometheus text).</li>
-<li><strong>Audit trail</strong>: <code>security_audit_events</code> table; written on 401/403 + listed error codes + 429 rate_limited.</li>
-<li><strong>CORS</strong>: env-driven, no wildcard.</li>
-<li><strong>Rate limit</strong>: per-process sliding window on authed paths.</li>
-<li><strong>Request correlation</strong>: <code>X-Request-ID</code> inbound is honored, otherwise generated; always echoed.</li>
-<li><strong>Structured logs</strong>: JSON per line.</li>
-<li>Alembic head: <code>b2c3d4e5f6a7</code>.</li>
+<li><strong>Admin governance</strong>: <code>POST/PATCH/DELETE /users</code> + <code>POST/PATCH/DELETE /locations</code> (admin only, org-scoped, soft-delete via <code>is_active</code>).</li>
+<li><strong>Event discipline</strong>: <code>EVENT_SCHEMAS</code> allowlist with per-type required keys; invalid <code>event_type</code> or <code>event_data</code> → 400.</li>
+<li><strong>Pagination</strong>: <code>GET /encounters?limit=&amp;offset=</code> + <code>X-Total-Count</code>/<code>X-Limit</code>/<code>X-Offset</code> headers.</li>
+<li>Observability: <code>/health</code> · <code>/ready</code> · <code>/metrics</code> (Prometheus text).</li>
+<li>Audit trail: <code>security_audit_events</code> table.</li>
+<li>CORS + rate-limit + request-id + structured logs: unchanged.</li>
+<li>Alembic head: <code>c3d4e5f6a7b8</code>.</li>
 </ul>
 <h2>Testing layers</h2>
 <table><thead><tr><th>Layer</th><th>Tool</th><th>Count</th><th>Scope</th></tr></thead><tbody>
-<tr><td>pytest</td><td>pytest</td><td>51</td><td>backend (auth, RBAC, scoping, state machine, bearer JWT, operational, observability)</td></tr>
+<tr><td>pytest</td><td>pytest</td><td>91</td><td>backend (auth, RBAC, scoping, state machine, JWT, operational, observability, admin/governance/events/pagination)</td></tr>
 <tr><td>shell smoke</td><td>smoke.sh</td><td>9</td><td>live HTTP contract (SQLite + Postgres)</td></tr>
-<tr><td>vitest</td><td>vitest</td><td>12</td><td>frontend integration</td></tr>
-<tr><td>Playwright</td><td>@playwright</td><td>8</td><td>full-stack browser</td></tr>
-<tr><td>staging smoke</td><td>staging_verify.sh</td><td>9</td><td>live staging stack (health + ready + metrics + auth + audit signal)</td></tr>
+<tr><td>vitest</td><td>vitest</td><td>18</td><td>frontend integration (mocked API, incl. AdminPanel)</td></tr>
+<tr><td>Playwright</td><td>@playwright</td><td>10</td><td>full-stack browser (incl. admin create-user/location, non-admin denial)</td></tr>
+<tr><td>staging</td><td>staging_verify.sh</td><td>9</td><td>live staging stack</td></tr>
 </tbody></table>
-<h2>Deploy / release</h2>
+<h2>Verified working endpoints</h2>
+<h3>Open</h3>
 <ul>
-<li>Release: <code>.github/workflows/release.yml</code> on <code>v*.*.*</code> tags pushes <code>ghcr.io/&lt;owner&gt;/chartnav-api:&lt;tag&gt;</code> + <code>:latest</code>, produces <code>chartnav-api-&lt;v&gt;.tar</code>, <code>chartnav-web-&lt;v&gt;.tar.gz</code>, <code>chartnav-staging-&lt;v&gt;.tar.gz</code>, and <code>MANIFEST.txt</code> in a GitHub Release.</li>
-<li>Staging deploy: <code>infra/docker/docker-compose.staging.yml</code> + <code>.env.staging</code> on the staging host; one-shot <code>make staging-up</code> / <code>staging-verify</code> / <code>staging-rollback TAG=...</code>.</li>
-<li>Prod: <code>infra/docker/docker-compose.prod.yml</code> remains available; it&#x27;s the generic ancestor of the staging compose.</li>
+<li><code>GET /health</code>, <code>GET /</code></li>
+<li><code>GET /ready</code>, <code>GET /metrics</code></li>
+</ul>
+<h3>Authenticated (any role)</h3>
+<ul>
+<li><code>GET /me</code></li>
+<li><code>GET /organizations</code>, <code>GET /locations</code>, <code>GET /users</code> (+ <code>?include_inactive=1</code>)</li>
+<li><code>GET /encounters</code> (filters + pagination), <code>GET /encounters/{id}</code>, <code>GET /encounters/{id}/events</code></li>
+<li><code>POST /encounters</code> (admin, clinician)</li>
+<li><code>POST /encounters/{id}/events</code> (admin, clinician; event-type + schema validated)</li>
+<li><code>POST /encounters/{id}/status</code> (per-edge RBAC)</li>
+</ul>
+<h3>Admin only (org-scoped, soft-delete semantics)</h3>
+<ul>
+<li><code>POST /users</code>, <code>PATCH /users/{id}</code>, <code>DELETE /users/{id}</code></li>
+<li><code>POST /locations</code>, <code>PATCH /locations/{id}</code>, <code>DELETE /locations/{id}</code></li>
 </ul>
 <h2>Automation</h2>
 <ul>
-<li><code>make verify</code> (backend gate), <code>make pg-verify</code> (Postgres parity), <code>make web-verify</code>, <code>make e2e</code></li>
+<li><code>make verify</code> — backend gate (91 pytest + 9 smoke)</li>
+<li><code>make web-verify</code> — frontend gate (18 vitest + typecheck + build)</li>
+<li><code>make e2e</code> — Playwright (10 scenarios)</li>
+<li><code>make pg-verify</code> — Postgres parity</li>
 <li><code>make staging-up / staging-verify / staging-rollback TAG=... / staging-down</code></li>
 <li><code>make release-build VERSION=v0.1.0</code></li>
-<li><code>make dev</code> (boot backend + frontend)</li>
-<li>CI: <code>backend-sqlite</code> + <code>frontend</code> + <code>deploy-config</code> in parallel; <code>e2e</code> gates on backend+frontend; <code>backend-postgres</code>, <code>docker-build</code>, <code>docs</code> chain on <code>backend-sqlite</code>.</li>
+<li><code>make dev</code> — backend + frontend</li>
+<li>CI: backend-sqlite + frontend + deploy-config in parallel; e2e needs backend+frontend; backend-postgres + docker-build + docs chain on backend-sqlite.</li>
 </ul>
 </section>
 <section id="sec-3"><h2>02 — Workflow state machine</h2>
@@ -253,6 +265,40 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <tr><td>review_needed</td><td>completed</td><td>admin, reviewer</td></tr>
 </tbody></table>
 <p>Same-state POST = no-op (200). Role violation → 403 <code>role_cannot_transition</code>. Invalid transition → 400 <code>invalid_transition</code>. Cross-org → 404.</p>
+<h2>Admin endpoints (🔒 <code>admin</code> role only, org-scoped)</h2>
+<table><thead><tr><th>Method</th><th>Path</th><th>Body</th></tr></thead><tbody>
+<tr><td>POST</td><td><code>/users</code></td><td><code>{email, full_name?, role}</code></td></tr>
+<tr><td>PATCH</td><td><code>/users/{id}</code></td><td><code>{email?, full_name?, role?, is_active?}</code></td></tr>
+<tr><td>DELETE</td><td><code>/users/{id}</code></td><td>soft-delete (sets <code>is_active=0</code>)</td></tr>
+<tr><td>POST</td><td><code>/locations</code></td><td><code>{name}</code></td></tr>
+<tr><td>PATCH</td><td><code>/locations/{id}</code></td><td><code>{name?, is_active?}</code></td></tr>
+<tr><td>DELETE</td><td><code>/locations/{id}</code></td><td>soft-delete</td></tr>
+</tbody></table>
+<p>Error codes introduced:</p>
+<ul>
+<li><code>role_admin_required</code> (403) — non-admin tried an admin action.</li>
+<li><code>invalid_role</code> (400) — role not in <code>{admin, clinician, reviewer}</code>.</li>
+<li><code>user_email_taken</code> (409) — email uniqueness conflict.</li>
+<li><code>cannot_demote_self</code> (400), <code>cannot_deactivate_self</code> (400) — admin self-protection.</li>
+<li><code>user_not_found</code> / <code>location_not_found</code> (404) — includes cross-org lookups (no existence leak).</li>
+</ul>
+<p>See <code>22-admin-governance.md</code> for the governance model.</p>
+<h2>Event validation (phase 12)</h2>
+<p><code>POST /encounters/{id}/events</code> is now schema-bound:</p>
+<table><thead><tr><th>event_type</th><th>required keys</th></tr></thead><tbody>
+<tr><td><code>manual_note</code></td><td><code>note</code></td></tr>
+<tr><td><code>note_draft_requested</code></td><td><code>requested_by</code></td></tr>
+<tr><td><code>note_draft_completed</code></td><td><code>template</code></td></tr>
+<tr><td><code>note_reviewed</code></td><td><code>reviewer</code></td></tr>
+</tbody></table>
+<p>Server-written types (<code>encounter_created</code>, <code>status_changed</code>) bypass the</p>
+<p>validator — they&#x27;re constructed internally with known-good payloads.</p>
+<p>Unknown types → 400 <code>invalid_event_type</code>. Non-object or missing-keys</p>
+<p><code>event_data</code> → 400 <code>invalid_event_data</code>.</p>
+<h2>Pagination (phase 12)</h2>
+<p><code>GET /encounters</code> accepts <code>limit</code> (1..500, default 50) and <code>offset</code> (≥0,</p>
+<p>default 0). Response body is still an array — <strong>backward compatible</strong>.</p>
+<p>Totals come on response headers: <code>X-Total-Count</code>, <code>X-Limit</code>, <code>X-Offset</code>.</p>
 <h2>Error code inventory</h2>
 <table><thead><tr><th>Code</th><th>HTTP</th><th>Origin</th></tr></thead><tbody>
 <tr><td><code>missing_auth_header</code></td><td>401</td><td>auth transport</td></tr>
@@ -302,15 +348,25 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <tr><td>organization_id</td><td>INTEGER</td><td>NOT NULL, FK → organizations(id)</td></tr>
 <tr><td>email</td><td>VARCHAR</td><td>NOT NULL, UNIQUE</td></tr>
 <tr><td>full_name</td><td>VARCHAR</td><td>NULL</td></tr>
-<tr><td>role</td><td>VARCHAR</td><td>NOT NULL default <code>&quot;admin&quot;</code></td></tr>
+<tr><td>role</td><td>VARCHAR</td><td>NOT NULL default <code>&quot;admin&quot;</code>, <strong>CHECK (<code>admin</code>/<code>clinician</code>/<code>reviewer</code>)</strong></td></tr>
+<tr><td>is_active</td><td>BOOLEAN</td><td>NOT NULL default <code>true</code></td></tr>
 <tr><td>created_at</td><td>DATETIME</td><td>NOT NULL default now()</td></tr>
 </tbody></table>
-<p><strong>Application-level role vocabulary</strong> (enforced by <code>app/authz.py</code>):</p>
-<p><code>admin</code>, <code>clinician</code>, <code>reviewer</code>. The column remains a free VARCHAR in</p>
-<p>SQL; constraint is enforced at the app layer. If you need a DB-level</p>
-<p>CHECK constraint, add it in a future migration.</p>
+<p><strong>Role vocabulary</strong> is enforced at BOTH layers since phase 12:</p>
+<ul>
+<li>App: <code>app/authz.py::KNOWN_ROLES</code>.</li>
+<li>DB: CHECK constraint installed by migration <code>c3d4e5f6a7b8</code>.</li>
+</ul>
+<p>Rows with <code>is_active = 0</code> are hidden from the default <code>GET /users</code>.</p>
+<p>Admins can list them with <code>?include_inactive=1</code>. Soft-delete preserves</p>
+<p>FK integrity for audit rows, workflow events, and encounters.</p>
+<h3><code>locations</code></h3>
+<p>Unchanged except for the <code>is_active</code> column added in migration</p>
+<p><code>c3d4e5f6a7b8</code> (same semantics as <code>users.is_active</code>).</p>
 <h3><code>encounters</code> and <code>workflow_events</code></h3>
-<p>Unchanged.</p>
+<p>Unchanged. <code>event_data</code> is still stored as JSON text; the shape is now</p>
+<p>gated at the API layer by <code>EVENT_SCHEMAS</code> (see</p>
+<p><code>22-admin-governance.md</code>).</p>
 <h3><code>security_audit_events</code> (added in phase 10)</h3>
 <table><thead><tr><th>column</th><th>type</th><th>constraints</th></tr></thead><tbody>
 <tr><td>id</td><td>INTEGER</td><td>PK</td></tr>
@@ -365,77 +421,100 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <h1>Build Log</h1>
 <p>Reverse-chronological.</p>
 <p>---</p>
-<h2>2026-04-18 — Phase 11: staging deployment + observability</h2>
+<h2>2026-04-18 — Phase 12: admin governance + event discipline + pagination</h2>
 <h3>Step 1 — Baseline</h3>
 <ul>
-<li>Head: <code>cbc5184</code> (real JWT + operational hardening).</li>
-<li>48/48 pytest, 9/9 smoke green. Rate limiter / audit / structured logs all in place.</li>
+<li>Head: <code>ee7cf43</code> (staging deployment + observability).</li>
+<li>51 pytest + 12 vitest + 8 Playwright green.</li>
 </ul>
-<h3>Step 2 — Observability surfaces</h3>
+<h3>Step 2 — DB role constraint + soft-delete columns</h3>
 <ul>
-<li>New <code>apps/api/app/metrics.py</code>: in-process Prometheus-text counters behind a threading lock. Counters are narrow on purpose:</li>
-<li><code>chartnav_requests_total{method,path,status}</code></li>
-<li><code>chartnav_auth_denied_total{error_code}</code></li>
-<li><code>chartnav_rate_limited_total</code></li>
-<li><code>chartnav_audit_events_total{event_type}</code></li>
-<li><code>chartnav_http_request_duration_ms_{sum,count}</code></li>
-<li><code>middleware.py::AccessLogMiddleware</code> now observes every response&#x27;s <code>(method, path, status bucket, duration_ms)</code>.</li>
-<li><code>middleware.py::RateLimitMiddleware</code> now bumps <code>rate_limited_total</code> before it writes the audit row.</li>
-<li><code>audit.py::record(...)</code> now bumps <code>audit_events_total{event_type}</code> before inserting. Fails-closed still applies — metric or insert failure cannot mask the original 4xx.</li>
-<li><code>main.py::_http_exception_handler</code> now bumps <code>auth_denied_total{error_code}</code> alongside the audit + WARNING log it already emits.</li>
-<li>New <code>GET /ready</code> — runs <code>SELECT 1</code> against the DB, returns <code>503 not_ready</code> if it fails. Designed to back container healthchecks.</li>
-<li>New <code>GET /metrics</code> — unauthed Prometheus text exposition. Documented as &quot;internal network only&quot; in <code>20-observability.md</code>.</li>
+<li>New Alembic migration <code>c3d4e5f6a7b8</code>:</li>
+<li><code>CHECK (role IN (&#x27;admin&#x27;,&#x27;clinician&#x27;,&#x27;reviewer&#x27;))</code> on <code>users.role</code> via <code>batch_alter_table</code> (works on SQLite + Postgres).</li>
+<li><code>is_active BOOLEAN NOT NULL DEFAULT true</code> on <code>users</code> and <code>locations</code>.</li>
+<li>Applied cleanly; seed still idempotent.</li>
 </ul>
-<h3>Step 3 — Staging deployment artifacts</h3>
+<h3>Step 3 — Admin authz dependency</h3>
 <ul>
-<li>New <code>infra/docker/docker-compose.staging.yml</code>: pinned image (<code>CHARTNAV_IMAGE_TAG</code>), 127.0.0.1-bound ports (reverse proxy expected), DB healthcheck, API healthcheck on <code>/ready</code>, named volume for Postgres, <code>restart: unless-stopped</code>, every critical env var blocked with <code>${VAR:?msg}</code>.</li>
-<li>New <code>infra/docker/.env.staging.example</code>: the full staging contract (image owner/tag, DB creds, bearer auth, CORS, rate-limit, seed, API port). Annotated with guardrails (&quot;NEVER put <code>*</code> in CORS&quot;, etc.).</li>
-<li>New runbook scripts:</li>
-<li><code>scripts/staging_up.sh</code> — validates compose config, optional <code>--pull</code>, then <code>up -d</code>.</li>
-<li><code>scripts/staging_verify.sh</code> — health + ready + metrics + unauth 401 + request-id round-trip + (header-mode only) full workflow mutation + audit signal assertion.</li>
-<li><code>scripts/staging_rollback.sh &lt;prev_tag&gt;</code> — atomic rewrite of <code>CHARTNAV_IMAGE_TAG</code> via python shim, <code>docker compose pull api</code>, <code>up -d api</code>, poll <code>/ready</code> ≤40s.</li>
-<li>All three scripts pass <code>shellcheck</code> clean.</li>
+<li><code>app.authz.require_admin</code>: FastAPI dep that 403s non-admins with <code>role_admin_required</code>.</li>
 </ul>
-<h3>Step 4 — Release bundle expansion</h3>
+<h3>Step 4 — Event schema discipline</h3>
 <ul>
-<li><code>scripts/release_build.sh</code> now also tars the staging artifact set (<code>docker-compose.staging.yml</code> + <code>.env.staging.example</code> + all three runbook scripts + docs 19/20/21) into <code>chartnav-staging-&lt;version&gt;.tar.gz</code>.</li>
-<li><code>MANIFEST.txt</code> sha256s all three artifacts.</li>
-<li><code>release.yml</code> attaches the staging tarball to tag-based GitHub Releases.</li>
+<li>New <code>EVENT_SCHEMAS</code> map in <code>routes.py</code> with per-type required keys for <code>encounter_created</code>, <code>status_changed</code>, <code>note_draft_requested</code>, <code>note_draft_completed</code>, <code>note_reviewed</code>, <code>manual_note</code>.</li>
+<li>New <code>_validate_event(event_type, event_data)</code> — rejects unknown types, non-object payloads, and missing required keys with stable error codes (<code>invalid_event_type</code>, <code>invalid_event_data</code>).</li>
+<li><code>POST /encounters/{id}/events</code> runs through the validator. Server-written events bypass (known-good by construction).</li>
 </ul>
-<h3>Step 5 — CI: <code>deploy-config</code> job</h3>
+<h3>Step 5 — Pagination</h3>
 <ul>
-<li>New <code>deploy-config</code> lane in <code>.github/workflows/ci.yml</code>:</li>
-<li><code>docker compose config</code> on all three compose files (dev / staging / prod).</li>
-<li><code>shellcheck</code> on every repo script.</li>
-<li>Runs on every push/PR. A broken compose file or sloppy script lands a red check before an operator ever hits <code>staging-up</code>.</li>
+<li><code>GET /encounters</code> accepts <code>limit</code> (default 50, 1..500) and <code>offset</code> (≥0). Returns headers <code>X-Total-Count</code>, <code>X-Limit</code>, <code>X-Offset</code>. Response body stays a JSON array — backward compatible with clients that ignore headers.</li>
 </ul>
-<h3>Step 6 — Makefile</h3>
+<h3>Step 6 — Admin CRUD endpoints</h3>
 <ul>
-<li>New targets: <code>staging-up</code>, <code>staging-verify</code>, <code>staging-rollback TAG=...</code>, <code>staging-down</code>.</li>
+<li><code>POST/PATCH/DELETE /users</code>, <code>POST/PATCH/DELETE /locations</code>, all admin-only, strictly org-scoped.</li>
+<li>Self-protection: admin cannot demote self (<code>cannot_demote_self</code>) or deactivate self (<code>cannot_deactivate_self</code>).</li>
+<li>Cross-org mutation → <code>404 *_not_found</code> (no existence leak).</li>
+<li>Email uniqueness check (<code>user_email_taken</code> 409); email format via Pydantic regex (422 on invalid).</li>
+<li>Soft-delete flips <code>is_active = 0</code>; <code>GET</code> lists filter to active by default, <code>?include_inactive=1</code> shows all.</li>
 </ul>
-<h3>Step 7 — Tests</h3>
+<h3>Step 7 — Backend tests</h3>
 <ul>
-<li>New <code>apps/api/tests/test_observability.py</code> (3 tests):</li>
-<li><code>/ready</code> returns 200 with <code>database=ok</code>.</li>
-<li><code>/metrics</code> is Prometheus text, exposes the expected series, and reflects an <code>auth_denied</code> after an unauth <code>/me</code>.</li>
-<li><code>/metrics</code> <code>chartnav_rate_limited_total</code> ticks when a request crosses the configured limit.</li>
-<li>Full suite now <strong>51/51 passing</strong>.</li>
+<li>New <code>apps/api/tests/test_admin.py</code> — <strong>20 tests</strong> covering DB role CHECK, admin create/update/deactivate users + locations, non-admin denial, cross-org denial (404), event type + data validation, pagination headers + filter combinations.</li>
+<li>Existing suites untouched by the new validator: role-gated tests still 403 before reaching the validator; status-change path writes server-constructed event data which matches the schema.</li>
+<li>Full backend suite: <strong>91/91 passed</strong>.</li>
 </ul>
-<h3>Step 8 — Verification</h3>
+<h3>Step 8 — Frontend</h3>
 <ul>
-<li><code>make verify</code> → 51 pytest + 9 smoke, clean teardown.</li>
-<li>Ran <code>staging_verify.sh</code> against a live <code>uvicorn</code> on <code>:8000</code> — all 9 assertions green including the audit/metrics check.</li>
-<li><code>docker compose --env-file .env.staging.test config</code> against the staging compose file parses (normalized output prints cleanly).</li>
-<li>Both <code>ci.yml</code> and <code>release.yml</code> YAML parse.</li>
-<li>Docs regenerated.</li>
+<li><code>apps/web/src/api.ts</code>: typed <code>User</code>, <code>Location</code> interfaces; <code>createUser</code>, <code>updateUser</code>, <code>deactivateUser</code>, <code>listUsers</code>, <code>createLocation</code>, <code>updateLocation</code>, <code>deactivateLocation</code>, <code>listLocations</code>, <code>listEncountersPage</code>; <code>isAdmin(role)</code>; <code>EVENT_TYPES</code> + <code>EVENT_TYPE_REQUIRED</code> constants mirroring the backend schema.</li>
+<li><code>requestWithResponse(...)</code> helper exposes response headers so the pagination helper can read <code>X-Total-Count</code> / <code>X-Limit</code> / <code>X-Offset</code> cleanly.</li>
+<li><code>apps/web/src/AdminPanel.tsx</code> — NEW modal with Users + Locations tabs. Create forms with validation + in-flight disabled state. Users table exposes inline role change + deactivate/reactivate; self-row is disabled. Locations table supports inline rename + deactivate.</li>
+<li><code>App.tsx</code>:</li>
+<li>Header gains the <strong>Admin</strong> button for <code>isAdmin</code> callers.</li>
+<li>Encounter list uses <code>listEncountersPage</code> and renders Prev/Next/&quot;N-M of T&quot; controls when <code>total &gt; PAGE_SIZE</code> (25).</li>
+<li>Event composer&#x27;s <code>event_type</code> input became a <code>&lt;select&gt;</code> wired to <code>EVENT_TYPES</code> — the UI can no longer submit unknown types.</li>
+<li><code>styles.css</code> — admin modal/table/pagination layout.</li>
 </ul>
-<h3>Step 9 — Hygiene</h3>
+<h3>Step 9 — Frontend tests</h3>
 <ul>
-<li><code>.gitignore</code> already excludes <code>*.db</code>, caches, <code>dist/release/</code>. Staging runbook mentions never committing <code>.env.staging</code> (real values); the <code>.example</code> file stays committed.</li>
+<li>New <code>apps/web/src/test/AdminPanel.test.tsx</code> — <strong>5 Vitest tests</strong>: lists users, submits create-user, surfaces 409 error, disables self-row controls, creates a location on the Locations tab.</li>
+<li>Existing <code>App.test.tsx</code> — added 1 test for admin-button visibility across roles; updated the list mock to use <code>listEncountersPage</code>.</li>
+<li>Frontend suite: <strong>18/18 passed</strong>.</li>
+</ul>
+<h3>Step 10 — E2E</h3>
+<ul>
+<li>Updated <code>apps/web/tests/e2e/workflow.spec.ts</code>:</li>
+<li>Event composer test now uses the <code>&lt;select&gt;</code>-based event-type + <code>manual_note</code> payload.</li>
+<li>New: admin creates a user AND a location end-to-end via the admin panel, asserts they appear in the tables.</li>
+<li>New: non-admin (clinician) does not see the Admin button.</li>
+<li><code>scripts/staging_verify.sh</code> also updated to post a valid <code>manual_note</code> event.</li>
+<li>Playwright: <strong>10/10 passed</strong> in ~16s.</li>
+</ul>
+<h3>Step 11 — Verification summary</h3>
+<ul>
+<li><code>make verify</code> → 91/91 pytest + 9/9 smoke + teardown clean.</li>
+<li><code>cd apps/web &amp;&amp; npm run build</code> → 168 KB JS / 8.1 KB CSS.</li>
+<li><code>cd apps/web &amp;&amp; npx tsc --noEmit</code> → clean.</li>
+<li><code>cd apps/web &amp;&amp; npx vitest run</code> → 18/18.</li>
+<li><code>cd apps/web &amp;&amp; npx playwright test</code> → 10/10.</li>
+<li><code>scripts/build_docs.py</code> → HTML + PDF regenerated.</li>
+<li>Dev DB reset to pristine seeded state before commit.</li>
+</ul>
+<h3>Step 12 — CI</h3>
+<ul>
+<li>No workflow edits required: the new tests live in <code>apps/api/tests/</code> and <code>apps/web/src/test/</code> + <code>apps/web/tests/e2e/</code>, which the existing <code>backend-sqlite</code> / <code>frontend</code> / <code>e2e</code> jobs already pick up. New migration is applied by the same <code>alembic upgrade head</code> every job runs.</li>
+<li><code>deploy-config</code> lane (compose config + shellcheck) still applies to the modified <code>scripts/staging_verify.sh</code>.</li>
+</ul>
+<h3>Step 13 — Docs</h3>
+<ul>
+<li>New <code>docs/build/22-admin-governance.md</code>.</li>
+<li>Updated <code>01-current-state</code>, <code>05-build-log</code>, <code>06-known-gaps</code>, <code>02-workflow-state-machine</code> (event schema section), <code>03-api-endpoints</code> (admin routes + pagination), <code>04-data-model</code> (role CHECK + is_active), <code>15-frontend-integration</code> (admin UI + pagination + event dropdown), <code>16-frontend-test-strategy</code> (admin panel tests).</li>
+<li>Diagrams: <code>er-diagram</code> notes role CHECK + is_active; <code>api-data-flow</code> keeps prior flows, still accurate.</li>
+<li><code>scripts/build_docs.py</code> picks up section 22.</li>
+<li>Final HTML + PDF regenerated.</li>
 </ul>
 <p>---</p>
 <h2>Prior phases</h2>
 <ul>
+<li><strong>Phase 11 — Staging deployment + observability</strong> (<code>ee7cf43</code>)</li>
 <li><strong>Phase 10 — Real JWT bearer + operational hardening</strong> (<code>cbc5184</code>)</li>
 <li><strong>Phase 9 — Playwright E2E + release pipeline</strong> (<code>74fe8dd</code>)</li>
 <li><strong>Phase 8 — Create UI + vitest + frontend CI</strong> (<code>f83d748</code>)</li>
@@ -450,62 +529,63 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 </section>
 <section id="sec-7"><h2>06 — Known gaps + verification matrix</h2>
 <h1>Known Gaps &amp; Verification Matrix</h1>
-<h2>Verification evidence — phase 11</h2>
+<h2>Verification evidence — phase 12</h2>
 <h3>Local gates</h3>
 <table><thead><tr><th>Gate</th><th>Result</th></tr></thead><tbody>
-<tr><td><code>make verify</code> (backend)</td><td>✅ <strong>51/51 pytest + 9/9 smoke</strong></td></tr>
-<tr><td><code>bash scripts/staging_verify.sh</code> (live API)</td><td>✅ 9/9 assertions</td></tr>
-<tr><td><code>docker compose … config</code> (dev / staging / prod)</td><td>✅ all three parse</td></tr>
-<tr><td><code>shellcheck</code> on all scripts</td><td>✅ clean (0 findings)</td></tr>
-<tr><td>YAML parse on <code>ci.yml</code> + <code>release.yml</code></td><td>✅</td></tr>
-<tr><td><code>scripts/build_docs.py</code> → HTML + PDF</td><td>✅ regenerated</td></tr>
+<tr><td><code>make verify</code> (backend)</td><td>✅ <strong>91/91 pytest + 9/9 smoke</strong></td></tr>
+<tr><td><code>cd apps/web &amp;&amp; npx tsc --noEmit</code></td><td>✅ clean</td></tr>
+<tr><td><code>cd apps/web &amp;&amp; npx vitest run</code></td><td>✅ <strong>18/18</strong></td></tr>
+<tr><td><code>cd apps/web &amp;&amp; npm run build</code></td><td>✅ 168 KB JS / 8.1 KB CSS</td></tr>
+<tr><td><code>cd apps/web &amp;&amp; npx playwright test</code></td><td>✅ <strong>10/10</strong> in ~16s</td></tr>
+<tr><td><code>bash scripts/staging_verify.sh http://127.0.0.1:8000</code></td><td>✅ 9 assertions (against local dev API)</td></tr>
+<tr><td><code>apps/api/.venv/bin/python scripts/build_docs.py</code></td><td>✅ HTML + PDF regenerated</td></tr>
 </tbody></table>
-<h3>pytest summary (51)</h3>
+<h3>pytest summary (91)</h3>
 <table><thead><tr><th>Suite</th><th>Count</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>test_admin.py</code> (new)</td><td><strong>20</strong></td><td>DB role CHECK, user/location CRUD, event-schema validation, pagination</td></tr>
 <tr><td><code>test_auth.py</code></td><td>5</td><td>header mode</td></tr>
 <tr><td><code>test_auth_modes.py</code></td><td>11</td><td>header + real JWT bearer</td></tr>
+<tr><td><code>test_observability.py</code></td><td>3</td><td><code>/ready</code>, <code>/metrics</code></td></tr>
+<tr><td><code>test_operational.py</code></td><td>12</td><td>request id, audit trail, rate limit, CORS</td></tr>
 <tr><td><code>test_rbac.py</code></td><td>12</td><td>role-gated writes + per-edge transitions</td></tr>
 <tr><td><code>test_scoping.py</code></td><td>8</td><td>org scoping + cross-org denial</td></tr>
-<tr><td><code>test_operational.py</code></td><td>12</td><td>request id, audit trail, rate limit, CORS</td></tr>
-<tr><td><strong><code>test_observability.py</code></strong></td><td><strong>3</strong></td><td><strong><code>/ready</code>, <code>/metrics</code> text, <code>/metrics</code> rate-limited counter</strong></td></tr>
+<tr><td><code>test_auth_modes.py</code> (bearer JWT — counted above)</td><td>—</td><td>—</td></tr>
 </tbody></table>
-<h3>Staging verify matrix (9)</h3>
-<table><thead><tr><th>Assertion</th><th>Result</th></tr></thead><tbody>
-<tr><td><code>GET /health</code> 200</td><td>✅</td></tr>
-<tr><td><code>GET /ready</code> 200 and <code>database=ok</code></td><td>✅</td></tr>
-<tr><td><code>GET /metrics</code> 200 and exposes <code>chartnav_requests_total</code></td><td>✅</td></tr>
-<tr><td><code>GET /me</code> without auth → 401</td><td>✅</td></tr>
-<tr><td><code>X-Request-ID</code> round-trips</td><td>✅</td></tr>
-<tr><td>Header-mode: <code>GET /me</code> with admin → 200</td><td>✅</td></tr>
-<tr><td>Header-mode: <code>GET /encounters</code> with admin → 200</td><td>✅</td></tr>
-<tr><td>Header-mode: <code>POST /encounters/1/events</code> → 201 (or skip if no seed)</td><td>✅</td></tr>
-<tr><td><code>/metrics</code> reflects a <code>missing_auth_header</code> denial</td><td>✅</td></tr>
+<h3>Vitest summary (18)</h3>
+<table><thead><tr><th>File</th><th>Count</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>App.test.tsx</code></td><td>13</td><td>existing 12 + new &quot;admin button visibility&quot; test</td></tr>
+<tr><td><code>AdminPanel.test.tsx</code></td><td><strong>5</strong></td><td>list users, create user, create error 409, self-row disabled, create location</td></tr>
 </tbody></table>
-<h3>Postgres parity</h3>
-<p>Not rerun this phase — no backend SQL changes since the last <code>make pg-verify</code> pass. Additive audit-table migration uses SA-portable constructs.</p>
-<h3>Honest limitations</h3>
-<ul>
-<li>CI has no <code>act</code>-style local workflow runner available in the dev shell; <code>deploy-config</code> was verified by running its component commands manually. The YAML parses cleanly.</li>
-<li><code>staging_verify.sh</code> bearer path: the script can&#x27;t mint real tokens, so in <code>CHARTNAV_AUTH_MODE=bearer</code> it only covers unauth surfaces + observability. The manual bearer path is documented in <code>21-staging-runbook.md</code>.</li>
-<li>Metrics &amp; rate limiter are <strong>per-process</strong>; multi-worker deployments will see counters and limits split per worker. Edge aggregation is required for coordinated behavior.</li>
-</ul>
+<h3>Playwright summary (10)</h3>
+<table><thead><tr><th>#</th><th>Scenario</th><th>Result</th></tr></thead><tbody>
+<tr><td>1</td><td>App boots, default identity resolves</td><td>✅</td></tr>
+<tr><td>2</td><td>Identity switch org1 → org2</td><td>✅</td></tr>
+<tr><td>3</td><td>Admin opens detail, creates encounter, sees it appear</td><td>✅</td></tr>
+<tr><td>4</td><td>Admin appends <code>manual_note</code> workflow event</td><td>✅</td></tr>
+<tr><td>5</td><td>Clinician operational transitions; review edge not offered</td><td>✅</td></tr>
+<tr><td>6</td><td>Reviewer sees review-stage controls, no create button, no event composer</td><td>✅</td></tr>
+<tr><td>7</td><td>Unknown email → <code>identity-error</code> with <code>unknown_user</code></td><td>✅</td></tr>
+<tr><td>8</td><td><strong>Admin creates user + location via admin panel</strong></td><td>✅</td></tr>
+<tr><td>9</td><td><strong>Clinician cannot see the Admin button</strong></td><td>✅</td></tr>
+<tr><td>10</td><td>Status filter narrows the list</td><td>✅</td></tr>
+</tbody></table>
 <h2>Real gaps (prioritized for next phase)</h2>
-<p>1. <strong>No OpenTelemetry / distributed tracing</strong> — correlation is by <code>request_id</code> only.</p>
-<p>2. <strong>No log shipping / retention defined</strong> — stdout JSON is ready; operators wire the collector.</p>
-<p>3. <strong>No audit-table archival / retention policy.</strong></p>
-<p>4. <strong>Metrics are per-process</strong> — multi-worker or multi-node needs a proper Prometheus multiprocess mode or a push gateway.</p>
-<p>5. <strong>Rollback cannot reverse destructive migrations</strong> (forward-only policy; documented in <code>21-staging-runbook.md</code>).</p>
-<p>6. <strong>No automated staging deploy from CI</strong> — tag pushes publish the image but the <code>make staging-up</code> handoff is manual. That&#x27;s intentional until there&#x27;s a protected target + secrets wired.</p>
-<p>7. <strong>No production equivalent of <code>staging_verify.sh</code></strong> yet. Extending it is trivial once the prod target exists.</p>
-<p>8. <strong>No JWKS-rotation test</strong> — PyJWKClient caches aggressively; rotation is handled by the IdP.</p>
-<p>9. <strong>No refresh-token / revocation flow.</strong></p>
-<p>10. <strong>No signing / SBOM / provenance</strong> on release artifacts.</p>
-<p>11. <strong><code>/organizations</code>, <code>/locations</code>, <code>/users</code></strong> still read-only.</p>
-<p>12. <strong><code>users.role</code></strong> free VARCHAR at DB layer.</p>
-<p>13. <strong>No pagination</strong> on <code>GET /encounters</code>.</p>
-<p>14. <strong>Free-form <code>event_data</code></strong> — no per-event_type schema.</p>
+<p>1. <strong>No OpenTelemetry / distributed tracing.</strong></p>
+<p>2. <strong>Metrics + rate limiter are per-process</strong> — multi-worker needs coordination.</p>
+<p>3. <strong>No log shipping / retention policy defined.</strong></p>
+<p>4. <strong>No audit-table archival / retention.</strong></p>
+<p>5. <strong>Forward-only migrations</strong> — rollback cannot reverse destructive DDL.</p>
+<p>6. <strong>No automated staging deploy from CI</strong> — tag push publishes image; operator runs <code>make staging-up</code>.</p>
+<p>7. <strong>No signing / SBOM / provenance</strong> on release artifacts.</p>
+<p>8. <strong>No JWKS-rotation test, no refresh-token / revocation flow.</strong></p>
+<p>9. <strong>No org-level CRUD</strong> — <code>PATCH /organizations/{id}</code> is intentionally absent.</p>
+<p>10. <strong>No user-invitation / email workflow</strong> — admins type emails directly.</p>
+<p>11. <strong>No bulk-import</strong> for users or locations.</p>
+<p>12. <strong>No audit log UI</strong> — <code>security_audit_events</code> is operator-inspected only.</p>
+<p>13. <strong>Free-form event payloads beyond required keys</strong> — extra keys are accepted; deep-schema per type (values types, enums) is not enforced.</p>
+<p>14. <strong>No pagination on audit table, users, or locations</strong> — fine at current scale.</p>
 <p>15. <strong>No visual-regression / a11y audits</strong> on the frontend.</p>
-<p>16. <strong>pytest matrix on Postgres</strong> not wired — fixture env-driven, ready to flip.</p>
+<p>16. <strong>pytest matrix on Postgres</strong> not wired (fixture env-driven, ready to flip).</p>
 </section>
 <section id="sec-8"><h2>07 — Auth, org scoping, RBAC</h2>
 <h1>Auth, Org Scoping, RBAC</h1>
@@ -1410,6 +1490,16 @@ make web-build        # vite build -&gt; apps/web/dist
 <p>role-aware transitions, reviewer restrictions, unknown-email auth</p>
 <p>surface, filters. Details in <code>17-e2e-and-release.md</code>. Command:</p>
 <p><code>make e2e</code>.</p>
+<h2>Admin governance (phase 12)</h2>
+<ul>
+<li><strong>Admin button</strong> in the header renders only when <code>isAdmin(role)</code>. Clinician / reviewer never see it.</li>
+<li>Opens <code>&lt;AdminPanel /&gt;</code> — a modal with <strong>Users</strong> and <strong>Locations</strong> tabs.</li>
+<li>Users: create form (email / full name / role), table with inline role change + deactivate/reactivate. Self-row is disabled so admins can&#x27;t lock themselves out.</li>
+<li>Locations: create form + inline rename (click-to-edit) + deactivate.</li>
+<li>Every mutating control disables in flight and surfaces backend <code>{error_code, reason}</code> in a per-tab banner on failure.</li>
+<li>The event composer&#x27;s event_type is now a <code>&lt;select&gt;</code> wired to the backend allowlist (<code>EVENT_TYPES</code>), so the UI can&#x27;t submit invalid types.</li>
+<li>Encounter list paginates 25 rows at a time via <code>listEncountersPage</code>, rendering Prev/Next + &quot;N-M of T&quot; when <code>total &gt; 25</code>.</li>
+</ul>
 <h2>What this phase explicitly does NOT do</h2>
 <ul>
 <li>No real login flow — <code>X-User-Email</code> is still dev transport.</li>
@@ -1495,6 +1585,12 @@ make web-verify      # typecheck + test + build
 <p>Vitest and Playwright are fully isolated: Vitest&#x27;s <code>test.include</code> is</p>
 <p>narrowed to <code>src/**/*.test.{ts,tsx}</code> and excludes <code>tests/**</code>, so the</p>
 <p>two suites never cross-contaminate.</p>
+<h2>Admin governance tests (phase 12)</h2>
+<ul>
+<li><code>src/test/AdminPanel.test.tsx</code> — 5 Vitest tests: user list, create user success + 409 error, self-row disabled, location create on the Locations tab.</li>
+<li><code>src/test/App.test.tsx</code> — added 1 test asserting the Admin button is visible to admins only.</li>
+<li>E2E <code>workflow.spec.ts</code> — 2 new scenarios: admin creates a user + a location end-to-end; clinician never sees the Admin button.</li>
+</ul>
 <h2>Gaps not yet covered</h2>
 <ul>
 <li>No visual regression / accessibility audits.</li>
@@ -2088,7 +2184,150 @@ cd infra/docker &amp;&amp; docker compose \
 </ul>
 <p>When any of these become first-class ChartNav concerns, they graduate to their own build-log phase and doc section.</p>
 </section>
-<section id="sec-23"><h2>Diagram — System architecture</h2>
+<section id="sec-23"><h2>22 — Admin governance</h2>
+<h1>Admin Governance</h1>
+<p>Phase 12 adds real administrative control on top of the RBAC +</p>
+<p>observability stack: admins can manage users and locations for their</p>
+<p>org, the DB enforces role vocabulary, workflow events are schema-bound,</p>
+<p>and the encounter list paginates. No more read-only metadata; no more</p>
+<p>free-form event drift.</p>
+<h2>1. DB-level role constraint</h2>
+<p>Migration <code>c3d4e5f6a7b8</code> adds a CHECK constraint:</p>
+<pre class="code lang-"><code>
+CHECK (role IN (&#x27;admin&#x27;, &#x27;clinician&#x27;, &#x27;reviewer&#x27;))
+</code></pre>
+<p>SQLite&#x27;s <code>batch_alter_table</code> rebuilds the <code>users</code> table to install it;</p>
+<p>Postgres picks it up as a normal <code>ADD CONSTRAINT</code>. <code>app.authz.KNOWN_ROLES</code></p>
+<p>matches exactly. Inserts with any other role now bounce at the</p>
+<p><code>IntegrityError</code> layer, before the app even sees them.</p>
+<p>The same migration adds <code>is_active BOOLEAN NOT NULL DEFAULT true</code> to</p>
+<p><code>users</code> and <code>locations</code> so metadata can be soft-deleted without</p>
+<p>breaking FK integrity on historical encounters, workflow events, or</p>
+<p>audit rows.</p>
+<h2>2. Admin CRUD API</h2>
+<p>All admin endpoints require role <code>admin</code> via <code>authz.require_admin</code>. Any</p>
+<p>other role gets <code>403 role_admin_required</code>. All operations are strictly</p>
+<p>scoped to the caller&#x27;s org.</p>
+<h3>Users</h3>
+<table><thead><tr><th>Method</th><th>Path</th><th>Body / Query</th><th>Errors</th></tr></thead><tbody>
+<tr><td>GET</td><td><code>/users</code></td><td><code>?include_inactive=1</code></td><td>—</td></tr>
+<tr><td>POST</td><td><code>/users</code></td><td><code>{email, full_name?, role}</code></td><td><code>invalid_role</code> (400), <code>user_email_taken</code> (409), <code>role_admin_required</code> (403)</td></tr>
+<tr><td>PATCH</td><td><code>/users/{id}</code></td><td><code>{email?, full_name?, role?, is_active?}</code></td><td><code>invalid_role</code>, <code>user_email_taken</code>, <code>cannot_demote_self</code>, <code>cannot_deactivate_self</code>, <code>user_not_found</code> (cross-org)</td></tr>
+<tr><td>DELETE</td><td><code>/users/{id}</code></td><td>soft-delete (sets <code>is_active=0</code>)</td><td><code>cannot_deactivate_self</code>, <code>user_not_found</code></td></tr>
+</tbody></table>
+<h3>Locations</h3>
+<table><thead><tr><th>Method</th><th>Path</th><th>Body / Query</th><th>Errors</th></tr></thead><tbody>
+<tr><td>GET</td><td><code>/locations</code></td><td><code>?include_inactive=1</code></td><td>—</td></tr>
+<tr><td>POST</td><td><code>/locations</code></td><td><code>{name}</code></td><td><code>role_admin_required</code></td></tr>
+<tr><td>PATCH</td><td><code>/locations/{id}</code></td><td><code>{name?, is_active?}</code></td><td><code>location_not_found</code> (cross-org)</td></tr>
+<tr><td>DELETE</td><td><code>/locations/{id}</code></td><td>soft-delete</td><td><code>location_not_found</code></td></tr>
+</tbody></table>
+<p>Self-protection rules:</p>
+<ul>
+<li>An admin cannot demote their own role (<code>cannot_demote_self</code>).</li>
+<li>An admin cannot deactivate their own account (<code>cannot_deactivate_self</code>).</li>
+</ul>
+<p>Cross-org accesses return <strong>404 <code>user_not_found</code> / <code>location_not_found</code></strong> —</p>
+<p>same shape as &quot;doesn&#x27;t exist&quot; so the API doesn&#x27;t leak existence of other</p>
+<p>orgs&#x27; data.</p>
+<h2>3. Event schema discipline</h2>
+<p><code>app.api.routes.EVENT_SCHEMAS</code> is the single source of truth for</p>
+<p>workflow events. New or unlisted types are rejected.</p>
+<table><thead><tr><th>event_type</th><th>required keys</th><th>Who writes it</th></tr></thead><tbody>
+<tr><td><code>encounter_created</code></td><td><code>status</code></td><td>Server, on <code>POST /encounters</code></td></tr>
+<tr><td><code>status_changed</code></td><td><code>old_status</code>, <code>new_status</code></td><td>Server, on successful status transition</td></tr>
+<tr><td><code>note_draft_requested</code></td><td><code>requested_by</code></td><td>Client (admin / clinician)</td></tr>
+<tr><td><code>note_draft_completed</code></td><td><code>template</code></td><td>Client</td></tr>
+<tr><td><code>note_reviewed</code></td><td><code>reviewer</code></td><td>Client</td></tr>
+<tr><td><code>manual_note</code></td><td><code>note</code></td><td>Client — generic operator-authored event</td></tr>
+</tbody></table>
+<p>Validation lives in <code>_validate_event(event_type, event_data)</code>:</p>
+<ul>
+<li>Unknown <code>event_type</code> → 400 <code>invalid_event_type</code> with the full</li>
+</ul>
+<p>allowed list in the reason.</p>
+<ul>
+<li><code>event_data</code> missing when required → 400 <code>invalid_event_data</code>.</li>
+<li><code>event_data</code> not a JSON object → 400 <code>invalid_event_data</code>.</li>
+<li>Missing required keys → 400 <code>invalid_event_data</code> listing them.</li>
+</ul>
+<p>Server-written events bypass the validator (they construct known-good</p>
+<p>payloads directly). That keeps <code>encounter_created</code> / <code>status_changed</code></p>
+<p>hot paths free of needless checks while client-submitted events run</p>
+<p>through a strict gate.</p>
+<h2>4. Pagination</h2>
+<p><code>GET /encounters</code> now accepts:</p>
+<table><thead><tr><th>param</th><th>default</th><th>range</th></tr></thead><tbody>
+<tr><td><code>limit</code></td><td>50</td><td>1 .. 500</td></tr>
+<tr><td><code>offset</code></td><td>0</td><td>≥ 0</td></tr>
+</tbody></table>
+<p>The response is still a JSON array (backward compatible), but three</p>
+<p>headers carry the page metadata:</p>
+<table><thead><tr><th>Header</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>X-Total-Count</code></td><td>Full filtered count (pre limit/offset)</td></tr>
+<tr><td><code>X-Limit</code></td><td>Echo of the applied limit</td></tr>
+<tr><td><code>X-Offset</code></td><td>Echo of the applied offset</td></tr>
+</tbody></table>
+<p>Existing clients that ignore headers keep working (they just see the</p>
+<p>first page). The frontend client has a dedicated <code>listEncountersPage</code></p>
+<p>helper that surfaces the totals.</p>
+<h2>5. Frontend — admin UI</h2>
+<ul>
+<li>Header shows an <strong>Admin</strong> button for role <code>admin</code> only.</li>
+<li>Clicking it opens a modal with two tabs: <strong>Users</strong> and <strong>Locations</strong>.</li>
+<li><strong>Users</strong> tab: create form (email / full name / role), table with</li>
+</ul>
+<p>inline role select + deactivate/reactivate buttons. Self-row is</p>
+<p>disabled so admins can&#x27;t lock themselves out. Role change goes</p>
+<p>through <code>PATCH /users/{id}</code> with the exact pydantic model; failures</p>
+<p>surface the <code>{error_code, reason}</code> envelope in a banner.</p>
+<ul>
+<li><strong>Locations</strong> tab: create form (name), table with inline name edit</li>
+</ul>
+<p>(click to edit; Enter saves, Escape cancels) and Deactivate buttons.</p>
+<ul>
+<li>Encounter list now paginates 25 rows at a time with Prev/Next</li>
+</ul>
+<p>controls + &quot;N-M of T&quot; status line.</p>
+<h2>6. Tests</h2>
+<h3>Backend (<code>apps/api/tests/test_admin.py</code>) — 20 tests</h3>
+<ul>
+<li>DB role CHECK rejects unknown role (raises <code>IntegrityError</code>).</li>
+<li>Admin can create / update / deactivate users and locations in own org.</li>
+<li>Non-admin (clinician / reviewer) receives 403 <code>role_admin_required</code> on every admin write.</li>
+<li>Admin cannot create a user with an unknown role (<code>invalid_role</code>).</li>
+<li>Admin cannot duplicate emails (<code>user_email_taken</code>).</li>
+<li>Pydantic email validation returns 422.</li>
+<li>Admin cannot demote / deactivate self.</li>
+<li>Cross-org admin mutations return 404 <code>user_not_found</code> / <code>location_not_found</code>.</li>
+<li>Soft-deleted users/locations disappear from default list; <code>?include_inactive=1</code> shows them.</li>
+<li><code>POST /encounters/{id}/events</code> rejects unknown <code>event_type</code> (<code>invalid_event_type</code>) and invalid <code>event_data</code> (<code>invalid_event_data</code>), accepts valid <code>manual_note</code>.</li>
+<li>Pagination: headers returned, offset works, filters + pagination combine correctly.</li>
+</ul>
+<h3>Frontend (<code>apps/web/src/test/AdminPanel.test.tsx</code>) — 5 Vitest tests</h3>
+<ul>
+<li>Lists users on open.</li>
+<li>Create-user submit flows through <code>createUser</code> and shows success banner.</li>
+<li>Create-user 409 conflict surfaces error banner verbatim.</li>
+<li>Self-row role select + deactivate button are disabled.</li>
+<li>Create-location flow on the Locations tab.</li>
+</ul>
+<p>Plus an App-level test asserting admin role sees the Admin button; clinician / reviewer do not.</p>
+<h3>E2E (<code>apps/web/tests/e2e/workflow.spec.ts</code>) — 2 new scenarios</h3>
+<ul>
+<li>Admin opens the panel, creates a user and a location end-to-end against the live stack; both appear in their respective tables.</li>
+<li>Non-admin (clinician) never sees the Admin button.</li>
+</ul>
+<h2>7. What this phase explicitly does NOT do</h2>
+<ul>
+<li>No org-level CRUD — <code>PATCH /organizations/{id}</code> is deliberately absent. Renaming an org is a rare event; add it when it&#x27;s real.</li>
+<li>No per-org SSO configuration.</li>
+<li>No bulk-import.</li>
+<li>No invitation / email workflow.</li>
+<li>No audit log UI — the <code>security_audit_events</code> table remains operator-inspected. A tab for it is a small next step.</li>
+</ul>
+</section>
+<section id="sec-24"><h2>Diagram — System architecture</h2>
 <h1>System Architecture</h1>
 <div class="mermaid">
 flowchart LR
@@ -2189,7 +2428,7 @@ flowchart LR
   Compose --> PG
 </div>
 </section>
-<section id="sec-24"><h2>Diagram — Encounter status machine</h2>
+<section id="sec-25"><h2>Diagram — Encounter status machine</h2>
 <h1>Encounter Status State Machine</h1>
 <div class="mermaid">
 stateDiagram-v2
@@ -2211,7 +2450,7 @@ stateDiagram-v2
 <p>Legend: any edge not shown is rejected at <code>POST /encounters/{id}/status</code></p>
 <p>with HTTP 400 <code>invalid_transition</code>.</p>
 </section>
-<section id="sec-25"><h2>Diagram — ER</h2>
+<section id="sec-26"><h2>Diagram — ER</h2>
 <h1>ER Diagram</h1>
 <div class="mermaid">
 erDiagram
@@ -2246,6 +2485,7 @@ erDiagram
     int id PK
     int organization_id FK
     string name
+    boolean is_active
     datetime created_at
   }
   users {
@@ -2253,7 +2493,8 @@ erDiagram
     int organization_id FK
     string email UK
     string full_name
-    string role "admin | clinician | reviewer"
+    string role "admin | clinician | reviewer (CHECK constraint)"
+    boolean is_active
     datetime created_at
   }
   encounters {
@@ -2290,7 +2531,7 @@ erDiagram
 <p><code>users.organization_id</code> is the authoritative source of scope; never</p>
 <p>derived from client input.</p>
 </section>
-<section id="sec-26"><h2>Diagram — API / data flow</h2>
+<section id="sec-27"><h2>Diagram — API / data flow</h2>
 <h1>API / Data Flow &amp; CI</h1>
 <h2>UI → Backend request path</h2>
 <div class="mermaid">

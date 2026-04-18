@@ -81,7 +81,7 @@ if [ "$MODE" = "header" ]; then
     code=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "$ADMIN1" \
         -H 'Content-Type: application/json' \
         "$BASE/encounters/1/events" \
-        -d '{"event_type":"staging_verify_ping"}')
+        -d '{"event_type":"manual_note","event_data":{"note":"staging verify ping"}}')
     if [ "$code" = "201" ]; then
         pass "POST /encounters/1/events → 201"
     else

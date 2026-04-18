@@ -75,6 +75,48 @@ Per-edge RBAC:
 
 Same-state POST = no-op (200). Role violation → 403 `role_cannot_transition`. Invalid transition → 400 `invalid_transition`. Cross-org → 404.
 
+## Admin endpoints (🔒 `admin` role only, org-scoped)
+
+| Method | Path                    | Body                                          |
+|--------|-------------------------|-----------------------------------------------|
+| POST   | `/users`                | `{email, full_name?, role}`                   |
+| PATCH  | `/users/{id}`           | `{email?, full_name?, role?, is_active?}`     |
+| DELETE | `/users/{id}`           | soft-delete (sets `is_active=0`)              |
+| POST   | `/locations`            | `{name}`                                      |
+| PATCH  | `/locations/{id}`       | `{name?, is_active?}`                         |
+| DELETE | `/locations/{id}`       | soft-delete                                   |
+
+Error codes introduced:
+- `role_admin_required` (403) — non-admin tried an admin action.
+- `invalid_role` (400) — role not in `{admin, clinician, reviewer}`.
+- `user_email_taken` (409) — email uniqueness conflict.
+- `cannot_demote_self` (400), `cannot_deactivate_self` (400) — admin self-protection.
+- `user_not_found` / `location_not_found` (404) — includes cross-org lookups (no existence leak).
+
+See `22-admin-governance.md` for the governance model.
+
+## Event validation (phase 12)
+
+`POST /encounters/{id}/events` is now schema-bound:
+
+| event_type              | required keys           |
+|-------------------------|-------------------------|
+| `manual_note`           | `note`                  |
+| `note_draft_requested`  | `requested_by`          |
+| `note_draft_completed`  | `template`              |
+| `note_reviewed`         | `reviewer`              |
+
+Server-written types (`encounter_created`, `status_changed`) bypass the
+validator — they're constructed internally with known-good payloads.
+Unknown types → 400 `invalid_event_type`. Non-object or missing-keys
+`event_data` → 400 `invalid_event_data`.
+
+## Pagination (phase 12)
+
+`GET /encounters` accepts `limit` (1..500, default 50) and `offset` (≥0,
+default 0). Response body is still an array — **backward compatible**.
+Totals come on response headers: `X-Total-Count`, `X-Limit`, `X-Offset`.
+
 ## Error code inventory
 
 | Code                               | HTTP | Origin                              |

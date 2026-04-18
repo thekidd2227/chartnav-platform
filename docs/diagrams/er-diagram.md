@@ -33,6 +33,7 @@ erDiagram
     int id PK
     int organization_id FK
     string name
+    boolean is_active
     datetime created_at
   }
   users {
@@ -40,7 +41,8 @@ erDiagram
     int organization_id FK
     string email UK
     string full_name
-    string role "admin | clinician | reviewer"
+    string role "admin | clinician | reviewer (CHECK constraint)"
+    boolean is_active
     datetime created_at
   }
   encounters {

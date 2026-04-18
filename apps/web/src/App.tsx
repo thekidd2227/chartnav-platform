@@ -5,6 +5,7 @@ import {
   ApiError,
   Encounter,
   EncounterFilters,
+  EVENT_TYPES,
   Me,
   NewEncounterInput,
   Role,
@@ -17,10 +18,12 @@ import {
   getEncounter,
   getEncounterEvents,
   getMe,
-  listEncounters,
+  isAdmin,
+  listEncountersPage,
   listLocations,
   updateEncounterStatus,
 } from "./api";
+import { AdminPanel } from "./AdminPanel";
 import { SEEDED_IDENTITIES, loadIdentity, saveIdentity } from "./identity";
 
 type Banner =
@@ -48,6 +51,12 @@ export default function App() {
 
   const [banner, setBanner] = useState<Banner>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
+
+  // Pagination
+  const PAGE_SIZE = 25;
+  const [offset, setOffset] = useState(0);
+  const [total, setTotal] = useState(0);
 
   // ---- loaders ---------------------------------------------------------
 
@@ -68,9 +77,14 @@ export default function App() {
     setListLoading(true);
     setListError(null);
     try {
-      const rows = await listEncounters(identity, filters);
-      setEncounters(rows);
-      if (selectedId && !rows.some((r) => r.id === selectedId)) {
+      const { items, total: t } = await listEncountersPage(
+        identity,
+        filters,
+        { limit: PAGE_SIZE, offset }
+      );
+      setEncounters(items);
+      setTotal(t);
+      if (selectedId && !items.some((r) => r.id === selectedId)) {
         setSelectedId(null);
         setEncounter(null);
         setEvents([]);
@@ -81,7 +95,7 @@ export default function App() {
     } finally {
       setListLoading(false);
     }
-  }, [identity, filters, selectedId]);
+  }, [identity, filters, selectedId, offset]);
 
   const refreshDetail = useCallback(
     async (id: number | null) => {
@@ -131,6 +145,8 @@ export default function App() {
     setEncounter(null);
     setEvents([]);
     setShowCreate(false);
+    setShowAdmin(false);
+    setOffset(0);
     setBanner({ kind: "info", msg: `Identity switched to ${email}` });
   };
 
@@ -187,6 +203,7 @@ export default function App() {
   // ---- render ----------------------------------------------------------
 
   const canCreate = me ? canCreateEncounter(me.role) : false;
+  const canAdmin = me ? isAdmin(me.role) : false;
 
   return (
     <div>
@@ -208,13 +225,28 @@ export default function App() {
               + New encounter
             </button>
           )}
+          {canAdmin && (
+            <button
+              className="btn"
+              onClick={() => setShowAdmin(true)}
+              data-testid="open-admin-panel"
+            >
+              Admin
+            </button>
+          )}
           <IdentityPicker value={identity} onChange={onIdentityChange} />
         </div>
       </header>
 
       <div className="layout">
         <aside className="layout__list">
-          <FilterBar value={filters} onChange={setFilters} />
+          <FilterBar
+            value={filters}
+            onChange={(next) => {
+              setFilters(next);
+              setOffset(0);
+            }}
+          />
           <EncounterList
             rows={encounters}
             loading={listLoading}
@@ -222,6 +254,29 @@ export default function App() {
             selectedId={selectedId}
             onSelect={setSelectedId}
           />
+          {total > PAGE_SIZE && (
+            <div className="pagination" data-testid="pagination">
+              <button
+                className="btn"
+                disabled={offset === 0}
+                onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
+                data-testid="page-prev"
+              >
+                ← Prev
+              </button>
+              <span className="subtle-note" data-testid="page-status">
+                {offset + 1}-{Math.min(offset + PAGE_SIZE, total)} of {total}
+              </span>
+              <button
+                className="btn"
+                disabled={offset + PAGE_SIZE >= total}
+                onClick={() => setOffset(offset + PAGE_SIZE)}
+                data-testid="page-next"
+              >
+                Next →
+              </button>
+            </div>
+          )}
         </aside>
 
         <section className="layout__detail">
@@ -264,6 +319,13 @@ export default function App() {
           me={me}
           onCancel={() => setShowCreate(false)}
           onSubmit={onCreateEncounter}
+        />
+      )}
+      {showAdmin && me && isAdmin(me.role) && (
+        <AdminPanel
+          identity={identity}
+          me={me}
+          onClose={() => setShowAdmin(false)}
         />
       )}
     </div>
@@ -654,14 +716,17 @@ function EventComposer({
         setData("");
       }}
     >
-      <input
-        type="text"
+      <select
         data-testid="event-type"
-        placeholder="event_type (e.g. note_reviewed)"
         value={type}
         onChange={(e) => setType(e.target.value)}
         required
-      />
+      >
+        <option value="" disabled>Select event type…</option>
+        {EVENT_TYPES.map((t) => (
+          <option key={t} value={t}>{t}</option>
+        ))}
+      </select>
       <textarea
         data-testid="event-data"
         placeholder='event_data (optional JSON, e.g. {"comment":"..."})'

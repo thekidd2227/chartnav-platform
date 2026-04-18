@@ -32,6 +32,24 @@ export interface Me {
   organization_id: number;
 }
 
+export interface User {
+  id: number;
+  organization_id: number;
+  email: string;
+  full_name: string | null;
+  role: Role;
+  is_active: number | boolean;
+  created_at: string;
+}
+
+export interface Location {
+  id: number;
+  organization_id: number;
+  name: string;
+  is_active: number | boolean;
+  created_at: string;
+}
+
 export interface Encounter {
   id: number;
   organization_id: number;
@@ -64,6 +82,13 @@ async function request<T>(
   path: string,
   init: RequestInit & { email?: string | null } = {}
 ): Promise<T> {
+  return (await requestWithResponse<T>(path, init)).body;
+}
+
+async function requestWithResponse<T>(
+  path: string,
+  init: RequestInit & { email?: string | null } = {}
+): Promise<{ body: T; response: Response }> {
   const { email, ...fetchInit } = init;
   const headers = new Headers(fetchInit.headers || {});
   if (email && !headers.has("X-User-Email")) {
@@ -92,7 +117,7 @@ async function request<T>(
       (typeof body === "string" ? body : res.statusText);
     throw new ApiError(res.status, code, reason);
   }
-  return body as T;
+  return { body: body as T, response: res };
 }
 
 // ---- Endpoints ----------------------------------------------------------
@@ -175,9 +200,102 @@ export function createEncounter(
 }
 
 export function listLocations(
-  email: string
-): Promise<{ id: number; organization_id: number; name: string }[]> {
-  return request("/locations", { email });
+  email: string,
+  opts: { includeInactive?: boolean } = {}
+): Promise<Location[]> {
+  const qs = opts.includeInactive ? "?include_inactive=1" : "";
+  return request(`/locations${qs}`, { email });
+}
+
+export function createLocation(email: string, name: string): Promise<Location> {
+  return request("/locations", {
+    email,
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function updateLocation(
+  email: string,
+  id: number,
+  patch: { name?: string; is_active?: boolean }
+): Promise<Location> {
+  return request(`/locations/${id}`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
+export function deactivateLocation(email: string, id: number): Promise<Location> {
+  return request(`/locations/${id}`, { email, method: "DELETE" });
+}
+
+export function listUsers(
+  email: string,
+  opts: { includeInactive?: boolean } = {}
+): Promise<User[]> {
+  const qs = opts.includeInactive ? "?include_inactive=1" : "";
+  return request(`/users${qs}`, { email });
+}
+
+export function createUser(
+  email: string,
+  body: { email: string; full_name?: string | null; role: Role }
+): Promise<User> {
+  return request("/users", {
+    email,
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateUser(
+  email: string,
+  id: number,
+  patch: {
+    email?: string;
+    full_name?: string | null;
+    role?: Role;
+    is_active?: boolean;
+  }
+): Promise<User> {
+  return request(`/users/${id}`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
+export function deactivateUser(email: string, id: number): Promise<User> {
+  return request(`/users/${id}`, { email, method: "DELETE" });
+}
+
+/**
+ * Paginated encounters. Returns both items and totals pulled from the
+ * `X-*` response headers emitted by the backend.
+ */
+export async function listEncountersPage(
+  email: string,
+  filters: EncounterFilters = {},
+  page: { limit?: number; offset?: number } = {}
+): Promise<{ items: Encounter[]; total: number; limit: number; offset: number }> {
+  const qs = new URLSearchParams();
+  if (filters.status) qs.set("status", filters.status);
+  if (filters.provider_name) qs.set("provider_name", filters.provider_name);
+  if (typeof filters.location_id === "number")
+    qs.set("location_id", String(filters.location_id));
+  if (typeof page.limit === "number") qs.set("limit", String(page.limit));
+  if (typeof page.offset === "number") qs.set("offset", String(page.offset));
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  const { body, response } = await requestWithResponse<Encounter[]>(
+    `/encounters${suffix}`,
+    { email }
+  );
+  const total = parseInt(response.headers.get("X-Total-Count") || "0", 10);
+  const limit = parseInt(response.headers.get("X-Limit") || String(body.length), 10);
+  const offset = parseInt(response.headers.get("X-Offset") || "0", 10);
+  return { items: body, total, limit, offset };
 }
 
 // ---- Pure helpers -------------------------------------------------------
@@ -223,3 +341,22 @@ export function canCreateEvent(role: Role): boolean {
 export function canCreateEncounter(role: Role): boolean {
   return role === "admin" || role === "clinician";
 }
+
+export function isAdmin(role: Role): boolean {
+  return role === "admin";
+}
+
+// Event type allowlist — mirrors apps/api/app/api/routes.py::EVENT_SCHEMAS.
+export const EVENT_TYPES = [
+  "manual_note",
+  "note_draft_requested",
+  "note_draft_completed",
+  "note_reviewed",
+] as const;
+
+export const EVENT_TYPE_REQUIRED: Record<string, readonly string[]> = {
+  manual_note: ["note"],
+  note_draft_requested: ["requested_by"],
+  note_draft_completed: ["template"],
+  note_reviewed: ["reviewer"],
+};

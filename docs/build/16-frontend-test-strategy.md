@@ -81,6 +81,12 @@ Vitest and Playwright are fully isolated: Vitest's `test.include` is
 narrowed to `src/**/*.test.{ts,tsx}` and excludes `tests/**`, so the
 two suites never cross-contaminate.
 
+## Admin governance tests (phase 12)
+
+- `src/test/AdminPanel.test.tsx` — 5 Vitest tests: user list, create user success + 409 error, self-row disabled, location create on the Locations tab.
+- `src/test/App.test.tsx` — added 1 test asserting the Admin button is visible to admins only.
+- E2E `workflow.spec.ts` — 2 new scenarios: admin creates a user + a location end-to-end; clinician never sees the Admin button.
+
 ## Gaps not yet covered
 - No visual regression / accessibility audits.
 - The create modal doesn't exercise location-list errors yet.

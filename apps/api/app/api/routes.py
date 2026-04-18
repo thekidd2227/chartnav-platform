@@ -4,13 +4,15 @@ import json
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from app.auth import Caller, ensure_same_org, require_caller
 from app.authz import (
+    KNOWN_ROLES,
     assert_can_transition,
+    require_admin,
     require_create_encounter,
     require_create_event,
 )
@@ -39,6 +41,64 @@ ALLOWED_TRANSITIONS: dict[str, set[str]] = {
     "review_needed": {"completed", "draft_ready"},
     "completed": set(),
 }
+
+
+# ---------- Event schema ----------
+#
+# Allowlist of event_type values + per-type required keys for
+# `event_data`. Types that aren't listed here are rejected.
+# `manual_note` is the generic operator-authored event; it just
+# requires a `note` key.
+#
+# Server-written types (encounter_created, status_changed) are
+# recorded automatically by the mutation handlers — they're included
+# here so the validator doesn't need a second bypass path.
+EVENT_SCHEMAS: dict[str, tuple[str, ...]] = {
+    "encounter_created":      ("status",),
+    "status_changed":         ("old_status", "new_status"),
+    "note_draft_requested":   ("requested_by",),
+    "note_draft_completed":   ("template",),
+    "note_reviewed":          ("reviewer",),
+    "manual_note":            ("note",),
+}
+
+
+def _validate_event(event_type: str, event_data: Any) -> Optional[dict]:
+    """Return a normalized dict payload, or raise 400 on violation.
+
+    - `event_type` must be in EVENT_SCHEMAS.
+    - `event_data` must be a JSON object (dict) with all required keys.
+      `None` is accepted only for types with no required keys.
+    """
+    if event_type not in EVENT_SCHEMAS:
+        raise _err(
+            "invalid_event_type",
+            f"must be one of {sorted(EVENT_SCHEMAS.keys())}",
+            400,
+        )
+    required = EVENT_SCHEMAS[event_type]
+    if event_data is None:
+        if required:
+            raise _err(
+                "invalid_event_data",
+                f"{event_type} requires keys: {list(required)}",
+                400,
+            )
+        return None
+    if not isinstance(event_data, dict):
+        raise _err(
+            "invalid_event_data",
+            f"{event_type} event_data must be a JSON object",
+            400,
+        )
+    missing = [k for k in required if k not in event_data]
+    if missing:
+        raise _err(
+            "invalid_event_data",
+            f"{event_type} missing required keys: {missing}",
+            400,
+        )
+    return event_data
 
 
 # ---------- standardized errors ----------
@@ -99,6 +159,33 @@ class EventCreate(BaseModel):
 
 class StatusUpdate(BaseModel):
     status: str
+
+
+# ---------- Admin payloads ----------
+
+_EMAIL_RE = r"^[^\s@]+@[^\s@]+\.[^\s@]+$"
+
+
+class UserCreate(BaseModel):
+    email: str = Field(..., min_length=3, max_length=255, pattern=_EMAIL_RE)
+    full_name: Optional[str] = Field(default=None, max_length=255)
+    role: str
+
+
+class UserUpdate(BaseModel):
+    email: Optional[str] = Field(default=None, min_length=3, max_length=255, pattern=_EMAIL_RE)
+    full_name: Optional[str] = Field(default=None, max_length=255)
+    role: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class LocationCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+
+
+class LocationUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    is_active: Optional[bool] = None
 
 
 # ---------- Open endpoints ----------
@@ -164,19 +251,39 @@ def list_organizations(caller: Caller = Depends(require_caller)) -> list[dict]:
 
 
 @router.get("/locations")
-def list_locations(caller: Caller = Depends(require_caller)) -> list[dict]:
+def list_locations(
+    caller: Caller = Depends(require_caller),
+    include_inactive: bool = Query(default=False),
+) -> list[dict]:
+    if include_inactive:
+        return fetch_all(
+            "SELECT id, organization_id, name, is_active, created_at "
+            "FROM locations WHERE organization_id = :org ORDER BY id",
+            {"org": caller.organization_id},
+        )
     return fetch_all(
-        "SELECT id, organization_id, name, created_at FROM locations "
-        "WHERE organization_id = :org ORDER BY id",
+        "SELECT id, organization_id, name, is_active, created_at "
+        "FROM locations WHERE organization_id = :org AND is_active = 1 "
+        "ORDER BY id",
         {"org": caller.organization_id},
     )
 
 
 @router.get("/users")
-def list_users(caller: Caller = Depends(require_caller)) -> list[dict]:
+def list_users(
+    caller: Caller = Depends(require_caller),
+    include_inactive: bool = Query(default=False),
+) -> list[dict]:
+    if include_inactive:
+        return fetch_all(
+            "SELECT id, organization_id, email, full_name, role, is_active, "
+            "created_at FROM users WHERE organization_id = :org ORDER BY id",
+            {"org": caller.organization_id},
+        )
     return fetch_all(
-        "SELECT id, organization_id, email, full_name, role, created_at "
-        "FROM users WHERE organization_id = :org ORDER BY id",
+        "SELECT id, organization_id, email, full_name, role, is_active, "
+        "created_at FROM users WHERE organization_id = :org AND is_active = 1 "
+        "ORDER BY id",
         {"org": caller.organization_id},
     )
 
@@ -185,12 +292,25 @@ def list_users(caller: Caller = Depends(require_caller)) -> list[dict]:
 
 @router.get("/encounters")
 def list_encounters(
+    response: Response,
     caller: Caller = Depends(require_caller),
     organization_id: Optional[int] = Query(default=None, ge=1),
     location_id: Optional[int] = Query(default=None, ge=1),
     status: Optional[str] = Query(default=None),
     provider_name: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
 ) -> list[dict]:
+    """List encounters scoped to the caller's org.
+
+    Backward compatible: still returns a JSON array. Pagination metadata
+    is exposed on response headers so existing clients that ignore
+    pagination keep working:
+
+        X-Total-Count : full filtered count (ignoring limit/offset)
+        X-Limit       : echo of the limit applied
+        X-Offset      : echo of the offset applied
+    """
     if organization_id is not None and organization_id != caller.organization_id:
         raise _err(
             "cross_org_access_forbidden",
@@ -218,10 +338,21 @@ def list_encounters(
         params["provider"] = provider_name
 
     where = " WHERE " + " AND ".join(clauses)
-    return fetch_all(
-        f"SELECT {ENCOUNTER_COLUMNS} FROM encounters{where} ORDER BY id",
-        params,
+
+    count_row = fetch_one(f"SELECT COUNT(*) AS n FROM encounters{where}", params)
+    total = int(count_row["n"]) if count_row else 0
+
+    page_params = {**params, "limit": limit, "offset": offset}
+    rows = fetch_all(
+        f"SELECT {ENCOUNTER_COLUMNS} FROM encounters{where} "
+        "ORDER BY id LIMIT :limit OFFSET :offset",
+        page_params,
     )
+
+    response.headers["X-Total-Count"] = str(total)
+    response.headers["X-Limit"] = str(limit)
+    response.headers["X-Offset"] = str(offset)
+    return rows
 
 
 @router.get("/encounters/{encounter_id}")
@@ -332,12 +463,9 @@ def create_encounter_event(
 ) -> dict:
     _load_encounter_for_caller(encounter_id, caller)
 
-    if payload.event_data is None:
-        event_data_str: Optional[str] = None
-    elif isinstance(payload.event_data, str):
-        event_data_str = payload.event_data
-    else:
-        event_data_str = json.dumps(payload.event_data, sort_keys=True)
+    # Validate event_type + event_data shape.
+    validated = _validate_event(payload.event_type, payload.event_data)
+    event_data_str = json.dumps(validated, sort_keys=True) if validated is not None else None
 
     with transaction() as conn:
         new_id = insert_returning_id(
@@ -439,5 +567,225 @@ def update_encounter_status(
         updated = conn.execute(
             text(f"SELECT {ENCOUNTER_COLUMNS} FROM encounters WHERE id = :id"),
             {"id": encounter_id},
+        ).mappings().first()
+        return dict(updated)
+
+
+# =========================================================================
+# Admin CRUD — users + locations (admin role only; strictly org-scoped)
+# =========================================================================
+
+USER_COLUMNS = (
+    "id, organization_id, email, full_name, role, is_active, created_at"
+)
+LOCATION_COLUMNS = "id, organization_id, name, is_active, created_at"
+
+
+@router.post("/users", status_code=status.HTTP_201_CREATED)
+def admin_create_user(
+    payload: UserCreate, caller: Caller = Depends(require_admin)
+) -> dict:
+    if payload.role not in KNOWN_ROLES:
+        raise _err(
+            "invalid_role",
+            f"role must be one of {sorted(KNOWN_ROLES)}",
+            400,
+        )
+    with transaction() as conn:
+        existing = conn.execute(
+            text("SELECT id FROM users WHERE email = :e"),
+            {"e": payload.email},
+        ).mappings().first()
+        if existing:
+            raise _err("user_email_taken", "email already in use", 409)
+
+        new_id = insert_returning_id(
+            conn,
+            "users",
+            {
+                "organization_id": caller.organization_id,
+                "email": payload.email,
+                "full_name": payload.full_name,
+                "role": payload.role,
+            },
+        )
+        row = conn.execute(
+            text(f"SELECT {USER_COLUMNS} FROM users WHERE id = :id"),
+            {"id": new_id},
+        ).mappings().first()
+        return dict(row)
+
+
+@router.patch("/users/{user_id}")
+def admin_update_user(
+    user_id: int,
+    payload: UserUpdate,
+    caller: Caller = Depends(require_admin),
+) -> dict:
+    # Validate role if provided, and prevent the caller from demoting
+    # themselves or deactivating their own account (foot-gun protection).
+    if payload.role is not None and payload.role not in KNOWN_ROLES:
+        raise _err(
+            "invalid_role",
+            f"role must be one of {sorted(KNOWN_ROLES)}",
+            400,
+        )
+
+    with transaction() as conn:
+        row = conn.execute(
+            text(f"SELECT {USER_COLUMNS} FROM users WHERE id = :id"),
+            {"id": user_id},
+        ).mappings().first()
+        if not row or row["organization_id"] != caller.organization_id:
+            raise _err("user_not_found", "no such user in your organization", 404)
+
+        if user_id == caller.user_id:
+            if payload.role is not None and payload.role != "admin":
+                raise _err(
+                    "cannot_demote_self",
+                    "an admin cannot remove their own admin role",
+                    400,
+                )
+            if payload.is_active is False:
+                raise _err(
+                    "cannot_deactivate_self",
+                    "an admin cannot deactivate their own account",
+                    400,
+                )
+
+        updates: dict[str, Any] = {}
+        if payload.email is not None:
+            # Uniqueness check (case-sensitive; matches prior contract)
+            clash = conn.execute(
+                text("SELECT id FROM users WHERE email = :e AND id != :id"),
+                {"e": payload.email, "id": user_id},
+            ).mappings().first()
+            if clash:
+                raise _err("user_email_taken", "email already in use", 409)
+            updates["email"] = payload.email
+        if payload.full_name is not None:
+            updates["full_name"] = payload.full_name
+        if payload.role is not None:
+            updates["role"] = payload.role
+        if payload.is_active is not None:
+            updates["is_active"] = bool(payload.is_active)
+
+        if updates:
+            set_clause = ", ".join(f"{k} = :{k}" for k in updates)
+            conn.execute(
+                text(f"UPDATE users SET {set_clause} WHERE id = :id"),
+                {**updates, "id": user_id},
+            )
+        updated = conn.execute(
+            text(f"SELECT {USER_COLUMNS} FROM users WHERE id = :id"),
+            {"id": user_id},
+        ).mappings().first()
+        return dict(updated)
+
+
+@router.delete("/users/{user_id}")
+def admin_deactivate_user(
+    user_id: int, caller: Caller = Depends(require_admin)
+) -> dict:
+    """Soft-delete — sets is_active = 0. Preserves audit/history FKs."""
+    if user_id == caller.user_id:
+        raise _err(
+            "cannot_deactivate_self",
+            "an admin cannot deactivate their own account",
+            400,
+        )
+    with transaction() as conn:
+        row = conn.execute(
+            text(f"SELECT {USER_COLUMNS} FROM users WHERE id = :id"),
+            {"id": user_id},
+        ).mappings().first()
+        if not row or row["organization_id"] != caller.organization_id:
+            raise _err("user_not_found", "no such user in your organization", 404)
+
+        conn.execute(
+            text("UPDATE users SET is_active = 0 WHERE id = :id"),
+            {"id": user_id},
+        )
+        updated = conn.execute(
+            text(f"SELECT {USER_COLUMNS} FROM users WHERE id = :id"),
+            {"id": user_id},
+        ).mappings().first()
+        return dict(updated)
+
+
+@router.post("/locations", status_code=status.HTTP_201_CREATED)
+def admin_create_location(
+    payload: LocationCreate, caller: Caller = Depends(require_admin)
+) -> dict:
+    with transaction() as conn:
+        new_id = insert_returning_id(
+            conn,
+            "locations",
+            {"organization_id": caller.organization_id, "name": payload.name},
+        )
+        row = conn.execute(
+            text(f"SELECT {LOCATION_COLUMNS} FROM locations WHERE id = :id"),
+            {"id": new_id},
+        ).mappings().first()
+        return dict(row)
+
+
+@router.patch("/locations/{location_id}")
+def admin_update_location(
+    location_id: int,
+    payload: LocationUpdate,
+    caller: Caller = Depends(require_admin),
+) -> dict:
+    with transaction() as conn:
+        row = conn.execute(
+            text(f"SELECT {LOCATION_COLUMNS} FROM locations WHERE id = :id"),
+            {"id": location_id},
+        ).mappings().first()
+        if not row or row["organization_id"] != caller.organization_id:
+            raise _err(
+                "location_not_found",
+                "no such location in your organization",
+                404,
+            )
+        updates: dict[str, Any] = {}
+        if payload.name is not None:
+            updates["name"] = payload.name
+        if payload.is_active is not None:
+            updates["is_active"] = bool(payload.is_active)
+        if updates:
+            set_clause = ", ".join(f"{k} = :{k}" for k in updates)
+            conn.execute(
+                text(f"UPDATE locations SET {set_clause} WHERE id = :id"),
+                {**updates, "id": location_id},
+            )
+        updated = conn.execute(
+            text(f"SELECT {LOCATION_COLUMNS} FROM locations WHERE id = :id"),
+            {"id": location_id},
+        ).mappings().first()
+        return dict(updated)
+
+
+@router.delete("/locations/{location_id}")
+def admin_deactivate_location(
+    location_id: int, caller: Caller = Depends(require_admin)
+) -> dict:
+    with transaction() as conn:
+        row = conn.execute(
+            text(f"SELECT {LOCATION_COLUMNS} FROM locations WHERE id = :id"),
+            {"id": location_id},
+        ).mappings().first()
+        if not row or row["organization_id"] != caller.organization_id:
+            raise _err(
+                "location_not_found",
+                "no such location in your organization",
+                404,
+            )
+        conn.execute(
+            text("UPDATE locations SET is_active = 0 WHERE id = :id"),
+            {"id": location_id},
+        )
+        updated = conn.execute(
+            text(f"SELECT {LOCATION_COLUMNS} FROM locations WHERE id = :id"),
+            {"id": location_id},
         ).mappings().first()
         return dict(updated)
