@@ -33,7 +33,11 @@ def upgrade() -> None:
                 "is_active",
                 sa.Boolean(),
                 nullable=False,
-                server_default=sa.text("1"),  # portable: SQLite bool = int; Postgres coerces
+                # Portable boolean literal: SQLite accepts "true"/"false"
+                # as text; Postgres accepts them natively. An integer "1"
+                # default breaks Postgres ("DatatypeMismatch: column is
+                # BOOLEAN but default is INTEGER").
+                server_default=sa.text("true"),
             )
         )
         # DB-level role enforcement. batch_alter_table handles SQLite's
@@ -46,7 +50,7 @@ def upgrade() -> None:
                 "is_active",
                 sa.Boolean(),
                 nullable=False,
-                server_default=sa.text("1"),
+                server_default=sa.text("true"),
             )
         )
 
