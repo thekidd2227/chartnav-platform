@@ -81,6 +81,23 @@ Consul, etc. to reason about.
 
 If the image can't boot, serve `/health`, or pass smoke, the job fails.
 
+## Staging deployment (phase 11 overlay)
+
+Staging rides on the same Dockerfile + entrypoint. The dedicated
+surface lives in `infra/docker/docker-compose.staging.yml` +
+`infra/docker/.env.staging.example`, driven by
+`scripts/staging_{up,verify,rollback}.sh`. Full reference:
+`19-staging-deployment.md` and the operator runbook
+`21-staging-runbook.md`.
+
+Key differences from this phase's generic prod compose:
+
+- Image is **pinned** to `CHARTNAV_IMAGE_TAG` — rollback = repin + restart.
+- API healthcheck uses `/ready` (DB-aware) rather than `/health`.
+- Ports bind to `127.0.0.1` only; a reverse proxy is expected to front it.
+- Every critical env var is `${VAR:?msg}`-guarded so a missing value
+  blocks startup with an explicit error.
+
 ## Out of scope this phase
 
 - Image registry push (no target credentials by default).

@@ -39,7 +39,7 @@
   <div class="sub">Backend phases 1–5: spine → state machine → auth → RBAC → CI/hardening<br>
   Repo: <code>thekidd2227/chartnav-platform</code></div>
 </header>
-<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth, org scoping, RBAC</a></li><li><a href="#sec-9">08 — Test strategy</a></li><li><a href="#sec-10">09 — CI & deploy hardening</a></li><li><a href="#sec-11">10 — Doc artifact pipeline</a></li><li><a href="#sec-12">11 — Production-auth seam</a></li><li><a href="#sec-13">12 — Runtime config</a></li><li><a href="#sec-14">13 — Deploy target</a></li><li><a href="#sec-15">14 — Postgres parity</a></li><li><a href="#sec-16">15 — Frontend integration</a></li><li><a href="#sec-17">16 — Frontend test strategy</a></li><li><a href="#sec-18">17 — E2E & release</a></li><li><a href="#sec-19">18 — Operational hardening</a></li><li><a href="#sec-20">Diagram — System architecture</a></li><li><a href="#sec-21">Diagram — Encounter status machine</a></li><li><a href="#sec-22">Diagram — ER</a></li><li><a href="#sec-23">Diagram — API / data flow</a></li></ol></nav>
+<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth, org scoping, RBAC</a></li><li><a href="#sec-9">08 — Test strategy</a></li><li><a href="#sec-10">09 — CI & deploy hardening</a></li><li><a href="#sec-11">10 — Doc artifact pipeline</a></li><li><a href="#sec-12">11 — Production-auth seam</a></li><li><a href="#sec-13">12 — Runtime config</a></li><li><a href="#sec-14">13 — Deploy target</a></li><li><a href="#sec-15">14 — Postgres parity</a></li><li><a href="#sec-16">15 — Frontend integration</a></li><li><a href="#sec-17">16 — Frontend test strategy</a></li><li><a href="#sec-18">17 — E2E & release</a></li><li><a href="#sec-19">18 — Operational hardening</a></li><li><a href="#sec-20">19 — Staging deployment</a></li><li><a href="#sec-21">20 — Observability</a></li><li><a href="#sec-22">21 — Staging runbook</a></li><li><a href="#sec-23">Diagram — System architecture</a></li><li><a href="#sec-24">Diagram — Encounter status machine</a></li><li><a href="#sec-25">Diagram — ER</a></li><li><a href="#sec-26">Diagram — API / data flow</a></li></ol></nav>
 <section id="sec-1"><h2>Executive summary</h2>
 <p>This document consolidates <strong>all</strong> ChartNav backend phases delivered to</p>
 <p>date.</p>
@@ -52,77 +52,86 @@
 <p><strong>Phase 7 — Frontend workflow UI.</strong> Typed API client + identity seam + full two-pane workflow console (list + filters + detail + timeline + role-aware actions). Error banners surface the backend envelope verbatim.</p>
 <p><strong>Phase 8 — Create UI + frontend tests + frontend CI.</strong> Admin/clinician can create encounters through a modal; Vitest + Testing Library harness (12 tests) locks the UI down; dedicated <code>frontend</code> CI job runs typecheck + tests + build on every push/PR.</p>
 <p><strong>Phase 9 — Playwright E2E + release pipeline.</strong> Playwright boots backend + frontend together, 8 Chromium scenarios, new <code>e2e</code> CI job. <code>release.yml</code> workflow on <code>v*.*.*</code> tags: GHCR push + release bundle + GitHub Release with tarballs and MANIFEST.</p>
-<p><strong>Phase 10 — Real JWT bearer auth + operational hardening (this phase).</strong> <code>resolve_caller_from_bearer</code> now performs real PyJWT validation against a JWKS URL (signature + iss + aud + exp + claim mapping). Every request gets a correlated <code>X-Request-ID</code>. Structured JSON access + auth-denied logs. New <code>security_audit_events</code> table (migration <code>b2c3d4e5f6a7</code>) writes one row per denied/suspicious access attempt via a central HTTP exception handler. <code>allow_origins=[&quot;*&quot;]</code> is gone — CORS is env-driven (<code>CHARTNAV_CORS_ALLOW_ORIGINS</code>). Per-process sliding-window rate limiter protects authed paths (<code>CHARTNAV_RATE_LIMIT_PER_MINUTE</code>, default 120). Backend suite grows to 48 tests including 11 bearer scenarios and 12 operational scenarios. No endpoint contract changes.</p>
+<p><strong>Phase 10 — Real JWT bearer auth + operational hardening.</strong> Real PyJWT validation against a JWKS URL (signature + iss + aud + exp + claim mapping). Request correlation (<code>X-Request-ID</code>), structured JSON logs, <code>security_audit_events</code> table (<code>b2c3d4e5f6a7</code>), CORS driven by config, per-process rate limiter.</p>
+<p><strong>Phase 11 — Staging deployment + observability (this phase).</strong> New <code>GET /ready</code> (DB-aware readiness) and <code>GET /metrics</code> (Prometheus text) surface request, auth-denied, rate-limited, audit-event, and latency counters. Staging is a pinned-image compose deploy: <code>infra/docker/docker-compose.staging.yml</code> + <code>.env.staging.example</code>, driven by <code>staging_up.sh</code>/<code>staging_verify.sh</code>/<code>staging_rollback.sh</code>. Release bundle now ships a <code>chartnav-staging-&lt;version&gt;.tar.gz</code>. New CI <code>deploy-config</code> job validates compose files + shellchecks every script. Runbook + observability docs are operator-grade (19/20/21). 51 pytest tests including 3 observability scenarios; 9-assertion staging verify runs live against a locally-booted API.</p>
 <p>Preserved untouched: <code>/health</code>, <code>/</code>, SQLite dev workflow, state machine + filtering surface, workflow_events model, existing endpoint contracts.</p>
 </section>
 <section id="sec-2"><h2>01 — Current state</h2>
 <h1>ChartNav — Current State</h1>
-<p><strong>As of:</strong> 2026-04-18 (phase: JWT bearer auth + operational hardening)</p>
+<p><strong>As of:</strong> 2026-04-18 (phase: staging deployment + observability)</p>
 <h2>Repo layout (relevant)</h2>
 <pre class="code lang-"><code>
 chartnav-platform/
 ├── .github/workflows/
-│   ├── ci.yml            # backend-sqlite · backend-postgres · frontend · e2e · docker-build · docs
-│   └── release.yml
-├── Makefile
-├── scripts/              # build_docs.py · verify.sh · pg_verify.sh · release_build.sh
+│   ├── ci.yml            # backend-sqlite · backend-postgres · frontend · e2e · docker-build · deploy-config · docs
+│   └── release.yml       # now also bundles the staging artifact tar
+├── Makefile              # + staging-up · staging-verify · staging-rollback · staging-down
+├── scripts/
+│   ├── build_docs.py
+│   ├── verify.sh · pg_verify.sh · release_build.sh
+│   └── staging_up.sh · staging_verify.sh · staging_rollback.sh
 ├── apps/
 │   ├── api/
 │   │   ├── app/
 │   │   │   ├── main.py              # CORS + middleware + exception-handler audit
-│   │   │   ├── config.py            # + CORS, rate-limit, jwt-claim config
+│   │   │   ├── config.py
 │   │   │   ├── db.py
-│   │   │   ├── auth.py              # real JWT bearer via PyJWKClient
+│   │   │   ├── auth.py              # real JWT bearer
 │   │   │   ├── authz.py
-│   │   │   ├── audit.py             # NEW — security_audit_events writer
-│   │   │   ├── logging_config.py    # NEW — JSON logs
-│   │   │   ├── middleware.py        # NEW — request id / access log / rate limit
-│   │   │   └── api/routes.py
-│   │   ├── alembic/versions/        # 3 migrations (now + security_audit_events)
-│   │   ├── scripts_seed.py
-│   │   ├── scripts/smoke.sh
-│   │   ├── tests/                   # 48 pytest (incl. 11 bearer + 12 operational)
-│   │   └── Dockerfile · entrypoint.sh
+│   │   │   ├── audit.py
+│   │   │   ├── logging_config.py
+│   │   │   ├── middleware.py        # request-id · access log · rate limit
+│   │   │   ├── metrics.py           # NEW — in-process Prometheus counters
+│   │   │   └── api/routes.py        # adds /ready, /metrics
+│   │   ├── alembic/versions/        # 3 migrations through b2c3d4e5f6a7
+│   │   ├── scripts_seed.py · scripts/smoke.sh
+│   │   ├── tests/                   # 51 pytest (+ 3 observability)
+│   │   └── Dockerfile · entrypoint.sh · .env.example
 │   └── web/
 │       └── (unchanged this phase)
-├── infra/docker/{docker-compose,docker-compose.prod}.yml
-└── docs/build/ 01 … 18
+├── infra/docker/
+│   ├── docker-compose.yml           # dev
+│   ├── docker-compose.prod.yml      # generic prod
+│   ├── docker-compose.staging.yml   # NEW — pinned image, /ready healthcheck, volumes
+│   └── .env.staging.example         # NEW — explicit staging contract
+└── docs/build/ 01 … 21
 </code></pre>
 <h2>Runtime baseline</h2>
 <ul>
-<li>Backend: FastAPI + SQLAlchemy Core + PyJWT. SQLite or Postgres.</li>
+<li>Backend: FastAPI + SQLAlchemy Core + PyJWT.</li>
 <li>Frontend: Vite 5 + React 18 + TypeScript + Vitest + Playwright.</li>
-<li>Auth: <code>CHARTNAV_AUTH_MODE</code></li>
-<li><code>header</code> (dev) — <code>X-User-Email</code> → <code>users</code> lookup.</li>
-<li><code>bearer</code> (prod) — real JWT validation (signature/iss/aud/exp) against <code>CHARTNAV_JWT_JWKS_URL</code>, claim → user via <code>CHARTNAV_JWT_USER_CLAIM</code>.</li>
+<li>Auth: <code>header</code> (dev) or <code>bearer</code> (prod, real JWT with JWKS cache).</li>
 <li>RBAC: <code>admin</code> / <code>clinician</code> / <code>reviewer</code>.</li>
-<li>Error envelope: <code>{&quot;detail&quot;: {&quot;error_code&quot;: &quot;...&quot;, &quot;reason&quot;: &quot;...&quot;}}</code> — audited by the HTTP exception handler for 401/403 + listed codes.</li>
-<li><strong>CORS</strong>: env-driven <code>CHARTNAV_CORS_ALLOW_ORIGINS</code>. No more <code>*</code>.</li>
-<li><strong>Rate limit</strong>: <code>CHARTNAV_RATE_LIMIT_PER_MINUTE</code> (default 120), in-memory sliding window on authed paths.</li>
+<li>Error envelope: <code>{&quot;detail&quot;: {&quot;error_code&quot;: &quot;...&quot;, &quot;reason&quot;: &quot;...&quot;}}</code>.</li>
+<li><strong>Observability</strong>: <code>/health</code> (liveness), <code>/ready</code> (DB-aware), <code>/metrics</code> (Prometheus text).</li>
+<li><strong>Audit trail</strong>: <code>security_audit_events</code> table; written on 401/403 + listed error codes + 429 rate_limited.</li>
+<li><strong>CORS</strong>: env-driven, no wildcard.</li>
+<li><strong>Rate limit</strong>: per-process sliding window on authed paths.</li>
 <li><strong>Request correlation</strong>: <code>X-Request-ID</code> inbound is honored, otherwise generated; always echoed.</li>
-<li><strong>Structured logs</strong>: JSON-per-line; every request logs <code>request_id</code>, <code>method</code>, <code>path</code>, <code>status</code>, <code>duration_ms</code>, <code>user_email</code>, <code>organization_id</code>.</li>
-<li><strong>Audit table</strong>: <code>security_audit_events</code> (migration <code>b2c3d4e5f6a7</code>); written on auth/scoping/role/rate-limit denials; never on success.</li>
+<li><strong>Structured logs</strong>: JSON per line.</li>
+<li>Alembic head: <code>b2c3d4e5f6a7</code>.</li>
 </ul>
-<p>Alembic head: <code>b2c3d4e5f6a7</code>.</p>
 <h2>Testing layers</h2>
 <table><thead><tr><th>Layer</th><th>Tool</th><th>Count</th><th>Scope</th></tr></thead><tbody>
-<tr><td>pytest</td><td>pytest</td><td>48</td><td>backend units + integration (auth, RBAC, scoping, state machine, bearer JWT, ops hardening)</td></tr>
+<tr><td>pytest</td><td>pytest</td><td>51</td><td>backend (auth, RBAC, scoping, state machine, bearer JWT, operational, observability)</td></tr>
 <tr><td>shell smoke</td><td>smoke.sh</td><td>9</td><td>live HTTP contract (SQLite + Postgres)</td></tr>
-<tr><td>vitest</td><td>vitest</td><td>12</td><td>frontend integration (mocked API)</td></tr>
-<tr><td>Playwright</td><td>@playwright</td><td>8</td><td>full-stack browser (live backend + frontend)</td></tr>
+<tr><td>vitest</td><td>vitest</td><td>12</td><td>frontend integration</td></tr>
+<tr><td>Playwright</td><td>@playwright</td><td>8</td><td>full-stack browser</td></tr>
+<tr><td>staging smoke</td><td>staging_verify.sh</td><td>9</td><td>live staging stack (health + ready + metrics + auth + audit signal)</td></tr>
 </tbody></table>
-<h2>Release / deploy</h2>
+<h2>Deploy / release</h2>
 <ul>
-<li><code>scripts/release_build.sh</code> builds a docker-saved API tar + web bundle + sha256 manifest under <code>dist/release/&lt;version&gt;/</code>.</li>
-<li><code>.github/workflows/release.yml</code> on <code>v*.*.*</code> tags pushes <code>ghcr.io/&lt;owner&gt;/chartnav-api:&lt;version&gt;</code> + <code>:latest</code> and creates a GitHub Release with the bundle attached.</li>
+<li>Release: <code>.github/workflows/release.yml</code> on <code>v*.*.*</code> tags pushes <code>ghcr.io/&lt;owner&gt;/chartnav-api:&lt;tag&gt;</code> + <code>:latest</code>, produces <code>chartnav-api-&lt;v&gt;.tar</code>, <code>chartnav-web-&lt;v&gt;.tar.gz</code>, <code>chartnav-staging-&lt;v&gt;.tar.gz</code>, and <code>MANIFEST.txt</code> in a GitHub Release.</li>
+<li>Staging deploy: <code>infra/docker/docker-compose.staging.yml</code> + <code>.env.staging</code> on the staging host; one-shot <code>make staging-up</code> / <code>staging-verify</code> / <code>staging-rollback TAG=...</code>.</li>
+<li>Prod: <code>infra/docker/docker-compose.prod.yml</code> remains available; it&#x27;s the generic ancestor of the staging compose.</li>
 </ul>
 <h2>Automation</h2>
 <ul>
-<li><code>make verify</code> (backend gate), <code>make pg-verify</code> (Postgres parity)</li>
-<li><code>make web-verify</code> (frontend unit gate), <code>make e2e</code> (browser gate)</li>
-<li><code>make release-build VERSION=v0.1.0</code> (reproducible bundle)</li>
+<li><code>make verify</code> (backend gate), <code>make pg-verify</code> (Postgres parity), <code>make web-verify</code>, <code>make e2e</code></li>
+<li><code>make staging-up / staging-verify / staging-rollback TAG=... / staging-down</code></li>
+<li><code>make release-build VERSION=v0.1.0</code></li>
 <li><code>make dev</code> (boot backend + frontend)</li>
-<li>CI: <code>backend-sqlite</code> + <code>frontend</code> run in parallel; <code>e2e</code> gates on both; <code>backend-postgres</code>, <code>docker-build</code>, <code>docs</code> chain on <code>backend-sqlite</code>.</li>
+<li>CI: <code>backend-sqlite</code> + <code>frontend</code> + <code>deploy-config</code> in parallel; <code>e2e</code> gates on backend+frontend; <code>backend-postgres</code>, <code>docker-build</code>, <code>docs</code> chain on <code>backend-sqlite</code>.</li>
 </ul>
 </section>
 <section id="sec-3"><h2>02 — Workflow state machine</h2>
@@ -356,85 +365,78 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <h1>Build Log</h1>
 <p>Reverse-chronological.</p>
 <p>---</p>
-<h2>2026-04-18 — Phase 10: real JWT bearer + operational hardening</h2>
+<h2>2026-04-18 — Phase 11: staging deployment + observability</h2>
 <h3>Step 1 — Baseline</h3>
 <ul>
-<li>Head: <code>74fe8dd</code> (Playwright E2E + release pipeline).</li>
-<li>28 pytest + 12 vitest + 8 Playwright + 9 smoke all green.</li>
+<li>Head: <code>cbc5184</code> (real JWT + operational hardening).</li>
+<li>48/48 pytest, 9/9 smoke green. Rate limiter / audit / structured logs all in place.</li>
 </ul>
-<h3>Step 2 — Real JWT bearer validation</h3>
+<h3>Step 2 — Observability surfaces</h3>
 <ul>
-<li>Added <code>pyjwt[crypto]&gt;=2.8</code> to <code>pyproject.toml</code> dependencies (core, not an extra — bearer mode is a first-class path now).</li>
-<li><code>apps/api/app/config.py</code> gains <code>jwt_user_claim</code>, <code>cors_allow_origins</code>, <code>rate_limit_per_minute</code>; claim default <code>email</code>; CORS default covers Vite dev on <code>:5173</code> and E2E on <code>:5174</code>.</li>
-<li><code>apps/api/app/auth.py</code>:</li>
-<li>Removed the 501 placeholder.</li>
-<li>New <code>resolve_caller_from_bearer</code>: parses <code>Authorization: Bearer …</code>, runs <code>PyJWKClient(settings.jwt_jwks_url).get_signing_key_from_jwt(token)</code>, then <code>jwt.decode(...)</code> requiring <code>exp</code>, <code>iss</code>, <code>aud</code>; algorithm allowlist <code>RS256/384/512</code> + <code>ES256/384/512</code>.</li>
-<li>Distinct error codes: <code>invalid_authorization_header</code>, <code>invalid_token</code>, <code>invalid_issuer</code>, <code>invalid_audience</code>, <code>token_expired</code>, <code>missing_user_claim</code>, <code>unknown_user</code>.</li>
-<li>Module-level <code>_jwk_client</code> with <code>set_jwk_client(...)</code> test hook so tests inject a local RSA key; production uses <code>PyJWKClient</code> against the real JWKS URL.</li>
-<li><code>require_caller</code> now takes <code>Request</code> so it can stash the resolved <code>Caller</code> onto <code>request.state</code>. That&#x27;s what lets the access log and audit writer reference the caller.</li>
+<li>New <code>apps/api/app/metrics.py</code>: in-process Prometheus-text counters behind a threading lock. Counters are narrow on purpose:</li>
+<li><code>chartnav_requests_total{method,path,status}</code></li>
+<li><code>chartnav_auth_denied_total{error_code}</code></li>
+<li><code>chartnav_rate_limited_total</code></li>
+<li><code>chartnav_audit_events_total{event_type}</code></li>
+<li><code>chartnav_http_request_duration_ms_{sum,count}</code></li>
+<li><code>middleware.py::AccessLogMiddleware</code> now observes every response&#x27;s <code>(method, path, status bucket, duration_ms)</code>.</li>
+<li><code>middleware.py::RateLimitMiddleware</code> now bumps <code>rate_limited_total</code> before it writes the audit row.</li>
+<li><code>audit.py::record(...)</code> now bumps <code>audit_events_total{event_type}</code> before inserting. Fails-closed still applies — metric or insert failure cannot mask the original 4xx.</li>
+<li><code>main.py::_http_exception_handler</code> now bumps <code>auth_denied_total{error_code}</code> alongside the audit + WARNING log it already emits.</li>
+<li>New <code>GET /ready</code> — runs <code>SELECT 1</code> against the DB, returns <code>503 not_ready</code> if it fails. Designed to back container healthchecks.</li>
+<li>New <code>GET /metrics</code> — unauthed Prometheus text exposition. Documented as &quot;internal network only&quot; in <code>20-observability.md</code>.</li>
 </ul>
-<h3>Step 3 — Structured logging + request IDs</h3>
+<h3>Step 3 — Staging deployment artifacts</h3>
 <ul>
-<li>New <code>apps/api/app/logging_config.py</code>: line-delimited JSON formatter, UTC timestamps, <code>extra={}</code> fields merged onto every record.</li>
-<li>New <code>apps/api/app/middleware.py::RequestIdMiddleware</code>: honors inbound <code>X-Request-ID</code> (≤ 64 chars), else generates a UUID4 hex. Echoed on every response including errors.</li>
-<li><code>AccessLogMiddleware</code>: one <code>INFO request</code> line per response with <code>request_id</code>, <code>method</code>, <code>path</code>, <code>status</code>, <code>duration_ms</code>, <code>user_email</code>, <code>organization_id</code>, <code>remote_addr</code>.</li>
+<li>New <code>infra/docker/docker-compose.staging.yml</code>: pinned image (<code>CHARTNAV_IMAGE_TAG</code>), 127.0.0.1-bound ports (reverse proxy expected), DB healthcheck, API healthcheck on <code>/ready</code>, named volume for Postgres, <code>restart: unless-stopped</code>, every critical env var blocked with <code>${VAR:?msg}</code>.</li>
+<li>New <code>infra/docker/.env.staging.example</code>: the full staging contract (image owner/tag, DB creds, bearer auth, CORS, rate-limit, seed, API port). Annotated with guardrails (&quot;NEVER put <code>*</code> in CORS&quot;, etc.).</li>
+<li>New runbook scripts:</li>
+<li><code>scripts/staging_up.sh</code> — validates compose config, optional <code>--pull</code>, then <code>up -d</code>.</li>
+<li><code>scripts/staging_verify.sh</code> — health + ready + metrics + unauth 401 + request-id round-trip + (header-mode only) full workflow mutation + audit signal assertion.</li>
+<li><code>scripts/staging_rollback.sh &lt;prev_tag&gt;</code> — atomic rewrite of <code>CHARTNAV_IMAGE_TAG</code> via python shim, <code>docker compose pull api</code>, <code>up -d api</code>, poll <code>/ready</code> ≤40s.</li>
+<li>All three scripts pass <code>shellcheck</code> clean.</li>
 </ul>
-<h3>Step 4 — Audit trail</h3>
+<h3>Step 4 — Release bundle expansion</h3>
 <ul>
-<li>New Alembic migration <code>b2c3d4e5f6a7 — add security_audit_events</code> with indexes on <code>event_type</code>, <code>actor_email</code>, <code>created_at</code>.</li>
-<li>New <code>apps/api/app/audit.py</code>:</li>
-<li><code>AUDITED_ERROR_CODES</code> set.</li>
-<li><code>record(...)</code> writes a row; never raises (internal exceptions are logged at ERROR and swallowed so they can&#x27;t mask the underlying denial).</li>
-<li><code>query_recent(limit)</code> read helper used by tests and operator debugging.</li>
-<li><code>apps/api/app/main.py</code> adds an <code>@app.exception_handler(HTTPException)</code> that:</li>
-<li>Writes an audit row on any 401/403 or known-audited <code>error_code</code>.</li>
-<li>Always copies <code>X-Request-ID</code> to the error response.</li>
-<li>Emits a <code>WARNING auth_denied</code> structured log.</li>
+<li><code>scripts/release_build.sh</code> now also tars the staging artifact set (<code>docker-compose.staging.yml</code> + <code>.env.staging.example</code> + all three runbook scripts + docs 19/20/21) into <code>chartnav-staging-&lt;version&gt;.tar.gz</code>.</li>
+<li><code>MANIFEST.txt</code> sha256s all three artifacts.</li>
+<li><code>release.yml</code> attaches the staging tarball to tag-based GitHub Releases.</li>
 </ul>
-<h3>Step 5 — CORS + runtime defaults</h3>
+<h3>Step 5 — CI: <code>deploy-config</code> job</h3>
 <ul>
-<li>Removed <code>allow_origins=[&quot;*&quot;]</code>. Driven by <code>CHARTNAV_CORS_ALLOW_ORIGINS</code>.</li>
-<li>Narrowed <code>allow_methods</code> and <code>allow_headers</code> to the set the app actually uses.</li>
-<li><code>expose_headers=[&quot;X-Request-ID&quot;]</code> so browsers can surface it for debugging.</li>
+<li>New <code>deploy-config</code> lane in <code>.github/workflows/ci.yml</code>:</li>
+<li><code>docker compose config</code> on all three compose files (dev / staging / prod).</li>
+<li><code>shellcheck</code> on every repo script.</li>
+<li>Runs on every push/PR. A broken compose file or sloppy script lands a red check before an operator ever hits <code>staging-up</code>.</li>
 </ul>
-<h3>Step 6 — Rate limiting</h3>
+<h3>Step 6 — Makefile</h3>
 <ul>
-<li><code>RateLimitMiddleware</code> — in-memory, per-process sliding 60-second window keyed on <code>(client_ip, path)</code>.</li>
-<li>Protects the authed path prefixes <code>/me</code>, <code>/encounters</code>, <code>/organizations</code>, <code>/locations</code>, <code>/users</code>. Leaves <code>/health</code> and <code>/</code> untouched.</li>
-<li><code>CHARTNAV_RATE_LIMIT_PER_MINUTE</code> (default 120). <code>0</code> disables.</li>
-<li>On limit: writes an audit row with <code>event_type=rate_limited</code>, returns HTTP 429 with the standardized envelope.</li>
-<li>Limitation documented: per-process only; multi-worker deployments should add an edge limiter.</li>
+<li>New targets: <code>staging-up</code>, <code>staging-verify</code>, <code>staging-rollback TAG=...</code>, <code>staging-down</code>.</li>
 </ul>
 <h3>Step 7 — Tests</h3>
 <ul>
-<li><code>apps/api/tests/test_auth_modes.py</code> rewritten for real JWT:</li>
-<li>Local RSA keypair, sign tokens with <code>PyJWT</code>, inject a <code>_TestJWKSClient</code> stub via <code>set_jwk_client(...)</code>.</li>
-<li>Added 9 bearer scenarios (valid, missing, malformed header, garbage, wrong iss, wrong aud, expired, unknown user, missing claim).</li>
-<li>Fixed first-run bug: initial stub built a full PyJWK dict and hit a base64 encoding mismatch — now returns a minimal object carrying just <code>.key</code>.</li>
-<li>New <code>apps/api/tests/test_operational.py</code> (12 tests): request-id round-trip, request-id generation, request-id on 401, audit on missing-auth / unknown-user / cross-org / role-forbidden, no-audit on success, 429 rate-limit behavior, rate-limit disabled when 0, CORS allowed/disallowed preflight.</li>
-<li>Full suite: <strong>48/48 passed</strong>.</li>
+<li>New <code>apps/api/tests/test_observability.py</code> (3 tests):</li>
+<li><code>/ready</code> returns 200 with <code>database=ok</code>.</li>
+<li><code>/metrics</code> is Prometheus text, exposes the expected series, and reflects an <code>auth_denied</code> after an unauth <code>/me</code>.</li>
+<li><code>/metrics</code> <code>chartnav_rate_limited_total</code> ticks when a request crosses the configured limit.</li>
+<li>Full suite now <strong>51/51 passing</strong>.</li>
 </ul>
-<h3>Step 8 — CI</h3>
+<h3>Step 8 — Verification</h3>
 <ul>
-<li>CI already installs <code>[dev,postgres]</code> in all backend jobs. Because <code>pyjwt[crypto]</code> moved to the core <code>dependencies</code> block, every backend job (sqlite / postgres / e2e / docker-build) picks it up automatically. No workflow changes were necessary.</li>
-<li>Docs build still picks up the new sections via <code>scripts/build_docs.py</code>.</li>
+<li><code>make verify</code> → 51 pytest + 9 smoke, clean teardown.</li>
+<li>Ran <code>staging_verify.sh</code> against a live <code>uvicorn</code> on <code>:8000</code> — all 9 assertions green including the audit/metrics check.</li>
+<li><code>docker compose --env-file .env.staging.test config</code> against the staging compose file parses (normalized output prints cleanly).</li>
+<li>Both <code>ci.yml</code> and <code>release.yml</code> YAML parse.</li>
+<li>Docs regenerated.</li>
 </ul>
-<h3>Step 9 — Verification</h3>
+<h3>Step 9 — Hygiene</h3>
 <ul>
-<li><code>make verify</code> (SQLite backend) → <strong>48/48 pytest + 9/9 smoke green</strong>.</li>
-<li>Header mode live <code>/me</code> still returns 200 for admin.</li>
-<li>YAML workflows still parse.</li>
-<li>Dev DB reset; audit log table shipped via new migration.</li>
-<li><code>apps/api/.venv/bin/python scripts/build_docs.py</code> regenerated final HTML + PDF.</li>
-</ul>
-<h3>Step 10 — Hygiene</h3>
-<ul>
-<li><code>.gitignore</code> already covers caches/<code>*.db</code>/release output.</li>
-<li>Migration is additive; Alembic head moves to <code>b2c3d4e5f6a7</code> — existing migrations untouched.</li>
+<li><code>.gitignore</code> already excludes <code>*.db</code>, caches, <code>dist/release/</code>. Staging runbook mentions never committing <code>.env.staging</code> (real values); the <code>.example</code> file stays committed.</li>
 </ul>
 <p>---</p>
 <h2>Prior phases</h2>
 <ul>
+<li><strong>Phase 10 — Real JWT bearer + operational hardening</strong> (<code>cbc5184</code>)</li>
 <li><strong>Phase 9 — Playwright E2E + release pipeline</strong> (<code>74fe8dd</code>)</li>
 <li><strong>Phase 8 — Create UI + vitest + frontend CI</strong> (<code>f83d748</code>)</li>
 <li><strong>Phase 7 — Frontend workflow UI</strong> (<code>c4f6e4f</code>)</li>
@@ -448,67 +450,62 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 </section>
 <section id="sec-7"><h2>06 — Known gaps + verification matrix</h2>
 <h1>Known Gaps &amp; Verification Matrix</h1>
-<h2>Verification evidence — phase 10</h2>
+<h2>Verification evidence — phase 11</h2>
 <h3>Local gates</h3>
 <table><thead><tr><th>Gate</th><th>Result</th></tr></thead><tbody>
-<tr><td><code>make verify</code> (backend)</td><td>✅ 48/48 pytest + 9/9 smoke</td></tr>
-<tr><td>Header <code>/me</code> live</td><td>✅ 200 admin</td></tr>
-<tr><td>Alembic upgrade head</td><td>✅ migrations 1 → 2 → <code>b2c3d4e5f6a7</code></td></tr>
-<tr><td><code>make pg-verify</code> (Postgres)</td><td>not rerun in this phase — no backend SQL changes that would break it, migration is SA-portable</td></tr>
-<tr><td><code>make web-verify</code> / <code>make e2e</code></td><td>no frontend changes this phase — previously ✅</td></tr>
+<tr><td><code>make verify</code> (backend)</td><td>✅ <strong>51/51 pytest + 9/9 smoke</strong></td></tr>
+<tr><td><code>bash scripts/staging_verify.sh</code> (live API)</td><td>✅ 9/9 assertions</td></tr>
+<tr><td><code>docker compose … config</code> (dev / staging / prod)</td><td>✅ all three parse</td></tr>
+<tr><td><code>shellcheck</code> on all scripts</td><td>✅ clean (0 findings)</td></tr>
+<tr><td>YAML parse on <code>ci.yml</code> + <code>release.yml</code></td><td>✅</td></tr>
+<tr><td><code>scripts/build_docs.py</code> → HTML + PDF</td><td>✅ regenerated</td></tr>
 </tbody></table>
-<h3>pytest summary (48)</h3>
+<h3>pytest summary (51)</h3>
 <table><thead><tr><th>Suite</th><th>Count</th><th>Notes</th></tr></thead><tbody>
 <tr><td><code>test_auth.py</code></td><td>5</td><td>header mode</td></tr>
-<tr><td><code>test_auth_modes.py</code></td><td>11</td><td>header + real JWT bearer (valid, missing, malformed, garbage, wrong iss, wrong aud, expired, unknown user, missing claim)</td></tr>
+<tr><td><code>test_auth_modes.py</code></td><td>11</td><td>header + real JWT bearer</td></tr>
 <tr><td><code>test_rbac.py</code></td><td>12</td><td>role-gated writes + per-edge transitions</td></tr>
 <tr><td><code>test_scoping.py</code></td><td>8</td><td>org scoping + cross-org denial</td></tr>
 <tr><td><code>test_operational.py</code></td><td>12</td><td>request id, audit trail, rate limit, CORS</td></tr>
+<tr><td><strong><code>test_observability.py</code></strong></td><td><strong>3</strong></td><td><strong><code>/ready</code>, <code>/metrics</code> text, <code>/metrics</code> rate-limited counter</strong></td></tr>
 </tbody></table>
-<h3>Audit / ops matrix (<code>test_operational.py</code>)</h3>
-<table><thead><tr><th>Scenario</th><th>Result</th></tr></thead><tbody>
-<tr><td>Inbound <code>X-Request-ID</code> roundtrips</td><td>✅</td></tr>
-<tr><td>Server generates request id when missing</td><td>✅</td></tr>
-<tr><td>Error responses carry request id</td><td>✅</td></tr>
-<tr><td>Audit on <code>missing_auth_header</code></td><td>✅</td></tr>
-<tr><td>Audit on <code>unknown_user</code></td><td>✅</td></tr>
-<tr><td>Audit on <code>cross_org_access_forbidden</code></td><td>✅</td></tr>
-<tr><td>Audit on <code>role_cannot_create_encounter</code></td><td>✅</td></tr>
-<tr><td>No audit on success</td><td>✅</td></tr>
-<tr><td>429 on rate limit with correct envelope</td><td>✅</td></tr>
-<tr><td>Rate limit disabled when 0</td><td>✅</td></tr>
-<tr><td>CORS preflight allows configured origin</td><td>✅</td></tr>
-<tr><td>CORS preflight rejects unconfigured origin</td><td>✅</td></tr>
+<h3>Staging verify matrix (9)</h3>
+<table><thead><tr><th>Assertion</th><th>Result</th></tr></thead><tbody>
+<tr><td><code>GET /health</code> 200</td><td>✅</td></tr>
+<tr><td><code>GET /ready</code> 200 and <code>database=ok</code></td><td>✅</td></tr>
+<tr><td><code>GET /metrics</code> 200 and exposes <code>chartnav_requests_total</code></td><td>✅</td></tr>
+<tr><td><code>GET /me</code> without auth → 401</td><td>✅</td></tr>
+<tr><td><code>X-Request-ID</code> round-trips</td><td>✅</td></tr>
+<tr><td>Header-mode: <code>GET /me</code> with admin → 200</td><td>✅</td></tr>
+<tr><td>Header-mode: <code>GET /encounters</code> with admin → 200</td><td>✅</td></tr>
+<tr><td>Header-mode: <code>POST /encounters/1/events</code> → 201 (or skip if no seed)</td><td>✅</td></tr>
+<tr><td><code>/metrics</code> reflects a <code>missing_auth_header</code> denial</td><td>✅</td></tr>
 </tbody></table>
-<h3>Bearer JWT matrix (<code>test_auth_modes.py</code>)</h3>
-<table><thead><tr><th>Case</th><th>Result</th></tr></thead><tbody>
-<tr><td>Bearer without JWT env → <code>RuntimeError</code> at import</td><td>✅</td></tr>
-<tr><td>Header mode default contract</td><td>✅</td></tr>
-<tr><td>Valid RS256 token + known user → 200 role/org</td><td>✅</td></tr>
-<tr><td>Missing <code>Authorization</code></td><td>✅ 401 <code>missing_auth_header</code></td></tr>
-<tr><td>Non-Bearer scheme</td><td>✅ 401 <code>invalid_authorization_header</code></td></tr>
-<tr><td>Garbage token</td><td>✅ 401 <code>invalid_token</code></td></tr>
-<tr><td>Wrong issuer</td><td>✅ 401 <code>invalid_issuer</code></td></tr>
-<tr><td>Wrong audience</td><td>✅ 401 <code>invalid_audience</code></td></tr>
-<tr><td>Expired token</td><td>✅ 401 <code>token_expired</code></td></tr>
-<tr><td>Unknown user mapping</td><td>✅ 401 <code>unknown_user</code></td></tr>
-<tr><td>Missing configured claim</td><td>✅ 401 <code>missing_user_claim</code></td></tr>
-</tbody></table>
+<h3>Postgres parity</h3>
+<p>Not rerun this phase — no backend SQL changes since the last <code>make pg-verify</code> pass. Additive audit-table migration uses SA-portable constructs.</p>
+<h3>Honest limitations</h3>
+<ul>
+<li>CI has no <code>act</code>-style local workflow runner available in the dev shell; <code>deploy-config</code> was verified by running its component commands manually. The YAML parses cleanly.</li>
+<li><code>staging_verify.sh</code> bearer path: the script can&#x27;t mint real tokens, so in <code>CHARTNAV_AUTH_MODE=bearer</code> it only covers unauth surfaces + observability. The manual bearer path is documented in <code>21-staging-runbook.md</code>.</li>
+<li>Metrics &amp; rate limiter are <strong>per-process</strong>; multi-worker deployments will see counters and limits split per worker. Edge aggregation is required for coordinated behavior.</li>
+</ul>
 <h2>Real gaps (prioritized for next phase)</h2>
-<p>1. <strong>Rate limiter is per-process, in-memory.</strong> Multi-worker / multi-node deployments need an edge limiter or a shared store (Redis) backing a distributed window.</p>
-<p>2. <strong>No OpenTelemetry tracing yet.</strong> Structured logs carry request ids, but there&#x27;s no span propagation across services.</p>
-<p>3. <strong>No log shipping / retention defined.</strong> JSON logs go to stdout; operators wire them to their stack.</p>
-<p>4. <strong>Audit table has no retention or archival.</strong> Rows accumulate indefinitely.</p>
-<p>5. <strong>No JWKS-rotation test</strong> and no HS256 path (intentionally — production should be asymmetric).</p>
-<p>6. <strong>No refresh-token flow / revocation list.</strong> If a token must die before <code>exp</code>, rotate the IdP signing key or delete the <code>users</code> row.</p>
-<p>7. <strong>Deploy flow stops at &quot;pushed image + GitHub Release&quot;.</strong> Actual rollouts / rollbacks are still operator-run.</p>
-<p>8. <strong>No signing / SBOM / provenance</strong> on release artifacts.</p>
-<p>9. <strong><code>/organizations</code>, <code>/locations</code>, <code>/users</code></strong> remain read-only.</p>
-<p>10. <strong><code>users.role</code></strong> free VARCHAR at DB layer (CHECK or lookup table).</p>
-<p>11. <strong>No pagination</strong> on <code>GET /encounters</code>.</p>
-<p>12. <strong>Free-form <code>event_data</code></strong> — no per-event_type schema.</p>
-<p>13. <strong>No visual-regression / a11y audits</strong> on the frontend.</p>
-<p>14. <strong>pytest matrix on Postgres</strong> not wired — fixture env-driven, ready to flip.</p>
+<p>1. <strong>No OpenTelemetry / distributed tracing</strong> — correlation is by <code>request_id</code> only.</p>
+<p>2. <strong>No log shipping / retention defined</strong> — stdout JSON is ready; operators wire the collector.</p>
+<p>3. <strong>No audit-table archival / retention policy.</strong></p>
+<p>4. <strong>Metrics are per-process</strong> — multi-worker or multi-node needs a proper Prometheus multiprocess mode or a push gateway.</p>
+<p>5. <strong>Rollback cannot reverse destructive migrations</strong> (forward-only policy; documented in <code>21-staging-runbook.md</code>).</p>
+<p>6. <strong>No automated staging deploy from CI</strong> — tag pushes publish the image but the <code>make staging-up</code> handoff is manual. That&#x27;s intentional until there&#x27;s a protected target + secrets wired.</p>
+<p>7. <strong>No production equivalent of <code>staging_verify.sh</code></strong> yet. Extending it is trivial once the prod target exists.</p>
+<p>8. <strong>No JWKS-rotation test</strong> — PyJWKClient caches aggressively; rotation is handled by the IdP.</p>
+<p>9. <strong>No refresh-token / revocation flow.</strong></p>
+<p>10. <strong>No signing / SBOM / provenance</strong> on release artifacts.</p>
+<p>11. <strong><code>/organizations</code>, <code>/locations</code>, <code>/users</code></strong> still read-only.</p>
+<p>12. <strong><code>users.role</code></strong> free VARCHAR at DB layer.</p>
+<p>13. <strong>No pagination</strong> on <code>GET /encounters</code>.</p>
+<p>14. <strong>Free-form <code>event_data</code></strong> — no per-event_type schema.</p>
+<p>15. <strong>No visual-regression / a11y audits</strong> on the frontend.</p>
+<p>16. <strong>pytest matrix on Postgres</strong> not wired — fixture env-driven, ready to flip.</p>
 </section>
 <section id="sec-8"><h2>07 — Auth, org scoping, RBAC</h2>
 <h1>Auth, Org Scoping, RBAC</h1>
@@ -743,6 +740,13 @@ make docker-build
 <p>Service container <code>postgres:16-alpine</code> on localhost:5432. Install deps (incl. <code>[postgres]</code> extra) → <code>alembic upgrade head</code> on Postgres → seed twice → boot uvicorn → <code>scripts/smoke.sh</code> → live status transition asserts the returned row. Fails the workflow if Postgres parity breaks.</p>
 <h3><code>frontend</code></h3>
 <p>Node 20 + npm cache keyed on <code>apps/web/package-lock.json</code> → <code>npm ci</code> → <code>npm run typecheck</code> → <code>npm test</code> (vitest, 12 integration tests) → <code>npm run build</code>. Runs in parallel with <code>backend-sqlite</code> — the frontend is a peer quality gate, not blocked by backend CI.</p>
+<h3><code>deploy-config</code></h3>
+<p>Independent — runs in parallel with the backend/frontend gates.</p>
+<ul>
+<li><code>docker compose config</code> on all three compose files (dev/staging/prod).</li>
+<li><code>shellcheck</code> on every repo script (<code>scripts/*.sh</code>, <code>apps/api/scripts/smoke.sh</code>).</li>
+</ul>
+<p>A broken compose file or sloppy script lands a red check before anyone runs <code>staging-up</code>.</p>
 <h3><code>e2e</code> (needs: <code>backend-sqlite</code>, <code>frontend</code>)</h3>
 <p>Python 3.11 + Node 20 installed. <code>pip install -e &quot;apps/api[dev,postgres]&quot;</code> + <code>npm ci</code> in <code>apps/web</code>. <code>npx playwright install --with-deps chromium</code>. Then <code>npx playwright test --reporter=list</code> — Playwright boots backend on 8001 (SQLite) and frontend on 5174, runs the 8 browser scenarios, tears both down. On failure, <code>playwright-report/</code> and <code>test-results/</code> are uploaded as a workflow artifact for triage.</p>
 <h3><code>release.yml</code> (separate workflow)</h3>
@@ -1010,6 +1014,17 @@ python scripts/build_docs.py          # or:  make docs
 <p>The <code>+psycopg</code> driver selector is important — SQLAlchemy defaults to</p>
 <p><code>psycopg2</code> which is not installed. <code>psycopg[binary]</code> is declared in</p>
 <p><code>apps/api/pyproject.toml</code> as the <code>[postgres]</code> extra.</p>
+<h2>Staging env contract (phase 11)</h2>
+<p><code>infra/docker/.env.staging.example</code> captures the contract for the</p>
+<p>staging compose file. Every critical value is <code>${VAR:?}</code>-guarded in</p>
+<p><code>infra/docker/docker-compose.staging.yml</code> so missing env blocks</p>
+<p>startup loudly. Extra staging-only vars:</p>
+<table><thead><tr><th>Variable</th><th>Purpose</th></tr></thead><tbody>
+<tr><td><code>CHARTNAV_IMAGE_OWNER</code></td><td>GHCR namespace (e.g. <code>thekidd2227</code>).</td></tr>
+<tr><td><code>CHARTNAV_IMAGE_TAG</code></td><td>Pinned image tag. Rollback = change this + restart.</td></tr>
+<tr><td><code>POSTGRES_DB</code> / <code>USER</code> / <code>PASSWORD</code> / <code>PORT</code></td><td>Required. Never commit real values.</td></tr>
+</tbody></table>
+<p>Dev continues to use <code>apps/api/.env.example</code>. Runbook: <code>21-staging-runbook.md</code>.</p>
 <h2>Frontend runtime config</h2>
 <p>The web app reads exactly one env var at build time:</p>
 <table><thead><tr><th>Variable</th><th>Required?</th><th>Default</th><th>Purpose</th></tr></thead><tbody>
@@ -1095,6 +1110,21 @@ docker compose -f docker-compose.prod.yml up --build
 <p>5. Runs the same <code>scripts/smoke.sh</code> the backend-sqlite job uses.</p>
 <p>6. Tears down.</p>
 <p>If the image can&#x27;t boot, serve <code>/health</code>, or pass smoke, the job fails.</p>
+<h2>Staging deployment (phase 11 overlay)</h2>
+<p>Staging rides on the same Dockerfile + entrypoint. The dedicated</p>
+<p>surface lives in <code>infra/docker/docker-compose.staging.yml</code> +</p>
+<p><code>infra/docker/.env.staging.example</code>, driven by</p>
+<p><code>scripts/staging_{up,verify,rollback}.sh</code>. Full reference:</p>
+<p><code>19-staging-deployment.md</code> and the operator runbook</p>
+<p><code>21-staging-runbook.md</code>.</p>
+<p>Key differences from this phase&#x27;s generic prod compose:</p>
+<ul>
+<li>Image is <strong>pinned</strong> to <code>CHARTNAV_IMAGE_TAG</code> — rollback = repin + restart.</li>
+<li>API healthcheck uses <code>/ready</code> (DB-aware) rather than <code>/health</code>.</li>
+<li>Ports bind to <code>127.0.0.1</code> only; a reverse proxy is expected to front it.</li>
+<li>Every critical env var is <code>${VAR:?msg}</code>-guarded so a missing value</li>
+</ul>
+<p>blocks startup with an explicit error.</p>
 <h2>Out of scope this phase</h2>
 <ul>
 <li>Image registry push (no target credentials by default).</li>
@@ -1587,6 +1617,14 @@ git push origin v0.1.0
 docker pull ghcr.io/&lt;owner&gt;/chartnav-api:v0.1.0
 docker compose -f infra/docker/docker-compose.prod.yml up -d
 </code></pre>
+<h2>Staging artifact (phase 11)</h2>
+<p><code>scripts/release_build.sh</code> now also writes <code>chartnav-staging-&lt;version&gt;.tar.gz</code></p>
+<p>containing the staging compose file, its env template, and the runbook</p>
+<p>scripts (<code>staging_up.sh</code>, <code>staging_verify.sh</code>, <code>staging_rollback.sh</code>)</p>
+<p>plus the three new doc pages (19/20/21). <code>release.yml</code> attaches the</p>
+<p>tarball to the GitHub Release alongside the API image tar and web</p>
+<p>bundle, so a staging operator can <code>curl</code> one archive and be ready to</p>
+<p>run against the pinned image tag.</p>
 <h2>What this phase does NOT do</h2>
 <ul>
 <li>No staging / production deploy target is connected — the release workflow builds and publishes, operators still run <code>docker compose</code> wherever they host it.</li>
@@ -1688,15 +1726,369 @@ docker compose -f infra/docker/docker-compose.prod.yml up -d
 <tr><td>CORS preflight allows a configured origin</td><td>✅</td></tr>
 <tr><td>CORS preflight rejects an unconfigured origin</td><td>✅</td></tr>
 </tbody></table>
+<h2>Observability (phase 11 additions)</h2>
+<p>This baseline now includes a live observability surface — see</p>
+<p><code>20-observability.md</code>:</p>
+<ul>
+<li><code>GET /ready</code> — DB-aware readiness. Backs the staging container <code>HEALTHCHECK</code>.</li>
+<li><code>GET /metrics</code> — Prometheus text exposition. Counters cover request traffic, auth denials (by <code>error_code</code>), rate-limited responses, audit event writes (by <code>event_type</code>), and request latency sum/count.</li>
+<li>Middleware + exception handler now feed those counters as part of normal request handling. <code>audit.record</code> also bumps <code>chartnav_audit_events_total{event_type}</code> before the DB insert.</li>
+</ul>
 <h2>Remaining gaps</h2>
 <ul>
-<li>Rate limiter is in-memory per process — see above.</li>
+<li>Rate limiter is in-memory per process — same caveat applies to the new metrics.</li>
 <li>Distributed tracing (OpenTelemetry) not wired yet.</li>
 <li>No log shipping / retention policy defined.</li>
 <li>Audit table has no retention/archival yet.</li>
+<li>No dashboards/alerts are shipped — <code>20-observability.md</code> documents the alert points, wiring is the operator&#x27;s responsibility.</li>
 </ul>
 </section>
-<section id="sec-20"><h2>Diagram — System architecture</h2>
+<section id="sec-20"><h2>19 — Staging deployment</h2>
+<h1>Staging Deployment</h1>
+<h2>Shape</h2>
+<p>ChartNav&#x27;s staging deploy unit is a <strong>pinned Docker image</strong> (<code>ghcr.io/&lt;owner&gt;/chartnav-api:&lt;tag&gt;</code>) plus a <code>postgres:16-alpine</code> container, wired together by <code>infra/docker/docker-compose.staging.yml</code>. That&#x27;s the whole substrate. There is no Kubernetes, no Terraform, no serverless. Rolling out = change a tag + restart. Rolling back = change the tag back + restart.</p>
+<p>This is intentional. ChartNav is still a small service; a boring, reproducible compose deploy is the honest size. Phase-out-to-something-bigger will be a deliberate future phase, not an accident.</p>
+<h2>Artifacts added this phase</h2>
+<table><thead><tr><th>Path</th><th>Purpose</th></tr></thead><tbody>
+<tr><td><code>infra/docker/docker-compose.staging.yml</code></td><td>API + Postgres, pinned image, healthcheck on <code>/ready</code>, volumes, restart policy.</td></tr>
+<tr><td><code>infra/docker/.env.staging.example</code></td><td>The env contract. Copy to <code>.env.staging</code> and fill in.</td></tr>
+<tr><td><code>scripts/staging_up.sh</code></td><td><code>docker compose config</code>-validate then <code>up -d</code>.</td></tr>
+<tr><td><code>scripts/staging_verify.sh</code></td><td>Smoke + observability check against the running stack.</td></tr>
+<tr><td><code>scripts/staging_rollback.sh &lt;prev_tag&gt;</code></td><td>Repin <code>CHARTNAV_IMAGE_TAG</code>, pull, restart API, wait for <code>/ready</code>.</td></tr>
+</tbody></table>
+<h2>Topology</h2>
+<pre class="code lang-"><code>
+    ┌────────────────┐       ┌────────────────────────┐
+    │  reverse proxy │──TLS──▶  api:8000 (127.0.0.1)  │
+    │  (ops layer)   │       │  ghcr.io/..../chartnav  │
+    └────────────────┘       │  -api:${TAG}            │
+                             │  entrypoint: migrate    │
+                             │  + uvicorn              │
+                             └───────────┬─────────────┘
+                                         │ postgresql+psycopg
+                                         ▼
+                              ┌────────────────────┐
+                              │ db:5432            │
+                              │ postgres:16-alpine │
+                              │ volume:            │
+                              │  chartnav_staging_ │
+                              │  pgdata            │
+                              └────────────────────┘
+</code></pre>
+<ul>
+<li>API and DB both bind to <code>127.0.0.1</code> on the host — reverse proxy terminates TLS and handles public routing.</li>
+<li>Healthcheck runs <code>curl -fsS http://127.0.0.1:8000/ready</code> inside the container: because <code>/ready</code> touches the DB, that one call also verifies migrations ran and the DB connection is live.</li>
+<li>DB persistence: named volume <code>chartnav_staging_pgdata</code>. Volumes survive <code>docker compose down</code>; they do <strong>not</strong> survive <code>docker compose down -v</code>. A rollback to a prior image tag never needs to touch the volume.</li>
+</ul>
+<h2>Migration-on-start</h2>
+<p><code>apps/api/entrypoint.sh</code> runs <code>alembic upgrade head</code> before it execs <code>uvicorn</code>. Staging respects that, so &quot;deploy = new image&quot; and &quot;migrate&quot; are the same action. Two properties fall out for free:</p>
+<ul>
+<li>Deploys are idempotent: apply the same tag twice, get the same schema.</li>
+<li>Downgrade paths are an image concern, not an ops concern: redeploying an older image with its own Alembic head will only try to apply migrations it knows about.</li>
+</ul>
+<p>If a migration ever needs to run offline (big data reshape), that&#x27;s the one thing this flow doesn&#x27;t help with — pin the old image, take an outage window, run <code>alembic</code> manually, then deploy the new image.</p>
+<h2>Required env contract (summary)</h2>
+<p>Full reference: <code>12-runtime-config.md</code>. Staging adds nothing new; it just requires real values for what was optional in dev:</p>
+<table><thead><tr><th>Var</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>CHARTNAV_IMAGE_OWNER</code> / <code>_TAG</code></td><td>GHCR owner + pinned tag.</td></tr>
+<tr><td><code>POSTGRES_DB/USER/PASSWORD</code></td><td>Never commit real values.</td></tr>
+<tr><td><code>CHARTNAV_AUTH_MODE</code></td><td><code>bearer</code> in real staging. <code>header</code> only for first-touch QA.</td></tr>
+<tr><td><code>CHARTNAV_JWT_*</code></td><td>Required when <code>AUTH_MODE=bearer</code>; the app refuses to import otherwise.</td></tr>
+<tr><td><code>CHARTNAV_CORS_ALLOW_ORIGINS</code></td><td>**Never <code>*</code>**. Real staging frontend origin(s) only.</td></tr>
+<tr><td><code>CHARTNAV_RATE_LIMIT_PER_MINUTE</code></td><td>Defaults to 120; bump for load-test windows.</td></tr>
+</tbody></table>
+<p>Compose uses <code>${VAR:?message}</code> for the critical vars so a missing value blocks <code>docker compose up</code> with an explicit error.</p>
+<h2>Commands</h2>
+<pre class="code lang-bash"><code>
+# first-time: copy + fill in
+cp infra/docker/.env.staging.example infra/docker/.env.staging
+# edit infra/docker/.env.staging with real values
+
+# deploy
+make staging-up          # docker compose config + up -d
+make staging-verify      # smoke + observability checks (see 21)
+# real traffic
+
+# rollback to a previously-published tag
+make staging-rollback TAG=v0.0.9
+make staging-verify
+
+# teardown (keeps the DB volume)
+make staging-down
+# nuke DB too
+cd infra/docker &amp;&amp; docker compose -f docker-compose.staging.yml --env-file .env.staging down -v
+</code></pre>
+<h2>Rollback — honest description</h2>
+<p>&quot;Rollback&quot; in this deploy is:</p>
+<p>1. <code>scripts/staging_rollback.sh &lt;prev_tag&gt;</code> rewrites <code>CHARTNAV_IMAGE_TAG</code> in <code>.env.staging</code>.</p>
+<p>2. <code>docker compose pull api</code> fetches the prior image from GHCR.</p>
+<p>3. <code>docker compose up -d api</code> restarts only the API service; Postgres is untouched.</p>
+<p>4. The script polls <code>/ready</code> and fails loudly if it doesn&#x27;t come back green within ~40s.</p>
+<p>What rollback <strong>cannot</strong> do on this substrate:</p>
+<ul>
+<li>Undo a destructive migration. If revision N dropped a column, going back to N-1&#x27;s image won&#x27;t restore the column. Treat destructive migrations as one-way on this deploy.</li>
+<li>Blue/green. There&#x27;s one API replica.</li>
+<li>In-flight request draining. <code>docker compose up -d</code> is SIGTERM-then-wait. If you need graceful draining of long operations, put them behind a queue, not the web process.</li>
+</ul>
+<p>Those are fair tradeoffs for a compose-based staging. The migration-on-start path also means the rollback script doesn&#x27;t need to run Alembic by hand — the old image knows its own head.</p>
+<h2>CI validation</h2>
+<p><code>.github/workflows/ci.yml</code> → <code>deploy-config</code> job: on every push/PR it runs <code>docker compose … config</code> on all three compose files (dev/staging/prod) and <code>shellcheck</code> on every repo script. A broken compose file or sloppy script lands a failing check before the operator ever tries to <code>staging-up</code>.</p>
+</section>
+<section id="sec-21"><h2>20 — Observability</h2>
+<h1>Observability</h1>
+<p>ChartNav&#x27;s observability baseline is honest: three surfaces (<code>/health</code>, <code>/ready</code>, <code>/metrics</code>), one structured log stream, and one audit table. No platform fantasy.</p>
+<h2>Surfaces</h2>
+<h3><code>GET /health</code>  — liveness</h3>
+<p>Cheap. Never touches the DB. Use it for load-balancer keepalives where &quot;the process is answering&quot; is enough.</p>
+<pre class="code lang-"><code>
+200 {&quot;status&quot;:&quot;ok&quot;}
+</code></pre>
+<h3><code>GET /ready</code>  — readiness</h3>
+<p>Runs <code>SELECT 1</code> against the database. Use it for orchestrator healthchecks where you want to gate traffic on DB reachability. <code>503 not_ready</code> if the DB is unreachable.</p>
+<pre class="code lang-"><code>
+200 {&quot;status&quot;:&quot;ready&quot;,&quot;database&quot;:&quot;ok&quot;}
+</code></pre>
+<p>In <code>infra/docker/docker-compose.staging.yml</code>, the API container&#x27;s <code>HEALTHCHECK</code> targets <code>/ready</code> — not <code>/health</code> — because a running uvicorn with a broken DB connection is worse than no uvicorn.</p>
+<h3><code>GET /metrics</code>  — Prometheus text exposition</h3>
+<p>Unauthed. Exposed on the internal network only; restrict at the edge if you must expose publicly (see below).</p>
+<p>Counters emitted:</p>
+<table><thead><tr><th>Metric</th><th>What it answers</th></tr></thead><tbody>
+<tr><td><code>chartnav_requests_total{method,path,status}</code></td><td>Traffic by (method, path, status bucket <code>1xx..5xx</code>).</td></tr>
+<tr><td><code>chartnav_auth_denied_total{error_code}</code></td><td>Denied auth/scoping attempts, keyed on the stable error codes from the <code>{error_code, reason}</code> envelope.</td></tr>
+<tr><td><code>chartnav_rate_limited_total</code></td><td>429 <code>rate_limited</code> responses.</td></tr>
+<tr><td><code>chartnav_audit_events_total{event_type}</code></td><td>Audit rows written, by event type.</td></tr>
+<tr><td><code>chartnav_http_request_duration_ms_sum</code></td><td>Cumulative request latency, milliseconds.</td></tr>
+<tr><td><code>chartnav_http_request_duration_ms_count</code></td><td>Sample count matching the sum. Divide for a mean.</td></tr>
+</tbody></table>
+<p>Honest caveats:</p>
+<ul>
+<li><strong>In-process, single-worker.</strong> Same caveat as the rate limiter. Multi-worker uvicorn = each worker scrapes its own counters. A proper metrics lib backed by Prometheus multiprocess mode is the next step if that becomes a real problem.</li>
+<li>No histograms / percentiles. <code>sum + count</code> is the honest minimum; percentiles lie when they&#x27;re synthesized from one bucket.</li>
+</ul>
+<h2>Structured logs</h2>
+<p>All logs are line-delimited JSON on stdout. Ship them with whatever collector the deploy target uses (compose log driver, cloudwatch agent, vector, fluent-bit — the app doesn&#x27;t care).</p>
+<h3>Access log (INFO, <code>logger=chartnav.http</code>)</h3>
+<p>Emitted once per request:</p>
+<pre class="code lang-json"><code>
+{
+  &quot;timestamp&quot;: &quot;2026-04-18T15:22:10Z&quot;,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;logger&quot;: &quot;chartnav.http&quot;,
+  &quot;message&quot;: &quot;request&quot;,
+  &quot;request_id&quot;: &quot;a1b2c3...&quot;,
+  &quot;method&quot;: &quot;POST&quot;,
+  &quot;path&quot;: &quot;/encounters/1/status&quot;,
+  &quot;status&quot;: 200,
+  &quot;duration_ms&quot;: 7.42,
+  &quot;user_email&quot;: &quot;clin@chartnav.local&quot;,
+  &quot;organization_id&quot;: 1,
+  &quot;remote_addr&quot;: &quot;10.0.0.42&quot;
+}
+</code></pre>
+<h3>Auth-denied log (WARNING, <code>logger=chartnav</code>)</h3>
+<p>Emitted alongside every audited denial — mirror image of the audit row:</p>
+<pre class="code lang-json"><code>
+{
+  &quot;timestamp&quot;: &quot;2026-04-18T15:22:10Z&quot;,
+  &quot;level&quot;: &quot;WARNING&quot;,
+  &quot;logger&quot;: &quot;chartnav&quot;,
+  &quot;message&quot;: &quot;auth_denied&quot;,
+  &quot;request_id&quot;: &quot;a1b2c3...&quot;,
+  &quot;path&quot;: &quot;/me&quot;,
+  &quot;method&quot;: &quot;GET&quot;,
+  &quot;status&quot;: 401,
+  &quot;error_code&quot;: &quot;missing_auth_header&quot;,
+  &quot;user_email&quot;: null,
+  &quot;organization_id&quot;: null
+}
+</code></pre>
+<h3>Request failure log (ERROR)</h3>
+<p>Uncaught exceptions surface with a stack trace via the access-log middleware. Always carries <code>request_id</code>.</p>
+<h3>Fields guaranteed across all records</h3>
+<ul>
+<li><code>timestamp</code> — UTC ISO8601</li>
+<li><code>level</code> — standard logging level</li>
+<li><code>logger</code></li>
+<li><code>message</code></li>
+<li><code>request_id</code> — when the log is request-scoped</li>
+</ul>
+<h3>Collection notes</h3>
+<ul>
+<li>Docker compose: default stdout goes to the <code>json-file</code> driver unless you override <code>logging.driver</code> on the service. For staging, point at your collector (<code>loki</code>, <code>fluent-bit</code>, etc.) via a compose override file; the app emits valid JSON already.</li>
+<li>Do not parse with <code>grep</code> in production. Ship to a log store and query by <code>request_id</code>, <code>error_code</code>, or <code>user_email</code>.</li>
+</ul>
+<h2>Audit table (<code>security_audit_events</code>)</h2>
+<p>See <code>18-operational-hardening.md</code> for the schema. The audit table is a durable peer to the logs: logs answer &quot;what happened and when&quot;, the audit table answers &quot;what denied-access attempts, who did them, to which org, how often&quot;. They&#x27;re not redundant — logs churn, audit rows persist.</p>
+<p>Query examples:</p>
+<pre class="code lang-sql"><code>
+-- recent denials by error_code
+SELECT error_code, COUNT(*) AS n
+FROM security_audit_events
+WHERE created_at &gt; now() - interval &#x27;24 hours&#x27;
+GROUP BY error_code
+ORDER BY n DESC;
+
+-- repeated cross-org attempts from one actor
+SELECT actor_email, path, COUNT(*) AS n
+FROM security_audit_events
+WHERE event_type = &#x27;cross_org_access_forbidden&#x27;
+  AND created_at &gt; now() - interval &#x27;7 days&#x27;
+GROUP BY actor_email, path
+HAVING COUNT(*) &gt;= 3;
+</code></pre>
+<h2>What to check during staging smoke</h2>
+<p>The one-shot is <code>make staging-verify</code> (see <code>21-staging-runbook.md</code>). Interactively, an operator should look at:</p>
+<p>1. <strong>Liveness</strong>: <code>curl -fsS http://.../health</code>  →  <code>200</code>.</p>
+<p>2. <strong>Readiness</strong>: <code>curl -fsS http://.../ready</code>  →  <code>200 database=ok</code>. If this fails, API logs will explain; <code>docker compose logs db</code> will confirm.</p>
+<p>3. <strong>Request id round-trip</strong>: <code>curl -I -H &quot;X-Request-ID: probe-$$&quot; http://.../health</code> — response must carry the same id back.</p>
+<p>4. <strong>Auth surface</strong>:</p>
+<ul>
+<li><code>curl -i http://.../me</code> without auth → 401 + a <code>missing_auth_header</code> entry on the next <code>/metrics</code> scrape.</li>
+<li><code>GET /metrics</code> contains <code>chartnav_auth_denied_total{error_code=&quot;missing_auth_header&quot;}</code>.</li>
+</ul>
+<p>5. <strong>Rate-limit sanity</strong>: quickly spam <code>GET /me</code> to exceed the configured <code>CHARTNAV_RATE_LIMIT_PER_MINUTE</code>; expect a 429 and <code>chartnav_rate_limited_total</code> to tick up.</p>
+<p>6. <strong>Audit row check</strong>: <code>docker compose exec -T db psql -U $POSTGRES_USER -d $POSTGRES_DB -c &quot;SELECT event_type, COUNT(*) FROM security_audit_events GROUP BY 1 ORDER BY 2 DESC;&quot;</code>.</p>
+<h2>Alert points (contract, not implementation)</h2>
+<p>When an operator wires alerting, these are the knobs that carry real meaning:</p>
+<table><thead><tr><th>Signal</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>/ready</code> failing for &gt;1 minute</td><td>DB connection lost or pool exhausted.</td></tr>
+<tr><td><code>chartnav_auth_denied_total{error_code=&quot;invalid_token&quot;}</code> burst</td><td>IdP trouble or attack traffic hitting <code>Authorization:</code>.</td></tr>
+<tr><td><code>chartnav_auth_denied_total{error_code=&quot;cross_org_access_forbidden&quot;}</code> spike</td><td>Misconfigured client, token reuse across orgs, or probing.</td></tr>
+<tr><td><code>chartnav_rate_limited_total</code> steep climb</td><td>Abuse or a stuck client.</td></tr>
+<tr><td>Audit table growth rate ≫ steady-state</td><td>Investigate; correlate with the two metrics above via request_id.</td></tr>
+</tbody></table>
+<p>This phase does not ship dashboards or alert rules. The plumbing is in place; wire them in your observability platform of choice (Grafana/Datadog/CloudWatch/etc.).</p>
+<h2>Remaining gaps</h2>
+<ul>
+<li>No tracing / span propagation yet (OpenTelemetry is the natural next layer).</li>
+<li>Metrics are per-process.</li>
+<li>No log retention or audit-table retention/archival policy in the app; that&#x27;s ops infra&#x27;s job.</li>
+</ul>
+</section>
+<section id="sec-22"><h2>21 — Staging runbook</h2>
+<h1>Staging Runbook</h1>
+<p>Operator-grade playbook. Every command is real and reproducible. No magic.</p>
+<p>---</p>
+<h2>0. Prerequisites</h2>
+<ul>
+<li>Docker + <code>docker compose</code> v2.</li>
+<li>Access to <code>ghcr.io/&lt;owner&gt;/chartnav-api</code> (at minimum anonymous pull; the image is published public on release).</li>
+<li>A JWKS URL from your IdP (for bearer mode).</li>
+<li>Ability to place DNS / reverse-proxy config in front of port 8000 on the staging host. The compose file binds to <code>127.0.0.1:8000</code> — your reverse proxy is expected to handle public exposure and TLS.</li>
+</ul>
+<h2>1. First-time provisioning</h2>
+<pre class="code lang-bash"><code>
+# on the staging host
+git clone https://github.com/thekidd2227/chartnav-platform.git
+cd chartnav-platform
+cp infra/docker/.env.staging.example infra/docker/.env.staging
+# edit .env.staging with real values — see docs/build/19-staging-deployment.md
+</code></pre>
+<p>Validate before starting anything:</p>
+<pre class="code lang-bash"><code>
+docker compose \
+  --env-file infra/docker/.env.staging \
+  -f infra/docker/docker-compose.staging.yml \
+  config &gt;/dev/null
+</code></pre>
+<p>Failure here (<code>required variable X is missing</code>) is good: the compose file intentionally <code>${VAR:?}</code>-blocks on every critical var.</p>
+<h2>2. Deploy</h2>
+<pre class="code lang-bash"><code>
+make staging-up          # == bash scripts/staging_up.sh
+make staging-verify      # == bash scripts/staging_verify.sh
+</code></pre>
+<p>Expected finish:</p>
+<pre class="code lang-"><code>
+==&gt; staging verify: PASS
+</code></pre>
+<p>If verify fails at <code>/ready</code>, the API can&#x27;t reach the DB. Check in order:</p>
+<p>1. <code>docker compose -f infra/docker/docker-compose.staging.yml ps</code> — db should be <code>healthy</code>.</p>
+<p>2. <code>docker compose -f infra/docker/docker-compose.staging.yml logs --tail=100 db</code>.</p>
+<p>3. <code>docker compose -f infra/docker/docker-compose.staging.yml logs --tail=100 api</code>.</p>
+<p>If verify fails at the auth-denial metrics check, the app is up but the exception handler didn&#x27;t record the denial — check the API container&#x27;s logs for a Python traceback.</p>
+<h2>3. Exercising bearer mode</h2>
+<p><code>staging_verify.sh</code> only drives <code>/me</code> + <code>/encounters</code> as an authed caller when <code>CHARTNAV_AUTH_MODE=header</code>. In bearer mode the script stops after unauth surfaces + observability checks, because it cannot mint tokens.</p>
+<p>Manual path:</p>
+<p>1. Pull a real JWT from your IdP (e.g. <code>auth0</code> CLI, <code>okta</code> CLI, a curl against the IdP&#x27;s token endpoint).</p>
+<p>2. Confirm the token&#x27;s <code>email</code> claim (or whatever you set <code>CHARTNAV_JWT_USER_CLAIM</code> to) matches a row in <code>users</code>.</p>
+<p>3. Run:</p>
+<p>```bash</p>
+<p>curl -sS -H &quot;Authorization: Bearer $TOKEN&quot; http://127.0.0.1:8000/me | jq</p>
+<p>curl -sS -H &quot;Authorization: Bearer $TOKEN&quot; http://127.0.0.1:8000/encounters | jq &#x27;length&#x27;</p>
+<p>```</p>
+<p>4. Watch <code>docker compose logs -f api</code> in another terminal; the access log should show <code>user_email</code> and <code>organization_id</code>.</p>
+<p>If bearer validation fails, the <code>error_code</code> in the 401 body pinpoints the reason — <code>invalid_token</code>, <code>invalid_issuer</code>, <code>invalid_audience</code>, <code>token_expired</code>, <code>missing_user_claim</code>, <code>unknown_user</code>. Every one of those also writes a <code>security_audit_events</code> row.</p>
+<h2>4. Rollback</h2>
+<p>The contract: &quot;image tag rollback restores behavior, not data.&quot;</p>
+<pre class="code lang-bash"><code>
+# Pin a previously-published tag and restart the API only.
+make staging-rollback TAG=v0.0.9
+make staging-verify
+</code></pre>
+<p>What the script does (honest):</p>
+<p>1. Rewrites <code>CHARTNAV_IMAGE_TAG=</code> in <code>infra/docker/.env.staging</code>.</p>
+<p>2. <code>docker compose pull api</code>.</p>
+<p>3. <code>docker compose up -d api</code>.</p>
+<p>4. Polls <code>/ready</code> for ≤40s.</p>
+<p>What it does <strong>not</strong> do:</p>
+<ul>
+<li>Reverse any migrations. If release <code>N</code> applied a destructive migration (dropped a column, dropped a table), going back to <code>N-1</code>&#x27;s image will <strong>not</strong> restore data. Forward-only migrations are the policy — plan accordingly before tagging a release.</li>
+<li>Blue/green. There&#x27;s one API replica. During the restart, <code>/ready</code> will go red for a handful of seconds; the reverse proxy should drain accordingly.</li>
+</ul>
+<p>If rollback fails <code>/ready</code>, you&#x27;re worse off than before rollback and need to triage:</p>
+<p>1. <code>docker compose logs --tail=200 api</code>.</p>
+<p>2. Pin the <strong>current broken</strong> tag back (<code>make staging-rollback TAG=&lt;the tag you started from&gt;</code>) — sometimes the issue is &quot;the image didn&#x27;t actually pull&quot;.</p>
+<p>3. If the DB is broken (not the image), the recovery path is a DB restore from your backup. That is out-of-band of this repo; document it in your infra runbook.</p>
+<h2>5. Health / observability quick checks</h2>
+<pre class="code lang-bash"><code>
+# liveness + readiness
+curl -fsS http://127.0.0.1:8000/health
+curl -fsS http://127.0.0.1:8000/ready
+
+# metrics snapshot
+curl -fsS http://127.0.0.1:8000/metrics | grep -E &#x27;^(chartnav_requests_total|chartnav_auth_denied_total|chartnav_rate_limited_total|chartnav_audit_events_total)&#x27;
+
+# recent audit rows (inside the db container)
+docker compose -f infra/docker/docker-compose.staging.yml \
+  --env-file infra/docker/.env.staging \
+  exec -T db psql -U &quot;$POSTGRES_USER&quot; -d &quot;$POSTGRES_DB&quot; \
+  -c &quot;SELECT id, event_type, actor_email, path, error_code, created_at \
+      FROM security_audit_events ORDER BY id DESC LIMIT 20;&quot;
+
+# follow logs (JSON; pipe through jq for readability)
+docker compose -f infra/docker/docker-compose.staging.yml \
+  --env-file infra/docker/.env.staging \
+  logs -f api | sed &#x27;s/^[^{]*//&#x27; | jq -cR &#x27;fromjson? | select(.) | .&#x27;
+</code></pre>
+<p>See <code>20-observability.md</code> for the full field reference.</p>
+<h2>6. Teardown</h2>
+<pre class="code lang-bash"><code>
+# soft — keep the DB volume
+make staging-down
+
+# hard — DROP ALL DATA
+cd infra/docker &amp;&amp; docker compose \
+  --env-file .env.staging -f docker-compose.staging.yml down -v
+</code></pre>
+<p>Never run the hard teardown on a shared staging host without confirming with whoever else uses it.</p>
+<h2>7. Common failures, honest fixes</h2>
+<table><thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead><tbody>
+<tr><td><code>required variable CHARTNAV_JWT_JWKS_URL is missing</code></td><td><code>CHARTNAV_AUTH_MODE=bearer</code> but JWT config blank in <code>.env.staging</code></td><td>Fill in the three JWT vars or set <code>AUTH_MODE=header</code> for triage.</td></tr>
+<tr><td><code>db</code> never becomes healthy</td><td>Volume permissions / old volume with wrong password</td><td><code>docker volume rm docker_chartnav_staging_pgdata</code> <strong>iff</strong> you accept data loss.</td></tr>
+<tr><td>Smoke passes but app UX is broken</td><td>Stale frontend bundle vs. backend contract</td><td>Re-pin frontend asset (out of scope of this compose) — the API is fine.</td></tr>
+<tr><td>429 everywhere</td><td><code>CHARTNAV_RATE_LIMIT_PER_MINUTE</code> too low for a load test</td><td>Temporarily raise; remember it&#x27;s per-process, per-path, per-IP.</td></tr>
+<tr><td><code>invalid_issuer</code>/<code>invalid_audience</code> flood</td><td>Wrong <code>CHARTNAV_JWT_ISSUER</code> or <code>_AUDIENCE</code> vs. the IdP&#x27;s tokens</td><td>Inspect a sample token&#x27;s <code>iss</code> / <code>aud</code>; align env.</td></tr>
+</tbody></table>
+<h2>8. What this runbook intentionally does not cover</h2>
+<ul>
+<li>Backup &amp; restore. That&#x27;s your infra concern; the app is stateless beyond Postgres.</li>
+<li>DNS / TLS / edge routing.</li>
+<li>Disaster recovery beyond image rollback.</li>
+<li>Secret rotation. Rotate in your secret store, then <code>make staging-up</code> re-reads env on container restart.</li>
+</ul>
+<p>When any of these become first-class ChartNav concerns, they graduate to their own build-log phase and doc section.</p>
+</section>
+<section id="sec-23"><h2>Diagram — System architecture</h2>
 <h1>System Architecture</h1>
 <div class="mermaid">
 flowchart LR
@@ -1712,6 +2104,8 @@ flowchart LR
     Access["AccessLogMiddleware<br/>(JSON logs)"]
     Rate["RateLimitMiddleware<br/>(60s window)"]
     Audit[("security_audit_events")]
+    Metrics["metrics.py<br/>(chartnav_* counters)"]
+    Ready["/ready (DB ping)"]
     Config["config.py<br/>env-driven settings"]
     Authn["require_caller<br/>header · bearer (PyJWKClient)"]
     Authz["authz.py RBAC"]
@@ -1730,6 +2124,8 @@ flowchart LR
     Dockerfile["Dockerfile<br/>non-root · healthcheck"]
     Entry["entrypoint.sh<br/>migrate + exec"]
     Compose["docker-compose.prod.yml"]
+    StageCompose["docker-compose.staging.yml<br/>pinned tag · /ready healthcheck"]
+    StageScripts["staging_up · staging_verify<br/>staging_rollback"]
   end
 
   subgraph Tooling
@@ -1753,6 +2149,11 @@ flowchart LR
   Access --> Rate
   Rate --> FastAPI
   FastAPI -. audits denials .-> Audit
+  FastAPI -. bumps .-> Metrics
+  Access -. observes .-> Metrics
+  Rate -. observes .-> Metrics
+  FastAPI --> Ready
+  Metrics -->|"/metrics text"| ApiClient
   Ident -. stored caller .-> ApiClient
 
   FastAPI --> Authn
@@ -1788,7 +2189,7 @@ flowchart LR
   Compose --> PG
 </div>
 </section>
-<section id="sec-21"><h2>Diagram — Encounter status machine</h2>
+<section id="sec-24"><h2>Diagram — Encounter status machine</h2>
 <h1>Encounter Status State Machine</h1>
 <div class="mermaid">
 stateDiagram-v2
@@ -1810,7 +2211,7 @@ stateDiagram-v2
 <p>Legend: any edge not shown is rejected at <code>POST /encounters/{id}/status</code></p>
 <p>with HTTP 400 <code>invalid_transition</code>.</p>
 </section>
-<section id="sec-22"><h2>Diagram — ER</h2>
+<section id="sec-25"><h2>Diagram — ER</h2>
 <h1>ER Diagram</h1>
 <div class="mermaid">
 erDiagram
@@ -1889,7 +2290,7 @@ erDiagram
 <p><code>users.organization_id</code> is the authoritative source of scope; never</p>
 <p>derived from client input.</p>
 </section>
-<section id="sec-23"><h2>Diagram — API / data flow</h2>
+<section id="sec-26"><h2>Diagram — API / data flow</h2>
 <h1>API / Data Flow &amp; CI</h1>
 <h2>UI → Backend request path</h2>
 <div class="mermaid">
@@ -2000,6 +2401,25 @@ sequenceDiagram
     Authn-->>R: Caller(user_id, role, organization_id)
     R-->>C: 200 + X-Request-ID
   end
+</div>
+<h2>Staging deploy flow (phase 11)</h2>
+<div class="mermaid">
+flowchart LR
+  Op[Operator] --> Up[scripts/staging_up.sh]
+  Up --> V[docker compose config]
+  V --> UP[docker compose up -d]
+  UP --> API[api container<br/>pinned ghcr.io/.../chartnav-api:$TAG]
+  UP --> DB[(postgres:16-alpine)]
+  API --> E[entrypoint.sh<br/>alembic upgrade + uvicorn]
+  E --> Ready["HEALTHCHECK<br/>GET /ready"]
+  Ready -->|ok| Proxy[reverse proxy]
+  Op --> Verify[scripts/staging_verify.sh]
+  Verify -->|health · ready · metrics · 401 · x-request-id · mutation · audit signal| API
+
+  Op -. bad tag .-> Rollback[scripts/staging_rollback.sh PREV_TAG]
+  Rollback --> RP[rewrite CHARTNAV_IMAGE_TAG]
+  RP --> UPapi[docker compose up -d api]
+  UPapi --> Ready
 </div>
 <h2>Release pipeline</h2>
 <div class="mermaid">

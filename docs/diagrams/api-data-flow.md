@@ -118,6 +118,27 @@ sequenceDiagram
   end
 ```
 
+## Staging deploy flow (phase 11)
+
+```mermaid
+flowchart LR
+  Op[Operator] --> Up[scripts/staging_up.sh]
+  Up --> V[docker compose config]
+  V --> UP[docker compose up -d]
+  UP --> API[api container<br/>pinned ghcr.io/.../chartnav-api:$TAG]
+  UP --> DB[(postgres:16-alpine)]
+  API --> E[entrypoint.sh<br/>alembic upgrade + uvicorn]
+  E --> Ready["HEALTHCHECK<br/>GET /ready"]
+  Ready -->|ok| Proxy[reverse proxy]
+  Op --> Verify[scripts/staging_verify.sh]
+  Verify -->|health · ready · metrics · 401 · x-request-id · mutation · audit signal| API
+
+  Op -. bad tag .-> Rollback[scripts/staging_rollback.sh PREV_TAG]
+  Rollback --> RP[rewrite CHARTNAV_IMAGE_TAG]
+  RP --> UPapi[docker compose up -d api]
+  UPapi --> Ready
+```
+
 ## Release pipeline
 
 ```mermaid

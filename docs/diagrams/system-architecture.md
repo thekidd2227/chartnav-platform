@@ -14,6 +14,8 @@ flowchart LR
     Access["AccessLogMiddleware<br/>(JSON logs)"]
     Rate["RateLimitMiddleware<br/>(60s window)"]
     Audit[("security_audit_events")]
+    Metrics["metrics.py<br/>(chartnav_* counters)"]
+    Ready["/ready (DB ping)"]
     Config["config.py<br/>env-driven settings"]
     Authn["require_caller<br/>header · bearer (PyJWKClient)"]
     Authz["authz.py RBAC"]
@@ -32,6 +34,8 @@ flowchart LR
     Dockerfile["Dockerfile<br/>non-root · healthcheck"]
     Entry["entrypoint.sh<br/>migrate + exec"]
     Compose["docker-compose.prod.yml"]
+    StageCompose["docker-compose.staging.yml<br/>pinned tag · /ready healthcheck"]
+    StageScripts["staging_up · staging_verify<br/>staging_rollback"]
   end
 
   subgraph Tooling
@@ -55,6 +59,11 @@ flowchart LR
   Access --> Rate
   Rate --> FastAPI
   FastAPI -. audits denials .-> Audit
+  FastAPI -. bumps .-> Metrics
+  Access -. observes .-> Metrics
+  Rate -. observes .-> Metrics
+  FastAPI --> Ready
+  Metrics -->|"/metrics text"| ApiClient
   Ident -. stored caller .-> ApiClient
 
   FastAPI --> Authn

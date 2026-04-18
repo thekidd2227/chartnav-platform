@@ -65,6 +65,11 @@ class AccessLogMiddleware(BaseHTTPMiddleware):
             raise
         duration_ms = round((time.perf_counter() - start) * 1000, 2)
         caller = getattr(request.state, "caller", None)
+        # Metrics observation (honest in-process counters)
+        from app.metrics import metrics as _metrics
+        _metrics.observe_request(
+            request.method, request.url.path, response.status_code, duration_ms
+        )
         log.info(
             "request",
             extra={
@@ -124,6 +129,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if len(window) >= self.per_minute:
             # Defer audit import to avoid circular at module load time.
             from app.audit import record as audit_record
+            from app.metrics import metrics as _metrics
+            _metrics.observe_rate_limited()
 
             rid = getattr(request.state, "request_id", None)
             audit_record(

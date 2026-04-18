@@ -102,9 +102,19 @@ See `12-runtime-config.md` for the full contract.
 | CORS preflight allows a configured origin                     | ✅ |
 | CORS preflight rejects an unconfigured origin                 | ✅ |
 
+## Observability (phase 11 additions)
+
+This baseline now includes a live observability surface — see
+`20-observability.md`:
+
+- `GET /ready` — DB-aware readiness. Backs the staging container `HEALTHCHECK`.
+- `GET /metrics` — Prometheus text exposition. Counters cover request traffic, auth denials (by `error_code`), rate-limited responses, audit event writes (by `event_type`), and request latency sum/count.
+- Middleware + exception handler now feed those counters as part of normal request handling. `audit.record` also bumps `chartnav_audit_events_total{event_type}` before the DB insert.
+
 ## Remaining gaps
 
-- Rate limiter is in-memory per process — see above.
+- Rate limiter is in-memory per process — same caveat applies to the new metrics.
 - Distributed tracing (OpenTelemetry) not wired yet.
 - No log shipping / retention policy defined.
 - Audit table has no retention/archival yet.
+- No dashboards/alerts are shipped — `20-observability.md` documents the alert points, wiring is the operator's responsibility.

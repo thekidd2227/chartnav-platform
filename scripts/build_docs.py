@@ -42,6 +42,9 @@ SECTIONS = [
     ("16 — Frontend test strategy", BUILD / "16-frontend-test-strategy.md"),
     ("17 — E2E & release", BUILD / "17-e2e-and-release.md"),
     ("18 — Operational hardening", BUILD / "18-operational-hardening.md"),
+    ("19 — Staging deployment", BUILD / "19-staging-deployment.md"),
+    ("20 — Observability", BUILD / "20-observability.md"),
+    ("21 — Staging runbook", BUILD / "21-staging-runbook.md"),
     ("Diagram — System architecture", DIAGR / "system-architecture.md"),
     ("Diagram — Encounter status machine", DIAGR / "encounter-status-machine.md"),
     ("Diagram — ER", DIAGR / "er-diagram.md"),
@@ -70,7 +73,9 @@ date.
 
 **Phase 9 — Playwright E2E + release pipeline.** Playwright boots backend + frontend together, 8 Chromium scenarios, new `e2e` CI job. `release.yml` workflow on `v*.*.*` tags: GHCR push + release bundle + GitHub Release with tarballs and MANIFEST.
 
-**Phase 10 — Real JWT bearer auth + operational hardening (this phase).** `resolve_caller_from_bearer` now performs real PyJWT validation against a JWKS URL (signature + iss + aud + exp + claim mapping). Every request gets a correlated `X-Request-ID`. Structured JSON access + auth-denied logs. New `security_audit_events` table (migration `b2c3d4e5f6a7`) writes one row per denied/suspicious access attempt via a central HTTP exception handler. `allow_origins=["*"]` is gone — CORS is env-driven (`CHARTNAV_CORS_ALLOW_ORIGINS`). Per-process sliding-window rate limiter protects authed paths (`CHARTNAV_RATE_LIMIT_PER_MINUTE`, default 120). Backend suite grows to 48 tests including 11 bearer scenarios and 12 operational scenarios. No endpoint contract changes.
+**Phase 10 — Real JWT bearer auth + operational hardening.** Real PyJWT validation against a JWKS URL (signature + iss + aud + exp + claim mapping). Request correlation (`X-Request-ID`), structured JSON logs, `security_audit_events` table (`b2c3d4e5f6a7`), CORS driven by config, per-process rate limiter.
+
+**Phase 11 — Staging deployment + observability (this phase).** New `GET /ready` (DB-aware readiness) and `GET /metrics` (Prometheus text) surface request, auth-denied, rate-limited, audit-event, and latency counters. Staging is a pinned-image compose deploy: `infra/docker/docker-compose.staging.yml` + `.env.staging.example`, driven by `staging_up.sh`/`staging_verify.sh`/`staging_rollback.sh`. Release bundle now ships a `chartnav-staging-<version>.tar.gz`. New CI `deploy-config` job validates compose files + shellchecks every script. Runbook + observability docs are operator-grade (19/20/21). 51 pytest tests including 3 observability scenarios; 9-assertion staging verify runs live against a locally-booted API.
 
 Preserved untouched: `/health`, `/`, SQLite dev workflow, state machine + filtering surface, workflow_events model, existing endpoint contracts.
 """

@@ -53,6 +53,21 @@ other module imports from there; nothing else reads `os.environ`.
   `psycopg2` which is not installed. `psycopg[binary]` is declared in
   `apps/api/pyproject.toml` as the `[postgres]` extra.
 
+## Staging env contract (phase 11)
+
+`infra/docker/.env.staging.example` captures the contract for the
+staging compose file. Every critical value is `${VAR:?}`-guarded in
+`infra/docker/docker-compose.staging.yml` so missing env blocks
+startup loudly. Extra staging-only vars:
+
+| Variable                | Purpose                                                        |
+|-------------------------|----------------------------------------------------------------|
+| `CHARTNAV_IMAGE_OWNER`  | GHCR namespace (e.g. `thekidd2227`).                           |
+| `CHARTNAV_IMAGE_TAG`    | Pinned image tag. Rollback = change this + restart.            |
+| `POSTGRES_DB` / `USER` / `PASSWORD` / `PORT` | Required. Never commit real values.     |
+
+Dev continues to use `apps/api/.env.example`. Runbook: `21-staging-runbook.md`.
+
 ## Frontend runtime config
 
 The web app reads exactly one env var at build time:

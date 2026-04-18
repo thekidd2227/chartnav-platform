@@ -105,12 +105,38 @@ class StatusUpdate(BaseModel):
 
 @router.get("/health")
 def health() -> dict[str, str]:
+    """Liveness — cheap, never touches the DB."""
     return {"status": "ok"}
+
+
+@router.get("/ready")
+def ready() -> dict:
+    """Readiness — pings the DB. 503 if the DB isn't reachable.
+
+    Operators: wire this into your compose/orchestrator healthcheck
+    instead of `/health` when you want to gate traffic on DB wiring.
+    """
+    try:
+        fetch_one("SELECT 1 AS ok")
+        return {"status": "ready", "database": "ok"}
+    except Exception as e:  # pragma: no cover — defensive
+        raise _err("not_ready", f"database unreachable: {e}", 503)
 
 
 @router.get("/")
 def root() -> dict[str, str]:
     return {"service": "chartnav-api", "version": "0.1.0"}
+
+
+@router.get("/metrics", include_in_schema=False)
+def metrics_endpoint():
+    """Prometheus text exposition. Unauthed — restrict at the edge."""
+    from fastapi.responses import PlainTextResponse
+    from app.metrics import metrics as _m
+
+    return PlainTextResponse(
+        _m.render(), media_type="text/plain; version=0.0.4; charset=utf-8"
+    )
 
 
 # ---------- Identity ----------

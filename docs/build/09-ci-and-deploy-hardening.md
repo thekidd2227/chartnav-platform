@@ -13,6 +13,12 @@ Service container `postgres:16-alpine` on localhost:5432. Install deps (incl. `[
 ### `frontend`
 Node 20 + npm cache keyed on `apps/web/package-lock.json` → `npm ci` → `npm run typecheck` → `npm test` (vitest, 12 integration tests) → `npm run build`. Runs in parallel with `backend-sqlite` — the frontend is a peer quality gate, not blocked by backend CI.
 
+### `deploy-config`
+Independent — runs in parallel with the backend/frontend gates.
+- `docker compose config` on all three compose files (dev/staging/prod).
+- `shellcheck` on every repo script (`scripts/*.sh`, `apps/api/scripts/smoke.sh`).
+A broken compose file or sloppy script lands a red check before anyone runs `staging-up`.
+
 ### `e2e` (needs: `backend-sqlite`, `frontend`)
 Python 3.11 + Node 20 installed. `pip install -e "apps/api[dev,postgres]"` + `npm ci` in `apps/web`. `npx playwright install --with-deps chromium`. Then `npx playwright test --reporter=list` — Playwright boots backend on 8001 (SQLite) and frontend on 5174, runs the 8 browser scenarios, tears both down. On failure, `playwright-report/` and `test-results/` are uploaded as a workflow artifact for triage.
 

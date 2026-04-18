@@ -55,6 +55,12 @@ async def _http_exception_handler(request: Request, exc: HTTPException) -> JSONR
         reason = detail.get("reason")
 
     if should_audit(exc.status_code, error_code):
+        # Observe metric (fails-closed — wrapped in try inside metrics module).
+        try:
+            from app.metrics import metrics as _metrics
+            _metrics.observe_auth_denial(error_code or f"http_{exc.status_code}")
+        except Exception:  # pragma: no cover
+            pass
         caller = getattr(request.state, "caller", None)
         audit_record(
             event_type=error_code or f"http_{exc.status_code}",

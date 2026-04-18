@@ -64,6 +64,13 @@ def record(
 ) -> None:
     """Write a single audit event. Never raises."""
     try:
+        # Observe the metric first so it still counts even if the DB
+        # insert fails.
+        from app.metrics import metrics as _metrics
+        _metrics.observe_audit_event(event_type)
+    except Exception:  # pragma: no cover
+        pass
+    try:
         with transaction() as conn:
             conn.execute(
                 text(

@@ -39,10 +39,26 @@ docker save "$API_TAG" -o "$API_TAR"
 
 # ---------- Web bundle ---------------------------------------------------
 echo "==> building apps/web"
-( cd apps/web && npm ci --prefer-offline --no-audit --fund=false >/dev/null 2>&1 || npm ci )
+( cd apps/web && { npm ci --prefer-offline --no-audit --fund=false >/dev/null 2>&1 || npm ci; } )
 ( cd apps/web && npm run build )
 WEB_TGZ="$OUT_DIR/chartnav-web-$VERSION.tar.gz"
 tar -C apps/web/dist -czf "$WEB_TGZ" .
+
+# ---------- Staging bundle ----------------------------------------------
+# A tarball of everything an operator needs to stand up staging against
+# this release: the compose file, env template, and runbook scripts.
+# Explicitly does NOT include real secrets.
+STAGE_TGZ="$OUT_DIR/chartnav-staging-$VERSION.tar.gz"
+tar -czf "$STAGE_TGZ" \
+    -C "$REPO_ROOT" \
+    infra/docker/docker-compose.staging.yml \
+    infra/docker/.env.staging.example \
+    scripts/staging_up.sh \
+    scripts/staging_verify.sh \
+    scripts/staging_rollback.sh \
+    docs/build/19-staging-deployment.md \
+    docs/build/20-observability.md \
+    docs/build/21-staging-runbook.md
 
 # ---------- Manifest -----------------------------------------------------
 {
@@ -53,7 +69,7 @@ tar -C apps/web/dist -czf "$WEB_TGZ" .
     echo "built_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo ""
     echo "artifacts:"
-    for f in "$API_TAR" "$WEB_TGZ"; do
+    for f in "$API_TAR" "$WEB_TGZ" "$STAGE_TGZ"; do
         size=$(du -h "$f" | awk '{print $1}')
         sha=$(shasum -a 256 "$f" | awk '{print $1}')
         echo "  $(basename "$f")  ${size}  sha256=${sha}"

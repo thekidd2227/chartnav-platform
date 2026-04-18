@@ -96,4 +96,5 @@ jobs:
           files: |
             dist/release/${{ steps.ver.outputs.version }}/chartnav-api-${{ steps.ver.outputs.version }}.tar
             dist/release/${{ steps.ver.outputs.version }}/chartnav-web-${{ steps.ver.outputs.version }}.tar.gz
+            dist/release/${{ steps.ver.outputs.version }}/chartnav-staging-${{ steps.ver.outputs.version }}.tar.gz
             dist/release/${{ steps.ver.outputs.version }}/MANIFEST.txt

@@ -218,6 +218,23 @@ jobs:
             apps/web/test-results/
           if-no-files-found: ignore
 
+  deploy-config:
+    name: Deploy config — compose + scripts validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate staging compose file
+        run: |
+          cp infra/docker/.env.staging.example infra/docker/.env.staging
+          docker compose --env-file infra/docker/.env.staging \
+            -f infra/docker/docker-compose.staging.yml config >/dev/null
+          docker compose -f infra/docker/docker-compose.prod.yml config >/dev/null
+          docker compose -f infra/docker/docker-compose.yml config >/dev/null
+      - name: shellcheck runbook scripts
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends shellcheck
+          shellcheck scripts/staging_up.sh scripts/staging_verify.sh scripts/staging_rollback.sh scripts/verify.sh scripts/pg_verify.sh scripts/release_build.sh apps/api/scripts/smoke.sh
+
   docs:
     name: Docs — regenerate HTML + PDF
     runs-on: ubuntu-latest

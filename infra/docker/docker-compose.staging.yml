@@ -1,0 +1,73 @@
+# Staging deployment compose.
+#
+# Differences from docker-compose.prod.yml:
+#   - Image is PINNED to CHARTNAV_IMAGE_TAG so rollback = repin + restart.
+#   - Env lives in `.env.staging` next to this file (copy `.env.staging.example`).
+#   - Ports bind to 127.0.0.1 by default; a front-facing reverse proxy
+#     (nginx/Caddy/cloud LB) is expected to handle TLS + public exposure.
+#   - API healthcheck uses /ready (DB-aware) rather than /health.
+#   - /metrics is reachable inside the compose network on the api service.
+#
+# Boot:        scripts/staging_up.sh
+# Verify:      scripts/staging_verify.sh
+# Rollback:    scripts/staging_rollback.sh <previous_tag>
+# Teardown:    docker compose -f infra/docker/docker-compose.staging.yml down
+#
+# All sensitive values come from `infra/docker/.env.staging` (gitignored).
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: chartnav-staging-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
+    volumes:
+      - chartnav_staging_pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  api:
+    # Pinned image. Rollback = change tag + restart.
+    image: ghcr.io/${CHARTNAV_IMAGE_OWNER:?CHARTNAV_IMAGE_OWNER required}/chartnav-api:${CHARTNAV_IMAGE_TAG:?CHARTNAV_IMAGE_TAG required}
+    container_name: chartnav-staging-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      CHARTNAV_ENV: staging
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}}
+      # Auth (required)
+      CHARTNAV_AUTH_MODE: ${CHARTNAV_AUTH_MODE:?CHARTNAV_AUTH_MODE required}
+      CHARTNAV_JWT_ISSUER: ${CHARTNAV_JWT_ISSUER:-}
+      CHARTNAV_JWT_AUDIENCE: ${CHARTNAV_JWT_AUDIENCE:-}
+      CHARTNAV_JWT_JWKS_URL: ${CHARTNAV_JWT_JWKS_URL:-}
+      CHARTNAV_JWT_USER_CLAIM: ${CHARTNAV_JWT_USER_CLAIM:-email}
+      # CORS — must be explicit in staging
+      CHARTNAV_CORS_ALLOW_ORIGINS: ${CHARTNAV_CORS_ALLOW_ORIGINS:?CHARTNAV_CORS_ALLOW_ORIGINS required}
+      # Rate limit
+      CHARTNAV_RATE_LIMIT_PER_MINUTE: ${CHARTNAV_RATE_LIMIT_PER_MINUTE:-120}
+      # Seed is off by default in staging. Flip to 1 for first boot on a
+      # fresh DB if you want the demo fixtures available for QA.
+      CHARTNAV_RUN_SEED: ${CHARTNAV_RUN_SEED:-0}
+      API_PORT: "8000"
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    healthcheck:
+      # /ready touches the DB, so this also verifies migrations ran.
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/ready || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 8
+      start_period: 15s
+
+volumes:
+  chartnav_staging_pgdata:

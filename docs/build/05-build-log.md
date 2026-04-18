@@ -4,77 +4,71 @@ Reverse-chronological.
 
 ---
 
-## 2026-04-18 — Phase 10: real JWT bearer + operational hardening
+## 2026-04-18 — Phase 11: staging deployment + observability
 
 ### Step 1 — Baseline
-- Head: `74fe8dd` (Playwright E2E + release pipeline).
-- 28 pytest + 12 vitest + 8 Playwright + 9 smoke all green.
+- Head: `cbc5184` (real JWT + operational hardening).
+- 48/48 pytest, 9/9 smoke green. Rate limiter / audit / structured logs all in place.
 
-### Step 2 — Real JWT bearer validation
-- Added `pyjwt[crypto]>=2.8` to `pyproject.toml` dependencies (core, not an extra — bearer mode is a first-class path now).
-- `apps/api/app/config.py` gains `jwt_user_claim`, `cors_allow_origins`, `rate_limit_per_minute`; claim default `email`; CORS default covers Vite dev on `:5173` and E2E on `:5174`.
-- `apps/api/app/auth.py`:
-  - Removed the 501 placeholder.
-  - New `resolve_caller_from_bearer`: parses `Authorization: Bearer …`, runs `PyJWKClient(settings.jwt_jwks_url).get_signing_key_from_jwt(token)`, then `jwt.decode(...)` requiring `exp`, `iss`, `aud`; algorithm allowlist `RS256/384/512` + `ES256/384/512`.
-  - Distinct error codes: `invalid_authorization_header`, `invalid_token`, `invalid_issuer`, `invalid_audience`, `token_expired`, `missing_user_claim`, `unknown_user`.
-  - Module-level `_jwk_client` with `set_jwk_client(...)` test hook so tests inject a local RSA key; production uses `PyJWKClient` against the real JWKS URL.
-  - `require_caller` now takes `Request` so it can stash the resolved `Caller` onto `request.state`. That's what lets the access log and audit writer reference the caller.
+### Step 2 — Observability surfaces
+- New `apps/api/app/metrics.py`: in-process Prometheus-text counters behind a threading lock. Counters are narrow on purpose:
+  - `chartnav_requests_total{method,path,status}`
+  - `chartnav_auth_denied_total{error_code}`
+  - `chartnav_rate_limited_total`
+  - `chartnav_audit_events_total{event_type}`
+  - `chartnav_http_request_duration_ms_{sum,count}`
+- `middleware.py::AccessLogMiddleware` now observes every response's `(method, path, status bucket, duration_ms)`.
+- `middleware.py::RateLimitMiddleware` now bumps `rate_limited_total` before it writes the audit row.
+- `audit.py::record(...)` now bumps `audit_events_total{event_type}` before inserting. Fails-closed still applies — metric or insert failure cannot mask the original 4xx.
+- `main.py::_http_exception_handler` now bumps `auth_denied_total{error_code}` alongside the audit + WARNING log it already emits.
+- New `GET /ready` — runs `SELECT 1` against the DB, returns `503 not_ready` if it fails. Designed to back container healthchecks.
+- New `GET /metrics` — unauthed Prometheus text exposition. Documented as "internal network only" in `20-observability.md`.
 
-### Step 3 — Structured logging + request IDs
-- New `apps/api/app/logging_config.py`: line-delimited JSON formatter, UTC timestamps, `extra={}` fields merged onto every record.
-- New `apps/api/app/middleware.py::RequestIdMiddleware`: honors inbound `X-Request-ID` (≤ 64 chars), else generates a UUID4 hex. Echoed on every response including errors.
-- `AccessLogMiddleware`: one `INFO request` line per response with `request_id`, `method`, `path`, `status`, `duration_ms`, `user_email`, `organization_id`, `remote_addr`.
+### Step 3 — Staging deployment artifacts
+- New `infra/docker/docker-compose.staging.yml`: pinned image (`CHARTNAV_IMAGE_TAG`), 127.0.0.1-bound ports (reverse proxy expected), DB healthcheck, API healthcheck on `/ready`, named volume for Postgres, `restart: unless-stopped`, every critical env var blocked with `${VAR:?msg}`.
+- New `infra/docker/.env.staging.example`: the full staging contract (image owner/tag, DB creds, bearer auth, CORS, rate-limit, seed, API port). Annotated with guardrails ("NEVER put `*` in CORS", etc.).
+- New runbook scripts:
+  - `scripts/staging_up.sh` — validates compose config, optional `--pull`, then `up -d`.
+  - `scripts/staging_verify.sh` — health + ready + metrics + unauth 401 + request-id round-trip + (header-mode only) full workflow mutation + audit signal assertion.
+  - `scripts/staging_rollback.sh <prev_tag>` — atomic rewrite of `CHARTNAV_IMAGE_TAG` via python shim, `docker compose pull api`, `up -d api`, poll `/ready` ≤40s.
+- All three scripts pass `shellcheck` clean.
 
-### Step 4 — Audit trail
-- New Alembic migration `b2c3d4e5f6a7 — add security_audit_events` with indexes on `event_type`, `actor_email`, `created_at`.
-- New `apps/api/app/audit.py`:
-  - `AUDITED_ERROR_CODES` set.
-  - `record(...)` writes a row; never raises (internal exceptions are logged at ERROR and swallowed so they can't mask the underlying denial).
-  - `query_recent(limit)` read helper used by tests and operator debugging.
-- `apps/api/app/main.py` adds an `@app.exception_handler(HTTPException)` that:
-  - Writes an audit row on any 401/403 or known-audited `error_code`.
-  - Always copies `X-Request-ID` to the error response.
-  - Emits a `WARNING auth_denied` structured log.
+### Step 4 — Release bundle expansion
+- `scripts/release_build.sh` now also tars the staging artifact set (`docker-compose.staging.yml` + `.env.staging.example` + all three runbook scripts + docs 19/20/21) into `chartnav-staging-<version>.tar.gz`.
+- `MANIFEST.txt` sha256s all three artifacts.
+- `release.yml` attaches the staging tarball to tag-based GitHub Releases.
 
-### Step 5 — CORS + runtime defaults
-- Removed `allow_origins=["*"]`. Driven by `CHARTNAV_CORS_ALLOW_ORIGINS`.
-- Narrowed `allow_methods` and `allow_headers` to the set the app actually uses.
-- `expose_headers=["X-Request-ID"]` so browsers can surface it for debugging.
+### Step 5 — CI: `deploy-config` job
+- New `deploy-config` lane in `.github/workflows/ci.yml`:
+  - `docker compose config` on all three compose files (dev / staging / prod).
+  - `shellcheck` on every repo script.
+- Runs on every push/PR. A broken compose file or sloppy script lands a red check before an operator ever hits `staging-up`.
 
-### Step 6 — Rate limiting
-- `RateLimitMiddleware` — in-memory, per-process sliding 60-second window keyed on `(client_ip, path)`.
-- Protects the authed path prefixes `/me`, `/encounters`, `/organizations`, `/locations`, `/users`. Leaves `/health` and `/` untouched.
-- `CHARTNAV_RATE_LIMIT_PER_MINUTE` (default 120). `0` disables.
-- On limit: writes an audit row with `event_type=rate_limited`, returns HTTP 429 with the standardized envelope.
-- Limitation documented: per-process only; multi-worker deployments should add an edge limiter.
+### Step 6 — Makefile
+- New targets: `staging-up`, `staging-verify`, `staging-rollback TAG=...`, `staging-down`.
 
 ### Step 7 — Tests
-- `apps/api/tests/test_auth_modes.py` rewritten for real JWT:
-  - Local RSA keypair, sign tokens with `PyJWT`, inject a `_TestJWKSClient` stub via `set_jwk_client(...)`.
-  - Added 9 bearer scenarios (valid, missing, malformed header, garbage, wrong iss, wrong aud, expired, unknown user, missing claim).
-  - Fixed first-run bug: initial stub built a full PyJWK dict and hit a base64 encoding mismatch — now returns a minimal object carrying just `.key`.
-- New `apps/api/tests/test_operational.py` (12 tests): request-id round-trip, request-id generation, request-id on 401, audit on missing-auth / unknown-user / cross-org / role-forbidden, no-audit on success, 429 rate-limit behavior, rate-limit disabled when 0, CORS allowed/disallowed preflight.
-- Full suite: **48/48 passed**.
+- New `apps/api/tests/test_observability.py` (3 tests):
+  - `/ready` returns 200 with `database=ok`.
+  - `/metrics` is Prometheus text, exposes the expected series, and reflects an `auth_denied` after an unauth `/me`.
+  - `/metrics` `chartnav_rate_limited_total` ticks when a request crosses the configured limit.
+- Full suite now **51/51 passing**.
 
-### Step 8 — CI
-- CI already installs `[dev,postgres]` in all backend jobs. Because `pyjwt[crypto]` moved to the core `dependencies` block, every backend job (sqlite / postgres / e2e / docker-build) picks it up automatically. No workflow changes were necessary.
-- Docs build still picks up the new sections via `scripts/build_docs.py`.
+### Step 8 — Verification
+- `make verify` → 51 pytest + 9 smoke, clean teardown.
+- Ran `staging_verify.sh` against a live `uvicorn` on `:8000` — all 9 assertions green including the audit/metrics check.
+- `docker compose --env-file .env.staging.test config` against the staging compose file parses (normalized output prints cleanly).
+- Both `ci.yml` and `release.yml` YAML parse.
+- Docs regenerated.
 
-### Step 9 — Verification
-- `make verify` (SQLite backend) → **48/48 pytest + 9/9 smoke green**.
-- Header mode live `/me` still returns 200 for admin.
-- YAML workflows still parse.
-- Dev DB reset; audit log table shipped via new migration.
-- `apps/api/.venv/bin/python scripts/build_docs.py` regenerated final HTML + PDF.
-
-### Step 10 — Hygiene
-- `.gitignore` already covers caches/`*.db`/release output.
-- Migration is additive; Alembic head moves to `b2c3d4e5f6a7` — existing migrations untouched.
+### Step 9 — Hygiene
+- `.gitignore` already excludes `*.db`, caches, `dist/release/`. Staging runbook mentions never committing `.env.staging` (real values); the `.example` file stays committed.
 
 ---
 
 ## Prior phases
 
+- **Phase 10 — Real JWT bearer + operational hardening** (`cbc5184`)
 - **Phase 9 — Playwright E2E + release pipeline** (`74fe8dd`)
 - **Phase 8 — Create UI + vitest + frontend CI** (`f83d748`)
 - **Phase 7 — Frontend workflow UI** (`c4f6e4f`)

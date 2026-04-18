@@ -128,6 +128,16 @@ docker pull ghcr.io/<owner>/chartnav-api:v0.1.0
 docker compose -f infra/docker/docker-compose.prod.yml up -d
 ```
 
+## Staging artifact (phase 11)
+
+`scripts/release_build.sh` now also writes `chartnav-staging-<version>.tar.gz`
+containing the staging compose file, its env template, and the runbook
+scripts (`staging_up.sh`, `staging_verify.sh`, `staging_rollback.sh`)
+plus the three new doc pages (19/20/21). `release.yml` attaches the
+tarball to the GitHub Release alongside the API image tar and web
+bundle, so a staging operator can `curl` one archive and be ready to
+run against the pinned image tag.
+
 ## What this phase does NOT do
 
 - No staging / production deploy target is connected — the release workflow builds and publishes, operators still run `docker compose` wherever they host it.

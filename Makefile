@@ -13,7 +13,7 @@ PIP     := $(VENV)/bin/pip
 DEV_DB  := $(API_DIR)/chartnav.db
 PORT    := 8765
 
-.PHONY: help install migrate seed test boot smoke docs verify clean reset-db pg-verify docker-build docker-up docker-down web-install web-dev web-build web-typecheck web-test web-verify e2e e2e-headed e2e-ui release-build dev
+.PHONY: help install migrate seed test boot smoke docs verify clean reset-db pg-verify docker-build docker-up docker-down web-install web-dev web-build web-typecheck web-test web-verify e2e e2e-headed e2e-ui release-build staging-up staging-verify staging-rollback staging-down dev
 
 help:
 	@awk 'BEGIN{FS=":.*?## "} /^[a-zA-Z_-]+:.*?## /{printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -84,6 +84,18 @@ e2e-ui: ## Playwright interactive UI mode
 
 release-build: ## Build release artifacts into dist/release/<version>/ (usage: make release-build VERSION=v0.1.0)
 	bash scripts/release_build.sh $(VERSION)
+
+staging-up: ## Boot the staging stack (requires infra/docker/.env.staging)
+	bash scripts/staging_up.sh
+
+staging-verify: ## Run staging smoke + observability checks
+	bash scripts/staging_verify.sh
+
+staging-rollback: ## Roll the staging API image back (usage: make staging-rollback TAG=v0.1.0)
+	bash scripts/staging_rollback.sh $(TAG)
+
+staging-down: ## Tear down the staging stack
+	cd infra/docker && docker compose --env-file .env.staging -f docker-compose.staging.yml down
 
 dev: ## Boot backend (port 8000) + frontend (port 5173) together
 	@bash -c 'set -e; \
