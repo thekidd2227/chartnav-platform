@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    name: Backend — migrate · seed · test · smoke
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install backend deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      # Use an isolated CI DB so we never depend on a developer's local state.
+      - name: Migrate (isolated CI DB)
+        env:
+          CI_DB_PATH: ${{ runner.temp }}/chartnav_ci.db
+        run: |
+          rm -f "$CI_DB_PATH"
+          alembic -x "sqlalchemy.url=sqlite:///$CI_DB_PATH" upgrade head
+
+      - name: Idempotent seed (run twice)
+        env:
+          CI_DB_PATH: ${{ runner.temp }}/chartnav_ci.db
+        run: |
+          python -c "import scripts_seed; scripts_seed.DB_PATH = '$CI_DB_PATH'; scripts_seed.main(); scripts_seed.main()"
+
+      - name: Unit + integration tests
+        run: pytest tests/ -v
+
+      # Reuse the exact boot+smoke sequence operators use locally.
+      # verify.sh prefers .venv/bin/uvicorn but falls back to PATH, so
+      # CI's system install works without a symlink dance.
+      - name: API boot smoke
+        env:
+          CI_DB_PATH: ${{ runner.temp }}/chartnav_ci.db
+        working-directory: ${{ github.workspace }}
+        run: |
+          ln -sf "$CI_DB_PATH" apps/api/chartnav.db
+          bash scripts/verify.sh
+
+  docs:
+    name: Docs — regenerate HTML + PDF
+    runs-on: ubuntu-latest
+    needs: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Chromium for PDF rendering
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y chromium-browser || sudo apt-get install -y chromium
+
+      - name: Build final HTML + PDF
+        env:
+          CHARTNAV_PDF_BROWSER: chromium-browser
+        run: python scripts/build_docs.py
+
+      - name: Upload rebuilt artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: chartnav-docs-final
+          path: |
+            docs/final/chartnav-workflow-state-machine-build.html
+            docs/final/chartnav-workflow-state-machine-build.pdf
+          if-no-files-found: error

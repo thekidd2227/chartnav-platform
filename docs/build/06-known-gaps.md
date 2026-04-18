@@ -1,64 +1,59 @@
 # Known Gaps & Verification Matrix
 
-## Automated verification (this phase)
+## Verification evidence — phase 5
 
+### Automated pytest (unchanged contract, now in CI)
 ```
 $ cd apps/api && pytest tests/ -v
-... 25 passed in 12.39s
+... 25 passed in ~12s
 ```
 
-Every matrix below is now machine-asserted in `apps/api/tests/`.
+### `make verify` (canonical local gate)
+Steps executed in order:
 
-### Auth (5/5)
+| Step                                            | Result |
+|-------------------------------------------------|--------|
+| `rm -f apps/api/chartnav.db`                    | ✅     |
+| `alembic upgrade head`                          | ✅     |
+| `scripts_seed.py`                               | ✅ (idempotent)|
+| `pytest tests/ -v`                              | ✅ (25/25) |
+| `uvicorn app.main:app --port 8765` boots        | ✅     |
+| `/health` reachable within 10s                  | ✅     |
+| `scripts/smoke.sh` all 9 assertions             | ✅     |
+| boot process torn down cleanly                  | ✅     |
 
-| Case                                 | Expected | Result |
-|--------------------------------------|----------|--------|
-| `/health` open                       | 200      | ✅     |
-| `/me` no header                      | 401 `missing_auth_header` | ✅ |
-| `/me` empty header                   | 401      | ✅     |
-| `/me` unknown email                  | 401 `unknown_user` | ✅ |
-| `/me` admin org1                     | 200 role=admin, org=1 | ✅ |
+### Smoke assertions (`scripts/smoke.sh`)
 
-### Scoping (8/8)
+| Assertion                                                          | Result |
+|--------------------------------------------------------------------|--------|
+| `GET /health` → 200, body `status=ok`                              | ✅     |
+| `GET /me` without auth → 401                                       | ✅     |
+| `GET /me` with admin1 → 200, `role=admin`, `organization_id=1`     | ✅     |
+| `GET /encounters` without auth → 401                               | ✅     |
+| `GET /encounters` with admin1 → 200                                | ✅     |
+| `GET /encounters?organization_id=2` as org1 admin → 403             | ✅     |
+| `GET /encounters/1` as admin1 → 200                                | ✅     |
+| `GET /encounters/3` as admin1 (cross-org) → 404                    | ✅     |
 
-| Case                                                 | Expected | Result |
-|------------------------------------------------------|----------|--------|
-| `/organizations` scoped per tenant                   | 1 row each | ✅ |
-| `/organizations` no auth                             | 401      | ✅     |
-| `/locations` scoped                                  | caller org only | ✅ |
-| `/users` scoped                                      | caller org only | ✅ |
-| `/encounters` disjoint per tenant                    | no overlap | ✅ |
-| Cross-org `GET /encounters/{id}`                     | 404      | ✅     |
-| `?organization_id=<other>` lens                      | 403      | ✅     |
-| Filter within org (`?status=`)                        | no leakage | ✅ |
+### Doc pipeline
+- `python scripts/build_docs.py` → wrote 59KB HTML + 1.1MB PDF via headless Chrome.
+- Both artifacts regenerate deterministically from `docs/build/` + `docs/diagrams/`.
 
-### RBAC (12/12)
-
-| Case                                                     | Expected | Result |
-|----------------------------------------------------------|----------|--------|
-| Admin creates encounter                                  | 201      | ✅     |
-| Clinician creates encounter                              | 201      | ✅     |
-| Reviewer creates encounter                               | 403 `role_cannot_create_encounter` | ✅ |
-| Reviewer adds event                                      | 403 `role_cannot_create_event` | ✅ |
-| Clinician: in_progress→draft_ready                       | 200      | ✅     |
-| Clinician: review_needed→completed                       | 403 `role_cannot_transition` | ✅ |
-| Reviewer: review_needed→completed                        | 200      | ✅     |
-| Reviewer: review_needed→draft_ready (kick back)          | 200      | ✅     |
-| Cross-org mutate                                         | 404      | ✅     |
-| Invalid transition (admin: in_progress→completed)        | 400 `invalid_transition` | ✅ |
-| `status_changed` event written with `changed_by`         | event count +1 | ✅ |
-| Cross-org create body mismatch                           | 403 `cross_org_access_forbidden` | ✅ |
+### CI YAML sanity
+- YAML parses cleanly (verified by PyYAML load).
+- Limitation: no `act` binary available to run the workflow locally; CI behavior is asserted by parity with `make verify` and by the structural review of the YAML.
 
 ## Real gaps (prioritized for next phase)
 
-1. **Transport still dev-only.** `X-User-Email` is spoofable. Swap to a signed token path via `CHARTNAV_AUTH_MODE`. The seam is in place; the dependency only needs a new branch.
-2. **No user/org metadata writes.** `/organizations`, `/locations`, `/users` are read-only. Admins can't invite users, create locations, or edit their own org metadata through the API. Needs RBAC-gated write endpoints.
-3. **Role constraint is app-layer only.** `users.role` is a free VARCHAR. Next migration could add a CHECK constraint or a lookup table.
-4. **No pagination / cursor** on `GET /encounters`.
-5. **No encounter update / delete / cancel** path; no `cancelled` status.
-6. **Free-form `event_data`**. No per-`event_type` schema validation.
-7. **Raw `sqlite3`** per-request connections. Postgres parity (docker compose) untested.
-8. **CORS `allow_origins=["*"]`** — tighten before any hosted deploy.
-9. **No distinct audit log.** Auth failures and scoping violations are not persisted; only successful workflow events are.
-10. **No rate limiting, no lockout, no observability.**
-11. **No CI.** Tests exist but aren't yet run on every PR.
+1. **Auth transport still dev-only.** `X-User-Email` spoofable. Swap via `CHARTNAV_AUTH_MODE` + JWT/SSO.
+2. **No `act` or local workflow runner** — YAML syntactic parse only. Add `act` or accept first-push feedback loop.
+3. **No RBAC-gated write endpoints for org metadata.** `/organizations`, `/locations`, `/users` are read-only.
+4. **`users.role` free VARCHAR at the DB level** — no CHECK constraint; enforced at app layer only.
+5. **No pagination / cursor** on `GET /encounters`.
+6. **No encounter update / delete / cancel**; no `cancelled` status.
+7. **Free-form `event_data`** — no per-event_type schema.
+8. **Raw `sqlite3`** per-request connections; Postgres parity (docker compose) untested.
+9. **CORS `allow_origins=["*"]`** remains.
+10. **No distinct audit log** for auth/scoping failures (only successful workflow events).
+11. **No rate limiting, no lockout, no structured logging.**
+12. **No deploy target** — CI builds + tests but does not ship anything.

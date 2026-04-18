@@ -1,11 +1,12 @@
-# Test Strategy
+# Test & Smoke Strategy
 
 ## Stack
 
-- `pytest` + FastAPI `TestClient` (httpx under the hood).
-- Per-test temporary SQLite file: each test gets a fresh migrated +
-  seeded DB so writes from one test cannot leak into another.
-- No external services; tests run offline in under ~15 seconds.
+- `pytest` + FastAPI `TestClient` for unit/integration.
+- Per-test temporary SQLite (fresh migrate + seed per test).
+- Shell-level smoke via `apps/api/scripts/smoke.sh` against a real
+  running uvicorn.
+- All of it runs in CI (`.github/workflows/ci.yml`).
 
 ## Layout
 
@@ -15,61 +16,53 @@ apps/api/tests/
 ├── test_auth.py         # authn surface
 ├── test_scoping.py      # org scoping across every list/read endpoint
 └── test_rbac.py         # role-gated writes + state transitions
+
+apps/api/scripts/
+└── smoke.sh             # curl-level live smoke (health, me, encounters, cross-org)
 ```
 
 ## Coverage matrix
 
-### Auth (`test_auth.py`)
-- `/health` open.
-- `/me` without header → 401 `missing_auth_header`.
-- `/me` with empty header → 401.
-- `/me` with unknown email → 401 `unknown_user`.
-- `/me` with seeded admin → 200 + correct `organization_id` + role.
+### Auth (5)
+Health open; `/me` missing/empty/unknown/valid.
 
-### Scoping (`test_scoping.py`)
-- `/organizations` returns only caller org row (for both orgs).
-- `/organizations` without auth → 401.
-- `/locations` scoped to caller org.
-- `/users` scoped to caller org (no cross-tenant leakage).
-- `/encounters` returns disjoint sets for org1 vs org2.
-- Cross-org `GET /encounters/{id}` → 404.
-- `?organization_id=2` as org1 caller → 403.
-- Filters (`status=`) work inside caller org and don't leak.
+### Scoping (8)
+Orgs/locs/users scoped per tenant. `/organizations` 401 without auth.
+Encounters disjoint across tenants. Cross-org GET → 404.
+`?organization_id=<other>` → 403. Filters don't leak.
 
-### RBAC (`test_rbac.py`)
-- Admin can create encounter (201).
-- Clinician can create encounter (201).
-- Reviewer cannot create encounter (403 `role_cannot_create_encounter`).
-- Reviewer cannot add events (403 `role_cannot_create_event`).
-- Clinician can perform `in_progress → draft_ready`.
-- Clinician cannot perform `review_needed → completed` (403 `role_cannot_transition`).
-- Reviewer can complete a review (`review_needed → completed`).
-- Reviewer can kick back (`review_needed → draft_ready`).
-- Cross-org mutate → 404 (existence not leaked).
-- Invalid transition still → 400 `invalid_transition`.
-- Successful status change writes a `status_changed` event with `old_status`/`new_status`/`changed_by`.
-- Cross-org body mismatch on `POST /encounters` → 403 `cross_org_access_forbidden`.
+### RBAC (12)
+Admin + clinician create encounter. Reviewer create → 403. Reviewer
+event → 403. Clinician operational transition OK. Clinician review-
+stage transition 403. Reviewer complete/kick-back OK. Cross-org mutate
+→ 404. Invalid transition preserved as 400. `status_changed` carries
+`old_status`/`new_status`/`changed_by`. Cross-org body mismatch → 403.
+
+### Smoke (9)
+Exercise live HTTP. Commands in `09-ci-and-deploy-hardening.md`.
 
 ## How to run
 
-From `apps/api/` with the venv active:
-
 ```bash
-pytest tests/ -v
+# just the pytest suite
+cd apps/api && pytest tests/ -v
+
+# everything (reset DB + pytest + boot + smoke)
+make verify
+
+# smoke only, against an already-running API
+cd apps/api && bash scripts/smoke.sh http://127.0.0.1:8000
 ```
 
-Result at time of writing: **25 passed in ~12s**.
+## Results at time of writing
 
-## Guarantees we get from this suite
-
-- Any regression that breaks auth, scoping, or a role gate surfaces in CI (when we add it).
-- The error-code envelope is asserted against, so rename-by-accident is caught.
-- Seed idempotency isn't tested directly here but is still exercised
-  indirectly: each test reseeds cleanly without collision.
+- `pytest`: **25 passed in ~12s**
+- `make verify`: all 9 smoke assertions pass after pytest succeeds
 
 ## Gaps not yet covered
 
-- Concurrent writers / race conditions.
-- Event JSON schema per `event_type`.
-- Pagination behavior (not yet implemented).
-- Auth transport swap (would warrant its own harness).
+- Concurrent writers / race conditions
+- `event_data` schema per `event_type`
+- Pagination (not yet implemented)
+- Auth transport swap (needs its own harness when JWT/SSO lands)
+- Long-running soak / memory behavior

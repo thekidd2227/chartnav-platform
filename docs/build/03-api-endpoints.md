@@ -1,14 +1,7 @@
 # API Endpoints
 
-Base URL (local dev): `http://127.0.0.1:8000`.
-
-Auth: every endpoint tagged **🔒** requires header `X-User-Email: <seeded user email>`.
-Some endpoints are further role-gated — see `07-auth-and-scoping.md`.
-
-All error bodies have the standardized shape:
-```json
-{"detail": {"error_code": "<stable_code>", "reason": "<human message>"}}
-```
+Base URL (local dev): `http://127.0.0.1:8000`. All error bodies use
+`{"detail": {"error_code": "...", "reason": "..."}}`.
 
 ## System (open)
 
@@ -23,18 +16,18 @@ All error bodies have the standardized shape:
 |--------|-------|------|-------|
 | GET    | `/me` | 🔒   | any   |
 
-## Org metadata (🔒, org-scoped, any role)
+## Org metadata (🔒, org-scoped)
 
 | Method | Path             | Behavior                                       |
 |--------|------------------|------------------------------------------------|
-| GET    | `/organizations` | Returns only the caller's org row.             |
+| GET    | `/organizations` | Returns only caller's org row.                 |
 | GET    | `/locations`     | `WHERE organization_id = caller.org`.          |
 | GET    | `/users`         | `WHERE organization_id = caller.org`.          |
 
 ## Encounters (🔒, org-scoped + RBAC)
 
 ### GET `/encounters`
-Any authenticated role. Always filtered to `caller.organization_id`.
+Any authenticated role. Always `WHERE organization_id = caller.org`.
 
 Optional query params (AND-ed, parameterized):
 
@@ -51,7 +44,7 @@ Optional query params (AND-ed, parameterized):
 ### GET `/encounters/{id}/events` — any role
 404 if parent missing or cross-org.
 
-### POST `/encounters` — **admin, clinician**
+### POST `/encounters` — admin, clinician
 Body:
 ```json
 {
@@ -64,18 +57,12 @@ Body:
   "status": "scheduled"
 }
 ```
-Rules:
-- Reviewer → 403 `role_cannot_create_encounter`.
-- `organization_id` must match caller org → 403 otherwise.
-- `location_id` must exist and belong to caller org → 400 or 403 otherwise.
-- Initial status restricted to `scheduled` or `in_progress`.
 
-### POST `/encounters/{id}/events` — **admin, clinician**
-Reviewer → 403 `role_cannot_create_event`. 404 if cross-org.
+### POST `/encounters/{id}/events` — admin, clinician
+Reviewer → 403. 404 if cross-org.
 
 ### POST `/encounters/{id}/status`
-404 if cross-org. Status must be valid. Transition must be legal by the
-state machine (`02-workflow-state-machine.md`). **Per-edge** RBAC:
+Per-edge RBAC:
 
 | From            | To             | Roles allowed                 |
 |-----------------|----------------|-------------------------------|
@@ -86,7 +73,7 @@ state machine (`02-workflow-state-machine.md`). **Per-edge** RBAC:
 | review_needed   | draft_ready    | admin, reviewer               |
 | review_needed   | completed      | admin, reviewer               |
 
-Same-state POST = no-op (200). Role violation → 403 `role_cannot_transition`. Invalid transition → 400 `invalid_transition`.
+Same-state POST = no-op (200). Role violation → 403 `role_cannot_transition`. Invalid transition → 400 `invalid_transition`. Cross-org → 404.
 
 ## Error code inventory
 
@@ -95,13 +82,21 @@ Same-state POST = no-op (200). Role violation → 403 `role_cannot_transition`. 
 | `missing_auth_header`              | 401  | auth transport                      |
 | `unknown_user`                     | 401  | auth transport                      |
 | `auth_mode_unsupported`            | 500  | `CHARTNAV_AUTH_MODE` set to unknown |
-| `role_forbidden`                   | 403  | generic `require_roles` gate        |
+| `role_forbidden`                   | 403  | generic `require_roles`             |
 | `role_cannot_create_encounter`    | 403  | POST /encounters                    |
 | `role_cannot_create_event`         | 403  | POST /encounters/{id}/events        |
 | `role_cannot_transition`           | 403  | POST /encounters/{id}/status        |
-| `cross_org_access_forbidden`       | 403  | body/query asserts another org      |
+| `cross_org_access_forbidden`       | 403  | body/query asserts other org        |
 | `encounter_not_found`              | 404  | missing or cross-org encounter      |
 | `location_not_found`               | 400  | bad location_id                     |
 | `invalid_status`                   | 400  | unknown status string               |
-| `invalid_initial_status`           | 400  | POST /encounters with bad init      |
+| `invalid_initial_status`           | 400  | POST /encounters bad init           |
 | `invalid_transition`               | 400  | disallowed state-machine edge       |
+
+## Verification
+
+This full surface is now locked in by two layers:
+- pytest (`apps/api/tests/`) — 25 tests, per-test ephemeral SQLite.
+- Live smoke (`apps/api/scripts/smoke.sh`) — 9 assertions against a running API.
+
+Both run in CI on every push/PR. See `09-ci-and-deploy-hardening.md`.

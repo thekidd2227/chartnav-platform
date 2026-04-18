@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8">
-<title>ChartNav — Workflow State Machine Build</title>
+<title>ChartNav — Consolidated Build</title>
 <style>
   :root { --fg:#0F172A; --muted:#64748B; --line:#E5E7EB; --bg:#ffffff; --code:#F8FAFC; --accent:#0B6E79; }
   html, body { background: var(--bg); color: var(--fg); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 14px; line-height: 1.55; }
@@ -35,81 +35,81 @@
 </head>
 <body>
 <header class="cover">
-  <h1>ChartNav — Workflow State Machine Build</h1>
-  <div class="sub">Phase: strict encounter state machine + filtered listing<br>
-  Repo: <code>thekidd2227/chartnav-platform</code> · Generated 2026-04-17</div>
+  <h1>ChartNav — Consolidated Build</h1>
+  <div class="sub">Backend phases 1–5: spine → state machine → auth → RBAC → CI/hardening<br>
+  Repo: <code>thekidd2227/chartnav-platform</code></div>
 </header>
-<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth, org scoping, RBAC</a></li><li><a href="#sec-9">08 — Test strategy</a></li><li><a href="#sec-10">Diagram — System architecture</a></li><li><a href="#sec-11">Diagram — Encounter status machine</a></li><li><a href="#sec-12">Diagram — ER</a></li><li><a href="#sec-13">Diagram — API / data flow</a></li></ol></nav>
+<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth, org scoping, RBAC</a></li><li><a href="#sec-9">08 — Test strategy</a></li><li><a href="#sec-10">09 — CI & deploy hardening</a></li><li><a href="#sec-11">10 — Doc artifact pipeline</a></li><li><a href="#sec-12">Diagram — System architecture</a></li><li><a href="#sec-13">Diagram — Encounter status machine</a></li><li><a href="#sec-14">Diagram — ER</a></li><li><a href="#sec-15">Diagram — API / data flow</a></li></ol></nav>
 <section id="sec-1"><h2>Executive summary</h2>
 <p>This document consolidates <strong>all</strong> ChartNav backend phases delivered to</p>
-<p>date. It covers the workflow spine, the strict encounter state machine,</p>
-<p>encounter filtering, and the dev auth + org scoping layer that just</p>
-<p>landed.</p>
-<p><strong>Phase 1 — Workflow spine.</strong> Alembic migration <code>a1b2c3d4e5f6</code> introduced <code>encounters</code> and <code>workflow_events</code> tables with FKs and indexes. Read and write endpoints for both. Idempotent seed.</p>
-<p><strong>Phase 2 — State machine + filtering.</strong> <code>POST /encounters/{id}/status</code> enforces explicit forward + rework edges; everything else returns <code>400 invalid_transition</code> with an allowed-next-states listing. <code>GET /encounters</code> accepts <code>organization_id</code>, <code>location_id</code>, <code>status</code>, <code>provider_name</code> filters.</p>
-<p><strong>Phase 3 — Dev auth + org scoping.</strong> New <code>apps/api/app/auth.py</code> resolves the caller from <code>X-User-Email</code>, looks up the user, and attaches a <code>Caller</code> dataclass with authoritative <code>organization_id</code>. Every encounter route is now org-scoped: cross-org reads return 404, cross-org body/query assertions return 403.</p>
-<p><strong>Phase 4 — RBAC + full scoping + tests (this phase).</strong> New <code>apps/api/app/authz.py</code> introduces <code>admin</code> / <code>clinician</code> / <code>reviewer</code> roles and per-edge transition rules. <code>/organizations</code>, <code>/locations</code>, <code>/users</code> are now authenticated and org-scoped. The auth module gained a <code>CHARTNAV_AUTH_MODE</code> seam and a standardized <code>{error_code, reason}</code> error envelope. A real pytest suite (25 tests, TestClient + per-test SQLite) locks in auth, scoping, RBAC, state-machine invariants, and cross-org denial.</p>
-<p>Preserved untouched: <code>/health</code>, <code>/</code>, Alembic history, SQLite dev workflow, the state machine + filtering surface, and the workflow_events model.</p>
+<p>date.</p>
+<p><strong>Phase 1 — Workflow spine.</strong> Alembic migration <code>a1b2c3d4e5f6</code> introduced <code>encounters</code> and <code>workflow_events</code> tables with FKs and indexes. Six encounter endpoints. Idempotent seed.</p>
+<p><strong>Phase 2 — State machine + filtering.</strong> <code>POST /encounters/{id}/status</code> enforces explicit forward + rework edges. <code>GET /encounters</code> accepts <code>organization_id</code>, <code>location_id</code>, <code>status</code>, <code>provider_name</code> filters.</p>
+<p><strong>Phase 3 — Dev auth + org scoping.</strong> <code>apps/api/app/auth.py</code> resolves the caller from <code>X-User-Email</code>. Every encounter route became org-scoped: cross-org reads return 404, cross-org body/query assertions 403.</p>
+<p><strong>Phase 4 — RBAC + full scoping + tests.</strong> <code>apps/api/app/authz.py</code> introduces <code>admin</code> / <code>clinician</code> / <code>reviewer</code> roles and per-edge transition rules. <code>/organizations</code>, <code>/locations</code>, <code>/users</code> are now authenticated and scoped. <code>{error_code, reason}</code> envelope is standardized. 25-test pytest suite covers auth, scoping, RBAC, state-machine invariants.</p>
+<p><strong>Phase 5 — CI + runtime hardening (this phase).</strong> GitHub Actions workflow runs <code>pip install -e &quot;.[dev]&quot;</code>, Alembic upgrade on an isolated CI DB, idempotent seed (executed twice), the full pytest suite, and a live <code>/health</code>/<code>/me</code>/<code>/encounters</code> smoke boot. A separate <code>docs</code> job regenerates the final HTML/PDF and uploads them as artifacts. A root <code>Makefile</code>, <code>apps/api/scripts/smoke.sh</code>, and <code>scripts/build_docs.py</code> codify the local verification + doc-build paths.</p>
+<p>Preserved untouched: <code>/health</code>, <code>/</code>, Alembic history, SQLite dev workflow, state machine + filtering surface, workflow_events model.</p>
 </section>
 <section id="sec-2"><h2>01 — Current state</h2>
 <h1>ChartNav — Current State</h1>
-<p><strong>As of:</strong> 2026-04-17 (phase: RBAC + full scoping + tests)</p>
+<p><strong>As of:</strong> 2026-04-17 (phase: CI + runtime hardening)</p>
 <h2>Repo layout (relevant)</h2>
 <pre class="code lang-"><code>
 chartnav-platform/
+├── .github/workflows/
+│   └── ci.yml                       # NEW — backend + docs CI
+├── Makefile                         # NEW — canonical local verification
+├── scripts/
+│   └── build_docs.py                # NEW — reproducible HTML/PDF builder
 ├── apps/
 │   ├── api/
 │   │   ├── app/main.py
-│   │   ├── app/auth.py              # authn only (header transport today)
-│   │   ├── app/authz.py             # NEW — RBAC roles + dependencies
-│   │   ├── app/api/routes.py        # all routes authed + scoped + role-gated
+│   │   ├── app/auth.py
+│   │   ├── app/authz.py
+│   │   ├── app/api/routes.py
 │   │   ├── alembic.ini
-│   │   ├── alembic/env.py           # now honors `-x sqlalchemy.url=` for tests
-│   │   ├── alembic/versions/        # 2 migrations (unchanged this phase)
-│   │   ├── scripts_seed.py          # 2 orgs, 5 users across 3 roles
-│   │   ├── tests/                   # NEW — pytest + TestClient
-│   │   │   ├── conftest.py
-│   │   │   ├── test_auth.py
-│   │   │   ├── test_scoping.py
-│   │   │   └── test_rbac.py
-│   │   └── pyproject.toml
+│   │   ├── alembic/env.py           # honors `-x sqlalchemy.url=`
+│   │   ├── alembic/versions/        # 2 migrations (unchanged)
+│   │   ├── scripts_seed.py          # 2 orgs, 5 users, 3 roles
+│   │   ├── scripts/smoke.sh         # NEW — curl-level smoke
+│   │   ├── tests/                   # pytest suite
+│   │   └── pyproject.toml           # now declares [dev] extras + pytest config
 │   └── web/
 ├── infra/docker/docker-compose.yml
 └── docs/
-    ├── build/                       # living docs
+    ├── build/                       # living docs 01–10
     ├── diagrams/                    # Mermaid sources
-    └── final/                       # consolidated HTML/PDF
+    └── final/                       # generated HTML + PDF
 </code></pre>
 <h2>Runtime baseline</h2>
 <ul>
 <li>Python 3.11+, FastAPI, raw <code>sqlite3</code> driver.</li>
-<li>SQLite at <code>apps/api/chartnav.db</code> (gitignored).</li>
+<li>SQLite at <code>apps/api/chartnav.db</code> (gitignored). CI uses <code>$RUNNER_TEMP/chartnav_ci.db</code>.</li>
 <li>Alembic head: <code>a1b2c3d4e5f6</code> (no new migrations this phase).</li>
-<li>Auth transport: <code>X-User-Email</code> → <code>users</code> lookup (dev only).</li>
-<li>Auth seam: <code>app.auth.require_caller</code> with <code>CHARTNAV_AUTH_MODE</code> env flag for future JWT/SSO swap.</li>
-<li>Authorization: <code>app.authz</code> with <code>ROLE_ADMIN</code> / <code>ROLE_CLINICIAN</code> / <code>ROLE_REVIEWER</code>, role-gated dependencies for create/event/transition.</li>
-<li>Error envelope standardized: <code>{&quot;detail&quot;: {&quot;error_code&quot;: &quot;...&quot;, &quot;reason&quot;: &quot;...&quot;}}</code>.</li>
+<li>Auth transport: <code>X-User-Email</code> (dev). Seam: <code>CHARTNAV_AUTH_MODE</code>.</li>
+<li>RBAC roles: <code>admin</code>, <code>clinician</code>, <code>reviewer</code>.</li>
+<li>Error envelope: <code>{&quot;detail&quot;: {&quot;error_code&quot;: &quot;...&quot;, &quot;reason&quot;: &quot;...&quot;}}</code>.</li>
+<li>Every endpoint except <code>/health</code> and <code>/</code> requires auth. All data endpoints are caller-org scoped.</li>
 </ul>
 <h2>Verified working endpoints</h2>
-<h3>Open</h3>
+<p>Unchanged since phase 4:</p>
 <ul>
-<li><code>GET /health</code>, <code>GET /</code></li>
-</ul>
-<h3>Authenticated (require <code>X-User-Email</code>)</h3>
-<ul>
+<li><code>GET /health</code>, <code>GET /</code> (open)</li>
 <li><code>GET /me</code></li>
-<li><code>GET /organizations</code> — scoped to caller&#x27;s org (single row)</li>
-<li><code>GET /locations</code> — scoped to caller&#x27;s org</li>
-<li><code>GET /users</code> — scoped to caller&#x27;s org</li>
-<li><code>GET /encounters</code> — scoped + filterable</li>
-<li><code>GET /encounters/{id}</code> — 404 if cross-org</li>
-<li><code>GET /encounters/{id}/events</code> — 404 if cross-org</li>
+<li><code>GET /organizations</code>, <code>GET /locations</code>, <code>GET /users</code> (authed + scoped)</li>
+<li><code>GET /encounters</code> (+ filters)</li>
+<li><code>GET /encounters/{id}</code>, <code>GET /encounters/{id}/events</code></li>
+<li><code>POST /encounters</code> (admin, clinician)</li>
+<li><code>POST /encounters/{id}/events</code> (admin, clinician)</li>
+<li><code>POST /encounters/{id}/status</code> (per-edge RBAC)</li>
 </ul>
-<h3>Authenticated + role-gated</h3>
+<h2>Automation now in place</h2>
 <ul>
-<li><code>POST /encounters</code> — admin or clinician (RBAC); body <code>organization_id</code> must match caller</li>
-<li><code>POST /encounters/{id}/events</code> — admin or clinician</li>
-<li><code>POST /encounters/{id}/status</code> — per-edge RBAC (see <code>07-auth-and-scoping.md</code>)</li>
+<li><code>make verify</code> — single command: reset DB, test, boot, smoke.</li>
+<li><code>pytest tests/ -v</code> — 25 tests pass.</li>
+<li><code>bash apps/api/scripts/smoke.sh &lt;base&gt;</code> — 9 curl assertions.</li>
+<li><code>python scripts/build_docs.py</code> — regenerates consolidated HTML + PDF.</li>
+<li><code>.github/workflows/ci.yml</code> — runs all of the above on push/PR + uploads rebuilt docs as a CI artifact.</li>
 </ul>
 <h2>Seeded tenants / users</h2>
 <table><thead><tr><th>org_id</th><th>slug</th><th>email</th><th>role</th></tr></thead><tbody>
@@ -182,13 +182,8 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 </section>
 <section id="sec-4"><h2>03 — API endpoints</h2>
 <h1>API Endpoints</h1>
-<p>Base URL (local dev): <code>http://127.0.0.1:8000</code>.</p>
-<p>Auth: every endpoint tagged <strong>🔒</strong> requires header <code>X-User-Email: &lt;seeded user email&gt;</code>.</p>
-<p>Some endpoints are further role-gated — see <code>07-auth-and-scoping.md</code>.</p>
-<p>All error bodies have the standardized shape:</p>
-<pre class="code lang-json"><code>
-{&quot;detail&quot;: {&quot;error_code&quot;: &quot;&lt;stable_code&gt;&quot;, &quot;reason&quot;: &quot;&lt;human message&gt;&quot;}}
-</code></pre>
+<p>Base URL (local dev): <code>http://127.0.0.1:8000</code>. All error bodies use</p>
+<p><code>{&quot;detail&quot;: {&quot;error_code&quot;: &quot;...&quot;, &quot;reason&quot;: &quot;...&quot;}}</code>.</p>
 <h2>System (open)</h2>
 <table><thead><tr><th>Method</th><th>Path</th></tr></thead><tbody>
 <tr><td>GET</td><td><code>/health</code></td></tr>
@@ -198,15 +193,15 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <table><thead><tr><th>Method</th><th>Path</th><th>Auth</th><th>Roles</th></tr></thead><tbody>
 <tr><td>GET</td><td><code>/me</code></td><td>🔒</td><td>any</td></tr>
 </tbody></table>
-<h2>Org metadata (🔒, org-scoped, any role)</h2>
+<h2>Org metadata (🔒, org-scoped)</h2>
 <table><thead><tr><th>Method</th><th>Path</th><th>Behavior</th></tr></thead><tbody>
-<tr><td>GET</td><td><code>/organizations</code></td><td>Returns only the caller&#x27;s org row.</td></tr>
+<tr><td>GET</td><td><code>/organizations</code></td><td>Returns only caller&#x27;s org row.</td></tr>
 <tr><td>GET</td><td><code>/locations</code></td><td><code>WHERE organization_id = caller.org</code>.</td></tr>
 <tr><td>GET</td><td><code>/users</code></td><td><code>WHERE organization_id = caller.org</code>.</td></tr>
 </tbody></table>
 <h2>Encounters (🔒, org-scoped + RBAC)</h2>
 <h3>GET <code>/encounters</code></h3>
-<p>Any authenticated role. Always filtered to <code>caller.organization_id</code>.</p>
+<p>Any authenticated role. Always <code>WHERE organization_id = caller.org</code>.</p>
 <p>Optional query params (AND-ed, parameterized):</p>
 <table><thead><tr><th>Param</th><th>Rule</th></tr></thead><tbody>
 <tr><td><code>organization_id</code></td><td>Must equal <code>caller.org</code> — else 403.</td></tr>
@@ -218,7 +213,7 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <p>404 if missing or cross-org.</p>
 <h3>GET <code>/encounters/{id}/events</code> — any role</h3>
 <p>404 if parent missing or cross-org.</p>
-<h3>POST <code>/encounters</code> — <strong>admin, clinician</strong></h3>
+<h3>POST <code>/encounters</code> — admin, clinician</h3>
 <p>Body:</p>
 <pre class="code lang-json"><code>
 {
@@ -231,18 +226,10 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
   &quot;status&quot;: &quot;scheduled&quot;
 }
 </code></pre>
-<p>Rules:</p>
-<ul>
-<li>Reviewer → 403 <code>role_cannot_create_encounter</code>.</li>
-<li><code>organization_id</code> must match caller org → 403 otherwise.</li>
-<li><code>location_id</code> must exist and belong to caller org → 400 or 403 otherwise.</li>
-<li>Initial status restricted to <code>scheduled</code> or <code>in_progress</code>.</li>
-</ul>
-<h3>POST <code>/encounters/{id}/events</code> — <strong>admin, clinician</strong></h3>
-<p>Reviewer → 403 <code>role_cannot_create_event</code>. 404 if cross-org.</p>
+<h3>POST <code>/encounters/{id}/events</code> — admin, clinician</h3>
+<p>Reviewer → 403. 404 if cross-org.</p>
 <h3>POST <code>/encounters/{id}/status</code></h3>
-<p>404 if cross-org. Status must be valid. Transition must be legal by the</p>
-<p>state machine (<code>02-workflow-state-machine.md</code>). <strong>Per-edge</strong> RBAC:</p>
+<p>Per-edge RBAC:</p>
 <table><thead><tr><th>From</th><th>To</th><th>Roles allowed</th></tr></thead><tbody>
 <tr><td>scheduled</td><td>in_progress</td><td>admin, clinician</td></tr>
 <tr><td>in_progress</td><td>draft_ready</td><td>admin, clinician</td></tr>
@@ -251,23 +238,30 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <tr><td>review_needed</td><td>draft_ready</td><td>admin, reviewer</td></tr>
 <tr><td>review_needed</td><td>completed</td><td>admin, reviewer</td></tr>
 </tbody></table>
-<p>Same-state POST = no-op (200). Role violation → 403 <code>role_cannot_transition</code>. Invalid transition → 400 <code>invalid_transition</code>.</p>
+<p>Same-state POST = no-op (200). Role violation → 403 <code>role_cannot_transition</code>. Invalid transition → 400 <code>invalid_transition</code>. Cross-org → 404.</p>
 <h2>Error code inventory</h2>
 <table><thead><tr><th>Code</th><th>HTTP</th><th>Origin</th></tr></thead><tbody>
 <tr><td><code>missing_auth_header</code></td><td>401</td><td>auth transport</td></tr>
 <tr><td><code>unknown_user</code></td><td>401</td><td>auth transport</td></tr>
 <tr><td><code>auth_mode_unsupported</code></td><td>500</td><td><code>CHARTNAV_AUTH_MODE</code> set to unknown</td></tr>
-<tr><td><code>role_forbidden</code></td><td>403</td><td>generic <code>require_roles</code> gate</td></tr>
+<tr><td><code>role_forbidden</code></td><td>403</td><td>generic <code>require_roles</code></td></tr>
 <tr><td><code>role_cannot_create_encounter</code></td><td>403</td><td>POST /encounters</td></tr>
 <tr><td><code>role_cannot_create_event</code></td><td>403</td><td>POST /encounters/{id}/events</td></tr>
 <tr><td><code>role_cannot_transition</code></td><td>403</td><td>POST /encounters/{id}/status</td></tr>
-<tr><td><code>cross_org_access_forbidden</code></td><td>403</td><td>body/query asserts another org</td></tr>
+<tr><td><code>cross_org_access_forbidden</code></td><td>403</td><td>body/query asserts other org</td></tr>
 <tr><td><code>encounter_not_found</code></td><td>404</td><td>missing or cross-org encounter</td></tr>
 <tr><td><code>location_not_found</code></td><td>400</td><td>bad location_id</td></tr>
 <tr><td><code>invalid_status</code></td><td>400</td><td>unknown status string</td></tr>
-<tr><td><code>invalid_initial_status</code></td><td>400</td><td>POST /encounters with bad init</td></tr>
+<tr><td><code>invalid_initial_status</code></td><td>400</td><td>POST /encounters bad init</td></tr>
 <tr><td><code>invalid_transition</code></td><td>400</td><td>disallowed state-machine edge</td></tr>
 </tbody></table>
+<h2>Verification</h2>
+<p>This full surface is now locked in by two layers:</p>
+<ul>
+<li>pytest (<code>apps/api/tests/</code>) — 25 tests, per-test ephemeral SQLite.</li>
+<li>Live smoke (<code>apps/api/scripts/smoke.sh</code>) — 9 assertions against a running API.</li>
+</ul>
+<p>Both run in CI on every push/PR. See <code>09-ci-and-deploy-hardening.md</code>.</p>
 </section>
 <section id="sec-5"><h2>04 — Data model</h2>
 <h1>Data Model</h1>
@@ -339,129 +333,121 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <h1>Build Log</h1>
 <p>Reverse-chronological.</p>
 <p>---</p>
-<h2>2026-04-17 — Phase: RBAC + full scoping + automated tests</h2>
+<h2>2026-04-17 — Phase 5: CI + runtime hardening + doc pipeline</h2>
 <h3>Step 1 — Baseline</h3>
 <ul>
-<li>Starting head: <code>efb5b56</code> (dev auth + org scoping).</li>
-<li>No schema changes needed this phase.</li>
+<li>Starting head: <code>c6f29e6</code> (RBAC + full scoping + pytest suite).</li>
+<li>No migrations touched this phase.</li>
+<li>Tests still green locally (25/25) before any changes.</li>
 </ul>
-<h3>Step 2 — RBAC module</h3>
+<h3>Step 2 — Packaging</h3>
 <ul>
-<li>New <code>apps/api/app/authz.py</code>:</li>
-<li>Role constants <code>ROLE_ADMIN</code>, <code>ROLE_CLINICIAN</code>, <code>ROLE_REVIEWER</code>.</li>
-<li><code>CAN_CREATE_ENCOUNTER</code>, <code>CAN_CREATE_EVENT</code> sets.</li>
-<li><code>TRANSITION_ROLES</code> map keyed on (from_status, to_status).</li>
-<li>Dependencies: <code>require_roles(*)</code>, <code>require_create_encounter</code>, <code>require_create_event</code>.</li>
-<li><code>assert_can_transition(caller, from, to)</code> enforces per-edge RBAC with an admin safety-net for unmapped edges.</li>
+<li><code>apps/api/pyproject.toml</code> now declares <code>[project.optional-dependencies].dev = [&quot;pytest&gt;=8&quot;, &quot;httpx&gt;=0.27&quot;]</code> and <code>[tool.pytest.ini_options]</code> with <code>testpaths = [&quot;tests&quot;]</code>. CI installs with <code>pip install -e &quot;apps/api[dev]&quot;</code>.</li>
 </ul>
-<h3>Step 3 — Routes wiring</h3>
+<h3>Step 3 — CI workflow</h3>
 <ul>
-<li><code>POST /encounters</code> now depends on <code>require_create_encounter</code> → reviewer 403.</li>
-<li><code>POST /encounters/{id}/events</code> now depends on <code>require_create_event</code> → reviewer 403.</li>
-<li><code>POST /encounters/{id}/status</code> calls <code>assert_can_transition</code> after the state machine accepts the edge. Clinician cannot drive review-stage edges; reviewer cannot drive charting edges.</li>
-<li><code>/organizations</code>, <code>/locations</code>, <code>/users</code> now require auth and filter <code>WHERE organization_id = caller.org</code> (previously unauthenticated).</li>
-<li>Error envelope standardized: every 4xx/5xx now returns <code>{detail: {error_code, reason}}</code>. Stable error codes inventoried in <code>03-api-endpoints.md</code>.</li>
+<li>New <code>.github/workflows/ci.yml</code> with two jobs:</li>
+<li><code>backend</code> — checkout → setup-python 3.11 (pip cache) → <code>pip install -e &quot;.[dev]&quot;</code> → <code>alembic -x sqlalchemy.url=sqlite:///$RUNNER_TEMP/chartnav_ci.db upgrade head</code> → seed twice (idempotency proof) → <code>pytest tests/ -v</code> → boot uvicorn against the CI DB, poll <code>/health</code>, run <code>scripts/smoke.sh</code>.</li>
+<li><code>docs</code> (needs: backend) — apt-install Chromium → <code>python scripts/build_docs.py</code> with <code>CHARTNAV_PDF_BROWSER=chromium-browser</code> → upload the rebuilt HTML + PDF as a <code>chartnav-docs-final</code> artifact (<code>if-no-files-found: error</code>).</li>
+<li>Triggers: <code>push</code> to <code>main</code> and every <code>pull_request</code>.</li>
 </ul>
-<h3>Step 4 — Auth seam hardening</h3>
+<h3>Step 4 — Smoke script</h3>
 <ul>
-<li><code>apps/api/app/auth.py</code> now reads <code>CHARTNAV_AUTH_MODE</code> (default <code>&quot;header&quot;</code>) as the single swap point for future transports. Module docstring calls out dev vs. prod.</li>
-<li>Errors routed through a private <code>_error(code, reason, status)</code> helper so the shape is consistent with authz.</li>
-<li>Authn vs. authz strictly separated: <code>auth.py</code> answers &quot;who&quot; only, <code>authz.py</code> answers &quot;may&quot;.</li>
+<li>New <code>apps/api/scripts/smoke.sh</code>. Shell-only curl assertions: <code>/health</code>, <code>/me</code> (401 without auth, 200 role=admin org=1 with admin header), <code>/encounters</code> (401/200), cross-org <code>?organization_id=2</code> lens → 403, own encounter 200, cross-org encounter 404. Exits non-zero on first failure.</li>
+<li>First draft used a helper function with an unquoted <code>$@</code> pass-through; that word-split the <code>X-User-Email</code> header and made curl hang on DNS for <code>admin@chartnav.local</code>. Rewrote to inline each assertion with proper quoting — no magic, no hangs.</li>
 </ul>
-<h3>Step 5 — Seed expansion</h3>
+<h3>Step 5 — Reproducible doc build</h3>
 <ul>
-<li><code>scripts_seed.py</code> now provisions 5 users across 2 orgs covering all three roles (admin/clinician/reviewer in org1, admin/clinician in org2). Users upserted on re-seed so role changes in the seed converge deterministically. Still idempotent.</li>
+<li>New <code>scripts/build_docs.py</code> (repo-rooted — paths resolved from <code>__file__</code>). Walks <code>docs/build/01..10</code> + <code>docs/diagrams/*</code>, renders the markdown subset + Mermaid blocks, writes the consolidated HTML, then prints to PDF via headless Chromium. <code>CHARTNAV_PDF_BROWSER</code> env var lets CI point at <code>chromium-browser</code> without code changes. Reportlab fallback for a plain-text PDF if no browser is present.</li>
+<li>Prior script <code>/tmp/build_final_docs.py</code> was a personal scratch file — now superseded by the in-repo version.</li>
 </ul>
-<h3>Step 6 — Automated tests</h3>
+<h3>Step 6 — Makefile (canonical local path)</h3>
 <ul>
-<li>New <code>apps/api/tests/</code> with pytest + FastAPI <code>TestClient</code>.</li>
-<li>Per-test temp SQLite fixture: each test gets a fresh migrated + seeded DB, so writes never leak across tests.</li>
-<li>Added <code>-x sqlalchemy.url=...</code> support in <code>alembic/env.py</code> so the test fixture can migrate an ephemeral DB without rewriting <code>alembic.ini</code>.</li>
-<li>Added <code>pytest</code> and <code>httpx</code> as dev deps.</li>
-<li>Tests cover: auth surface, org scoping across every list/read, cross-org 404, cross-org 403 lens, per-role create/event/transition rules, invalid transitions, event provenance (<code>changed_by</code>).</li>
-<li>Run: <code>pytest tests/ -v</code> → <strong>25 passed</strong> in ~12s.</li>
+<li>New root <code>Makefile</code> with targets: <code>install</code>, <code>migrate</code>, <code>seed</code>, <code>test</code>, <code>boot</code>, <code>smoke</code>, <code>docs</code>, <code>reset-db</code>, <code>clean</code>, and the composite <code>verify</code> (reset-db + test + boot + smoke).</li>
 </ul>
-<h3>Step 7 — Verification</h3>
+<h3>Step 7 — New docs</h3>
 <ul>
-<li><code>alembic upgrade head</code> against a fresh DB → both migrations apply.</li>
-<li>Seed idempotent across back-to-back runs (user count stable).</li>
-<li><code>pytest</code> suite green (25/25).</li>
-<li>Full manual sanity: <code>/me</code> across all seeded roles returns correct <code>role</code> + <code>organization_id</code>.</li>
+<li><code>docs/build/09-ci-and-deploy-hardening.md</code> — workflow design, local path, dev/CI DB separation, smoke contract.</li>
+<li><code>docs/build/10-doc-artifact-pipeline.md</code> — builder contract, section order, fallback behavior.</li>
 </ul>
-<h3>Step 8 — Documentation</h3>
+<h3>Step 8 — Verification</h3>
 <ul>
-<li>Updated <code>01-current-state.md</code>, <code>03-api-endpoints.md</code> (error inventory), <code>04-data-model.md</code> (role coverage), <code>05-build-log.md</code>, <code>06-known-gaps.md</code>, <code>07-auth-and-scoping.md</code> (RBAC section + diagram).</li>
-<li>New <code>08-test-strategy.md</code> covering harness, matrix, and run command.</li>
-<li>Regenerated <code>docs/final/chartnav-workflow-state-machine-build.{html,pdf}</code> with this phase&#x27;s evidence.</li>
+<li><code>make reset-db &amp;&amp; make test</code> → 25/25 pytest passed (~12s).</li>
+<li><code>make verify</code> → pytest green, uvicorn boot, smoke all 9 assertions green, process torn down cleanly.</li>
+<li><code>scripts/build_docs.py</code> → regenerated <code>docs/final/chartnav-workflow-state-machine-build.{html,pdf}</code> deterministically.</li>
+<li>YAML sanity checked by loading with PyYAML; <code>act</code> not available in the shell, honest limitation documented in <code>06-known-gaps.md</code>.</li>
 </ul>
 <h3>Step 9 — Git hygiene</h3>
 <ul>
-<li>DB reset to seeded state before commit.</li>
-<li>Gitignore already covers <code>.venv</code>, <code>__pycache__</code>, <code>.pytest_cache</code>, <code>*.db</code>.</li>
+<li><code>.pytest_cache/</code> and <code>__pycache__/</code> still ignored.</li>
+<li>No DB files committed.</li>
+<li>DB reset to clean seeded state before commit.</li>
 </ul>
 <p>---</p>
 <h2>Prior phases (preserved)</h2>
-<h3>2026-04-17 — Dev auth + org scoping (phase 3)</h3>
-<p>Auth dependency, <code>X-User-Email</code> transport, <code>Caller</code> ctx, cross-org 404/403, two-tenant seed.</p>
-<h3>2026-04-17 — Strict state machine + filtering (phase 2)</h3>
-<p><code>ALLOWED_TRANSITIONS</code> map, standardized 400 errors on invalid edges, <code>GET /encounters</code> filters.</p>
-<h3>2026-04-17 — Workflow spine (phase 1)</h3>
-<p>Alembic migration <code>a1b2c3d4e5f6</code>, idempotent seed, six encounter endpoints.</p>
+<h3>Phase 4 — RBAC + full scoping + pytest suite</h3>
+<p><code>authz.py</code>, per-edge transition roles, <code>/organizations</code> / <code>/locations</code> / <code>/users</code> now authed + org-scoped, 25-test pytest suite with per-test temp SQLite.</p>
+<h3>Phase 3 — Dev auth + org scoping</h3>
+<p><code>auth.py</code> with <code>X-User-Email</code>, <code>Caller</code>, cross-org 404 on reads and 403 on assertions.</p>
+<h3>Phase 2 — Strict state machine + filtering</h3>
+<p><code>ALLOWED_TRANSITIONS</code> map, 400 <code>invalid_transition</code> with allowed-next listing, <code>GET /encounters</code> filters.</p>
+<h3>Phase 1 — Workflow spine</h3>
+<p>Migration <code>a1b2c3d4e5f6</code>, idempotent seed, six encounter endpoints.</p>
 </section>
 <section id="sec-7"><h2>06 — Known gaps + verification matrix</h2>
 <h1>Known Gaps &amp; Verification Matrix</h1>
-<h2>Automated verification (this phase)</h2>
+<h2>Verification evidence — phase 5</h2>
+<h3>Automated pytest (unchanged contract, now in CI)</h3>
 <pre class="code lang-"><code>
 $ cd apps/api &amp;&amp; pytest tests/ -v
-... 25 passed in 12.39s
+... 25 passed in ~12s
 </code></pre>
-<p>Every matrix below is now machine-asserted in <code>apps/api/tests/</code>.</p>
-<h3>Auth (5/5)</h3>
-<table><thead><tr><th>Case</th><th>Expected</th><th>Result</th></tr></thead><tbody>
-<tr><td><code>/health</code> open</td><td>200</td><td>✅</td></tr>
-<tr><td><code>/me</code> no header</td><td>401 <code>missing_auth_header</code></td><td>✅</td></tr>
-<tr><td><code>/me</code> empty header</td><td>401</td><td>✅</td></tr>
-<tr><td><code>/me</code> unknown email</td><td>401 <code>unknown_user</code></td><td>✅</td></tr>
-<tr><td><code>/me</code> admin org1</td><td>200 role=admin, org=1</td><td>✅</td></tr>
+<h3><code>make verify</code> (canonical local gate)</h3>
+<p>Steps executed in order:</p>
+<table><thead><tr><th>Step</th><th>Result</th></tr></thead><tbody>
+<tr><td><code>rm -f apps/api/chartnav.db</code></td><td>✅</td></tr>
+<tr><td><code>alembic upgrade head</code></td><td>✅</td></tr>
+<tr><td><code>scripts_seed.py</code></td><td>✅ (idempotent)</td></tr>
+<tr><td><code>pytest tests/ -v</code></td><td>✅ (25/25)</td></tr>
+<tr><td><code>uvicorn app.main:app --port 8765</code> boots</td><td>✅</td></tr>
+<tr><td><code>/health</code> reachable within 10s</td><td>✅</td></tr>
+<tr><td><code>scripts/smoke.sh</code> all 9 assertions</td><td>✅</td></tr>
+<tr><td>boot process torn down cleanly</td><td>✅</td></tr>
 </tbody></table>
-<h3>Scoping (8/8)</h3>
-<table><thead><tr><th>Case</th><th>Expected</th><th>Result</th></tr></thead><tbody>
-<tr><td><code>/organizations</code> scoped per tenant</td><td>1 row each</td><td>✅</td></tr>
-<tr><td><code>/organizations</code> no auth</td><td>401</td><td>✅</td></tr>
-<tr><td><code>/locations</code> scoped</td><td>caller org only</td><td>✅</td></tr>
-<tr><td><code>/users</code> scoped</td><td>caller org only</td><td>✅</td></tr>
-<tr><td><code>/encounters</code> disjoint per tenant</td><td>no overlap</td><td>✅</td></tr>
-<tr><td>Cross-org <code>GET /encounters/{id}</code></td><td>404</td><td>✅</td></tr>
-<tr><td><code>?organization_id=&lt;other&gt;</code> lens</td><td>403</td><td>✅</td></tr>
-<tr><td>Filter within org (<code>?status=</code>)</td><td>no leakage</td><td>✅</td></tr>
+<h3>Smoke assertions (<code>scripts/smoke.sh</code>)</h3>
+<table><thead><tr><th>Assertion</th><th>Result</th></tr></thead><tbody>
+<tr><td><code>GET /health</code> → 200, body <code>status=ok</code></td><td>✅</td></tr>
+<tr><td><code>GET /me</code> without auth → 401</td><td>✅</td></tr>
+<tr><td><code>GET /me</code> with admin1 → 200, <code>role=admin</code>, <code>organization_id=1</code></td><td>✅</td></tr>
+<tr><td><code>GET /encounters</code> without auth → 401</td><td>✅</td></tr>
+<tr><td><code>GET /encounters</code> with admin1 → 200</td><td>✅</td></tr>
+<tr><td><code>GET /encounters?organization_id=2</code> as org1 admin → 403</td><td>✅</td></tr>
+<tr><td><code>GET /encounters/1</code> as admin1 → 200</td><td>✅</td></tr>
+<tr><td><code>GET /encounters/3</code> as admin1 (cross-org) → 404</td><td>✅</td></tr>
 </tbody></table>
-<h3>RBAC (12/12)</h3>
-<table><thead><tr><th>Case</th><th>Expected</th><th>Result</th></tr></thead><tbody>
-<tr><td>Admin creates encounter</td><td>201</td><td>✅</td></tr>
-<tr><td>Clinician creates encounter</td><td>201</td><td>✅</td></tr>
-<tr><td>Reviewer creates encounter</td><td>403 <code>role_cannot_create_encounter</code></td><td>✅</td></tr>
-<tr><td>Reviewer adds event</td><td>403 <code>role_cannot_create_event</code></td><td>✅</td></tr>
-<tr><td>Clinician: in_progress→draft_ready</td><td>200</td><td>✅</td></tr>
-<tr><td>Clinician: review_needed→completed</td><td>403 <code>role_cannot_transition</code></td><td>✅</td></tr>
-<tr><td>Reviewer: review_needed→completed</td><td>200</td><td>✅</td></tr>
-<tr><td>Reviewer: review_needed→draft_ready (kick back)</td><td>200</td><td>✅</td></tr>
-<tr><td>Cross-org mutate</td><td>404</td><td>✅</td></tr>
-<tr><td>Invalid transition (admin: in_progress→completed)</td><td>400 <code>invalid_transition</code></td><td>✅</td></tr>
-<tr><td><code>status_changed</code> event written with <code>changed_by</code></td><td>event count +1</td><td>✅</td></tr>
-<tr><td>Cross-org create body mismatch</td><td>403 <code>cross_org_access_forbidden</code></td><td>✅</td></tr>
-</tbody></table>
+<h3>Doc pipeline</h3>
+<ul>
+<li><code>python scripts/build_docs.py</code> → wrote 59KB HTML + 1.1MB PDF via headless Chrome.</li>
+<li>Both artifacts regenerate deterministically from <code>docs/build/</code> + <code>docs/diagrams/</code>.</li>
+</ul>
+<h3>CI YAML sanity</h3>
+<ul>
+<li>YAML parses cleanly (verified by PyYAML load).</li>
+<li>Limitation: no <code>act</code> binary available to run the workflow locally; CI behavior is asserted by parity with <code>make verify</code> and by the structural review of the YAML.</li>
+</ul>
 <h2>Real gaps (prioritized for next phase)</h2>
-<p>1. <strong>Transport still dev-only.</strong> <code>X-User-Email</code> is spoofable. Swap to a signed token path via <code>CHARTNAV_AUTH_MODE</code>. The seam is in place; the dependency only needs a new branch.</p>
-<p>2. <strong>No user/org metadata writes.</strong> <code>/organizations</code>, <code>/locations</code>, <code>/users</code> are read-only. Admins can&#x27;t invite users, create locations, or edit their own org metadata through the API. Needs RBAC-gated write endpoints.</p>
-<p>3. <strong>Role constraint is app-layer only.</strong> <code>users.role</code> is a free VARCHAR. Next migration could add a CHECK constraint or a lookup table.</p>
-<p>4. <strong>No pagination / cursor</strong> on <code>GET /encounters</code>.</p>
-<p>5. <strong>No encounter update / delete / cancel</strong> path; no <code>cancelled</code> status.</p>
-<p>6. <strong>Free-form <code>event_data</code></strong>. No per-<code>event_type</code> schema validation.</p>
-<p>7. <strong>Raw <code>sqlite3</code></strong> per-request connections. Postgres parity (docker compose) untested.</p>
-<p>8. **CORS <code>allow_origins=[&quot;*&quot;]</code>** — tighten before any hosted deploy.</p>
-<p>9. <strong>No distinct audit log.</strong> Auth failures and scoping violations are not persisted; only successful workflow events are.</p>
-<p>10. <strong>No rate limiting, no lockout, no observability.</strong></p>
-<p>11. <strong>No CI.</strong> Tests exist but aren&#x27;t yet run on every PR.</p>
+<p>1. <strong>Auth transport still dev-only.</strong> <code>X-User-Email</code> spoofable. Swap via <code>CHARTNAV_AUTH_MODE</code> + JWT/SSO.</p>
+<p>2. <strong>No <code>act</code> or local workflow runner</strong> — YAML syntactic parse only. Add <code>act</code> or accept first-push feedback loop.</p>
+<p>3. <strong>No RBAC-gated write endpoints for org metadata.</strong> <code>/organizations</code>, <code>/locations</code>, <code>/users</code> are read-only.</p>
+<p>4. <strong><code>users.role</code> free VARCHAR at the DB level</strong> — no CHECK constraint; enforced at app layer only.</p>
+<p>5. <strong>No pagination / cursor</strong> on <code>GET /encounters</code>.</p>
+<p>6. <strong>No encounter update / delete / cancel</strong>; no <code>cancelled</code> status.</p>
+<p>7. <strong>Free-form <code>event_data</code></strong> — no per-event_type schema.</p>
+<p>8. <strong>Raw <code>sqlite3</code></strong> per-request connections; Postgres parity (docker compose) untested.</p>
+<p>9. **CORS <code>allow_origins=[&quot;*&quot;]</code>** remains.</p>
+<p>10. <strong>No distinct audit log</strong> for auth/scoping failures (only successful workflow events).</p>
+<p>11. <strong>No rate limiting, no lockout, no structured logging.</strong></p>
+<p>12. <strong>No deploy target</strong> — CI builds + tests but does not ship anything.</p>
 </section>
 <section id="sec-8"><h2>07 — Auth, org scoping, RBAC</h2>
 <h1>Auth, Org Scoping, RBAC</h1>
@@ -595,15 +581,16 @@ sequenceDiagram
 <p>These are the next auth/security phase&#x27;s targets.</p>
 </section>
 <section id="sec-9"><h2>08 — Test strategy</h2>
-<h1>Test Strategy</h1>
+<h1>Test &amp; Smoke Strategy</h1>
 <h2>Stack</h2>
 <ul>
-<li><code>pytest</code> + FastAPI <code>TestClient</code> (httpx under the hood).</li>
-<li>Per-test temporary SQLite file: each test gets a fresh migrated +</li>
+<li><code>pytest</code> + FastAPI <code>TestClient</code> for unit/integration.</li>
+<li>Per-test temporary SQLite (fresh migrate + seed per test).</li>
+<li>Shell-level smoke via <code>apps/api/scripts/smoke.sh</code> against a real</li>
 </ul>
-<p>seeded DB so writes from one test cannot leak into another.</p>
+<p>running uvicorn.</p>
 <ul>
-<li>No external services; tests run offline in under ~15 seconds.</li>
+<li>All of it runs in CI (<code>.github/workflows/ci.yml</code>).</li>
 </ul>
 <h2>Layout</h2>
 <pre class="code lang-"><code>
@@ -612,93 +599,275 @@ apps/api/tests/
 ├── test_auth.py         # authn surface
 ├── test_scoping.py      # org scoping across every list/read endpoint
 └── test_rbac.py         # role-gated writes + state transitions
+
+apps/api/scripts/
+└── smoke.sh             # curl-level live smoke (health, me, encounters, cross-org)
 </code></pre>
 <h2>Coverage matrix</h2>
-<h3>Auth (<code>test_auth.py</code>)</h3>
-<ul>
-<li><code>/health</code> open.</li>
-<li><code>/me</code> without header → 401 <code>missing_auth_header</code>.</li>
-<li><code>/me</code> with empty header → 401.</li>
-<li><code>/me</code> with unknown email → 401 <code>unknown_user</code>.</li>
-<li><code>/me</code> with seeded admin → 200 + correct <code>organization_id</code> + role.</li>
-</ul>
-<h3>Scoping (<code>test_scoping.py</code>)</h3>
-<ul>
-<li><code>/organizations</code> returns only caller org row (for both orgs).</li>
-<li><code>/organizations</code> without auth → 401.</li>
-<li><code>/locations</code> scoped to caller org.</li>
-<li><code>/users</code> scoped to caller org (no cross-tenant leakage).</li>
-<li><code>/encounters</code> returns disjoint sets for org1 vs org2.</li>
-<li>Cross-org <code>GET /encounters/{id}</code> → 404.</li>
-<li><code>?organization_id=2</code> as org1 caller → 403.</li>
-<li>Filters (<code>status=</code>) work inside caller org and don&#x27;t leak.</li>
-</ul>
-<h3>RBAC (<code>test_rbac.py</code>)</h3>
-<ul>
-<li>Admin can create encounter (201).</li>
-<li>Clinician can create encounter (201).</li>
-<li>Reviewer cannot create encounter (403 <code>role_cannot_create_encounter</code>).</li>
-<li>Reviewer cannot add events (403 <code>role_cannot_create_event</code>).</li>
-<li>Clinician can perform <code>in_progress → draft_ready</code>.</li>
-<li>Clinician cannot perform <code>review_needed → completed</code> (403 <code>role_cannot_transition</code>).</li>
-<li>Reviewer can complete a review (<code>review_needed → completed</code>).</li>
-<li>Reviewer can kick back (<code>review_needed → draft_ready</code>).</li>
-<li>Cross-org mutate → 404 (existence not leaked).</li>
-<li>Invalid transition still → 400 <code>invalid_transition</code>.</li>
-<li>Successful status change writes a <code>status_changed</code> event with <code>old_status</code>/<code>new_status</code>/<code>changed_by</code>.</li>
-<li>Cross-org body mismatch on <code>POST /encounters</code> → 403 <code>cross_org_access_forbidden</code>.</li>
-</ul>
+<h3>Auth (5)</h3>
+<p>Health open; <code>/me</code> missing/empty/unknown/valid.</p>
+<h3>Scoping (8)</h3>
+<p>Orgs/locs/users scoped per tenant. <code>/organizations</code> 401 without auth.</p>
+<p>Encounters disjoint across tenants. Cross-org GET → 404.</p>
+<p><code>?organization_id=&lt;other&gt;</code> → 403. Filters don&#x27;t leak.</p>
+<h3>RBAC (12)</h3>
+<p>Admin + clinician create encounter. Reviewer create → 403. Reviewer</p>
+<p>event → 403. Clinician operational transition OK. Clinician review-</p>
+<p>stage transition 403. Reviewer complete/kick-back OK. Cross-org mutate</p>
+<p>→ 404. Invalid transition preserved as 400. <code>status_changed</code> carries</p>
+<p><code>old_status</code>/<code>new_status</code>/<code>changed_by</code>. Cross-org body mismatch → 403.</p>
+<h3>Smoke (9)</h3>
+<p>Exercise live HTTP. Commands in <code>09-ci-and-deploy-hardening.md</code>.</p>
 <h2>How to run</h2>
-<p>From <code>apps/api/</code> with the venv active:</p>
 <pre class="code lang-bash"><code>
-pytest tests/ -v
+# just the pytest suite
+cd apps/api &amp;&amp; pytest tests/ -v
+
+# everything (reset DB + pytest + boot + smoke)
+make verify
+
+# smoke only, against an already-running API
+cd apps/api &amp;&amp; bash scripts/smoke.sh http://127.0.0.1:8000
 </code></pre>
-<p>Result at time of writing: <strong>25 passed in ~12s</strong>.</p>
-<h2>Guarantees we get from this suite</h2>
+<h2>Results at time of writing</h2>
 <ul>
-<li>Any regression that breaks auth, scoping, or a role gate surfaces in CI (when we add it).</li>
-<li>The error-code envelope is asserted against, so rename-by-accident is caught.</li>
-<li>Seed idempotency isn&#x27;t tested directly here but is still exercised</li>
+<li><code>pytest</code>: <strong>25 passed in ~12s</strong></li>
+<li><code>make verify</code>: all 9 smoke assertions pass after pytest succeeds</li>
 </ul>
-<p>indirectly: each test reseeds cleanly without collision.</p>
 <h2>Gaps not yet covered</h2>
 <ul>
-<li>Concurrent writers / race conditions.</li>
-<li>Event JSON schema per <code>event_type</code>.</li>
-<li>Pagination behavior (not yet implemented).</li>
-<li>Auth transport swap (would warrant its own harness).</li>
+<li>Concurrent writers / race conditions</li>
+<li><code>event_data</code> schema per <code>event_type</code></li>
+<li>Pagination (not yet implemented)</li>
+<li>Auth transport swap (needs its own harness when JWT/SSO lands)</li>
+<li>Long-running soak / memory behavior</li>
 </ul>
 </section>
-<section id="sec-10"><h2>Diagram — System architecture</h2>
+<section id="sec-10"><h2>09 — CI & deploy hardening</h2>
+<h1>CI &amp; Deploy Hardening</h1>
+<h2>GitHub Actions workflow</h2>
+<p>File: <code>.github/workflows/ci.yml</code></p>
+<p>Triggers: <strong>push to <code>main</code></strong> and <strong>every pull request</strong>.</p>
+<h3>Job <code>backend</code> (ubuntu-latest, working directory <code>apps/api</code>)</h3>
+<p>1. <code>actions/checkout@v4</code></p>
+<p>2. <code>actions/setup-python@v5</code> — Python 3.11, pip cache on.</p>
+<p>3. <code>pip install -e &quot;.[dev]&quot;</code> — installs backend plus <code>pytest</code> + <code>httpx</code> from <code>pyproject.toml [project.optional-dependencies].dev</code>.</p>
+<p>4. <strong>Migrate (isolated CI DB)</strong> — <code>alembic -x &quot;sqlalchemy.url=sqlite:///$CI_DB_PATH&quot; upgrade head</code>. <code>CI_DB_PATH</code> lives under <code>$RUNNER_TEMP</code>, never in the repo.</p>
+<p>5. <strong>Idempotent seed run twice</strong> — proves the seed is safe to re-run in live environments.</p>
+<p>6. <strong>Tests</strong> — <code>pytest tests/ -v</code>. 25 tests must pass.</p>
+<p>7. <strong>API boot smoke</strong> — launches uvicorn in-process against the CI DB, waits up to ~10s for <code>/health</code>, then runs <code>apps/api/scripts/smoke.sh</code>. Smoke script exercises <code>/health</code>, <code>/me</code> auth paths, <code>/encounters</code> scoped list, and the cross-org 403 lens.</p>
+<h3>Job <code>docs</code> (ubuntu-latest, <code>needs: backend</code>)</h3>
+<p>1. Install Chromium via apt (<code>chromium-browser</code>).</p>
+<p>2. Run <code>python scripts/build_docs.py</code> with <code>CHARTNAV_PDF_BROWSER=chromium-browser</code>.</p>
+<p>3. Upload <code>docs/final/chartnav-workflow-state-machine-build.{html,pdf}</code> as a CI artifact — the <code>docs</code> job fails loudly if either artifact is missing.</p>
+<h3>What CI catches</h3>
+<table><thead><tr><th>Change</th><th>Failure surface</th></tr></thead><tbody>
+<tr><td>Broken migration</td><td><code>alembic upgrade</code> step</td></tr>
+<tr><td>Broken seed</td><td>idempotent-seed step</td></tr>
+<tr><td>Any pytest regression (auth, RBAC, scoping, state machine)</td><td>pytest step</td></tr>
+<tr><td>App can&#x27;t boot / <code>/health</code> broken</td><td>smoke script</td></tr>
+<tr><td><code>/me</code> contract drift</td><td>smoke script</td></tr>
+<tr><td>Cross-org leak introduced</td><td>smoke 403 lens check</td></tr>
+<tr><td>Docs pipeline regression</td><td><code>docs</code> job</td></tr>
+</tbody></table>
+<h2>Local verification path (canonical)</h2>
+<p>One command:</p>
+<pre class="code lang-bash"><code>
+make verify
+</code></pre>
+<p>Under the hood that:</p>
+<ul>
+<li>resets the dev SQLite DB,</li>
+<li>applies Alembic migrations,</li>
+<li>re-seeds idempotently,</li>
+<li>runs pytest,</li>
+<li>boots uvicorn on port 8765,</li>
+<li>runs <code>apps/api/scripts/smoke.sh</code>,</li>
+<li>kills the boot process.</li>
+</ul>
+<p>Individual targets:</p>
+<table><thead><tr><th>Target</th><th>Purpose</th></tr></thead><tbody>
+<tr><td><code>make install</code></td><td>venv + <code>pip install -e &quot;apps/api[dev]&quot;</code></td></tr>
+<tr><td><code>make migrate</code></td><td>Alembic upgrade head on dev DB</td></tr>
+<tr><td><code>make seed</code></td><td>Idempotent seed on dev DB</td></tr>
+<tr><td><code>make test</code></td><td>Full pytest suite</td></tr>
+<tr><td><code>make boot</code></td><td>Foreground uvicorn on port 8765</td></tr>
+<tr><td><code>make smoke</code></td><td><code>scripts/smoke.sh</code> against running API</td></tr>
+<tr><td><code>make docs</code></td><td>Rebuild <code>docs/final/*.html</code> + <code>.pdf</code></td></tr>
+<tr><td><code>make reset-db</code></td><td><code>rm -f chartnav.db</code> + migrate + seed</td></tr>
+<tr><td><code>make clean</code></td><td>Remove DB + caches</td></tr>
+</tbody></table>
+<h2>Dev vs CI DB separation</h2>
+<table><thead><tr><th>Surface</th><th>Path</th></tr></thead><tbody>
+<tr><td>Developer local</td><td><code>apps/api/chartnav.db</code> (gitignored)</td></tr>
+<tr><td>pytest per-test</td><td><code>tmp_path / &quot;chartnav.db&quot;</code> (ephemeral)</td></tr>
+<tr><td>CI</td><td><code>$RUNNER_TEMP/chartnav_ci.db</code> (ephemeral)</td></tr>
+</tbody></table>
+<p>The only path CI or tests ever touch inside the repo is the source code;</p>
+<p>no DB file is shared between contexts.</p>
+<h2>Smoke script</h2>
+<p>File: <code>apps/api/scripts/smoke.sh</code></p>
+<p>Shell-only curl-level checks. Takes an optional <code>BASE_URL</code>:</p>
+<pre class="code lang-bash"><code>
+scripts/smoke.sh [BASE_URL=http://127.0.0.1:8000]
+</code></pre>
+<p>Exits non-zero on the first failed assertion. Exercises:</p>
+<ul>
+<li><code>GET /health</code> → 200 + <code>status=ok</code></li>
+<li><code>GET /me</code> → 401 without auth; 200 with seeded admin header; role equals <code>admin</code></li>
+<li><code>GET /encounters</code> → 401 without auth; 200 with admin header</li>
+<li><code>GET /encounters?organization_id=2</code> as org1 admin → 403 (cross-org lens)</li>
+<li><code>GET /encounters/1</code> as org1 admin → 200</li>
+<li><code>GET /encounters/3</code> as org1 admin → 404 (cross-org)</li>
+</ul>
+<h2>What this phase explicitly does NOT do</h2>
+<ul>
+<li>No container image build / push.</li>
+<li>No production deploy target.</li>
+<li>No Kubernetes, Terraform, or infra-as-code.</li>
+<li>No secrets management or signed build artifacts.</li>
+</ul>
+<p>Those belong in a future &quot;hosted deploy&quot; phase. The seam is ready: CI</p>
+<p>already reliably migrates, seeds, tests, and smokes the API.</p>
+</section>
+<section id="sec-11"><h2>10 — Doc artifact pipeline</h2>
+<h1>Doc Artifact Pipeline</h1>
+<h2>Purpose</h2>
+<p>The living docs in <code>docs/build/*</code> and <code>docs/diagrams/*</code> are the source</p>
+<p>of truth. The final consolidated artifacts in <code>docs/final/</code> are always</p>
+<p>rebuildable from those sources — no hand edits.</p>
+<h2>Source / output layout</h2>
+<pre class="code lang-"><code>
+docs/
+├── build/        # human-maintained markdown — source of truth
+├── diagrams/     # Mermaid sources (fenced in markdown)
+└── final/
+    ├── chartnav-workflow-state-machine-build.html   # generated
+    └── chartnav-workflow-state-machine-build.pdf    # generated
+</code></pre>
+<h2>Builder</h2>
+<p>File: <code>scripts/build_docs.py</code></p>
+<ul>
+<li>Pure Python, no external deps beyond the standard library.</li>
+<li>Resolves paths relative to the script, so the same invocation works</li>
+</ul>
+<p>locally and in CI.</p>
+<ul>
+<li>Parses a small markdown subset (headings, fenced code, tables, bullet</li>
+</ul>
+<p>lists, inline <code>code</code>, <code><strong>bold</strong></code>) directly to HTML.</p>
+<ul>
+<li>Mermaid fences are passed through verbatim into <code>&lt;div class=&quot;mermaid&quot;&gt;</code></li>
+</ul>
+<p>blocks; the HTML imports Mermaid from a CDN and renders on load.</p>
+<ul>
+<li>Writes <code>docs/final/chartnav-workflow-state-machine-build.html</code>.</li>
+<li>Generates the PDF via headless Chromium (<code>--headless=new --print-to-pdf</code>).</li>
+</ul>
+<p>Selection order:</p>
+<p>1. <code>CHARTNAV_PDF_BROWSER</code> env var if set (used by CI with <code>chromium-browser</code>).</p>
+<p>2. macOS Chrome at <code>/Applications/Google Chrome.app/...</code>.</p>
+<p>3. Chromium in a standard app bundle.</p>
+<p>4. <code>chromium-browser</code>, <code>chromium</code>, <code>google-chrome</code>, <code>chrome</code> on <code>PATH</code>.</p>
+<ul>
+<li>If no browser is available, falls back to <code>reportlab</code> for a plain-text</li>
+</ul>
+<p>PDF so CI never silently produces a zero-byte artifact.</p>
+<h2>Run it</h2>
+<p>Locally:</p>
+<pre class="code lang-bash"><code>
+python scripts/build_docs.py          # or:  make docs
+</code></pre>
+<p>In CI: the <code>docs</code> job in <code>.github/workflows/ci.yml</code> installs</p>
+<p><code>chromium-browser</code> via apt, runs the builder with</p>
+<p><code>CHARTNAV_PDF_BROWSER=chromium-browser</code>, and uploads the resulting</p>
+<p>HTML + PDF as a <code>chartnav-docs-final</code> artifact. The upload step is</p>
+<p>configured with <code>if-no-files-found: error</code>, so a silent generation</p>
+<p>failure fails the build.</p>
+<h2>Sections consumed (in order)</h2>
+<p>1. Executive summary (inlined in the builder)</p>
+<p>2. <code>docs/build/01-current-state.md</code></p>
+<p>3. <code>docs/build/02-workflow-state-machine.md</code></p>
+<p>4. <code>docs/build/03-api-endpoints.md</code></p>
+<p>5. <code>docs/build/04-data-model.md</code></p>
+<p>6. <code>docs/build/05-build-log.md</code></p>
+<p>7. <code>docs/build/06-known-gaps.md</code></p>
+<p>8. <code>docs/build/07-auth-and-scoping.md</code></p>
+<p>9. <code>docs/build/08-test-strategy.md</code></p>
+<p>10. <code>docs/build/09-ci-and-deploy-hardening.md</code></p>
+<p>11. <code>docs/build/10-doc-artifact-pipeline.md</code></p>
+<p>12. <code>docs/diagrams/system-architecture.md</code></p>
+<p>13. <code>docs/diagrams/encounter-status-machine.md</code></p>
+<p>14. <code>docs/diagrams/er-diagram.md</code></p>
+<p>15. <code>docs/diagrams/api-data-flow.md</code></p>
+<p>If a source file is missing, the builder emits an inline</p>
+<p><code>*missing: &lt;path&gt;*</code> marker rather than crashing — a broken diagram or</p>
+<p>an undeleted section shows up immediately in the rendered output and in</p>
+<p>the CI artifact.</p>
+<h2>Why not a heavier stack</h2>
+<ul>
+<li>No MkDocs / Docusaurus / Sphinx — those require a theme + build</li>
+</ul>
+<p>config we&#x27;d have to maintain. We currently just need the 10-page PDF</p>
+<p>to stay fresh.</p>
+<ul>
+<li>No pandoc dependency — keeps the CI image lean and the local</li>
+</ul>
+<p>experience <code>python</code> + a headless browser (which most devs already</p>
+<p>have).</p>
+<ul>
+<li>If we grow beyond a single consolidated artifact (e.g. a hosted docs</li>
+</ul>
+<p>site), this builder is easy to retire because the sources are already</p>
+<p>plain markdown.</p>
+</section>
+<section id="sec-12"><h2>Diagram — System architecture</h2>
 <h1>System Architecture</h1>
 <div class="mermaid">
 flowchart LR
-  Client["Client<br/>(curl / tests / apps/web)"]
-  FastAPI["FastAPI<br/>apps/api/app/main.py"]
-  Authn["require_caller<br/>apps/api/app/auth.py<br/>(AUTH_MODE seam)"]
-  Authz["require_roles / assert_can_transition<br/>apps/api/app/authz.py"]
-  Router["APIRouter<br/>apps/api/app/api/routes.py"]
-  SM["State Machine<br/>ALLOWED_TRANSITIONS"]
-  Scope["Org Scoping<br/>ensure_same_org / 404 on cross-org"]
-  DB[("SQLite<br/>apps/api/chartnav.db")]
-  Alembic["Alembic<br/>apps/api/alembic/"]
-  Seed["scripts_seed.py<br/>2 orgs · 5 users · 3 roles"]
-  Tests["pytest<br/>apps/api/tests/"]
+  subgraph Runtime
+    Client["Client<br/>curl · tests · apps/web"]
+    FastAPI["FastAPI<br/>apps/api/app/main.py"]
+    Authn["require_caller<br/>apps/api/app/auth.py<br/>(CHARTNAV_AUTH_MODE seam)"]
+    Authz["require_* / assert_can_transition<br/>apps/api/app/authz.py"]
+    Router["APIRouter<br/>apps/api/app/api/routes.py"]
+    SM["State Machine<br/>ALLOWED_TRANSITIONS"]
+    Scope["Org Scoping<br/>404 cross-org read · 403 assertion"]
+    DB[("SQLite<br/>apps/api/chartnav.db")]
+  end
+  subgraph Tooling
+    Alembic["Alembic<br/>apps/api/alembic/"]
+    Seed["scripts_seed.py<br/>2 orgs · 5 users · 3 roles"]
+    PyTest["pytest<br/>apps/api/tests/"]
+    Smoke["smoke.sh<br/>apps/api/scripts/"]
+    DocBuild["build_docs.py<br/>scripts/"]
+    Make["Makefile<br/>make verify"]
+    CI[".github/workflows/ci.yml<br/>backend + docs jobs"]
+  end
 
   Client -->|"HTTP + X-User-Email"| FastAPI
   FastAPI --> Authn
-  Authn -->|"lookup by email"| DB
+  Authn -->|"users lookup"| DB
   Authn -->|"Caller(role, org)"| Authz
   Authz --> Router
   Router --> Scope
   Router --> SM
   Router -->|"scoped SQL"| DB
-  Alembic -.->|"upgrade head"| DB
-  Seed -.->|"idempotent seed"| DB
-  Tests -.->|"TestClient + temp DB"| FastAPI
+
+  Alembic -.-> DB
+  Seed -.-> DB
+  PyTest -.->|"TestClient + temp DB"| FastAPI
+  Smoke -.->|"curl"| FastAPI
+  DocBuild -.->|"reads docs/build + docs/diagrams"| DocBuild
+  Make --> Alembic
+  Make --> Seed
+  Make --> PyTest
+  Make --> Smoke
+  Make --> DocBuild
+  CI --> Make
 </div>
 </section>
-<section id="sec-11"><h2>Diagram — Encounter status machine</h2>
+<section id="sec-13"><h2>Diagram — Encounter status machine</h2>
 <h1>Encounter Status State Machine</h1>
 <div class="mermaid">
 stateDiagram-v2
@@ -720,7 +889,7 @@ stateDiagram-v2
 <p>Legend: any edge not shown is rejected at <code>POST /encounters/{id}/status</code></p>
 <p>with HTTP 400 <code>invalid_transition</code>.</p>
 </section>
-<section id="sec-12"><h2>Diagram — ER</h2>
+<section id="sec-14"><h2>Diagram — ER</h2>
 <h1>ER Diagram</h1>
 <div class="mermaid">
 erDiagram
@@ -784,8 +953,9 @@ erDiagram
 <p><code>users.organization_id</code> is the authoritative source of scope; never</p>
 <p>derived from client input.</p>
 </section>
-<section id="sec-13"><h2>Diagram — API / data flow</h2>
-<h1>API / Data Flow</h1>
+<section id="sec-15"><h2>Diagram — API / data flow</h2>
+<h1>API / Data Flow &amp; CI</h1>
+<h2>Request path (happy + denial)</h2>
 <div class="mermaid">
 sequenceDiagram
   autonumber
@@ -798,48 +968,61 @@ sequenceDiagram
 
   Note over C,DB: Happy path — clinician advances own encounter
   C->>Authn: POST /encounters/1/status {"status":"draft_ready"}<br/>X-User-Email: clin@chartnav.local
-  Authn->>DB: SELECT user WHERE email=?
-  DB-->>Authn: {role=clinician, organization_id=1}
-  Authn-->>R: Caller(role=clinician, org=1)
+  Authn->>DB: SELECT user
+  DB-->>Authn: {role=clinician, org=1}
+  Authn-->>Authz: Caller
+  Authz->>Authz: role in {admin, clinician}? ✓
+  Authz-->>R: Caller
   R->>DB: SELECT encounter 1
   DB-->>R: row(org=1, status=in_progress)
-  R->>R: encounter.org == caller.org ✓
   R->>SM: is (in_progress → draft_ready) allowed?
   SM-->>R: yes
   R->>Authz: assert_can_transition(clinician, in_progress, draft_ready)
   Authz-->>R: allowed
   R->>DB: UPDATE + INSERT status_changed{changed_by=clin@...}
-  R-->>C: 200 updated
+  R-->>C: 200
 
   Note over C,DB: Role denied — clinician tries review-stage edge
-  C->>Authn: POST /encounters/2/status {"status":"completed"}<br/>X-User-Email: clin@chartnav.local
-  Authn-->>R: Caller(role=clinician, org=1)
-  R->>DB: SELECT encounter 2
-  DB-->>R: row(org=1, status=review_needed)
-  R->>SM: is (review_needed → completed) allowed?
-  SM-->>R: yes
-  R->>Authz: assert_can_transition(clinician, review_needed, completed)
+  C->>Authn: POST /encounters/2/status {"status":"completed"}
+  Authn-->>Authz: Caller(role=clinician)
+  Authz->>SM: edge valid?
+  SM-->>Authz: yes
+  Authz->>Authz: clinician in role-set for (review_needed, completed)?
   Authz-->>C: 403 role_cannot_transition
 
-  Note over C,DB: Reviewer cannot create encounter
-  C->>Authn: POST /encounters {...}<br/>X-User-Email: rev@chartnav.local
-  Authn-->>Authz: Caller(role=reviewer)
-  Authz-->>C: 403 role_cannot_create_encounter
-
-  Note over C,DB: Cross-org read — returns 404
-  C->>Authn: GET /encounters/3<br/>X-User-Email: clin@chartnav.local
-  Authn-->>R: Caller(org=1)
+  Note over C,DB: Cross-org read — 404
+  C->>Authn: GET /encounters/3 as clin@chartnav.local
   R->>DB: SELECT encounter 3
   DB-->>R: row(org=2)
   R-->>C: 404 encounter_not_found
 
   Note over C,DB: Missing / unknown identity
-  C->>Authn: GET /encounters
-  Authn-->>C: 401 missing_auth_header
-  C->>Authn: GET /encounters<br/>X-User-Email: ghost@nowhere
-  Authn->>DB: SELECT user
-  DB-->>Authn: ∅
-  Authn-->>C: 401 unknown_user
+  C->>Authn: GET /encounters (no header) → 401 missing_auth_header
+  C->>Authn: GET /encounters (bogus email) → 401 unknown_user
 </div>
+<h2>CI gate flow</h2>
+<div class="mermaid">
+flowchart TD
+  PR[["push / PR"]]
+  subgraph backend job
+    A[checkout] --> B[setup-python 3.11]
+    B --> C["pip install -e \".[dev]\""]
+    C --> D["alembic -x url=... upgrade head<br/>(isolated CI DB)"]
+    D --> E["seed twice (idempotency)"]
+    E --> F["pytest tests/ -v"]
+    F --> G["boot uvicorn + poll /health"]
+    G --> H["scripts/smoke.sh"]
+  end
+  subgraph docs job
+    I[checkout] --> J[apt chromium]
+    J --> K["python scripts/build_docs.py"]
+    K --> L["upload HTML + PDF artifact"]
+  end
+  PR --> A
+  H --> I
+  classDef fail fill:#fee,stroke:#c33
+  class F,G,H,K,L fail
+</div>
+<p>Any failure in a red-bordered step fails CI.</p>
 </section>
 </body></html>
