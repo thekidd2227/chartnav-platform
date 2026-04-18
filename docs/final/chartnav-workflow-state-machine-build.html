@@ -36,10 +36,10 @@
 <body>
 <header class="cover">
   <h1>ChartNav — Consolidated Build</h1>
-  <div class="sub">Phases 1–17: spine → state machine → auth → RBAC → CI → production seam → Postgres → frontend → E2E → JWT + ops → staging → governance → control plane → invitations → enterprise quality &amp; compliance → platform mode &amp; interoperability → brand &amp; domain alignment<br>
+  <div class="sub">Phases 1–18: spine → state machine → auth → RBAC → CI → production seam → Postgres → frontend → E2E → JWT + ops → staging → governance → control plane → invitations → enterprise quality &amp; compliance → platform mode &amp; interoperability → brand &amp; domain alignment → native clinical layer + FHIR<br>
   Repo: <code>thekidd2227/chartnav-platform</code></div>
 </header>
-<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth, org scoping, RBAC</a></li><li><a href="#sec-9">08 — Test strategy</a></li><li><a href="#sec-10">09 — CI & deploy hardening</a></li><li><a href="#sec-11">10 — Doc artifact pipeline</a></li><li><a href="#sec-12">11 — Production-auth seam</a></li><li><a href="#sec-13">12 — Runtime config</a></li><li><a href="#sec-14">13 — Deploy target</a></li><li><a href="#sec-15">14 — Postgres parity</a></li><li><a href="#sec-16">15 — Frontend integration</a></li><li><a href="#sec-17">16 — Frontend test strategy</a></li><li><a href="#sec-18">17 — E2E & release</a></li><li><a href="#sec-19">18 — Operational hardening</a></li><li><a href="#sec-20">19 — Staging deployment</a></li><li><a href="#sec-21">20 — Observability</a></li><li><a href="#sec-22">21 — Staging runbook</a></li><li><a href="#sec-23">22 — Admin governance</a></li><li><a href="#sec-24">23 — Operator control plane</a></li><li><a href="#sec-25">24 — Invitations & governance</a></li><li><a href="#sec-26">25 — Enterprise quality & compliance</a></li><li><a href="#sec-27">26 — Platform mode & interoperability</a></li><li><a href="#sec-28">27 — Adoption & implementation model</a></li><li><a href="#sec-29">28 — Brand & domain alignment</a></li><li><a href="#sec-30">Diagram — System architecture</a></li><li><a href="#sec-31">Diagram — Encounter status machine</a></li><li><a href="#sec-32">Diagram — ER</a></li><li><a href="#sec-33">Diagram — API / data flow</a></li></ol></nav>
+<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth, org scoping, RBAC</a></li><li><a href="#sec-9">08 — Test strategy</a></li><li><a href="#sec-10">09 — CI & deploy hardening</a></li><li><a href="#sec-11">10 — Doc artifact pipeline</a></li><li><a href="#sec-12">11 — Production-auth seam</a></li><li><a href="#sec-13">12 — Runtime config</a></li><li><a href="#sec-14">13 — Deploy target</a></li><li><a href="#sec-15">14 — Postgres parity</a></li><li><a href="#sec-16">15 — Frontend integration</a></li><li><a href="#sec-17">16 — Frontend test strategy</a></li><li><a href="#sec-18">17 — E2E & release</a></li><li><a href="#sec-19">18 — Operational hardening</a></li><li><a href="#sec-20">19 — Staging deployment</a></li><li><a href="#sec-21">20 — Observability</a></li><li><a href="#sec-22">21 — Staging runbook</a></li><li><a href="#sec-23">22 — Admin governance</a></li><li><a href="#sec-24">23 — Operator control plane</a></li><li><a href="#sec-25">24 — Invitations & governance</a></li><li><a href="#sec-26">25 — Enterprise quality & compliance</a></li><li><a href="#sec-27">26 — Platform mode & interoperability</a></li><li><a href="#sec-28">27 — Adoption & implementation model</a></li><li><a href="#sec-29">28 — Brand & domain alignment</a></li><li><a href="#sec-30">29 — Native clinical layer & FHIR</a></li><li><a href="#sec-31">Diagram — System architecture</a></li><li><a href="#sec-32">Diagram — Encounter status machine</a></li><li><a href="#sec-33">Diagram — ER</a></li><li><a href="#sec-34">Diagram — API / data flow</a></li></ol></nav>
 <section id="sec-1"><h2>Executive summary</h2>
 <p>This document consolidates <strong>all</strong> ChartNav backend phases delivered to</p>
 <p>date.</p>
@@ -59,12 +59,13 @@
 <p><strong>Phase 14 — Invitations, settings schema, audit export, event hardening, bulk users.</strong> Migration <code>e5f6a7b8c9d0</code> adds <code>invitation_token_hash</code> (sha256-only), <code>invitation_expires_at</code>, <code>invitation_accepted_at</code>. New endpoints: <code>POST /users/{id}/invite</code>, <code>POST /invites/accept</code>, <code>POST /users/bulk</code>, <code>GET /security-audit-events/export</code>. Organization settings becomes a typed <code>OrganizationSettings</code> pydantic model (extra=forbid) with dedicated fields + an <code>extensions</code> forward-compat bucket. Event payloads enforce per-type value discipline (status enums, non-empty strings, non-negative ints). Admin UI adds per-user <strong>Invite</strong> with a one-shot raw-token banner, a <strong>Bulk import…</strong> dialog, an <strong>Export CSV</strong> button on the audit tab, typed inputs on the Organization tab, and a minimal <code>/invite?invite=&lt;token&gt;</code> accept screen. Suites grow to <strong>110 pytest / 25 Vitest / 12 Playwright</strong>.</p>
 <p><strong>Phase 15 — Enterprise quality + compliance.</strong> Five real enterprise-credibility guarantees land together. (1) <strong>Accessibility baseline</strong>: <code>@axe-core/playwright</code> over Chromium, 5 scans covering app shell + encounter list/detail + admin users/audit + invite accept; <code>serious</code>/<code>critical</code> findings are blocking; established fixes land <code>aria-label</code> on the event-type and inline role <code>&lt;select&gt;</code>s. (2) <strong>Visual regression baseline</strong>: 4 Playwright screenshots (encounter list, admin users, admin audit, invite accept) at 1280×820 with animations disabled and <code>maxDiffPixelRatio: 0.02</code>; macOS baselines committed for local dev; CI intentionally skips because Chromium renders differently on Linux (documented gap). (3) <strong>Admin list scaling</strong>: <code>GET /users</code> and <code>GET /locations</code> gain <code>limit</code>, <code>offset</code>, <code>q</code>, and (users) <code>role</code> query params with <code>X-Total-Count</code>/<code>X-Limit</code>/<code>X-Offset</code> headers; UI adds search + Prev/Next pager (25/page) on both tabs. (4) <strong>Feature-flag consumption</strong>: <code>organization.settings.feature_flags.audit_export</code> and <code>.bulk_import</code> now actually hide the <strong>Export CSV</strong> / <strong>Bulk import…</strong> buttons; defaults stay <code>true</code>; documented as a UX toggle, not a security control. (5) <strong>Release compliance signals</strong>: <code>scripts/sbom.py</code> captures project + git sha/tag/dirty + image tag + <code>pip list</code> + <code>npm list</code>; <code>scripts/release_build.sh</code> also emits <code>chartnav-api-&lt;v&gt;.digest.txt</code> via <code>docker image inspect</code>; both are attached to GitHub Releases and included in <code>MANIFEST.txt</code>. (6) <strong>Audit retention scaffolding</strong>: <code>apps/api/app/retention.py::prune_audit_events</code> + <code>scripts/audit_retention.py</code> CLI + <code>CHARTNAV_AUDIT_RETENTION_DAYS</code> env (default <code>0</code> = never); the app never silently prunes. Suites grow to <strong>118 pytest / 28 Vitest / 21 Playwright</strong> (12 workflow + 5 a11y + 4 visual-local).</p>
 <p><strong>Phase 16 — Platform mode &amp; interoperability.</strong> ChartNav is now explicitly two products in one — a standalone lightweight EMR/EHR <strong>and</strong> an integration-first overlay on top of an existing EHR/EMR. The shape is architectural, not a feature flag bolted on. Four real changes landed together: (1) <strong>Operating modes</strong>: <code>CHARTNAV_PLATFORM_MODE</code> ∈ {<code>standalone</code>, <code>integrated_readthrough</code>, <code>integrated_writethrough</code>}, validated at import time; <code>standalone</code> pins the adapter to <code>native</code>, <code>integrated_*</code> defaults to <code>stub</code>. (2) <strong>Adapter boundary</strong> — <code>app/integrations/base.py::ClinicalSystemAdapter</code> protocol (<code>fetch_patient</code>, <code>search_patients</code>, <code>fetch_encounter</code>, <code>update_encounter_status</code>, <code>write_note</code>, <code>sync_reference_data</code>, <code>info</code>), <code>AdapterError</code> / <code>AdapterNotSupported</code>, <code>SourceOfTruth</code> enum. Ships two honest implementations: <code>NativeChartNavAdapter</code> (persists to the ChartNav DB via the same SA Core surface the HTTP routes use, refuses patient ops until a native <code>patients</code> table lands), and <code>StubClinicalSystemAdapter</code> (canned reads, write-through records writes to an in-process list, read-through raises <code>AdapterNotSupported</code>). Vendor adapters plug into a mutable <code>_VENDOR_ADAPTERS</code> registry via <code>register_vendor_adapter(key, factory)</code> — no decorator magic, grep-able. (3) <strong>HTTP surface</strong> — <code>GET /platform</code> (any authenticated caller) returns mode + adapter key + display name + supports-* flags + source-of-truth map. No secret leakage (asserted). (4) <strong>Frontend awareness</strong> — <code>api.ts</code> gains <code>getPlatform</code> + types; <code>AdminPanel</code> fetches <code>/platform</code> on mount and renders a platform banner above the tabs on every admin view. CI fallout from phase 15 was repaired in the same commit window: migration <code>c3d4e5f6a7b8</code> switched from <code>sa.text(&quot;1&quot;)</code> (Postgres-incompatible BOOLEAN default) to <code>sa.text(&quot;true&quot;)</code>, and vitest was downgraded to <code>^3.2.4</code> + lockfile regenerated to fix <code>npm ci</code> on Linux/Node 20 (Vitest 4 had transitively pulled rolldown + Vite 8 + esbuild 0.28, leaving the lockfile incomplete for non-mac platforms). Suites grow to <strong>131 pytest</strong> / <strong>30 Vitest</strong> / 21 Playwright. <code>GET /platform</code> is the only new endpoint.</p>
-<p><strong>Phase 17 — Brand &amp; domain alignment (this phase).</strong> Two cuts. (1) <strong>Domain</strong>: <code>chartnav.ai</code> and <code>www.chartnav.ai</code> → <code>https://arcgsystems.com/chartnav/</code> via GoDaddy 301 forwarding (primary, executed in the GoDaddy UI per <code>arcg-live/docs/chartnav-ai-domain-runbook.md</code>) plus an in-repo host-based safety-net in <code>arcg-live/index.html</code> + <code>public/404.html</code> that redirects the visitor before React mounts. The <code>CNAME</code> stays <code>arcgsystems.com</code> — Pages&#x27; primary domain is preserved. (2) <strong>Brand-aligned product UI</strong>: <code>apps/web/src/styles.css</code> now consumes the ChartNav marketing site&#x27;s token set directly (<code>--cn-*</code>). Teal <code>#0B6E79</code> primary with hover/active/tint/soft scale, Inter typography (cv02/03/04/11 features), tightened shadow scale, AA-safe muted text (<code>#475569</code>), pill admin tabs, brand-teal focus rings. The app header renders <code>public/brand/chartnav-logo.svg</code> (the real wordmark with the pulse-cross mark, copied from <code>arcg-live/public/chartnav/brand/</code>), and the app shell gains a footer with a single subtle <strong>Powered by ARCG Systems</strong> attribution (11px uppercase, 0.12em letter-spacing, <code>data-testid=&quot;app-footer-arcg&quot;</code>, Vitest-asserted copy). Legacy token names stayed as aliases so zero component code needed to change. Visual baselines regenerated (<code>visual.spec.ts-snapshots/*-darwin.png</code>); axe-AA 5/5 still green. Suites: 131 pytest, <strong>31 Vitest</strong> (+1 footer), 17 Playwright workflow+a11y, 4 visual. No endpoints changed.</p>
+<p><strong>Phase 17 — Brand &amp; domain alignment.</strong> Two cuts. (1) <strong>Domain</strong>: <code>chartnav.ai</code> and <code>www.chartnav.ai</code> → <code>https://arcgsystems.com/chartnav/</code> via GoDaddy 301 forwarding (primary, executed in the GoDaddy UI per <code>arcg-live/docs/chartnav-ai-domain-runbook.md</code>) plus an in-repo host-based safety-net in <code>arcg-live/index.html</code> + <code>public/404.html</code> that redirects the visitor before React mounts. The <code>CNAME</code> stays <code>arcgsystems.com</code> — Pages&#x27; primary domain is preserved. (2) <strong>Brand-aligned product UI</strong>: <code>apps/web/src/styles.css</code> now consumes the ChartNav marketing site&#x27;s token set directly (<code>--cn-*</code>). Teal <code>#0B6E79</code> primary with hover/active/tint/soft scale, Inter typography (cv02/03/04/11 features), tightened shadow scale, AA-safe muted text (<code>#475569</code>), pill admin tabs, brand-teal focus rings. The app header renders <code>public/brand/chartnav-logo.svg</code> (the real wordmark with the pulse-cross mark, copied from <code>arcg-live/public/chartnav/brand/</code>), and the app shell gains a footer with a single subtle <strong>Powered by ARCG Systems</strong> attribution (11px uppercase, 0.12em letter-spacing, <code>data-testid=&quot;app-footer-arcg&quot;</code>, Vitest-asserted copy). Legacy token names stayed as aliases so zero component code needed to change. Visual baselines regenerated (<code>visual.spec.ts-snapshots/*-darwin.png</code>); axe-AA 5/5 still green. Suites: 131 pytest, <strong>31 Vitest</strong> (+1 footer), 17 Playwright workflow+a11y, 4 visual. No endpoints changed.</p>
+<p><strong>Phase 18 — Native clinical layer + FHIR adapter (this phase).</strong> ChartNav&#x27;s dual-mode architecture becomes real. (1) <strong>Native clinical ownership</strong> — Alembic migration <code>f6a7b8c9d0e1</code> adds <code>patients</code> (org-scoped, <code>patient_identifier</code> unique per org, <code>external_ref</code> for integration mirroring, DOB + sex-at-birth, <code>is_active</code>) and <code>providers</code> (org-scoped, <code>display_name</code>, 10-digit <code>npi</code> unique per org when non-null, <code>specialty</code>, <code>external_ref</code>, <code>is_active</code>). Two nullable FKs land on <code>encounters</code> (<code>patient_id</code>, <code>provider_id</code>); legacy text fields stay for display continuity. Seed populates real rows and backfills FKs on re-seed without duplicating. (2) <strong>New HTTP surface</strong> — <code>GET/POST /patients</code> (admin + clinician write) and <code>GET/POST /providers</code> (admin-only write) with pagination + search + <code>X-Total-Count</code> headers. Mode-gated: <code>integrated_readthrough</code> returns 409 <code>native_write_disabled_in_integrated_mode</code> on both POSTs so the UI renders a clear banner instead of silently succeeding. (3) <strong>First real external adapter</strong> — <code>FHIRAdapter</code> in <code>app/integrations/fhir.py</code> implements the <code>ClinicalSystemAdapter</code> protocol against generic FHIR R4. Handles <code>fetch_patient</code>, <code>search_patients</code>, <code>fetch_encounter</code> with normalization (MRN extraction, participant display, <code>Encounter.status</code> → ChartNav status mapping). Writes raise <code>AdapterNotSupported</code> honestly. Pluggable transport (fixture injection for tests; urllib by default — zero new runtime deps). Config: <code>CHARTNAV_FHIR_BASE_URL</code>, <code>CHARTNAV_FHIR_AUTH_TYPE</code>, <code>CHARTNAV_FHIR_BEARER_TOKEN</code> with import-time validation. Registered at <code>fhir</code> in the vendor registry. (4) <strong>Native adapter honesty</strong> — <code>NativeChartNavAdapter</code> now implements <code>fetch_patient</code> + <code>search_patients</code>; <code>supports_patient_read</code>/<code>supports_patient_write</code> flip to True; source-of-truth map updated. (5) <strong>Frontend</strong> — <code>api.ts</code> gains <code>Patient</code>/<code>Provider</code> types + CRUD functions; <code>AdminPanel</code> adds Patients + Providers tabs with mode-aware banners + form gating. Suites: <strong>155 pytest</strong> (+24), <strong>34 Vitest</strong> (+3), 17 Playwright + 4 visual (baselines refreshed).</p>
 <p>Preserved untouched: <code>/health</code>, <code>/</code>, SQLite dev workflow, state machine + filtering surface, workflow_events model, existing endpoint contracts.</p>
 </section>
 <section id="sec-2"><h2>01 — Current state</h2>
 <h1>ChartNav — Current State</h1>
-<p><strong>As of:</strong> 2026-04-18 (phase: brand &amp; domain alignment)</p>
+<p><strong>As of:</strong> 2026-04-18 (phase: native clinical layer + FHIR adapter)</p>
 <h2>Repo layout (relevant)</h2>
 <pre class="code lang-"><code>
 chartnav-platform/
@@ -78,13 +79,14 @@ chartnav-platform/
 │   │   │   ├── main.py · config.py · db.py · auth.py · authz.py
 │   │   │   ├── audit.py · retention.py · logging_config.py · middleware.py · metrics.py
 │   │   │   ├── integrations/    # adapter boundary (phase 16)
-│   │   │   │   ├── __init__.py  # resolve_adapter + vendor registry
+│   │   │   │   ├── __init__.py  # resolve_adapter + vendor registry (FHIR registered)
 │   │   │   │   ├── base.py      # ClinicalSystemAdapter protocol + errors
-│   │   │   │   ├── native.py    # NativeChartNavAdapter
-│   │   │   │   └── stub.py      # StubClinicalSystemAdapter
-│   │   │   └── api/routes.py    # + GET /platform (phase 16)
-│   │   ├── alembic/versions/    # 6 migrations through e5f6a7b8c9d0
-│   │   ├── tests/               # 131 pytest (+13 test_platform_mode)
+│   │   │   │   ├── native.py    # NativeChartNavAdapter (patient/provider ops, phase 18)
+│   │   │   │   ├── stub.py      # StubClinicalSystemAdapter
+│   │   │   │   └── fhir.py      # FHIRAdapter — FHIR R4 read-through (phase 18)
+│   │   │   └── api/routes.py    # + GET /platform + /patients + /providers (phase 18)
+│   │   ├── alembic/versions/    # 7 migrations through f6a7b8c9d0e1 (patients+providers)
+│   │   ├── tests/               # 155 pytest (+13 clinical + +11 FHIR)
 │   │   └── Dockerfile · entrypoint.sh · .env.example
 │   └── web/
 │       ├── src/
@@ -112,16 +114,18 @@ chartnav-platform/
 <li><strong>Feature flags</strong>: <code>organization.settings.feature_flags.audit_export</code> and <code>.bulk_import</code> actually gate the corresponding admin buttons.</li>
 <li><strong>Audit retention</strong>: <code>scripts/audit_retention.py</code> prunes old rows per <code>CHARTNAV_AUDIT_RETENTION_DAYS</code>; the app never silently prunes.</li>
 <li><strong>Release compliance</strong>: SBOM (<code>chartnav-sbom-&lt;v&gt;.json</code>) + image digest (<code>chartnav-api-&lt;v&gt;.digest.txt</code>) in every release bundle, attached to the GitHub Release.</li>
-<li><strong>Platform mode</strong> (phase 16): <code>CHARTNAV_PLATFORM_MODE</code> ∈ {<code>standalone</code>, <code>integrated_readthrough</code>, <code>integrated_writethrough</code>}. Adapter boundary (<code>ClinicalSystemAdapter</code>) separates ChartNav core from any external EHR/EMR. Ships <code>NativeChartNavAdapter</code> (standalone) + <code>StubClinicalSystemAdapter</code> (integrated placeholder); vendor adapters plug in via <code>register_vendor_adapter</code>. Config fails loudly on misconfig. <code>GET /platform</code> surfaces mode + adapter + source-of-truth to the UI.</li>
+<li><strong>Platform mode</strong> (phase 16): <code>CHARTNAV_PLATFORM_MODE</code> ∈ {<code>standalone</code>, <code>integrated_readthrough</code>, <code>integrated_writethrough</code>}. Adapter boundary (<code>ClinicalSystemAdapter</code>) separates ChartNav core from any external EHR/EMR. Ships <code>NativeChartNavAdapter</code> (standalone) + <code>StubClinicalSystemAdapter</code> (integrated placeholder) + <strong><code>FHIRAdapter</code></strong> (phase 18). Vendor adapters plug in via <code>register_vendor_adapter</code>. Config fails loudly on misconfig. <code>GET /platform</code> surfaces mode + adapter + source-of-truth to the UI.</li>
+<li><strong>Native clinical layer</strong> (phase 18): <code>patients</code> and <code>providers</code> tables are org-scoped, soft-active, and carry <code>external_ref</code> for integrated-mode mirroring. <code>encounters.patient_id</code> + <code>encounters.provider_id</code> are nullable FKs so the legacy text fields (<code>patient_identifier</code>, <code>provider_name</code>) continue to render. Standalone mode persists and queries via the native adapter; <code>integrated_readthrough</code> refuses native writes with a clear error code.</li>
+<li><strong>FHIR adapter</strong> (phase 18): real R4 read-through over a pluggable transport. Normalizes Patient + Encounter resources into ChartNav&#x27;s internal shape (status mapping, participant display, MRN extraction, birthDate/gender passthrough). Write paths raise <code>AdapterNotSupported</code> honestly. Config: <code>CHARTNAV_FHIR_BASE_URL</code>, <code>CHARTNAV_FHIR_AUTH_TYPE</code>, <code>CHARTNAV_FHIR_BEARER_TOKEN</code>.</li>
 <li><strong>Brand alignment</strong> (phase 17): product UI uses the ChartNav marketing site&#x27;s exact token set (<code>--cn-*</code>). Inter typography, teal <code>#0B6E79</code> primary, real logo SVG in the header, subtle <code>Powered by ARCG Systems</code> footer. Axe-AA contrast preserved.</li>
 <li><strong>Domain</strong>: <code>chartnav.ai</code> → <code>https://arcgsystems.com/chartnav/</code> via GoDaddy 301 forwarding (external) + in-repo host-based safety-net in <code>arcg-live</code>. Runbook: <code>arcg-live/docs/chartnav-ai-domain-runbook.md</code>.</li>
-<li>Alembic head: <code>e5f6a7b8c9d0</code>.</li>
+<li>Alembic head: <code>f6a7b8c9d0e1</code> (phase 18 — native patients + providers + encounter linkage).</li>
 </ul>
 <h2>Testing layers</h2>
 <table><thead><tr><th>Layer</th><th>Tool</th><th>Count</th><th>Notes</th></tr></thead><tbody>
-<tr><td>pytest</td><td>pytest</td><td>131</td><td>+13 platform-mode + adapter resolution</td></tr>
+<tr><td>pytest</td><td>pytest</td><td>155</td><td>+24 native clinical layer + FHIR adapter</td></tr>
 <tr><td>shell smoke</td><td>smoke.sh</td><td>9</td><td>unchanged</td></tr>
-<tr><td>Vitest</td><td>vitest</td><td>31</td><td>+1 brand footer (Powered by ARCG Systems)</td></tr>
+<tr><td>Vitest</td><td>vitest</td><td>34</td><td>+3 patients/providers admin tabs</td></tr>
 <tr><td>Playwright workflow</td><td>@playwright</td><td>12</td><td>unchanged contract</td></tr>
 <tr><td>Playwright a11y</td><td>@axe-core/playwright</td><td>5</td><td>NEW</td></tr>
 <tr><td>Playwright visual</td><td>Playwright snapshots</td><td>4</td><td>NEW (local only)</td></tr>
@@ -133,8 +137,8 @@ chartnav-platform/
 <p>older callers that pass no params still see the first 100 rows.</p>
 <h2>Automation</h2>
 <ul>
-<li><code>make verify</code> → 131 pytest + 9 smoke</li>
-<li><code>make web-verify</code> → 31 vitest + typecheck + build</li>
+<li><code>make verify</code> → 155 pytest + 9 smoke</li>
+<li><code>make web-verify</code> → 34 vitest + typecheck + build</li>
 <li><code>make e2e</code> → 12 workflow + 5 a11y + 4 visual (local)</li>
 <li><code>make e2e-a11y</code> / <code>make e2e-visual</code> / <code>make e2e-visual-update</code></li>
 <li><code>make audit-prune ARGS=&quot;--days 90 --dry-run&quot;</code></li>
@@ -235,6 +239,15 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <tr><td>GET</td><td><code>/locations</code></td><td><code>WHERE organization_id = caller.org</code>. Supports <code>limit</code> (1..500, default 100), <code>offset</code> (≥0), <code>q</code> (substring search on <code>name</code>), plus <code>include_inactive</code> (admin). Emits <code>X-Total-Count</code>, <code>X-Limit</code>, <code>X-Offset</code> headers.</td></tr>
 <tr><td>GET</td><td><code>/users</code></td><td><code>WHERE organization_id = caller.org</code>. Supports <code>limit</code>, <code>offset</code>, <code>q</code> (substring on <code>email</code> or <code>full_name</code>), <code>role</code> (valid roles only — invalid → 400 <code>invalid_role</code>), <code>include_inactive</code> (admin). Emits <code>X-Total-Count</code>, <code>X-Limit</code>, <code>X-Offset</code> headers.</td></tr>
 </tbody></table>
+<h2>Native clinical layer (🔒, org-scoped) — phase 18</h2>
+<table><thead><tr><th>Method</th><th>Path</th><th>Behavior</th></tr></thead><tbody>
+<tr><td>GET</td><td><code>/patients</code></td><td><code>WHERE organization_id = caller.org</code>. Supports <code>limit</code>/<code>offset</code>/<code>q</code> (substring on MRN or name)/<code>include_inactive</code>. Emits <code>X-Total-Count</code>, <code>X-Limit</code>, <code>X-Offset</code>.</td></tr>
+<tr><td>POST</td><td><code>/patients</code></td><td>Admin or clinician creates a native patient. <code>integrated_readthrough</code> → 409 <code>native_write_disabled_in_integrated_mode</code>. Duplicate <code>(org, patient_identifier)</code> → 409 <code>patient_identifier_conflict</code>.</td></tr>
+<tr><td>GET</td><td><code>/providers</code></td><td><code>WHERE organization_id = caller.org</code>. Supports <code>limit</code>/<code>offset</code>/<code>q</code> (substring on <code>display_name</code>/<code>specialty</code>/<code>npi</code>)/<code>include_inactive</code>. Headers same as above.</td></tr>
+<tr><td>POST</td><td><code>/providers</code></td><td>Admin only. <code>integrated_readthrough</code> → 409 <code>native_write_disabled_in_integrated_mode</code>. <code>invalid_npi</code> (400) when <code>npi</code> present but not 10 digits. <code>npi_conflict</code> (409) on duplicate NPI within org.</td></tr>
+</tbody></table>
+<p>Encounter responses now also include <code>patient_id</code> + <code>provider_id</code></p>
+<p>nullable FKs pointing at the rows above.</p>
 <h2>Encounters (🔒, org-scoped + RBAC)</h2>
 <h3>GET <code>/encounters</code></h3>
 <p>Any authenticated role. Always <code>WHERE organization_id = caller.org</code>.</p>
@@ -477,7 +490,47 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 </tbody></table>
 <h2>Relationships</h2>
 <p>Unchanged — see <code>docs/diagrams/er-diagram.md</code>.</p>
-<h2>Source of truth per platform mode (phase 16)</h2>
+<h3><code>patients</code> (phase 18)</h3>
+<table><thead><tr><th>column</th><th>type</th><th>constraints</th></tr></thead><tbody>
+<tr><td>id</td><td>INTEGER</td><td>PK</td></tr>
+<tr><td>organization_id</td><td>INTEGER</td><td>NOT NULL, FK → organizations(id), indexed</td></tr>
+<tr><td>external_ref</td><td>VARCHAR(128)</td><td>NULL (vendor id — FHIR Patient.id / Epic MRN / …)</td></tr>
+<tr><td>patient_identifier</td><td>VARCHAR(64)</td><td>NOT NULL; unique per org (local MRN)</td></tr>
+<tr><td>first_name</td><td>VARCHAR(128)</td><td>NOT NULL</td></tr>
+<tr><td>last_name</td><td>VARCHAR(128)</td><td>NOT NULL</td></tr>
+<tr><td>date_of_birth</td><td>DATE</td><td>NULL</td></tr>
+<tr><td>sex_at_birth</td><td>VARCHAR(16)</td><td>NULL — free-form; no vocabulary imposed</td></tr>
+<tr><td>is_active</td><td>BOOLEAN</td><td>NOT NULL default <code>true</code></td></tr>
+<tr><td>created_at</td><td>DATETIME</td><td>NOT NULL default now()</td></tr>
+</tbody></table>
+<p>Unique <code>(organization_id, patient_identifier)</code> → 409</p>
+<p><code>patient_identifier_conflict</code>. Unique `(organization_id,</p>
+<p>external_ref)` when set → prevents dupe mirror rows for the same</p>
+<p>vendor id.</p>
+<h3><code>providers</code> (phase 18)</h3>
+<table><thead><tr><th>column</th><th>type</th><th>constraints</th></tr></thead><tbody>
+<tr><td>id</td><td>INTEGER</td><td>PK</td></tr>
+<tr><td>organization_id</td><td>INTEGER</td><td>NOT NULL, FK → organizations(id), indexed</td></tr>
+<tr><td>external_ref</td><td>VARCHAR(128)</td><td>NULL</td></tr>
+<tr><td>display_name</td><td>VARCHAR(255)</td><td>NOT NULL</td></tr>
+<tr><td>npi</td><td>VARCHAR(16)</td><td>NULL; 10-digit check enforced at the API layer, DB unique per org when non-null</td></tr>
+<tr><td>specialty</td><td>VARCHAR(128)</td><td>NULL</td></tr>
+<tr><td>is_active</td><td>BOOLEAN</td><td>NOT NULL default <code>true</code></td></tr>
+<tr><td>created_at</td><td>DATETIME</td><td>NOT NULL default now()</td></tr>
+</tbody></table>
+<h3><code>encounters</code> — native linkage (phase 18)</h3>
+<p>Two new nullable FK columns land on <code>encounters</code>:</p>
+<table><thead><tr><th>column</th><th>type</th><th>constraints</th></tr></thead><tbody>
+<tr><td>patient_id</td><td>INTEGER</td><td>NULL, FK → patients(id), indexed</td></tr>
+<tr><td>provider_id</td><td>INTEGER</td><td>NULL, FK → providers(id), indexed</td></tr>
+</tbody></table>
+<p>Legacy text fields (<code>patient_identifier</code>, <code>patient_name</code>,</p>
+<p><code>provider_name</code>) remain as denormalized display values so existing</p>
+<p>reads keep working. In standalone mode native linkage is the</p>
+<p>preferred source of truth going forward; integrations can populate</p>
+<p><code>external_ref</code> on the corresponding <code>patients</code>/<code>providers</code> row and</p>
+<p>the encounter FK for full lineage.</p>
+<h2>Source of truth per platform mode (phase 16 + 18)</h2>
 <table><thead><tr><th>Object</th><th><code>standalone</code></th><th><code>integrated_readthrough</code> (stub)</th><th><code>integrated_writethrough</code> (stub)</th></tr></thead><tbody>
 <tr><td>organization</td><td>ChartNav</td><td>mirrored</td><td>mirrored</td></tr>
 <tr><td>location</td><td>ChartNav</td><td>mirrored</td><td>mirrored</td></tr>
@@ -501,6 +554,138 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <section id="sec-6"><h2>05 — Build log</h2>
 <h1>Build Log</h1>
 <p>Reverse-chronological.</p>
+<p>---</p>
+<h2>2026-04-18 — Phase 18: native clinical layer + FHIR adapter</h2>
+<h3>Step 1 — Migration <code>f6a7b8c9d0e1</code></h3>
+<ul>
+<li>Created <code>patients</code> (org-scoped, <code>external_ref</code> nullable,</li>
+</ul>
+<p><code>patient_identifier</code> unique-per-org, <code>first_name</code>, <code>last_name</code>,</p>
+<p><code>date_of_birth</code>, <code>sex_at_birth</code>, <code>is_active</code>, <code>created_at</code>).</p>
+<ul>
+<li>Created <code>providers</code> (org-scoped, <code>external_ref</code> nullable,</li>
+</ul>
+<p><code>display_name</code>, <code>npi</code> unique-per-org when non-null, <code>specialty</code>,</p>
+<p><code>is_active</code>, <code>created_at</code>).</p>
+<ul>
+<li>Added <code>encounters.patient_id</code> + <code>encounters.provider_id</code> as nullable</li>
+</ul>
+<p>FKs via batch rewrite so SQLite accepts the ALTER. Legacy</p>
+<p><code>patient_identifier</code> / <code>provider_name</code> text fields kept for</p>
+<p>backward-compat reads.</p>
+<ul>
+<li>Booleans default to <code>sa.text(&quot;true&quot;)</code> for Postgres portability.</li>
+</ul>
+<h3>Step 2 — Seed extended</h3>
+<ul>
+<li><code>scripts_seed.py</code> gained <code>_ensure_patient</code> + <code>_ensure_provider</code> +</li>
+</ul>
+<p>patient/provider fixtures per tenant. Existing seeded encounters</p>
+<p>now link to real FK rows; re-running seed backfills <code>patient_id</code></p>
+<p>/ <code>provider_id</code> on existing encounters without duplicating rows.</p>
+<ul>
+<li><code>ENCOUNTER_COLUMNS</code> in <code>routes.py</code> now returns <code>patient_id</code> +</li>
+</ul>
+<p><code>provider_id</code> so existing clients see the linkage.</p>
+<h3>Step 3 — Native adapter (phase 16 follow-through)</h3>
+<ul>
+<li><code>NativeChartNavAdapter</code> now implements <code>fetch_patient</code> (by PK or</li>
+</ul>
+<p><code>patient_identifier</code>) and <code>search_patients</code> against the new</p>
+<p><code>patients</code> table. <code>supports_patient_read</code> / <code>supports_patient_write</code></p>
+<p>flip to <code>True</code>; source-of-truth map reports <code>patient: CHARTNAV</code></p>
+<p>and <code>provider: CHARTNAV</code>.</p>
+<ul>
+<li>Tests in <code>test_platform_mode.py</code> updated for the new honesty.</li>
+</ul>
+<h3>Step 4 — FHIR R4 adapter</h3>
+<ul>
+<li>New <code>app/integrations/fhir.py</code> — real implementation of the</li>
+</ul>
+<p><code>ClinicalSystemAdapter</code> protocol. Pluggable <code>transport</code> parameter</p>
+<p>lets tests inject fixtures; default transport is <code>urllib.request</code></p>
+<p>(no new runtime deps). Config-driven base URL + auth type</p>
+<p>(<code>none</code> / <code>bearer</code>) + bearer token. Normalizes FHIR <code>Patient</code> and</p>
+<p><code>Encounter</code> resources into ChartNav&#x27;s internal shape (MRN</p>
+<p>extraction, participant display, status mapping). Writes raise</p>
+<p><code>AdapterNotSupported</code> honestly.</p>
+<ul>
+<li>Registered under key <code>fhir</code> at module import time in</li>
+</ul>
+<p><code>app/integrations/__init__.py::_register_shipped_vendors()</code>.</p>
+<ul>
+<li><code>Settings</code> gained <code>fhir_base_url</code>, <code>fhir_auth_type</code>,</li>
+</ul>
+<p><code>fhir_bearer_token</code> with import-time validation.</p>
+<h3>Step 5 — Native CRUD endpoints</h3>
+<ul>
+<li><code>GET /patients</code> / <code>POST /patients</code> — admin or clinician can create</li>
+</ul>
+<p>in standalone + integrated_writethrough modes; reviewer is read-only;</p>
+<p>integrated_readthrough returns 409</p>
+<p><code>native_write_disabled_in_integrated_mode</code>. Search by MRN or name.</p>
+<ul>
+<li><code>GET /providers</code> / <code>POST /providers</code> — admin-only writes, 10-digit</li>
+</ul>
+<p>NPI validation (<code>invalid_npi</code>), uniqueness (<code>npi_conflict</code>), org</p>
+<p>scoping, same mode-aware write gate.</p>
+<ul>
+<li><code>ENCOUNTER_COLUMNS</code> now exposes the new FK columns; no changes</li>
+</ul>
+<p>to state-machine semantics.</p>
+<h3>Step 6 — Tests</h3>
+<ul>
+<li><strong>155 pytest.</strong> New:</li>
+<li><code>tests/test_clinical.py</code> (13) — seed + CRUD + conflict paths +</li>
+</ul>
+<p>cross-org isolation + readthrough-blocks-writes.</p>
+<ul>
+<li><code>tests/test_fhir_adapter.py</code> (11) — config validation + fixture</li>
+</ul>
+<p>transport patient/encounter normalization + bearer header +</p>
+<p>readthrough+fhir resolves to FHIR adapter + honest write</p>
+<p>refusals.</p>
+<ul>
+<li><strong>34 Vitest.</strong> <code>AdminPanel.test.tsx</code> adds 3 tests — Patients tab</li>
+</ul>
+<p>create form, integrated_readthrough hides the form + shows SoT</p>
+<p>banner, Providers tab create works.</p>
+<ul>
+<li><strong>17 Playwright workflow+a11y</strong>, <strong>4 visual</strong> — visual baselines</li>
+</ul>
+<p>regenerated for the new admin tabs.</p>
+<h3>Step 7 — Frontend</h3>
+<ul>
+<li><code>api.ts</code> gains <code>Patient</code>, <code>Provider</code>, <code>PatientCreateBody</code>,</li>
+</ul>
+<p><code>ProviderCreateBody</code> types + <code>listPatients</code>, <code>createPatient</code>,</p>
+<p><code>listProviders</code>, <code>createProvider</code>.</p>
+<ul>
+<li><code>AdminPanel</code> gets two new tabs (<code>patients</code>, <code>providers</code>) between</li>
+</ul>
+<p>Locations and Organization. Both panes render a <code>banner--info</code></p>
+<p>source-of-truth notice when `platform.platform_mode ===</p>
+<p>&quot;integrated_readthrough&quot;` and hide the create form.</p>
+<ul>
+<li>Providers pane gates the create form to admin-only, mirroring the</li>
+</ul>
+<p>backend RBAC.</p>
+<h3>Step 8 — Docs</h3>
+<ul>
+<li>New docs/build entries for each updated area. Section 29 captures</li>
+</ul>
+<p>the phase end-to-end: data model, adapter contract growth, FHIR</p>
+<p>normalization rules, operator verification matrix.</p>
+<ul>
+<li><code>scripts/build_docs.py</code> picks up section 29; executive summary</li>
+</ul>
+<p>extended. Final HTML + PDF regenerated.</p>
+<h3>Step 9 — Hygiene</h3>
+<ul>
+<li>Dev DB reset to pristine seeded state before commit.</li>
+<li>Visual baselines refreshed.</li>
+<li>No secrets in the FHIR test suite — fixture transports only.</li>
+</ul>
 <p>---</p>
 <h2>2026-04-18 — Phase 17: brand &amp; domain alignment</h2>
 <h3>Step 1 — Locate the relevant repos</h3>
@@ -968,6 +1153,14 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <h3>Playwright summary (12)</h3>
 <p>Adds &quot;admin can issue an invitation and download audit CSV&quot; on top of</p>
 <p>the 11 scenarios shipped through phase 13.</p>
+<h2>Phase-18 additions</h2>
+<ul>
+<li><strong>Native clinical layer</strong>: <code>patients</code> + <code>providers</code> tables (migration <code>f6a7b8c9d0e1</code>); <code>encounters.patient_id</code> + <code>encounters.provider_id</code> nullable FKs; seed populates real rows and backfills legacy encounters.</li>
+<li><strong>First real external adapter</strong>: <code>FHIRAdapter</code> — generic FHIR R4 read-through (Patient + Encounter). Pluggable transport; bearer auth; honest <code>AdapterNotSupported</code> on writes.</li>
+<li><strong>API</strong>: <code>GET/POST /patients</code>, <code>GET/POST /providers</code> with mode-aware write gating (<code>native_write_disabled_in_integrated_mode</code> in read-through).</li>
+<li><strong>Frontend</strong>: Patients + Providers admin tabs; integrated_readthrough surfaces a source-of-truth banner and hides create forms.</li>
+<li><strong>155 pytest</strong> (+24), <strong>34 Vitest</strong> (+3), 17 Playwright + 4 visual (local; refreshed).</li>
+</ul>
 <h2>Phase-17 additions</h2>
 <ul>
 <li><strong>Brand-aligned UI</strong>: <code>--cn-*</code> token system lifted from the ChartNav marketing site, real logo SVG in the header, Inter typography, subtle &quot;Powered by ARCG Systems&quot; footer, AA-safe muted text (<code>#475569</code>). Legacy token names kept as aliases — no component-level rewrites.</li>
@@ -992,9 +1185,11 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <li><strong>Release compliance</strong>: <code>chartnav-sbom-&lt;v&gt;.json</code> + <code>chartnav-api-&lt;v&gt;.digest.txt</code> are produced by <code>release_build.sh</code> and attached to the GitHub Release.</li>
 </ul>
 <h2>Real gaps (prioritized for next phase)</h2>
-<p>0. <strong>No native <code>patients</code> table</strong> — standalone mode&#x27;s adapter refuses patient operations today. Next standalone-mode build should add the minimum native patient + provider schema.</p>
-<p>0. <strong>No real vendor adapter</strong> (Epic / Cerner / Athena / FHIR). The contract + registry exist; vendor work plugs in. Recommended first target: FHIR read-through.</p>
-<p>0. <strong>Adapter path isn&#x27;t fully exercised by HTTP routes yet</strong> — <code>GET /platform</code> returns adapter metadata, but encounter/status routes still go through direct DB calls, not the adapter. Standalone that&#x27;s a nop (native adapter wraps the same DB); for integrated modes this is where the real vendor translation work happens next.</p>
+<p>0. <strong>Encounter/status routes still bypass the adapter path</strong> in integrated modes — HTTP handlers hit the native DB directly rather than routing through <code>resolve_adapter()</code>. Standalone this is a nop (native adapter wraps the same DB); integrated_* needs the handler-level adapter dispatch + translation work in a follow-up phase so FHIR reads can actually surface through <code>/encounters</code>.</p>
+<p>0. <strong>No vendor-specific FHIR adapter yet</strong> — generic <code>FHIRAdapter</code> handles the common case. Epic/Cerner/Athena/Nextech SMART-on-FHIR auth + vendor quirks remain future work. Start with SMART-on-FHIR handshake + Epic sandbox.</p>
+<p>0. <strong>FHIR writes are intentionally unsupported</strong> — <code>update_encounter_status</code> and <code>write_note</code> raise <code>AdapterNotSupported</code>. <code>DocumentReference</code> + Binary upload is a real project and belongs in a vendor adapter.</p>
+<p>0. <strong>No patient chart UI</strong> — Patients tab lists rows and supports create. There&#x27;s no detail view, encounter-by-patient view, or scheduling surface. Product decision, not a technical one.</p>
+<p>0. <strong>Legacy <code>encounters.provider_name</code> text isn&#x27;t automatically reconciled</strong> against the new <code>providers</code> table. Operators re-seed or run targeted UPDATEs to backfill <code>provider_id</code> for historical rows.</p>
 <p>1. <strong>No email delivery</strong> for invitations — admin manually shares the token.</p>
 <p>2. <strong>No SSO → users mapping change</strong> (still by <code>CHARTNAV_JWT_USER_CLAIM</code>).</p>
 <p>3. <strong>Metrics + rate limiter per-process</strong> — multi-worker still needs coordination.</p>
@@ -1208,6 +1403,30 @@ make docker-build
 <li><code>make verify</code> (SQLite): 28 pytest + 9 smoke — all green</li>
 <li><code>scripts/pg_verify.sh</code>: migrations + seed (x2) + smoke + status transition + event write — <strong>PASS</strong></li>
 </ul>
+<h2>Backend coverage (phase 18)</h2>
+<ul>
+<li><strong>155 pytest.</strong> New:</li>
+<li><code>test_clinical.py</code> (13) covers migration + seed linkage, patient</li>
+</ul>
+<p>+ provider CRUD, RBAC, uniqueness + NPI validation, cross-org</p>
+<p>isolation, readthrough-blocks-writes with</p>
+<p><code>native_write_disabled_in_integrated_mode</code>.</p>
+<ul>
+<li><code>test_fhir_adapter.py</code> (11) covers config validation (missing</li>
+</ul>
+<p>base URL, bearer missing token, invalid auth type), Patient +</p>
+<p>Encounter normalization against fixture resources, bearer</p>
+<p>header threading, honest <code>AdapterNotSupported</code> on write paths,</p>
+<p><code>resolve_adapter</code> resolves FHIR under <code>integrated_readthrough</code>.</p>
+<ul>
+<li>Platform-mode tests updated for the native adapter now supporting</li>
+</ul>
+<p>patient read/write (phase 18 deliberate promotion).</p>
+<ul>
+<li>Frontend: <strong>34 Vitest</strong> (+3 Patients/Providers admin tabs).</li>
+<li>Playwright unchanged contract (17 workflow + a11y); visual</li>
+</ul>
+<p>baselines refreshed for the new tabs.</p>
 <h2>Backend coverage (phase 16)</h2>
 <ul>
 <li><strong>131 pytest.</strong> <code>test_platform_mode.py</code> (13) covers:</li>
@@ -2063,6 +2282,29 @@ make web-build        # vite build -&gt; apps/web/dist
 <p><code>#475569</code> and <code>--cn-dim</code> from <code>#94A3B8</code> → <code>#64748B</code> so the</p>
 <p>existing axe baseline passes without new exceptions. Visual</p>
 <p>baselines regenerated deliberately.</p>
+<h2>Native clinical tabs (phase 18)</h2>
+<ul>
+<li><code>AdminPanel</code> now exposes <strong>Patients</strong> and <strong>Providers</strong> tabs</li>
+</ul>
+<p>between <strong>Locations</strong> and <strong>Organization</strong>. Both are powered by</p>
+<p><code>listPatients</code> / <code>listProviders</code> / <code>createPatient</code> /</p>
+<p><code>createProvider</code> in <code>api.ts</code>.</p>
+<ul>
+<li>Platform-mode awareness: when `platform.platform_mode ===</li>
+</ul>
+<p>&quot;integrated_readthrough&quot;`, both tabs render a</p>
+<p><code>banner--info</code> explaining the records come from the external EHR</p>
+<p>and the create form is hidden entirely. Server-side, the same</p>
+<p>modes return 409 <code>native_write_disabled_in_integrated_mode</code>, so</p>
+<p>the UI and contract agree.</p>
+<ul>
+<li>Providers pane additionally gates the create form to admin-only</li>
+</ul>
+<p>roles to mirror backend RBAC.</p>
+<ul>
+<li>Both panes wire into the existing admin-banner error flow — any</li>
+</ul>
+<p><code>ApiError</code> lands in the shared banner.</p>
 <h2>What this phase explicitly does NOT do</h2>
 <ul>
 <li>No real login flow — <code>X-User-Email</code> is still dev transport.</li>
@@ -2222,6 +2464,24 @@ make web-verify      # typecheck + test + build
 <li><code>admin-platform-adapter</code> content matches the adapter&#x27;s</li>
 </ul>
 <p><code>display_name</code>.</p>
+<h2>Native clinical layer tests (phase 18)</h2>
+<ul>
+<li><code>AdminPanel.test.tsx</code> now covers <strong>20 tests</strong> (+3).</li>
+<li>Standalone Patients tab → renders table, renders create form,</li>
+</ul>
+<p><code>createPatient</code> is called with the submitted fields.</p>
+<ul>
+<li>Integrated read-through mode → read-through banner visible and</li>
+</ul>
+<p>the create form is absent.</p>
+<ul>
+<li>Providers tab → create form submits through <code>createProvider</code></li>
+</ul>
+<p>with the NPI carried through.</p>
+<ul>
+<li>Mocks extended: <code>listPatients</code>, <code>createPatient</code>, <code>listProviders</code>,</li>
+</ul>
+<p><code>createProvider</code>.</p>
 <h2>Gaps not yet covered</h2>
 <ul>
 <li>Visual regression not in CI (documented; OS-specific baselines).</li>
@@ -3649,6 +3909,7 @@ export CHARTNAV_INTEGRATION_ADAPTER=stub   # or a vendor key
 <table><thead><tr><th>Key</th><th>Module</th><th>Use</th><th><code>supports_encounter_write</code></th></tr></thead><tbody>
 <tr><td><code>native</code></td><td><code>app/integrations/native.py</code></td><td>Standalone — ChartNav DB is SoR</td><td>✓</td></tr>
 <tr><td><code>stub</code></td><td><code>app/integrations/stub.py</code></td><td>Integrated without a real vendor yet</td><td>✓ (write-through only)</td></tr>
+<tr><td><code>fhir</code></td><td><code>app/integrations/fhir.py</code> (phase 18)</td><td>Generic FHIR R4 read-through</td><td>✗ (read-only by design)</td></tr>
 </tbody></table>
 <p>Both implementations are honest:</p>
 <ul>
@@ -4057,7 +4318,165 @@ ChartNav · Clinical workflow platform        POWERED BY ARCG SYSTEMS
 </ul>
 <p>the GoDaddy UI using the runbook.</p>
 </section>
-<section id="sec-30"><h2>Diagram — System architecture</h2>
+<section id="sec-30"><h2>29 — Native clinical layer & FHIR</h2>
+<h1>Native Clinical Layer &amp; FHIR Adapter (phase 18)</h1>
+<p>This phase makes ChartNav&#x27;s dual-mode architecture *real* for the</p>
+<p>first time. Standalone mode now owns patients and providers natively.</p>
+<p>Integrated modes can target a generic FHIR R4 server via the first</p>
+<p>shipped vendor adapter.</p>
+<h2>1. Native clinical ownership (standalone)</h2>
+<p>Two new org-scoped tables persist the first-class clinical objects</p>
+<p>ChartNav now owns in <code>standalone</code> mode:</p>
+<ul>
+<li><code>patients</code> — local MRN (<code>patient_identifier</code>), name, DOB,</li>
+</ul>
+<p><code>sex_at_birth</code> (free-form), <code>external_ref</code> for integration mirroring,</p>
+<p><code>is_active</code> soft-delete.</p>
+<ul>
+<li><code>providers</code> — <code>display_name</code>, 10-digit <code>npi</code> (API-layer validated,</li>
+</ul>
+<p>DB-unique per org when set), <code>specialty</code>, <code>external_ref</code>, <code>is_active</code>.</p>
+<p>Both are unique per org on their natural key. Migration</p>
+<p><code>f6a7b8c9d0e1</code> lands the tables plus two nullable FKs on</p>
+<p><code>encounters</code>: <code>patient_id</code> and <code>provider_id</code>. Legacy text fields</p>
+<p>(<code>patient_identifier</code>, <code>patient_name</code>, <code>provider_name</code>) remain for</p>
+<p>display continuity and legacy integrations — the **preferred source</p>
+<p>of truth** in standalone mode is the FK linkage.</p>
+<p>Seed populates real patient + provider rows per tenant and backfills</p>
+<p>encounter FKs on re-seed without duplicating rows.</p>
+<h2>2. HTTP surface</h2>
+<table><thead><tr><th>Method</th><th>Path</th><th>Notes</th></tr></thead><tbody>
+<tr><td>GET</td><td><code>/patients</code></td><td><code>limit</code>/<code>offset</code>/<code>q</code>/<code>include_inactive</code>; <code>X-Total-Count</code> headers</td></tr>
+<tr><td>POST</td><td><code>/patients</code></td><td>admin + clinician; mode-gated; dup → 409 <code>patient_identifier_conflict</code></td></tr>
+<tr><td>GET</td><td><code>/providers</code></td><td>same pagination surface</td></tr>
+<tr><td>POST</td><td><code>/providers</code></td><td>admin only; NPI validated; dup NPI → 409 <code>npi_conflict</code></td></tr>
+</tbody></table>
+<p><code>integrated_readthrough</code> returns 409</p>
+<p><code>native_write_disabled_in_integrated_mode</code> on both POST endpoints so</p>
+<p>the UI can render a clear banner instead of silently succeeding.</p>
+<p><code>GET /encounters</code> responses now include <code>patient_id</code> + <code>provider_id</code>.</p>
+<h2>3. FHIR R4 adapter — first real external boundary</h2>
+<p><code>app/integrations/fhir.py::FHIRAdapter</code> implements the</p>
+<p><code>ClinicalSystemAdapter</code> protocol against a generic FHIR R4 server.</p>
+<p>Vendor-agnostic by design — any FHIR R4 endpoint (HAPI, Aidbox, Epic,</p>
+<p>Cerner, Athena, Nextech, …) works with the same adapter.</p>
+<h3>Capabilities</h3>
+<table><thead><tr><th>Operation</th><th>FHIR adapter</th></tr></thead><tbody>
+<tr><td><code>fetch_patient(id)</code></td><td>✅ <code>GET /Patient/&lt;id&gt;</code></td></tr>
+<tr><td><code>search_patients(query)</code></td><td>✅ <code>GET /Patient?name=…&amp;_count=…</code></td></tr>
+<tr><td><code>fetch_encounter(id)</code></td><td>✅ <code>GET /Encounter/&lt;id&gt;</code></td></tr>
+<tr><td><code>update_encounter_status</code></td><td>❌ <code>AdapterNotSupported</code> — vendor-specific</td></tr>
+<tr><td><code>write_note</code></td><td>❌ <code>AdapterNotSupported</code> — DocumentReference + Binary work</td></tr>
+<tr><td><code>sync_reference_data</code></td><td>returns zeros (vendor-specific)</td></tr>
+</tbody></table>
+<h3>Normalization rules</h3>
+<ul>
+<li><strong>Patient</strong></li>
+<li><code>external_ref</code> ← <code>Patient.id</code></li>
+<li><code>patient_identifier</code> ← first <code>identifier.value</code> where</li>
+</ul>
+<p><code>type.coding.code == &quot;MR&quot;</code> or <code>type.text == &quot;MRN&quot;</code>; falls back to</p>
+<p>first identifier.</p>
+<ul>
+<li><code>first_name</code> ← <code>given[]</code> joined from <code>name[use=official|usual]</code></li>
+<li><code>last_name</code> ← <code>family</code></li>
+<li><code>date_of_birth</code> ← <code>birthDate</code></li>
+<li><code>sex_at_birth</code> ← <code>gender</code></li>
+<li><strong>Encounter</strong></li>
+<li><code>status</code> ← best-effort ChartNav mapping:</li>
+</ul>
+<p><code>planned→scheduled</code>, <code>arrived|triaged|in-progress|onleave→in_progress</code>,</p>
+<p><code>finished|cancelled→completed</code>. <code>fhir_status</code> carries the raw.</p>
+<ul>
+<li><code>patient_id</code> ← <code>subject.reference</code> when it starts with <code>Patient/</code>.</li>
+<li><code>provider_name</code> ← first participant <code>individual.display</code>.</li>
+</ul>
+<h3>Transport &amp; config</h3>
+<ul>
+<li><code>CHARTNAV_FHIR_BASE_URL</code> (required when adapter is <code>fhir</code>).</li>
+<li><code>CHARTNAV_FHIR_AUTH_TYPE</code> ∈ {<code>none</code>, <code>bearer</code>} — default <code>none</code>.</li>
+<li><code>CHARTNAV_FHIR_BEARER_TOKEN</code> — required when auth type is <code>bearer</code>.</li>
+<li>Pluggable <code>transport</code> on the adapter class — tests inject a</li>
+</ul>
+<p>fixture transport; default uses <code>urllib.request</code> (no new runtime</p>
+<p>deps). All errors funnel through <code>AdapterError</code> with a specific</p>
+<p><code>error_code</code>.</p>
+<h3>Resolution</h3>
+<p><code>CHARTNAV_PLATFORM_MODE=integrated_readthrough</code> +</p>
+<p><code>CHARTNAV_INTEGRATION_ADAPTER=fhir</code> resolves to the FHIR adapter at</p>
+<p>boot. Misconfig (missing base URL, bearer auth without a token,</p>
+<p>invalid auth type) raises at resolution time with a clear code</p>
+<p>(<code>fhir_not_configured</code>, <code>fhir_missing_bearer</code>, <code>fhir_invalid_auth_type</code>).</p>
+<h2>4. Source-of-truth matrix</h2>
+<table><thead><tr><th>Object</th><th><code>standalone</code> (native)</th><th><code>integrated_readthrough</code> (stub / FHIR)</th><th><code>integrated_writethrough</code> (stub / FHIR)</th></tr></thead><tbody>
+<tr><td>patient</td><td>ChartNav</td><td>external (mirrored via <code>external_ref</code>)</td><td>external</td></tr>
+<tr><td>provider</td><td>ChartNav</td><td>external</td><td>external</td></tr>
+<tr><td>encounter</td><td>ChartNav</td><td>external</td><td>external</td></tr>
+<tr><td>workflow_event</td><td>ChartNav</td><td>ChartNav</td><td>ChartNav</td></tr>
+<tr><td>document</td><td>ChartNav (as workflow_events)</td><td>external (read-only via FHIR)</td><td>vendor-specific write path</td></tr>
+</tbody></table>
+<p>The admin panel renders this matrix as the platform banner for every</p>
+<p>operator — no mode is ever implicit.</p>
+<h2>5. Frontend</h2>
+<p>Admin panel gains two tabs:</p>
+<ul>
+<li><strong>Patients</strong> — list, search, create. In <code>integrated_readthrough</code></li>
+</ul>
+<p>mode the create form is hidden and a banner labels patients as</p>
+<p>read-through from the external EHR.</p>
+<ul>
+<li><strong>Providers</strong> — list, search, create (admin-only). Same mode-aware</li>
+</ul>
+<p>banner + form gating.</p>
+<h2>6. Tests</h2>
+<p>Backend:</p>
+<ul>
+<li><code>tests/test_clinical.py</code> (13) — migration + seed linkage, CRUD,</li>
+</ul>
+<p>RBAC, NPI format + dup conflicts, cross-org isolation,</p>
+<p>readthrough-blocks-writes.</p>
+<ul>
+<li><code>tests/test_fhir_adapter.py</code> (11) — config validation, fixture</li>
+</ul>
+<p>transport Patient/Encounter normalization, bearer auth threads</p>
+<p>through, write paths raise <code>AdapterNotSupported</code>, resolve_adapter</p>
+<p>picks the FHIR adapter under <code>integrated_readthrough</code>.</p>
+<p>Frontend:</p>
+<ul>
+<li>3 <code>AdminPanel.test.tsx</code> tests — Patients create form,</li>
+</ul>
+<p>readthrough-hides-form + banner, Providers create.</p>
+<p>Verification matrix (commands, all green locally):</p>
+<ul>
+<li><code>make verify</code> → 155 pytest + 9 smoke</li>
+<li><code>make web-verify</code> → 34 vitest + typecheck + build</li>
+<li><code>npx playwright test workflow.spec.ts a11y.spec.ts</code> → 17/17</li>
+<li><code>npx playwright test visual.spec.ts</code> → 4/4 (baselines refreshed)</li>
+</ul>
+<h2>7. What this phase does NOT do</h2>
+<ul>
+<li><strong>Does not</strong> ship a vendor-specific adapter (Epic, Cerner, …).</li>
+</ul>
+<p>Each vendor&#x27;s SMART-on-FHIR auth, status vocabulary, and write</p>
+<p>semantics are their own adapter class layered on top of (or</p>
+<p>beside) <code>FHIRAdapter</code>.</p>
+<ul>
+<li><strong>Does not</strong> implement FHIR <code>DocumentReference</code> writes.</li>
+</ul>
+<p><code>write_note</code> is intentionally <code>AdapterNotSupported</code> on the</p>
+<p>generic FHIR adapter.</p>
+<ul>
+<li><strong>Does not</strong> add a patient chart UI, scheduling, billing, or</li>
+</ul>
+<p>dictation — those are separate product surfaces.</p>
+<ul>
+<li><strong>Does not</strong> reconcile existing <code>encounters.provider_name</code> strings</li>
+</ul>
+<p>against the new <code>providers</code> table automatically. Operators can</p>
+<p>backfill by creating providers with matching <code>display_name</code> and</p>
+<p>re-running the seed, or by issuing targeted UPDATE statements.</p>
+</section>
+<section id="sec-31"><h2>Diagram — System architecture</h2>
 <h1>System Architecture</h1>
 <div class="mermaid">
 flowchart LR
@@ -4168,7 +4587,7 @@ flowchart LR
   Compose --> PG
 </div>
 </section>
-<section id="sec-31"><h2>Diagram — Encounter status machine</h2>
+<section id="sec-32"><h2>Diagram — Encounter status machine</h2>
 <h1>Encounter Status State Machine</h1>
 <div class="mermaid">
 stateDiagram-v2
@@ -4190,14 +4609,18 @@ stateDiagram-v2
 <p>Legend: any edge not shown is rejected at <code>POST /encounters/{id}/status</code></p>
 <p>with HTTP 400 <code>invalid_transition</code>.</p>
 </section>
-<section id="sec-32"><h2>Diagram — ER</h2>
+<section id="sec-33"><h2>Diagram — ER</h2>
 <h1>ER Diagram</h1>
 <div class="mermaid">
 erDiagram
   organizations ||--o{ locations        : "has"
   organizations ||--o{ users            : "employs (identity + role)"
   organizations ||--o{ encounters       : "owns"
+  organizations ||--o{ patients         : "owns (phase 18, native)"
+  organizations ||--o{ providers        : "owns (phase 18, native)"
   locations     ||--o{ encounters       : "hosts"
+  patients      ||--o{ encounters       : "subject of (nullable FK)"
+  providers     ||--o{ encounters       : "primary provider (nullable FK)"
   encounters    ||--o{ workflow_events  : "emits"
 
   security_audit_events {
@@ -4245,13 +4668,37 @@ erDiagram
     int id PK
     int organization_id FK
     int location_id FK
-    string patient_identifier
-    string patient_name
-    string provider_name
+    int patient_id FK "nullable — native linkage (phase 18)"
+    int provider_id FK "nullable — native linkage (phase 18)"
+    string patient_identifier "display; kept for back-compat"
+    string patient_name "display; kept for back-compat"
+    string provider_name "display; kept for back-compat"
     string status
     datetime scheduled_at
     datetime started_at
     datetime completed_at
+    datetime created_at
+  }
+  patients {
+    int id PK
+    int organization_id FK
+    string external_ref "nullable — vendor id"
+    string patient_identifier "local MRN; unique per org"
+    string first_name
+    string last_name
+    date date_of_birth
+    string sex_at_birth
+    boolean is_active
+    datetime created_at
+  }
+  providers {
+    int id PK
+    int organization_id FK
+    string external_ref "nullable — vendor id"
+    string display_name
+    string npi "nullable, 10-digit; unique per org when set"
+    string specialty
+    boolean is_active
     datetime created_at
   }
   workflow_events {
@@ -4275,7 +4722,7 @@ erDiagram
 <p><code>users.organization_id</code> is the authoritative source of scope; never</p>
 <p>derived from client input.</p>
 </section>
-<section id="sec-33"><h2>Diagram — API / data flow</h2>
+<section id="sec-34"><h2>Diagram — API / data flow</h2>
 <h1>API / Data Flow &amp; CI</h1>
 <h2>UI → Backend request path</h2>
 <div class="mermaid">

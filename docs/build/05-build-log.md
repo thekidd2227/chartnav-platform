@@ -4,6 +4,101 @@ Reverse-chronological.
 
 ---
 
+## 2026-04-18 — Phase 18: native clinical layer + FHIR adapter
+
+### Step 1 — Migration `f6a7b8c9d0e1`
+- Created `patients` (org-scoped, `external_ref` nullable,
+  `patient_identifier` unique-per-org, `first_name`, `last_name`,
+  `date_of_birth`, `sex_at_birth`, `is_active`, `created_at`).
+- Created `providers` (org-scoped, `external_ref` nullable,
+  `display_name`, `npi` unique-per-org when non-null, `specialty`,
+  `is_active`, `created_at`).
+- Added `encounters.patient_id` + `encounters.provider_id` as nullable
+  FKs via batch rewrite so SQLite accepts the ALTER. Legacy
+  `patient_identifier` / `provider_name` text fields kept for
+  backward-compat reads.
+- Booleans default to `sa.text("true")` for Postgres portability.
+
+### Step 2 — Seed extended
+- `scripts_seed.py` gained `_ensure_patient` + `_ensure_provider` +
+  patient/provider fixtures per tenant. Existing seeded encounters
+  now link to real FK rows; re-running seed backfills `patient_id`
+  / `provider_id` on existing encounters without duplicating rows.
+- `ENCOUNTER_COLUMNS` in `routes.py` now returns `patient_id` +
+  `provider_id` so existing clients see the linkage.
+
+### Step 3 — Native adapter (phase 16 follow-through)
+- `NativeChartNavAdapter` now implements `fetch_patient` (by PK or
+  `patient_identifier`) and `search_patients` against the new
+  `patients` table. `supports_patient_read` / `supports_patient_write`
+  flip to `True`; source-of-truth map reports `patient: CHARTNAV`
+  and `provider: CHARTNAV`.
+- Tests in `test_platform_mode.py` updated for the new honesty.
+
+### Step 4 — FHIR R4 adapter
+- New `app/integrations/fhir.py` — real implementation of the
+  `ClinicalSystemAdapter` protocol. Pluggable `transport` parameter
+  lets tests inject fixtures; default transport is `urllib.request`
+  (no new runtime deps). Config-driven base URL + auth type
+  (`none` / `bearer`) + bearer token. Normalizes FHIR `Patient` and
+  `Encounter` resources into ChartNav's internal shape (MRN
+  extraction, participant display, status mapping). Writes raise
+  `AdapterNotSupported` honestly.
+- Registered under key `fhir` at module import time in
+  `app/integrations/__init__.py::_register_shipped_vendors()`.
+- `Settings` gained `fhir_base_url`, `fhir_auth_type`,
+  `fhir_bearer_token` with import-time validation.
+
+### Step 5 — Native CRUD endpoints
+- `GET /patients` / `POST /patients` — admin or clinician can create
+  in standalone + integrated_writethrough modes; reviewer is read-only;
+  integrated_readthrough returns 409
+  `native_write_disabled_in_integrated_mode`. Search by MRN or name.
+- `GET /providers` / `POST /providers` — admin-only writes, 10-digit
+  NPI validation (`invalid_npi`), uniqueness (`npi_conflict`), org
+  scoping, same mode-aware write gate.
+- `ENCOUNTER_COLUMNS` now exposes the new FK columns; no changes
+  to state-machine semantics.
+
+### Step 6 — Tests
+- **155 pytest.** New:
+  - `tests/test_clinical.py` (13) — seed + CRUD + conflict paths +
+    cross-org isolation + readthrough-blocks-writes.
+  - `tests/test_fhir_adapter.py` (11) — config validation + fixture
+    transport patient/encounter normalization + bearer header +
+    readthrough+fhir resolves to FHIR adapter + honest write
+    refusals.
+- **34 Vitest.** `AdminPanel.test.tsx` adds 3 tests — Patients tab
+  create form, integrated_readthrough hides the form + shows SoT
+  banner, Providers tab create works.
+- **17 Playwright workflow+a11y**, **4 visual** — visual baselines
+  regenerated for the new admin tabs.
+
+### Step 7 — Frontend
+- `api.ts` gains `Patient`, `Provider`, `PatientCreateBody`,
+  `ProviderCreateBody` types + `listPatients`, `createPatient`,
+  `listProviders`, `createProvider`.
+- `AdminPanel` gets two new tabs (`patients`, `providers`) between
+  Locations and Organization. Both panes render a `banner--info`
+  source-of-truth notice when `platform.platform_mode ===
+  "integrated_readthrough"` and hide the create form.
+- Providers pane gates the create form to admin-only, mirroring the
+  backend RBAC.
+
+### Step 8 — Docs
+- New docs/build entries for each updated area. Section 29 captures
+  the phase end-to-end: data model, adapter contract growth, FHIR
+  normalization rules, operator verification matrix.
+- `scripts/build_docs.py` picks up section 29; executive summary
+  extended. Final HTML + PDF regenerated.
+
+### Step 9 — Hygiene
+- Dev DB reset to pristine seeded state before commit.
+- Visual baselines refreshed.
+- No secrets in the FHIR test suite — fixture transports only.
+
+---
+
 ## 2026-04-18 — Phase 17: brand & domain alignment
 
 ### Step 1 — Locate the relevant repos

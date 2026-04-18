@@ -19,6 +19,10 @@ vi.mock("../api", async () => {
     deactivateLocation: vi.fn(),
     getOrganization: vi.fn(),
     getPlatform: vi.fn(),
+    listPatients: vi.fn(),
+    createPatient: vi.fn(),
+    listProviders: vi.fn(),
+    createProvider: vi.fn(),
     updateOrganization: vi.fn(),
     listAuditEvents: vi.fn(),
     inviteUser: vi.fn(),
@@ -86,6 +90,30 @@ beforeEach(() => {
     name: "Demo Eye Clinic",
     slug: "demo-eye-clinic",
     settings: { timezone: "America/New_York" },
+    created_at: "2026-04-18 01:00:00",
+  });
+  (api.listPatients as any).mockResolvedValue([]);
+  (api.createPatient as any).mockResolvedValue({
+    id: 10,
+    organization_id: 1,
+    external_ref: null,
+    patient_identifier: "PT-NEW",
+    first_name: "New",
+    last_name: "Person",
+    date_of_birth: null,
+    sex_at_birth: null,
+    is_active: 1,
+    created_at: "2026-04-18 01:00:00",
+  });
+  (api.listProviders as any).mockResolvedValue([]);
+  (api.createProvider as any).mockResolvedValue({
+    id: 10,
+    organization_id: 1,
+    external_ref: null,
+    display_name: "Dr. New",
+    npi: null,
+    specialty: null,
+    is_active: 1,
     created_at: "2026-04-18 01:00:00",
   });
   (api.getPlatform as any).mockResolvedValue({
@@ -450,6 +478,92 @@ describe("AdminPanel", () => {
     expect(screen.getByTestId("admin-platform-adapter")).toHaveTextContent(
       "Stub (integrated)"
     );
+  });
+
+  it("standalone mode exposes a patient create form in the Patients tab", async () => {
+    (api.listPatients as any).mockResolvedValue([
+      {
+        id: 1,
+        organization_id: 1,
+        external_ref: null,
+        patient_identifier: "PT-1001",
+        first_name: "Morgan",
+        last_name: "Lee",
+        date_of_birth: "1962-03-14",
+        sex_at_birth: "female",
+        is_active: 1,
+        created_at: "2026-04-18 01:00:00",
+      },
+    ]);
+    const user = userEvent.setup();
+    render(<AdminPanel identity={ADMIN1.email} me={ADMIN1} onClose={() => {}} />);
+    await user.click(await screen.findByTestId("admin-tab-patients"));
+    expect(await screen.findByTestId("admin-patients-table")).toBeInTheDocument();
+    expect(screen.getByText("PT-1001")).toBeInTheDocument();
+    expect(screen.getByTestId("admin-patient-create-form")).toBeInTheDocument();
+    await user.type(screen.getByTestId("admin-patient-mrn"), "PT-NEW");
+    await user.type(screen.getByTestId("admin-patient-first"), "New");
+    await user.type(screen.getByTestId("admin-patient-last"), "Person");
+    await user.click(screen.getByTestId("admin-patient-submit"));
+    await waitFor(() => {
+      expect((api.createPatient as any)).toHaveBeenCalledWith(
+        ADMIN1.email,
+        expect.objectContaining({
+          patient_identifier: "PT-NEW",
+          first_name: "New",
+          last_name: "Person",
+        })
+      );
+    });
+  });
+
+  it("integrated_readthrough hides the patient create form and shows the source-of-truth banner", async () => {
+    (api.getPlatform as any).mockResolvedValue({
+      platform_mode: "integrated_readthrough",
+      integration_adapter: "fhir",
+      adapter: {
+        key: "fhir",
+        display_name: "FHIR R4",
+        description: "read-through",
+        supports: {
+          patient_read: true,
+          patient_write: false,
+          encounter_read: true,
+          encounter_write: false,
+          document_write: false,
+        },
+        source_of_truth: { patient: "external", encounter: "external" },
+      },
+    });
+    const user = userEvent.setup();
+    render(<AdminPanel identity={ADMIN1.email} me={ADMIN1} onClose={() => {}} />);
+    await user.click(await screen.findByTestId("admin-tab-patients"));
+    expect(
+      await screen.findByTestId("patients-readthrough-banner")
+    ).toHaveTextContent(/read-through/i);
+    expect(
+      screen.queryByTestId("admin-patient-create-form")
+    ).not.toBeInTheDocument();
+  });
+
+  it("admin can create a provider in the Providers tab", async () => {
+    const user = userEvent.setup();
+    render(<AdminPanel identity={ADMIN1.email} me={ADMIN1} onClose={() => {}} />);
+    await user.click(await screen.findByTestId("admin-tab-providers"));
+    await screen.findByTestId("admin-providers-table");
+    expect(screen.getByTestId("admin-provider-create-form")).toBeInTheDocument();
+    await user.type(screen.getByTestId("admin-provider-name"), "Dr. New");
+    await user.type(screen.getByTestId("admin-provider-npi"), "1234567893");
+    await user.click(screen.getByTestId("admin-provider-submit"));
+    await waitFor(() => {
+      expect((api.createProvider as any)).toHaveBeenCalledWith(
+        ADMIN1.email,
+        expect.objectContaining({
+          display_name: "Dr. New",
+          npi: "1234567893",
+        })
+      );
+    });
   });
 
   it("audit tab surfaces backend 403 as error banner", async () => {

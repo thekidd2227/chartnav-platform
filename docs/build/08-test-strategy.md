@@ -65,6 +65,24 @@ make docker-build
 - `make verify` (SQLite): 28 pytest + 9 smoke — all green
 - `scripts/pg_verify.sh`: migrations + seed (x2) + smoke + status transition + event write — **PASS**
 
+## Backend coverage (phase 18)
+
+- **155 pytest.** New:
+  - `test_clinical.py` (13) covers migration + seed linkage, patient
+    + provider CRUD, RBAC, uniqueness + NPI validation, cross-org
+    isolation, readthrough-blocks-writes with
+    `native_write_disabled_in_integrated_mode`.
+  - `test_fhir_adapter.py` (11) covers config validation (missing
+    base URL, bearer missing token, invalid auth type), Patient +
+    Encounter normalization against fixture resources, bearer
+    header threading, honest `AdapterNotSupported` on write paths,
+    `resolve_adapter` resolves FHIR under `integrated_readthrough`.
+- Platform-mode tests updated for the native adapter now supporting
+  patient read/write (phase 18 deliberate promotion).
+- Frontend: **34 Vitest** (+3 Patients/Providers admin tabs).
+- Playwright unchanged contract (17 workflow + a11y); visual
+  baselines refreshed for the new tabs.
+
 ## Backend coverage (phase 16)
 
 - **131 pytest.** `test_platform_mode.py` (13) covers:

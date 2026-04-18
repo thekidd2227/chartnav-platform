@@ -195,17 +195,14 @@ def test_vendor_registration_path():
 # Native adapter honesty
 # ---------------------------------------------------------------------
 
-def test_native_adapter_refuses_unsupported_operations():
-    import pytest
+def test_native_adapter_supports_patient_ops_since_phase_18():
+    """Native adapter now owns patients (phase 18)."""
     _reload_config_and_integrations()
-    from app.integrations.base import AdapterNotSupported
     from app.integrations.native import NativeChartNavAdapter
 
     adapter = NativeChartNavAdapter()
-    with pytest.raises(AdapterNotSupported):
-        adapter.fetch_patient("anything")
-    with pytest.raises(AdapterNotSupported):
-        adapter.search_patients(query="anything")
+    assert adapter.info.supports_patient_read is True
+    assert adapter.info.supports_patient_write is True
 
 
 # ---------------------------------------------------------------------
@@ -226,7 +223,8 @@ def test_platform_endpoint_surfaces_mode_and_adapter(client):
     assert body["adapter"]["key"] == "native"
     sot = body["adapter"]["source_of_truth"]
     assert sot["encounter"] == "chartnav"
-    assert sot["patient"] == "not_supported"
+    # Phase 18: native adapter now owns patients.
+    assert sot["patient"] == "chartnav"
     # No secret leakage.
     assert "jwt" not in resp.text.lower()
     assert "database_url" not in resp.text.lower()

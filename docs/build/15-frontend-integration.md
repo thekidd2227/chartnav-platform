@@ -239,6 +239,23 @@ surface, filters. Details in `17-e2e-and-release.md`. Command:
   existing axe baseline passes without new exceptions. Visual
   baselines regenerated deliberately.
 
+## Native clinical tabs (phase 18)
+
+- `AdminPanel` now exposes **Patients** and **Providers** tabs
+  between **Locations** and **Organization**. Both are powered by
+  `listPatients` / `listProviders` / `createPatient` /
+  `createProvider` in `api.ts`.
+- Platform-mode awareness: when `platform.platform_mode ===
+  "integrated_readthrough"`, both tabs render a
+  `banner--info` explaining the records come from the external EHR
+  and the create form is hidden entirely. Server-side, the same
+  modes return 409 `native_write_disabled_in_integrated_mode`, so
+  the UI and contract agree.
+- Providers pane additionally gates the create form to admin-only
+  roles to mirror backend RBAC.
+- Both panes wire into the existing admin-banner error flow — any
+  `ApiError` lands in the shared banner.
+
 ## What this phase explicitly does NOT do
 
 - No real login flow — `X-User-Email` is still dev transport.

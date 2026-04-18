@@ -5,7 +5,11 @@ erDiagram
   organizations ||--o{ locations        : "has"
   organizations ||--o{ users            : "employs (identity + role)"
   organizations ||--o{ encounters       : "owns"
+  organizations ||--o{ patients         : "owns (phase 18, native)"
+  organizations ||--o{ providers        : "owns (phase 18, native)"
   locations     ||--o{ encounters       : "hosts"
+  patients      ||--o{ encounters       : "subject of (nullable FK)"
+  providers     ||--o{ encounters       : "primary provider (nullable FK)"
   encounters    ||--o{ workflow_events  : "emits"
 
   security_audit_events {
@@ -53,13 +57,37 @@ erDiagram
     int id PK
     int organization_id FK
     int location_id FK
-    string patient_identifier
-    string patient_name
-    string provider_name
+    int patient_id FK "nullable — native linkage (phase 18)"
+    int provider_id FK "nullable — native linkage (phase 18)"
+    string patient_identifier "display; kept for back-compat"
+    string patient_name "display; kept for back-compat"
+    string provider_name "display; kept for back-compat"
     string status
     datetime scheduled_at
     datetime started_at
     datetime completed_at
+    datetime created_at
+  }
+  patients {
+    int id PK
+    int organization_id FK
+    string external_ref "nullable — vendor id"
+    string patient_identifier "local MRN; unique per org"
+    string first_name
+    string last_name
+    date date_of_birth
+    string sex_at_birth
+    boolean is_active
+    datetime created_at
+  }
+  providers {
+    int id PK
+    int organization_id FK
+    string external_ref "nullable — vendor id"
+    string display_name
+    string npi "nullable, 10-digit; unique per org when set"
+    string specialty
+    boolean is_active
     datetime created_at
   }
   workflow_events {

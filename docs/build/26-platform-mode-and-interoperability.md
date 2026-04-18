@@ -48,6 +48,7 @@ client directly. They talk to an adapter.
 |------------|----------------------------------------|----------------------------------------|:--:|
 | `native`   | `app/integrations/native.py`           | Standalone — ChartNav DB is SoR        | ✓ |
 | `stub`     | `app/integrations/stub.py`             | Integrated without a real vendor yet   | ✓ (write-through only) |
+| `fhir`     | `app/integrations/fhir.py` (phase 18)  | Generic FHIR R4 read-through           | ✗ (read-only by design) |
 
 Both implementations are honest:
 

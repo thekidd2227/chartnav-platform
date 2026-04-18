@@ -7,12 +7,16 @@ import {
   Me,
   Organization,
   OrganizationSettings,
+  Patient,
   PlatformInfo,
+  Provider,
   Role,
   SecurityAuditEvent,
   User,
   bulkCreateUsers,
   createLocation,
+  createPatient,
+  createProvider,
   createUser,
   deactivateLocation,
   deactivateUser,
@@ -23,6 +27,8 @@ import {
   inviteUser,
   listAuditEvents,
   listLocationsPage,
+  listPatients,
+  listProviders,
   listUsersPage,
   platformModeLabel,
   updateLocation,
@@ -30,7 +36,13 @@ import {
   updateUser,
 } from "./api";
 
-type Tab = "users" | "locations" | "organization" | "audit";
+type Tab =
+  | "users"
+  | "locations"
+  | "patients"
+  | "providers"
+  | "organization"
+  | "audit";
 
 export function AdminPanel({ identity, me, onClose }: {
   identity: string;
@@ -104,6 +116,20 @@ export function AdminPanel({ identity, me, onClose }: {
             Locations
           </button>
           <button
+            className={"btn " + (tab === "patients" ? "btn--primary" : "")}
+            data-testid="admin-tab-patients"
+            onClick={() => setTab("patients")}
+          >
+            Patients
+          </button>
+          <button
+            className={"btn " + (tab === "providers" ? "btn--primary" : "")}
+            data-testid="admin-tab-providers"
+            onClick={() => setTab("providers")}
+          >
+            Providers
+          </button>
+          <button
             className={"btn " + (tab === "organization" ? "btn--primary" : "")}
             data-testid="admin-tab-organization"
             onClick={() => setTab("organization")}
@@ -130,6 +156,8 @@ export function AdminPanel({ identity, me, onClose }: {
         <div className="modal__body">
           {tab === "users" && <UsersPane identity={identity} me={me} org={org} flash={flash} />}
           {tab === "locations" && <LocationsPane identity={identity} flash={flash} />}
+          {tab === "patients" && <PatientsPane identity={identity} platform={platform} flash={flash} />}
+          {tab === "providers" && <ProvidersPane identity={identity} me={me} platform={platform} flash={flash} />}
           {tab === "organization" && (
             <OrganizationPane
               identity={identity}
@@ -1226,4 +1254,338 @@ function friendly(e: unknown): string {
   if (e instanceof ApiError) return `${e.status} ${e.errorCode} — ${e.reason}`;
   if (e instanceof Error) return e.message;
   return String(e);
+}
+
+// ---------- Patients (phase 18) -------------------------------------------
+
+function PatientsPane({
+  identity,
+  platform,
+  flash,
+}: {
+  identity: string;
+  platform: PlatformInfo | null;
+  flash: (kind: "ok" | "error", msg: string) => void;
+}) {
+  const [rows, setRows] = useState<Patient[]>([]);
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [draft, setDraft] = useState({
+    patient_identifier: "",
+    first_name: "",
+    last_name: "",
+    date_of_birth: "",
+    sex_at_birth: "",
+  });
+
+  const isIntegratedReadthrough =
+    platform?.platform_mode === "integrated_readthrough";
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const items = await listPatients(identity, { q: query || undefined });
+      setRows(items);
+    } catch (e) {
+      flash("error", friendly(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [identity, query, flash]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!draft.patient_identifier || !draft.first_name || !draft.last_name) {
+      flash("error", "MRN, first name, and last name are required");
+      return;
+    }
+    try {
+      await createPatient(identity, {
+        patient_identifier: draft.patient_identifier.trim(),
+        first_name: draft.first_name.trim(),
+        last_name: draft.last_name.trim(),
+        date_of_birth: draft.date_of_birth || null,
+        sex_at_birth: draft.sex_at_birth || null,
+      });
+      flash("ok", `Patient ${draft.patient_identifier} created.`);
+      setDraft({
+        patient_identifier: "",
+        first_name: "",
+        last_name: "",
+        date_of_birth: "",
+        sex_at_birth: "",
+      });
+      refresh();
+    } catch (e) {
+      flash("error", friendly(e));
+    }
+  };
+
+  return (
+    <section>
+      {isIntegratedReadthrough && (
+        <div
+          className="banner banner--info"
+          data-testid="patients-readthrough-banner"
+        >
+          Patients are read-through from the external EHR — writes are
+          disabled in this mode.
+        </div>
+      )}
+      <div className="admin-list-head">
+        <h3>Patients</h3>
+        <input
+          type="search"
+          placeholder="Search MRN or name…"
+          value={query}
+          data-testid="admin-patient-search"
+          onChange={(e) => setQuery(e.target.value)}
+          aria-label="Search patients"
+        />
+      </div>
+      <table className="admin-table" data-testid="admin-patients-table">
+        <thead>
+          <tr>
+            <th>MRN</th>
+            <th>Name</th>
+            <th>DOB</th>
+            <th>Sex at birth</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((p) => (
+            <tr key={p.id} data-testid={`patient-row-${p.id}`}>
+              <td>{p.patient_identifier}</td>
+              <td>{p.first_name} {p.last_name}</td>
+              <td>{p.date_of_birth || ""}</td>
+              <td>{p.sex_at_birth || ""}</td>
+            </tr>
+          ))}
+          {!loading && rows.length === 0 && (
+            <tr><td colSpan={4} className="empty">No patients.</td></tr>
+          )}
+        </tbody>
+      </table>
+
+      {!isIntegratedReadthrough && (
+        <form onSubmit={onSubmit} className="event-form" style={{ marginTop: 16 }} data-testid="admin-patient-create-form">
+          <div className="admin-list-head">
+            <h3>New patient</h3>
+          </div>
+          <label>
+            MRN
+            <input
+              value={draft.patient_identifier}
+              onChange={(e) =>
+                setDraft({ ...draft, patient_identifier: e.target.value })
+              }
+              data-testid="admin-patient-mrn"
+              required
+            />
+          </label>
+          <label>
+            First name
+            <input
+              value={draft.first_name}
+              onChange={(e) => setDraft({ ...draft, first_name: e.target.value })}
+              data-testid="admin-patient-first"
+              required
+            />
+          </label>
+          <label>
+            Last name
+            <input
+              value={draft.last_name}
+              onChange={(e) => setDraft({ ...draft, last_name: e.target.value })}
+              data-testid="admin-patient-last"
+              required
+            />
+          </label>
+          <label>
+            Date of birth (optional)
+            <input
+              type="date"
+              value={draft.date_of_birth}
+              onChange={(e) =>
+                setDraft({ ...draft, date_of_birth: e.target.value })
+              }
+            />
+          </label>
+          <label>
+            Sex at birth (optional)
+            <input
+              value={draft.sex_at_birth}
+              onChange={(e) =>
+                setDraft({ ...draft, sex_at_birth: e.target.value })
+              }
+            />
+          </label>
+          <button
+            type="submit"
+            className="btn btn--primary"
+            data-testid="admin-patient-submit"
+          >
+            Create patient
+          </button>
+        </form>
+      )}
+    </section>
+  );
+}
+
+// ---------- Providers (phase 18) ------------------------------------------
+
+function ProvidersPane({
+  identity,
+  me,
+  platform,
+  flash,
+}: {
+  identity: string;
+  me: Me;
+  platform: PlatformInfo | null;
+  flash: (kind: "ok" | "error", msg: string) => void;
+}) {
+  const [rows, setRows] = useState<Provider[]>([]);
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [draft, setDraft] = useState({
+    display_name: "",
+    npi: "",
+    specialty: "",
+  });
+
+  const isIntegratedReadthrough =
+    platform?.platform_mode === "integrated_readthrough";
+  const canCreate = me.role === "admin" && !isIntegratedReadthrough;
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const items = await listProviders(identity, { q: query || undefined });
+      setRows(items);
+    } catch (e) {
+      flash("error", friendly(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [identity, query, flash]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!draft.display_name.trim()) {
+      flash("error", "Display name is required");
+      return;
+    }
+    try {
+      await createProvider(identity, {
+        display_name: draft.display_name.trim(),
+        npi: draft.npi.trim() || null,
+        specialty: draft.specialty.trim() || null,
+      });
+      flash("ok", `Provider ${draft.display_name} created.`);
+      setDraft({ display_name: "", npi: "", specialty: "" });
+      refresh();
+    } catch (e) {
+      flash("error", friendly(e));
+    }
+  };
+
+  return (
+    <section>
+      {isIntegratedReadthrough && (
+        <div
+          className="banner banner--info"
+          data-testid="providers-readthrough-banner"
+        >
+          Providers are read-through from the external EHR — writes are
+          disabled in this mode.
+        </div>
+      )}
+      <div className="admin-list-head">
+        <h3>Providers</h3>
+        <input
+          type="search"
+          placeholder="Search name, NPI, or specialty…"
+          value={query}
+          data-testid="admin-provider-search"
+          onChange={(e) => setQuery(e.target.value)}
+          aria-label="Search providers"
+        />
+      </div>
+      <table className="admin-table" data-testid="admin-providers-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>NPI</th>
+            <th>Specialty</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((p) => (
+            <tr key={p.id} data-testid={`provider-row-${p.id}`}>
+              <td>{p.display_name}</td>
+              <td style={{ fontFamily: "ui-monospace, monospace" }}>{p.npi || ""}</td>
+              <td>{p.specialty || ""}</td>
+            </tr>
+          ))}
+          {!loading && rows.length === 0 && (
+            <tr><td colSpan={3} className="empty">No providers.</td></tr>
+          )}
+        </tbody>
+      </table>
+
+      {canCreate && (
+        <form onSubmit={onSubmit} className="event-form" style={{ marginTop: 16 }} data-testid="admin-provider-create-form">
+          <div className="admin-list-head">
+            <h3>New provider</h3>
+          </div>
+          <label>
+            Display name
+            <input
+              value={draft.display_name}
+              onChange={(e) =>
+                setDraft({ ...draft, display_name: e.target.value })
+              }
+              data-testid="admin-provider-name"
+              required
+            />
+          </label>
+          <label>
+            NPI (10 digits, optional)
+            <input
+              value={draft.npi}
+              onChange={(e) => setDraft({ ...draft, npi: e.target.value })}
+              data-testid="admin-provider-npi"
+              maxLength={10}
+            />
+          </label>
+          <label>
+            Specialty (optional)
+            <input
+              value={draft.specialty}
+              onChange={(e) =>
+                setDraft({ ...draft, specialty: e.target.value })
+              }
+            />
+          </label>
+          <button
+            type="submit"
+            className="btn btn--primary"
+            data-testid="admin-provider-submit"
+          >
+            Create provider
+          </button>
+        </form>
+      )}
+    </section>
+  );
 }

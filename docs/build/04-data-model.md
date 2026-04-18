@@ -116,7 +116,56 @@ Encounters:
 
 Unchanged — see `docs/diagrams/er-diagram.md`.
 
-## Source of truth per platform mode (phase 16)
+### `patients` (phase 18)
+
+| column             | type         | constraints |
+|--------------------|--------------|-------------|
+| id                 | INTEGER      | PK |
+| organization_id    | INTEGER      | NOT NULL, FK → organizations(id), indexed |
+| external_ref       | VARCHAR(128) | NULL (vendor id — FHIR Patient.id / Epic MRN / …) |
+| patient_identifier | VARCHAR(64)  | NOT NULL; unique per org (local MRN) |
+| first_name         | VARCHAR(128) | NOT NULL |
+| last_name          | VARCHAR(128) | NOT NULL |
+| date_of_birth      | DATE         | NULL |
+| sex_at_birth       | VARCHAR(16)  | NULL — free-form; no vocabulary imposed |
+| is_active          | BOOLEAN      | NOT NULL default `true` |
+| created_at         | DATETIME     | NOT NULL default now() |
+
+Unique `(organization_id, patient_identifier)` → 409
+`patient_identifier_conflict`. Unique `(organization_id,
+external_ref)` when set → prevents dupe mirror rows for the same
+vendor id.
+
+### `providers` (phase 18)
+
+| column          | type         | constraints |
+|-----------------|--------------|-------------|
+| id              | INTEGER      | PK |
+| organization_id | INTEGER      | NOT NULL, FK → organizations(id), indexed |
+| external_ref    | VARCHAR(128) | NULL |
+| display_name    | VARCHAR(255) | NOT NULL |
+| npi             | VARCHAR(16)  | NULL; 10-digit check enforced at the API layer, DB unique per org when non-null |
+| specialty       | VARCHAR(128) | NULL |
+| is_active       | BOOLEAN      | NOT NULL default `true` |
+| created_at      | DATETIME     | NOT NULL default now() |
+
+### `encounters` — native linkage (phase 18)
+
+Two new nullable FK columns land on `encounters`:
+
+| column      | type    | constraints |
+|-------------|---------|-------------|
+| patient_id  | INTEGER | NULL, FK → patients(id), indexed |
+| provider_id | INTEGER | NULL, FK → providers(id), indexed |
+
+Legacy text fields (`patient_identifier`, `patient_name`,
+`provider_name`) remain as denormalized display values so existing
+reads keep working. In standalone mode native linkage is the
+preferred source of truth going forward; integrations can populate
+`external_ref` on the corresponding `patients`/`providers` row and
+the encounter FK for full lineage.
+
+## Source of truth per platform mode (phase 16 + 18)
 
 | Object         | `standalone`     | `integrated_readthrough` (stub) | `integrated_writethrough` (stub) |
 |----------------|------------------|-----------------------------------|------------------------------------|

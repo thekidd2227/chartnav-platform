@@ -82,10 +82,20 @@ class Settings:
 
     # Which external EHR/EMR adapter to select in integrated modes.
     # In `standalone`, this is ignored and the native adapter is used.
-    # Ships "stub" (honest placeholder) out of the box. Real vendor
-    # adapters ("fhir", "epic", "cerner", ...) plug in via the
-    # adapter registry in app/integrations/__init__.py.
+    # Ships "stub" (honest placeholder) and "fhir" (generic FHIR R4
+    # read-through) out of the box. Vendor-specific adapters ("epic",
+    # "cerner", ...) plug in via the adapter registry in
+    # app/integrations/__init__.py.
     integration_adapter: str
+
+    # FHIR adapter config — consumed when
+    # CHARTNAV_INTEGRATION_ADAPTER=fhir. The adapter reads these via
+    # os.environ directly too (so the test suite can drive it without
+    # touching the Settings singleton), but they're surfaced here so
+    # the contract is discoverable in one place.
+    fhir_base_url: str | None
+    fhir_auth_type: str            # "none" | "bearer"
+    fhir_bearer_token: str | None
 
 
 _DEFAULT_CORS = (
@@ -176,6 +186,18 @@ def _load() -> Settings:
             f"Got {integration_adapter!r}."
         )
 
+    fhir_base_url = _env("CHARTNAV_FHIR_BASE_URL")
+    fhir_auth_type = (_env("CHARTNAV_FHIR_AUTH_TYPE", "none") or "none").lower()
+    fhir_bearer_token = _env("CHARTNAV_FHIR_BEARER_TOKEN")
+    if fhir_auth_type not in {"none", "bearer"}:
+        raise RuntimeError(
+            f"CHARTNAV_FHIR_AUTH_TYPE must be 'none' or 'bearer' "
+            f"(got {fhir_auth_type!r})"
+        )
+    # FHIR adapter itself re-validates at construction time — the
+    # Settings object records the config without instantiating the
+    # adapter so bootstrapping doesn't require a live FHIR server.
+
     return Settings(
         env=env,
         database_url=database_url,
@@ -189,6 +211,9 @@ def _load() -> Settings:
         audit_retention_days=audit_retention_days,
         platform_mode=platform_mode,
         integration_adapter=integration_adapter,
+        fhir_base_url=fhir_base_url,
+        fhir_auth_type=fhir_auth_type,
+        fhir_bearer_token=fhir_bearer_token,
     )
 
 

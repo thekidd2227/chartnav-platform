@@ -648,3 +648,91 @@ export const EVENT_TYPE_REQUIRED: Record<string, readonly string[]> = {
   note_draft_completed: ["template"],
   note_reviewed: ["reviewer"],
 };
+
+// ---------- Native clinical layer (phase 18) ----------
+
+export interface Patient {
+  id: number;
+  organization_id: number;
+  external_ref: string | null;
+  patient_identifier: string;
+  first_name: string;
+  last_name: string;
+  date_of_birth: string | null;
+  sex_at_birth: string | null;
+  is_active: number | boolean;
+  created_at: string;
+}
+
+export interface Provider {
+  id: number;
+  organization_id: number;
+  external_ref: string | null;
+  display_name: string;
+  npi: string | null;
+  specialty: string | null;
+  is_active: number | boolean;
+  created_at: string;
+}
+
+export interface PatientCreateBody {
+  patient_identifier: string;
+  first_name: string;
+  last_name: string;
+  date_of_birth?: string | null;
+  sex_at_birth?: string | null;
+  external_ref?: string | null;
+}
+
+export interface ProviderCreateBody {
+  display_name: string;
+  npi?: string | null;
+  specialty?: string | null;
+  external_ref?: string | null;
+}
+
+export function listPatients(
+  email: string,
+  opts: { q?: string; limit?: number; offset?: number } = {}
+): Promise<Patient[]> {
+  const qs = new URLSearchParams();
+  if (opts.q) qs.set("q", opts.q);
+  if (opts.limit !== undefined) qs.set("limit", String(opts.limit));
+  if (opts.offset !== undefined) qs.set("offset", String(opts.offset));
+  const suffix = qs.toString() ? `?${qs}` : "";
+  return request(`/patients${suffix}`, { email });
+}
+
+export function createPatient(
+  email: string,
+  body: PatientCreateBody
+): Promise<Patient> {
+  return request("/patients", {
+    email,
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function listProviders(
+  email: string,
+  opts: { q?: string; limit?: number; offset?: number } = {}
+): Promise<Provider[]> {
+  const qs = new URLSearchParams();
+  if (opts.q) qs.set("q", opts.q);
+  if (opts.limit !== undefined) qs.set("limit", String(opts.limit));
+  if (opts.offset !== undefined) qs.set("offset", String(opts.offset));
+  const suffix = qs.toString() ? `?${qs}` : "";
+  return request(`/providers${suffix}`, { email });
+}
+
+export function createProvider(
+  email: string,
+  body: ProviderCreateBody
+): Promise<Provider> {
+  return request("/providers", {
+    email,
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}

@@ -41,11 +41,24 @@ from app.integrations.stub import StubClinicalSystemAdapter
 
 # Registry of vendor adapter factories. Real integrations register
 # themselves here. Keys are the values operators pass via
-# `CHARTNAV_INTEGRATION_ADAPTER=<key>`. Intentionally empty today —
-# "stub" and "native" are special-cased below; adding e.g. "fhir"
-# means: (1) write a FHIRAdapter in this package, (2) register its
-# factory here. No other core files need to change.
+# `CHARTNAV_INTEGRATION_ADAPTER=<key>`. "stub" and "native" are
+# special-cased below; "fhir" is registered at import time to the
+# generic R4 read-through adapter. Vendor-specific adapters (e.g.
+# "epic", "cerner") can override by re-registering under a new key.
 _VENDOR_ADAPTERS: dict[str, Callable[[], ClinicalSystemAdapter]] = {}
+
+
+def _register_shipped_vendors() -> None:
+    """Register the vendor adapters that ship in-tree.
+
+    Called once at import time. Kept in a function rather than at
+    module scope so reloads (in tests) don't double-register.
+    """
+    from app.integrations.fhir import FHIRAdapter
+    _VENDOR_ADAPTERS["fhir"] = lambda: FHIRAdapter()
+
+
+_register_shipped_vendors()
 
 
 def resolve_adapter() -> ClinicalSystemAdapter:

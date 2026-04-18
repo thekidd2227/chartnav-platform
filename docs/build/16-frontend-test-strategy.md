@@ -145,6 +145,18 @@ two suites never cross-contaminate.
   - `admin-platform-adapter` content matches the adapter's
     `display_name`.
 
+## Native clinical layer tests (phase 18)
+
+- `AdminPanel.test.tsx` now covers **20 tests** (+3).
+  - Standalone Patients tab → renders table, renders create form,
+    `createPatient` is called with the submitted fields.
+  - Integrated read-through mode → read-through banner visible and
+    the create form is absent.
+  - Providers tab → create form submits through `createProvider`
+    with the NPI carried through.
+- Mocks extended: `listPatients`, `createPatient`, `listProviders`,
+  `createProvider`.
+
 ## Gaps not yet covered
 - Visual regression not in CI (documented; OS-specific baselines).
 - No keyboard-only / screen-reader manual QA pass beyond axe's

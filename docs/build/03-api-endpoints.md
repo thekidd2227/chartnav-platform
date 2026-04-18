@@ -24,6 +24,18 @@ Base URL (local dev): `http://127.0.0.1:8000`. All error bodies use
 | GET    | `/locations`     | `WHERE organization_id = caller.org`. Supports `limit` (1..500, default 100), `offset` (≥0), `q` (substring search on `name`), plus `include_inactive` (admin). Emits `X-Total-Count`, `X-Limit`, `X-Offset` headers. |
 | GET    | `/users`         | `WHERE organization_id = caller.org`. Supports `limit`, `offset`, `q` (substring on `email` or `full_name`), `role` (valid roles only — invalid → 400 `invalid_role`), `include_inactive` (admin). Emits `X-Total-Count`, `X-Limit`, `X-Offset` headers. |
 
+## Native clinical layer (🔒, org-scoped) — phase 18
+
+| Method | Path          | Behavior |
+|--------|---------------|----------|
+| GET    | `/patients`   | `WHERE organization_id = caller.org`. Supports `limit`/`offset`/`q` (substring on MRN or name)/`include_inactive`. Emits `X-Total-Count`, `X-Limit`, `X-Offset`. |
+| POST   | `/patients`   | Admin or clinician creates a native patient. `integrated_readthrough` → 409 `native_write_disabled_in_integrated_mode`. Duplicate `(org, patient_identifier)` → 409 `patient_identifier_conflict`. |
+| GET    | `/providers`  | `WHERE organization_id = caller.org`. Supports `limit`/`offset`/`q` (substring on `display_name`/`specialty`/`npi`)/`include_inactive`. Headers same as above. |
+| POST   | `/providers`  | Admin only. `integrated_readthrough` → 409 `native_write_disabled_in_integrated_mode`. `invalid_npi` (400) when `npi` present but not 10 digits. `npi_conflict` (409) on duplicate NPI within org. |
+
+Encounter responses now also include `patient_id` + `provider_id`
+nullable FKs pointing at the rows above.
+
 ## Encounters (🔒, org-scoped + RBAC)
 
 ### GET `/encounters`

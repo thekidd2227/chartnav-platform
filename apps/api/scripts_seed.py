@@ -22,6 +22,26 @@ ORGS = [
             ("clin@chartnav.local", "Casey Clinician", "clinician"),
             ("rev@chartnav.local", "Riley Reviewer", "reviewer"),
         ],
+        "patients": [
+            {
+                "patient_identifier": "PT-1001",
+                "first_name": "Morgan",
+                "last_name": "Lee",
+                "date_of_birth": "1962-03-14",
+                "sex_at_birth": "female",
+            },
+            {
+                "patient_identifier": "PT-1002",
+                "first_name": "Jordan",
+                "last_name": "Rivera",
+                "date_of_birth": "1954-11-02",
+                "sex_at_birth": "male",
+            },
+        ],
+        "providers": [
+            {"display_name": "Dr. Carter", "npi": "1234567893", "specialty": "Ophthalmology"},
+            {"display_name": "Dr. Patel", "npi": "1932456321", "specialty": "Ophthalmology"},
+        ],
         "encounters": [
             {
                 "patient_identifier": "PT-1001",
@@ -62,6 +82,18 @@ ORGS = [
         "users": [
             ("admin@northside.local", "Northside Admin", "admin"),
             ("clin@northside.local", "Noa Clinician", "clinician"),
+        ],
+        "patients": [
+            {
+                "patient_identifier": "PT-2001",
+                "first_name": "Priya",
+                "last_name": "Shah",
+                "date_of_birth": "1948-07-20",
+                "sex_at_birth": "female",
+            },
+        ],
+        "providers": [
+            {"display_name": "Dr. Ahmed", "npi": "1609995340", "specialty": "Retina"},
         ],
         "encounters": [
             {
@@ -131,7 +163,62 @@ def _ensure_user(conn, org_id: int, email: str, full_name: str, role: str) -> No
         )
 
 
-def _get_or_create_encounter(conn, org_id: int, location_id: int, fx: dict) -> int:
+def _ensure_patient(conn, org_id: int, fx: dict) -> int:
+    """Idempotent patient upsert keyed on (org_id, patient_identifier)."""
+    row = conn.execute(
+        text(
+            "SELECT id FROM patients WHERE organization_id = :org "
+            "AND patient_identifier = :pid"
+        ),
+        {"org": org_id, "pid": fx["patient_identifier"]},
+    ).mappings().first()
+    if row:
+        return int(row["id"])
+    return insert_returning_id(
+        conn,
+        "patients",
+        {
+            "organization_id": org_id,
+            "patient_identifier": fx["patient_identifier"],
+            "first_name": fx["first_name"],
+            "last_name": fx["last_name"],
+            "date_of_birth": fx.get("date_of_birth"),
+            "sex_at_birth": fx.get("sex_at_birth"),
+        },
+    )
+
+
+def _ensure_provider(conn, org_id: int, fx: dict) -> int:
+    """Idempotent provider upsert keyed on (org_id, display_name).
+
+    NPI is unique-per-org when non-null; display_name is used as the
+    dedupe key so re-seeding across NPI changes stays idempotent.
+    """
+    row = conn.execute(
+        text(
+            "SELECT id FROM providers WHERE organization_id = :org "
+            "AND display_name = :name"
+        ),
+        {"org": org_id, "name": fx["display_name"]},
+    ).mappings().first()
+    if row:
+        return int(row["id"])
+    return insert_returning_id(
+        conn,
+        "providers",
+        {
+            "organization_id": org_id,
+            "display_name": fx["display_name"],
+            "npi": fx.get("npi"),
+            "specialty": fx.get("specialty"),
+        },
+    )
+
+
+def _get_or_create_encounter(
+    conn, org_id: int, location_id: int, fx: dict,
+    patient_id: int | None = None, provider_id: int | None = None,
+) -> int:
     row = conn.execute(
         text(
             "SELECT id FROM encounters WHERE organization_id = :org AND "
@@ -145,6 +232,15 @@ def _get_or_create_encounter(conn, org_id: int, location_id: int, fx: dict) -> i
         },
     ).mappings().first()
     if row:
+        # Backfill native linkage on re-seed even if row already exists.
+        if patient_id or provider_id:
+            conn.execute(
+                text(
+                    "UPDATE encounters SET patient_id = COALESCE(:pid_fk, patient_id), "
+                    "provider_id = COALESCE(:prov_fk, provider_id) WHERE id = :id"
+                ),
+                {"pid_fk": patient_id, "prov_fk": provider_id, "id": int(row["id"])},
+            )
         return int(row["id"])
 
     started = fx["status"] in {"in_progress", "draft_ready", "review_needed", "completed"}
@@ -156,9 +252,11 @@ def _get_or_create_encounter(conn, org_id: int, location_id: int, fx: dict) -> i
         text(
             "INSERT INTO encounters ("
             "organization_id, location_id, patient_identifier, patient_name, "
-            "provider_name, status, started_at, completed_at"
+            "provider_name, status, patient_id, provider_id, "
+            "started_at, completed_at"
             ") VALUES ("
             ":org, :loc, :pid, :pname, :provider, :status, "
+            ":pid_fk, :prov_fk, "
             + ("CURRENT_TIMESTAMP" if started else "NULL")
             + ", "
             + ("CURRENT_TIMESTAMP" if completed else "NULL")
@@ -171,6 +269,8 @@ def _get_or_create_encounter(conn, org_id: int, location_id: int, fx: dict) -> i
             "pname": fx["patient_name"],
             "provider": fx["provider_name"],
             "status": fx["status"],
+            "pid_fk": patient_id,
+            "prov_fk": provider_id,
         },
     )
     row = conn.execute(
@@ -219,8 +319,23 @@ def main() -> None:
             loc_id = _get_or_create_location(conn, org_id, org_fx["location"])
             for email, full_name, role in org_fx["users"]:
                 _ensure_user(conn, org_id, email, full_name, role)
+
+            # Native clinical objects (phase 18).
+            patient_ids: dict[str, int] = {}
+            for pat_fx in org_fx.get("patients", []):
+                pid = _ensure_patient(conn, org_id, pat_fx)
+                patient_ids[pat_fx["patient_identifier"]] = pid
+            provider_ids: dict[str, int] = {}
+            for prov_fx in org_fx.get("providers", []):
+                pvid = _ensure_provider(conn, org_id, prov_fx)
+                provider_ids[prov_fx["display_name"]] = pvid
+
             for enc_fx in org_fx["encounters"]:
-                enc_id = _get_or_create_encounter(conn, org_id, loc_id, enc_fx)
+                enc_id = _get_or_create_encounter(
+                    conn, org_id, loc_id, enc_fx,
+                    patient_id=patient_ids.get(enc_fx["patient_identifier"]),
+                    provider_id=provider_ids.get(enc_fx["provider_name"]),
+                )
                 _ensure_events(conn, enc_id, enc_fx["events"])
             summary.append((org_fx["slug"], org_id, loc_id))
 

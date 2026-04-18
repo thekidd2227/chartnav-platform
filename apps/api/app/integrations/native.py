@@ -35,12 +35,12 @@ _INFO = AdapterInfo(
     key="native",
     display_name="ChartNav native",
     description=(
-        "ChartNav persists clinical and operational data to its own "
-        "database. Use in standalone deployments where ChartNav is "
-        "the system of record."
+        "ChartNav persists clinical and operational data — including "
+        "patients and providers — to its own database. Use in "
+        "standalone deployments where ChartNav is the system of record."
     ),
-    supports_patient_read=False,  # patients table not yet modeled
-    supports_patient_write=False,
+    supports_patient_read=True,
+    supports_patient_write=True,
     supports_encounter_read=True,
     supports_encounter_write=True,
     supports_document_write=True,  # stored as workflow_events today
@@ -50,7 +50,8 @@ _INFO = AdapterInfo(
         "user": SourceOfTruth.CHARTNAV,
         "encounter": SourceOfTruth.CHARTNAV,
         "workflow_event": SourceOfTruth.CHARTNAV,
-        "patient": SourceOfTruth.NOT_SUPPORTED,
+        "patient": SourceOfTruth.CHARTNAV,
+        "provider": SourceOfTruth.CHARTNAV,
         "document": SourceOfTruth.CHARTNAV,
     },
 )
@@ -65,16 +66,48 @@ class NativeChartNavAdapter:
 
     # --- Patients ---------------------------------------------------
     def fetch_patient(self, patient_id: str) -> dict[str, Any]:
-        raise AdapterNotSupported(
-            "patient records are not yet modeled in the native adapter"
-        )
+        """Fetch a native patient by PK or `patient_identifier`.
+
+        Callers use PKs; adapters accept either because integrations
+        typically carry their own reference. Returns a canonicalized
+        dict, not a DB row.
+        """
+        if not patient_id:
+            raise AdapterError("invalid_argument", "patient_id is required")
+        with engine.connect() as conn:
+            row = conn.execute(
+                sa.text(
+                    "SELECT id, organization_id, external_ref, "
+                    "patient_identifier, first_name, last_name, "
+                    "date_of_birth, sex_at_birth, is_active, created_at "
+                    "FROM patients WHERE "
+                    "CAST(id AS VARCHAR) = :id OR patient_identifier = :id"
+                ),
+                {"id": str(patient_id)},
+            ).mappings().first()
+        if row is None:
+            raise AdapterError("patient_not_found", f"id={patient_id}")
+        return {**dict(row), "source": "native"}
 
     def search_patients(
         self, *, query: str, limit: int = 25
     ) -> list[dict[str, Any]]:
-        raise AdapterNotSupported(
-            "patient search is not yet modeled in the native adapter"
-        )
+        if not query:
+            return []
+        q = f"%{query}%"
+        with engine.connect() as conn:
+            rows = conn.execute(
+                sa.text(
+                    "SELECT id, organization_id, external_ref, "
+                    "patient_identifier, first_name, last_name, "
+                    "date_of_birth, sex_at_birth, is_active, created_at "
+                    "FROM patients WHERE is_active = 1 AND ("
+                    "patient_identifier LIKE :q OR first_name LIKE :q OR last_name LIKE :q"
+                    ") ORDER BY id LIMIT :lim"
+                ),
+                {"q": q, "lim": int(limit)},
+            ).mappings().all()
+        return [{**dict(r), "source": "native"} for r in rows]
 
     # --- Encounters -------------------------------------------------
     def fetch_encounter(self, encounter_id: str) -> dict[str, Any]:

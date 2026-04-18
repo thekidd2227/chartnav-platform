@@ -183,7 +183,8 @@ def _hydrate_event(row: dict) -> dict:
 
 ENCOUNTER_COLUMNS = (
     "id, organization_id, location_id, patient_identifier, patient_name, "
-    "provider_name, status, scheduled_at, started_at, completed_at, created_at"
+    "provider_name, status, patient_id, provider_id, "
+    "scheduled_at, started_at, completed_at, created_at"
 )
 
 
@@ -1346,3 +1347,214 @@ def admin_bulk_create_users(
             "errors": len(errors),
         },
     }
+
+
+# ===========================================================================
+# Native clinical layer (phase 18) — patients + providers
+# ===========================================================================
+#
+# These endpoints are the first-class surface for ChartNav-native clinical
+# objects in standalone mode. They still exist in integrated modes but behave
+# per the platform-mode contract documented in
+# docs/build/26-platform-mode-and-interoperability.md:
+#
+#   standalone              → full read + write against the native DB
+#   integrated_readthrough  → reads only against mirrored rows; writes 403
+#                             `native_write_disabled_in_integrated_mode`
+#   integrated_writethrough → reads + writes against the native DB
+#                             (adapters translate external pushes separately)
+
+PATIENT_COLUMNS = (
+    "id, organization_id, external_ref, patient_identifier, "
+    "first_name, last_name, date_of_birth, sex_at_birth, is_active, created_at"
+)
+PROVIDER_COLUMNS = (
+    "id, organization_id, external_ref, display_name, npi, specialty, "
+    "is_active, created_at"
+)
+
+
+def _native_writes_allowed() -> bool:
+    from app.config import settings as _settings
+    return _settings.platform_mode in {"standalone", "integrated_writethrough"}
+
+
+class PatientCreate(BaseModel):
+    patient_identifier: str = Field(..., min_length=1, max_length=64)
+    first_name: str = Field(..., min_length=1, max_length=128)
+    last_name: str = Field(..., min_length=1, max_length=128)
+    date_of_birth: Optional[str] = Field(default=None, description="ISO date YYYY-MM-DD")
+    sex_at_birth: Optional[str] = Field(default=None, max_length=16)
+    external_ref: Optional[str] = Field(default=None, max_length=128)
+
+
+class ProviderCreate(BaseModel):
+    display_name: str = Field(..., min_length=1, max_length=255)
+    npi: Optional[str] = Field(default=None, max_length=16)
+    specialty: Optional[str] = Field(default=None, max_length=128)
+    external_ref: Optional[str] = Field(default=None, max_length=128)
+
+
+@router.get("/patients")
+def list_patients(
+    response: Response,
+    caller: Caller = Depends(require_caller),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    q: Optional[str] = Query(default=None, max_length=100),
+    include_inactive: bool = Query(default=False),
+) -> list[dict]:
+    clauses = ["organization_id = :org"]
+    params: dict[str, Any] = {"org": caller.organization_id}
+    if not include_inactive:
+        clauses.append("is_active = 1")
+    if q:
+        clauses.append(
+            "(patient_identifier LIKE :q OR first_name LIKE :q OR last_name LIKE :q)"
+        )
+        params["q"] = f"%{q}%"
+    where = " WHERE " + " AND ".join(clauses)
+
+    total = int(fetch_one(f"SELECT COUNT(*) AS n FROM patients{where}", params)["n"])
+    rows = fetch_all(
+        f"SELECT {PATIENT_COLUMNS} FROM patients{where} "
+        "ORDER BY id LIMIT :limit OFFSET :offset",
+        {**params, "limit": limit, "offset": offset},
+    )
+    response.headers["X-Total-Count"] = str(total)
+    response.headers["X-Limit"] = str(limit)
+    response.headers["X-Offset"] = str(offset)
+    return rows
+
+
+@router.post("/patients", status_code=status.HTTP_201_CREATED)
+def create_patient(
+    payload: PatientCreate,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    # Admin or clinician can create; reviewers are read-only.
+    if caller.role not in {"admin", "clinician"}:
+        raise _err("role_forbidden", "admin or clinician only", 403)
+    if not _native_writes_allowed():
+        raise _err(
+            "native_write_disabled_in_integrated_mode",
+            "native patient writes are disabled when "
+            "CHARTNAV_PLATFORM_MODE=integrated_readthrough",
+            409,
+        )
+
+    # Uniqueness on (org, patient_identifier) — friendly error instead of 500.
+    existing = fetch_one(
+        "SELECT id FROM patients WHERE organization_id = :org "
+        "AND patient_identifier = :pid",
+        {"org": caller.organization_id, "pid": payload.patient_identifier},
+    )
+    if existing:
+        raise _err(
+            "patient_identifier_conflict",
+            f"patient_identifier {payload.patient_identifier!r} already exists in your organization",
+            409,
+        )
+
+    with transaction() as conn:
+        new_id = insert_returning_id(
+            conn,
+            "patients",
+            {
+                "organization_id": caller.organization_id,
+                "patient_identifier": payload.patient_identifier,
+                "first_name": payload.first_name,
+                "last_name": payload.last_name,
+                "date_of_birth": payload.date_of_birth,
+                "sex_at_birth": payload.sex_at_birth,
+                "external_ref": payload.external_ref,
+            },
+        )
+    row = fetch_one(
+        f"SELECT {PATIENT_COLUMNS} FROM patients WHERE id = :id",
+        {"id": new_id},
+    )
+    return row
+
+
+@router.get("/providers")
+def list_providers(
+    response: Response,
+    caller: Caller = Depends(require_caller),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    q: Optional[str] = Query(default=None, max_length=100),
+    include_inactive: bool = Query(default=False),
+) -> list[dict]:
+    clauses = ["organization_id = :org"]
+    params: dict[str, Any] = {"org": caller.organization_id}
+    if not include_inactive:
+        clauses.append("is_active = 1")
+    if q:
+        clauses.append(
+            "(display_name LIKE :q OR specialty LIKE :q OR npi LIKE :q)"
+        )
+        params["q"] = f"%{q}%"
+    where = " WHERE " + " AND ".join(clauses)
+
+    total = int(fetch_one(f"SELECT COUNT(*) AS n FROM providers{where}", params)["n"])
+    rows = fetch_all(
+        f"SELECT {PROVIDER_COLUMNS} FROM providers{where} "
+        "ORDER BY id LIMIT :limit OFFSET :offset",
+        {**params, "limit": limit, "offset": offset},
+    )
+    response.headers["X-Total-Count"] = str(total)
+    response.headers["X-Limit"] = str(limit)
+    response.headers["X-Offset"] = str(offset)
+    return rows
+
+
+@router.post("/providers", status_code=status.HTTP_201_CREATED)
+def create_provider(
+    payload: ProviderCreate,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    require_admin(caller)
+    if not _native_writes_allowed():
+        raise _err(
+            "native_write_disabled_in_integrated_mode",
+            "native provider writes are disabled when "
+            "CHARTNAV_PLATFORM_MODE=integrated_readthrough",
+            409,
+        )
+
+    # NPI format check — 10 digits only when provided.
+    if payload.npi is not None:
+        npi = payload.npi.strip()
+        if npi and (not npi.isdigit() or len(npi) != 10):
+            raise _err(
+                "invalid_npi",
+                "NPI must be exactly 10 digits when provided",
+                400,
+            )
+
+    if payload.npi:
+        dup = fetch_one(
+            "SELECT id FROM providers WHERE organization_id = :org AND npi = :npi",
+            {"org": caller.organization_id, "npi": payload.npi},
+        )
+        if dup:
+            raise _err("npi_conflict", "another provider in your org already uses this NPI", 409)
+
+    with transaction() as conn:
+        new_id = insert_returning_id(
+            conn,
+            "providers",
+            {
+                "organization_id": caller.organization_id,
+                "display_name": payload.display_name,
+                "npi": payload.npi,
+                "specialty": payload.specialty,
+                "external_ref": payload.external_ref,
+            },
+        )
+    row = fetch_one(
+        f"SELECT {PROVIDER_COLUMNS} FROM providers WHERE id = :id",
+        {"id": new_id},
+    )
+    return row

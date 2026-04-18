@@ -39,6 +39,14 @@
 Adds "admin can issue an invitation and download audit CSV" on top of
 the 11 scenarios shipped through phase 13.
 
+## Phase-18 additions
+
+- **Native clinical layer**: `patients` + `providers` tables (migration `f6a7b8c9d0e1`); `encounters.patient_id` + `encounters.provider_id` nullable FKs; seed populates real rows and backfills legacy encounters.
+- **First real external adapter**: `FHIRAdapter` — generic FHIR R4 read-through (Patient + Encounter). Pluggable transport; bearer auth; honest `AdapterNotSupported` on writes.
+- **API**: `GET/POST /patients`, `GET/POST /providers` with mode-aware write gating (`native_write_disabled_in_integrated_mode` in read-through).
+- **Frontend**: Patients + Providers admin tabs; integrated_readthrough surfaces a source-of-truth banner and hides create forms.
+- **155 pytest** (+24), **34 Vitest** (+3), 17 Playwright + 4 visual (local; refreshed).
+
 ## Phase-17 additions
 
 - **Brand-aligned UI**: `--cn-*` token system lifted from the ChartNav marketing site, real logo SVG in the header, Inter typography, subtle "Powered by ARCG Systems" footer, AA-safe muted text (`#475569`). Legacy token names kept as aliases — no component-level rewrites.
@@ -64,9 +72,11 @@ the 11 scenarios shipped through phase 13.
 
 ## Real gaps (prioritized for next phase)
 
-0. **No native `patients` table** — standalone mode's adapter refuses patient operations today. Next standalone-mode build should add the minimum native patient + provider schema.
-0. **No real vendor adapter** (Epic / Cerner / Athena / FHIR). The contract + registry exist; vendor work plugs in. Recommended first target: FHIR read-through.
-0. **Adapter path isn't fully exercised by HTTP routes yet** — `GET /platform` returns adapter metadata, but encounter/status routes still go through direct DB calls, not the adapter. Standalone that's a nop (native adapter wraps the same DB); for integrated modes this is where the real vendor translation work happens next.
+0. **Encounter/status routes still bypass the adapter path** in integrated modes — HTTP handlers hit the native DB directly rather than routing through `resolve_adapter()`. Standalone this is a nop (native adapter wraps the same DB); integrated_* needs the handler-level adapter dispatch + translation work in a follow-up phase so FHIR reads can actually surface through `/encounters`.
+0. **No vendor-specific FHIR adapter yet** — generic `FHIRAdapter` handles the common case. Epic/Cerner/Athena/Nextech SMART-on-FHIR auth + vendor quirks remain future work. Start with SMART-on-FHIR handshake + Epic sandbox.
+0. **FHIR writes are intentionally unsupported** — `update_encounter_status` and `write_note` raise `AdapterNotSupported`. `DocumentReference` + Binary upload is a real project and belongs in a vendor adapter.
+0. **No patient chart UI** — Patients tab lists rows and supports create. There's no detail view, encounter-by-patient view, or scheduling surface. Product decision, not a technical one.
+0. **Legacy `encounters.provider_name` text isn't automatically reconciled** against the new `providers` table. Operators re-seed or run targeted UPDATEs to backfill `provider_id` for historical rows.
 
 1. **No email delivery** for invitations — admin manually shares the token.
 2. **No SSO → users mapping change** (still by `CHARTNAV_JWT_USER_CLAIM`).
