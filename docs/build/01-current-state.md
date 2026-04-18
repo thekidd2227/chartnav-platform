@@ -1,38 +1,33 @@
 # ChartNav — Current State
 
-**As of:** 2026-04-18 (phase: admin governance + event discipline + pagination)
+**As of:** 2026-04-18 (phase: operator control plane — org settings, audit read, user-lifecycle signal)
 
 ## Repo layout (relevant)
 
 ```
 chartnav-platform/
-├── .github/workflows/
-│   ├── ci.yml            # backend-sqlite · backend-postgres · frontend · e2e · docker-build · deploy-config · docs
-│   └── release.yml
-├── Makefile              # staging-up/verify/rollback · web-* · e2e · release-build · dev
-├── scripts/              # build_docs.py · verify.sh · pg_verify.sh · release_build.sh · staging_*.sh
+├── .github/workflows/{ci.yml,release.yml}
+├── Makefile
+├── scripts/                # build_docs.py · verify.sh · pg_verify.sh · release_build.sh · staging_*.sh
 ├── apps/
 │   ├── api/
 │   │   ├── app/
 │   │   │   ├── main.py · config.py · db.py · auth.py · authz.py
 │   │   │   ├── audit.py · logging_config.py · middleware.py · metrics.py
-│   │   │   └── api/routes.py    # + admin CRUD, event schemas, pagination
-│   │   ├── alembic/versions/    # 4 migrations through c3d4e5f6a7b8
-│   │   ├── scripts_seed.py
-│   │   ├── scripts/smoke.sh
-│   │   ├── tests/               # 91 pytest (+20 admin, +3 observability)
+│   │   │   └── api/routes.py      # + /organization + /security-audit-events
+│   │   ├── alembic/versions/      # 5 migrations through d4e5f6a7b8c9
+│   │   ├── tests/                 # 88 pytest (+17 control-plane)
 │   │   └── Dockerfile · entrypoint.sh · .env.example
 │   └── web/
-│       ├── package.json · playwright.config.ts · vite.config.ts · tsconfig.json
 │       ├── src/
-│       │   ├── App.tsx          # + Admin button, pagination, event-type dropdown
-│       │   ├── AdminPanel.tsx   # NEW — users + locations tabs
-│       │   ├── api.ts           # + admin methods + listEncountersPage
+│       │   ├── App.tsx
+│       │   ├── AdminPanel.tsx     # 4 tabs — Users · Locations · Organization · Audit log
+│       │   ├── api.ts             # + org + audit helpers
 │       │   ├── identity.ts · styles.css · main.tsx
-│       │   └── test/            # 18 Vitest (+6 admin, +1 app)
-│       └── tests/e2e/           # 10 Playwright (+2 admin)
-├── infra/docker/{docker-compose,docker-compose.prod,docker-compose.staging}.yml
-└── docs/build/ 01 … 22
+│       │   └── test/              # 22 Vitest (+4 control-plane)
+│       └── tests/e2e/             # 11 Playwright (+1 org/audit)
+├── infra/docker/
+└── docs/build/ 01 … 23
 ```
 
 ## Runtime baseline
@@ -40,49 +35,43 @@ chartnav-platform/
 - Backend: FastAPI + SQLAlchemy Core + PyJWT.
 - Frontend: Vite 5 + React 18 + TypeScript + Vitest + Playwright.
 - Auth: `header` (dev) or `bearer` (prod JWT via JWKS).
-- RBAC: `admin` / `clinician` / `reviewer`. Enforced at **app level AND DB level** via CHECK constraint (migration `c3d4e5f6a7b8`).
+- RBAC: `admin` / `clinician` / `reviewer` (CHECK-constrained at DB level).
 - Error envelope: `{"detail": {"error_code": "...", "reason": "..."}}`.
-- **Admin governance**: `POST/PATCH/DELETE /users` + `POST/PATCH/DELETE /locations` (admin only, org-scoped, soft-delete via `is_active`).
-- **Event discipline**: `EVENT_SCHEMAS` allowlist with per-type required keys; invalid `event_type` or `event_data` → 400.
-- **Pagination**: `GET /encounters?limit=&offset=` + `X-Total-Count`/`X-Limit`/`X-Offset` headers.
+- **Org settings**: `GET /organization` (any authed role), `PATCH /organization` (admin). 16 KB cap on `settings` JSON; slug immutable.
+- **Audit read**: `GET /security-audit-events` (admin, org-scoped `OR organization_id IS NULL`, filterable, paginated).
+- **User lifecycle**: `invited_at` stamped on admin create; UI renders "Invited" badge.
+- Event discipline: `EVENT_SCHEMAS` allowlist with per-type required keys.
+- Encounter pagination: `limit`/`offset` + `X-Total-Count`/`X-Limit`/`X-Offset` headers.
 - Observability: `/health` · `/ready` · `/metrics` (Prometheus text).
-- Audit trail: `security_audit_events` table.
 - CORS + rate-limit + request-id + structured logs: unchanged.
-- Alembic head: `c3d4e5f6a7b8`.
+- Alembic head: `d4e5f6a7b8c9`.
 
 ## Testing layers
 
-| Layer        | Tool         | Count | Scope                                                                  |
-|--------------|--------------|:-----:|------------------------------------------------------------------------|
-| pytest       | pytest       |  91   | backend (auth, RBAC, scoping, state machine, JWT, operational, observability, admin/governance/events/pagination) |
-| shell smoke  | smoke.sh     |   9   | live HTTP contract (SQLite + Postgres)                                 |
-| vitest       | vitest       |  18   | frontend integration (mocked API, incl. AdminPanel)                    |
-| Playwright   | @playwright  |  10   | full-stack browser (incl. admin create-user/location, non-admin denial) |
-| staging      | staging_verify.sh | 9 | live staging stack                                                    |
+| Layer        | Tool         | Count | Notes |
+|--------------|--------------|:-----:|-------|
+| pytest       | pytest       |  88   | +17 `test_control_plane.py` (org settings, audit read, invited_at) |
+| shell smoke  | smoke.sh     |   9   | unchanged |
+| vitest       | vitest       |  22   | +4 admin-panel tests for Organization + Audit tabs |
+| Playwright   | @playwright  |  11   | +1 org settings + audit tab E2E |
+| staging      | staging_verify.sh | 9 | unchanged |
 
 ## Verified working endpoints
 
-### Open
-- `GET /health`, `GET /`
-- `GET /ready`, `GET /metrics`
+Additions this phase:
+- `GET /organization`, `PATCH /organization`
+- `GET /security-audit-events`
 
-### Authenticated (any role)
-- `GET /me`
-- `GET /organizations`, `GET /locations`, `GET /users` (+ `?include_inactive=1`)
-- `GET /encounters` (filters + pagination), `GET /encounters/{id}`, `GET /encounters/{id}/events`
-- `POST /encounters` (admin, clinician)
-- `POST /encounters/{id}/events` (admin, clinician; event-type + schema validated)
-- `POST /encounters/{id}/status` (per-edge RBAC)
-
-### Admin only (org-scoped, soft-delete semantics)
-- `POST /users`, `PATCH /users/{id}`, `DELETE /users/{id}`
-- `POST /locations`, `PATCH /locations/{id}`, `DELETE /locations/{id}`
+Unchanged from phase 12: `/health`, `/`, `/ready`, `/metrics`, `/me`,
+`/organizations`, `/locations`, `/users`, `/encounters` (+ pagination +
+filters), admin CRUD for users + locations, event-validated
+`POST /encounters/{id}/events`, per-edge RBAC on status transitions.
 
 ## Automation
 
-- `make verify` — backend gate (91 pytest + 9 smoke)
-- `make web-verify` — frontend gate (18 vitest + typecheck + build)
-- `make e2e` — Playwright (10 scenarios)
+- `make verify` → 88 pytest + 9 smoke
+- `make web-verify` → 22 vitest + typecheck + build
+- `make e2e` → 11 Playwright
 - `make pg-verify` — Postgres parity
 - `make staging-up / staging-verify / staging-rollback TAG=... / staging-down`
 - `make release-build VERSION=v0.1.0`

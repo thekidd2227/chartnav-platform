@@ -46,6 +46,7 @@ SECTIONS = [
     ("20 — Observability", BUILD / "20-observability.md"),
     ("21 — Staging runbook", BUILD / "21-staging-runbook.md"),
     ("22 — Admin governance", BUILD / "22-admin-governance.md"),
+    ("23 — Operator control plane", BUILD / "23-operator-control-plane.md"),
     ("Diagram — System architecture", DIAGR / "system-architecture.md"),
     ("Diagram — Encounter status machine", DIAGR / "encounter-status-machine.md"),
     ("Diagram — ER", DIAGR / "er-diagram.md"),
@@ -78,7 +79,9 @@ date.
 
 **Phase 11 — Staging deployment + observability.** New `/ready` + `/metrics` surfaces. Pinned-image staging compose + runbook scripts + release-bundled staging tarball. `deploy-config` CI job validates compose + shellcheck.
 
-**Phase 12 — Admin governance + event discipline + pagination (this phase).** Migration `c3d4e5f6a7b8` adds a CHECK constraint on `users.role` (DB-level rejection of anything outside `{admin, clinician, reviewer}`) plus `is_active` flags on `users` and `locations` for soft-delete. Admin CRUD arrives: `POST/PATCH/DELETE /users` and `POST/PATCH/DELETE /locations`, admin-only, strictly org-scoped, with self-protection against demote/deactivate. `EVENT_SCHEMAS` makes workflow events schema-bound (invalid type or payload → 400). `GET /encounters` paginates via `limit`+`offset` query params with `X-Total-Count`/`X-Limit`/`X-Offset` headers — backward-compatible array body. Frontend gains an `AdminPanel` modal (Users + Locations tabs), an Admin button gated on `isAdmin(role)`, a Prev/Next pager, and an event-type `<select>` wired to the backend allowlist. Backend suite jumps to 91 tests (+20 admin/governance), Vitest to 18 (+6 admin UI), Playwright to 10 (+2 admin scenarios).
+**Phase 12 — Admin governance + event discipline + pagination.** DB CHECK on `users.role`, `is_active` soft-delete flags, admin CRUD for users + locations, `EVENT_SCHEMAS` allowlist, encounter pagination via `limit`/`offset` + `X-Total-Count`. `AdminPanel` modal with Users + Locations tabs.
+
+**Phase 13 — Operator control plane (this phase).** Migration `d4e5f6a7b8c9` adds `organizations.settings TEXT` and `users.invited_at DATETIME`. New endpoints: `GET /organization` (any authed role) + `PATCH /organization` (admin, 16 KB settings cap, slug immutable), and `GET /security-audit-events` (admin, org-scoped `OR organization_id IS NULL`, filterable by `event_type` / `actor_email` / free-text `q`, paginated with `X-Total-Count`). Admin panel expands to four tabs (Users, Locations, Organization, Audit log); admin-create stamps `invited_at` and the Users tab shows an "Invited" badge. Suites grow to **88 pytest / 22 Vitest / 11 Playwright**.
 
 Preserved untouched: `/health`, `/`, SQLite dev workflow, state machine + filtering surface, workflow_events model, existing endpoint contracts.
 """

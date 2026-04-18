@@ -188,6 +188,13 @@ class LocationUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 
+class OrganizationUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    # Free-form whitelist-edited JSON object. The server coerces null to
+    # "cleared settings" and rejects non-object payloads.
+    settings: Optional[dict] = None
+
+
 # ---------- Open endpoints ----------
 
 @router.get("/health")
@@ -277,13 +284,13 @@ def list_users(
     if include_inactive:
         return fetch_all(
             "SELECT id, organization_id, email, full_name, role, is_active, "
-            "created_at FROM users WHERE organization_id = :org ORDER BY id",
+            "invited_at, created_at FROM users WHERE organization_id = :org ORDER BY id",
             {"org": caller.organization_id},
         )
     return fetch_all(
         "SELECT id, organization_id, email, full_name, role, is_active, "
-        "created_at FROM users WHERE organization_id = :org AND is_active = 1 "
-        "ORDER BY id",
+        "invited_at, created_at FROM users WHERE organization_id = :org "
+        "AND is_active = 1 ORDER BY id",
         {"org": caller.organization_id},
     )
 
@@ -576,7 +583,7 @@ def update_encounter_status(
 # =========================================================================
 
 USER_COLUMNS = (
-    "id, organization_id, email, full_name, role, is_active, created_at"
+    "id, organization_id, email, full_name, role, is_active, invited_at, created_at"
 )
 LOCATION_COLUMNS = "id, organization_id, name, is_active, created_at"
 
@@ -607,6 +614,7 @@ def admin_create_user(
                 "email": payload.email,
                 "full_name": payload.full_name,
                 "role": payload.role,
+                "invited_at": _now_iso(),
             },
         )
         row = conn.execute(
@@ -789,3 +797,130 @@ def admin_deactivate_location(
             {"id": location_id},
         ).mappings().first()
         return dict(updated)
+
+
+# =========================================================================
+# Organization settings (admin PATCH; everyone in-org can GET)
+# =========================================================================
+
+def _hydrate_org(row: dict) -> dict:
+    s = row.get("settings")
+    if s:
+        try:
+            row["settings"] = json.loads(s)
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return row
+
+
+@router.get("/organization")
+def get_organization(caller: Caller = Depends(require_caller)) -> dict:
+    row = fetch_one(
+        "SELECT id, name, slug, settings, created_at FROM organizations "
+        "WHERE id = :org",
+        {"org": caller.organization_id},
+    )
+    if not row:
+        raise _err("organization_not_found", "no such organization", 404)
+    return _hydrate_org(row)
+
+
+@router.patch("/organization")
+def patch_organization(
+    payload: OrganizationUpdate, caller: Caller = Depends(require_admin)
+) -> dict:
+    updates: dict[str, Any] = {}
+    if payload.name is not None:
+        updates["name"] = payload.name
+    if payload.settings is not None:
+        # Size guard — cap settings blob at 16 KB of JSON.
+        blob = json.dumps(payload.settings, sort_keys=True)
+        if len(blob) > 16_384:
+            raise _err(
+                "settings_too_large",
+                "settings JSON must be <= 16 KB",
+                400,
+            )
+        updates["settings"] = blob
+
+    if updates:
+        with transaction() as conn:
+            set_clause = ", ".join(f"{k} = :{k}" for k in updates)
+            conn.execute(
+                text(
+                    f"UPDATE organizations SET {set_clause} WHERE id = :org"
+                ),
+                {**updates, "org": caller.organization_id},
+            )
+
+    row = fetch_one(
+        "SELECT id, name, slug, settings, created_at FROM organizations "
+        "WHERE id = :org",
+        {"org": caller.organization_id},
+    )
+    return _hydrate_org(row or {})
+
+
+# =========================================================================
+# Security audit event read (admin only)
+# =========================================================================
+#
+# Scoping rule:
+#   Return rows where organization_id = caller.org
+#   OR organization_id IS NULL (pre-auth failures carry no caller identity,
+#   so they belong to "everyone who admins the system". An admin in
+#   another org inspecting their own org's audit log cannot tell whether
+#   a null-org row originated from a request targeting a sibling org —
+#   but that's the correct property: unauth attempts are visible to
+#   every admin, auth'd-cross-org denials are NOT visible here.)
+# =========================================================================
+
+_AUDIT_COLS = (
+    "id, event_type, request_id, actor_email, actor_user_id, organization_id, "
+    "path, method, error_code, detail, remote_addr, created_at"
+)
+
+
+@router.get("/security-audit-events")
+def list_security_audit_events(
+    response: Response,
+    caller: Caller = Depends(require_admin),
+    event_type: Optional[str] = Query(default=None),
+    error_code: Optional[str] = Query(default=None),
+    actor_email: Optional[str] = Query(default=None),
+    q: Optional[str] = Query(default=None, max_length=200),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> list[dict]:
+    clauses: list[str] = [
+        "(organization_id = :org OR organization_id IS NULL)"
+    ]
+    params: dict[str, Any] = {"org": caller.organization_id}
+    if event_type:
+        clauses.append("event_type = :event_type")
+        params["event_type"] = event_type
+    if error_code:
+        clauses.append("error_code = :error_code")
+        params["error_code"] = error_code
+    if actor_email:
+        clauses.append("actor_email = :actor_email")
+        params["actor_email"] = actor_email
+    if q:
+        clauses.append("(path LIKE :q OR detail LIKE :q)")
+        params["q"] = f"%{q}%"
+    where = " WHERE " + " AND ".join(clauses)
+
+    total_row = fetch_one(
+        f"SELECT COUNT(*) AS n FROM security_audit_events{where}", params
+    )
+    total = int(total_row["n"]) if total_row else 0
+
+    rows = fetch_all(
+        f"SELECT {_AUDIT_COLS} FROM security_audit_events{where} "
+        "ORDER BY id DESC LIMIT :limit OFFSET :offset",
+        {**params, "limit": limit, "offset": offset},
+    )
+    response.headers["X-Total-Count"] = str(total)
+    response.headers["X-Limit"] = str(limit)
+    response.headers["X-Offset"] = str(offset)
+    return rows

@@ -181,6 +181,13 @@ surface, filters. Details in `17-e2e-and-release.md`. Command:
 - The event composer's event_type is now a `<select>` wired to the backend allowlist (`EVENT_TYPES`), so the UI can't submit invalid types.
 - Encounter list paginates 25 rows at a time via `listEncountersPage`, rendering Prev/Next + "N-M of T" when `total > 25`.
 
+## Operator control plane (phase 13)
+
+- Admin panel is now **4 tabs**: Users, Locations, **Organization**, **Audit log**.
+- Organization tab: readonly `slug`, editable `name` + free-form `settings` JSON (16 KB cap enforced server-side). Local JSON parse errors surface before any PATCH is fired.
+- Audit log tab: filter row (`event_type`, `actor_email`, free-text `q`), paginated table (25/page) ordered newest-first with timestamp / event / actor / method+path / error code / request id columns. Backend 4xx surfaces as banner.
+- Users tab renders an "Invited" badge for active users with `invited_at` set.
+
 ## What this phase explicitly does NOT do
 
 - No real login flow — `X-User-Email` is still dev transport.

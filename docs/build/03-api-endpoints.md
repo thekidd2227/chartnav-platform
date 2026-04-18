@@ -95,6 +95,35 @@ Error codes introduced:
 
 See `22-admin-governance.md` for the governance model.
 
+### Organization settings (🔒 org-scoped)
+
+| Method | Path            | Auth            | Body                          |
+|--------|-----------------|-----------------|-------------------------------|
+| GET    | `/organization` | any authed role | —                             |
+| PATCH  | `/organization` | admin only      | `{ name?, settings? }`        |
+
+Rules:
+- `slug` is **immutable** — not accepted by PATCH.
+- `settings` is a JSON object; non-object → 422; serialized > 16 KB → 400 `settings_too_large`.
+- PATCH always scopes to caller's org — no cross-org parameter exists.
+
+### Security audit read (🔒 admin only)
+
+| Method | Path                           |
+|--------|--------------------------------|
+| GET    | `/security-audit-events`       |
+
+Query: `event_type`, `error_code`, `actor_email`, `q` (substring
+match against `path` or `detail`), `limit` (1..500, default 50),
+`offset` (≥0). Response: array ordered newest-first; pagination
+metadata on `X-Total-Count` / `X-Limit` / `X-Offset` headers.
+
+Scoping: rows where `organization_id = caller.org` **OR**
+`organization_id IS NULL` (pre-auth failures have no caller and are
+visible to every admin; cross-org denials with an identity stay
+private to that identity's org). See `23-operator-control-plane.md`
+for the rationale.
+
 ## Event validation (phase 12)
 
 `POST /encounters/{id}/events` is now schema-bound:

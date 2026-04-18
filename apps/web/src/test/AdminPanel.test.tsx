@@ -15,6 +15,9 @@ vi.mock("../api", async () => {
     createLocation: vi.fn(),
     updateLocation: vi.fn(),
     deactivateLocation: vi.fn(),
+    getOrganization: vi.fn(),
+    updateOrganization: vi.fn(),
+    listAuditEvents: vi.fn(),
   };
 });
 
@@ -37,6 +40,7 @@ const USERS: api.User[] = [
     full_name: "Admin A",
     role: "admin",
     is_active: 1,
+    invited_at: null,
     created_at: "2026-04-18 01:00:00",
   },
   {
@@ -46,6 +50,7 @@ const USERS: api.User[] = [
     full_name: "Casey",
     role: "clinician",
     is_active: 1,
+    invited_at: null,
     created_at: "2026-04-18 01:00:00",
   },
 ];
@@ -64,6 +69,34 @@ beforeEach(() => {
   vi.clearAllMocks();
   (api.listUsers as any).mockResolvedValue(USERS);
   (api.listLocations as any).mockResolvedValue(LOCATIONS);
+  (api.getOrganization as any).mockResolvedValue({
+    id: 1,
+    name: "Demo Eye Clinic",
+    slug: "demo-eye-clinic",
+    settings: { timezone: "America/New_York" },
+    created_at: "2026-04-18 01:00:00",
+  });
+  (api.listAuditEvents as any).mockResolvedValue({
+    items: [
+      {
+        id: 10,
+        event_type: "cross_org_access_forbidden",
+        request_id: "abc1234567",
+        actor_email: "admin@chartnav.local",
+        actor_user_id: 1,
+        organization_id: 1,
+        path: "/encounters",
+        method: "GET",
+        error_code: "cross_org_access_forbidden",
+        detail: "requested organization...",
+        remote_addr: "127.0.0.1",
+        created_at: "2026-04-18 05:00:00",
+      },
+    ],
+    total: 1,
+    limit: 25,
+    offset: 0,
+  });
 });
 
 describe("AdminPanel", () => {
@@ -83,6 +116,7 @@ describe("AdminPanel", () => {
       full_name: "New",
       role: "reviewer",
       is_active: 1,
+      invited_at: "2026-04-18 02:00:00",
       created_at: "2026-04-18 02:00:00",
     };
     (api.createUser as any).mockResolvedValueOnce(newUser);
@@ -159,5 +193,91 @@ describe("AdminPanel", () => {
     await waitFor(() => {
       expect(api.createLocation).toHaveBeenCalledWith("admin@chartnav.local", "Downtown");
     });
+  });
+
+  it("organization tab loads current org and saves edits", async () => {
+    const user = userEvent.setup();
+    render(<AdminPanel identity={ADMIN1.email} me={ADMIN1} onClose={() => {}} />);
+    await user.click(await screen.findByTestId("admin-tab-organization"));
+
+    const nameInput = await screen.findByTestId("admin-org-name") as HTMLInputElement;
+    expect(nameInput.value).toBe("Demo Eye Clinic");
+    const slugInput = screen.getByTestId("admin-org-slug") as HTMLInputElement;
+    expect(slugInput.readOnly).toBe(true);
+
+    // Mutate name and submit.
+    (api.updateOrganization as any).mockResolvedValueOnce({
+      id: 1,
+      name: "Demo Eye Clinic (Renamed)",
+      slug: "demo-eye-clinic",
+      settings: { timezone: "America/New_York" },
+      created_at: "2026-04-18 01:00:00",
+    });
+    await user.clear(nameInput);
+    await user.type(nameInput, "Demo Eye Clinic (Renamed)");
+    await user.click(screen.getByTestId("admin-org-submit"));
+
+    await waitFor(() => {
+      expect(api.updateOrganization).toHaveBeenCalledWith(
+        "admin@chartnav.local",
+        expect.objectContaining({ name: "Demo Eye Clinic (Renamed)" })
+      );
+    });
+    expect(await screen.findByTestId("admin-banner-ok")).toHaveTextContent(
+      /Organization saved/
+    );
+  });
+
+  it("organization settings non-object input shows a local error", async () => {
+    const user = userEvent.setup();
+    render(<AdminPanel identity={ADMIN1.email} me={ADMIN1} onClose={() => {}} />);
+    await user.click(await screen.findByTestId("admin-tab-organization"));
+    const ta = await screen.findByTestId("admin-org-settings") as HTMLTextAreaElement;
+    await user.clear(ta);
+    // user-event treats square brackets as keyboard modifiers; paste instead.
+    await user.click(ta);
+    await user.paste("[1,2,3]");
+    await user.click(screen.getByTestId("admin-org-submit"));
+    const banner = await screen.findByTestId("admin-banner-error");
+    expect(banner).toHaveTextContent(/settings JSON/);
+    // We must NOT have called the backend.
+    expect(api.updateOrganization).not.toHaveBeenCalled();
+  });
+
+  it("audit tab loads and filters by event_type", async () => {
+    const user = userEvent.setup();
+    render(<AdminPanel identity={ADMIN1.email} me={ADMIN1} onClose={() => {}} />);
+    await user.click(await screen.findByTestId("admin-tab-audit"));
+
+    await screen.findByTestId("admin-audit-table");
+    // "cross_org_access_forbidden" appears in both the event_type column
+    // and the error_code column, so scope the assertion to the row.
+    expect(screen.getByTestId("admin-audit-row-10")).toHaveTextContent(
+      "cross_org_access_forbidden"
+    );
+
+    await user.type(
+      screen.getByTestId("admin-audit-event-type"),
+      "invalid_token"
+    );
+
+    await waitFor(() => {
+      const calls = (api.listAuditEvents as any).mock.calls;
+      const last = calls.at(-1);
+      expect(last?.[1]).toEqual({ event_type: "invalid_token" });
+    });
+  });
+
+  it("audit tab surfaces backend 403 as error banner", async () => {
+    (api.listAuditEvents as any).mockRejectedValueOnce(
+      new api.ApiError(403, "role_admin_required", "admin only")
+    );
+    const user = userEvent.setup();
+    render(<AdminPanel identity={ADMIN1.email} me={ADMIN1} onClose={() => {}} />);
+    await user.click(await screen.findByTestId("admin-tab-audit"));
+
+    const banner = await screen.findByTestId("admin-banner-error");
+    expect(banner).toHaveTextContent("403");
+    expect(banner).toHaveTextContent("role_admin_required");
   });
 });

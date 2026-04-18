@@ -10,7 +10,8 @@ SQLite (local dev). Schema produced by Alembic migrations
 |---|---|---|
 | id | INTEGER | PK |
 | name | VARCHAR(255) | NOT NULL |
-| slug | VARCHAR(255) | NOT NULL, UNIQUE |
+| slug | VARCHAR(255) | NOT NULL, UNIQUE — **immutable via API** |
+| settings | TEXT | NULL — JSON object, ≤ 16 KB (phase 13, `d4e5f6a7b8c9`) |
 | created_at | DATETIME | NOT NULL default now() |
 
 ### `locations`
@@ -30,6 +31,7 @@ SQLite (local dev). Schema produced by Alembic migrations
 | full_name | VARCHAR | NULL |
 | role | VARCHAR | NOT NULL default `"admin"`, **CHECK (`admin`/`clinician`/`reviewer`)** |
 | is_active | BOOLEAN | NOT NULL default `true` |
+| invited_at | DATETIME | NULL — stamped on admin create (phase 13, `d4e5f6a7b8c9`) |
 | created_at | DATETIME | NOT NULL default now() |
 
 **Role vocabulary** is enforced at BOTH layers since phase 12:

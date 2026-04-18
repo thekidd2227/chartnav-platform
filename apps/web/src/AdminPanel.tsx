@@ -1,21 +1,27 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ApiError,
+  AuditFilters,
   Location,
   Me,
+  Organization,
   Role,
+  SecurityAuditEvent,
   User,
   createLocation,
   createUser,
   deactivateLocation,
   deactivateUser,
+  getOrganization,
+  listAuditEvents,
   listLocations,
   listUsers,
   updateLocation,
+  updateOrganization,
   updateUser,
 } from "./api";
 
-type Tab = "users" | "locations";
+type Tab = "users" | "locations" | "organization" | "audit";
 
 export function AdminPanel({ identity, me, onClose }: {
   identity: string;
@@ -63,6 +69,20 @@ export function AdminPanel({ identity, me, onClose }: {
           >
             Locations
           </button>
+          <button
+            className={"btn " + (tab === "organization" ? "btn--primary" : "")}
+            data-testid="admin-tab-organization"
+            onClick={() => setTab("organization")}
+          >
+            Organization
+          </button>
+          <button
+            className={"btn " + (tab === "audit" ? "btn--primary" : "")}
+            data-testid="admin-tab-audit"
+            onClick={() => setTab("audit")}
+          >
+            Audit log
+          </button>
         </div>
         {banner && (
           <div
@@ -74,11 +94,10 @@ export function AdminPanel({ identity, me, onClose }: {
           </div>
         )}
         <div className="modal__body">
-          {tab === "users" ? (
-            <UsersPane identity={identity} me={me} flash={flash} />
-          ) : (
-            <LocationsPane identity={identity} flash={flash} />
-          )}
+          {tab === "users" && <UsersPane identity={identity} me={me} flash={flash} />}
+          {tab === "locations" && <LocationsPane identity={identity} flash={flash} />}
+          {tab === "organization" && <OrganizationPane identity={identity} flash={flash} />}
+          {tab === "audit" && <AuditPane identity={identity} flash={flash} />}
         </div>
       </div>
     </div>
@@ -235,7 +254,7 @@ function UsersPane({
       ) : (
         <table className="admin-table" data-testid="admin-users-table">
           <thead>
-            <tr><th>Email</th><th>Name</th><th>Role</th><th>Active</th><th></th></tr>
+            <tr><th>Email</th><th>Name</th><th>Role</th><th>Active</th><th>Status</th><th></th></tr>
           </thead>
           <tbody>
             {users.map((u) => (
@@ -255,6 +274,11 @@ function UsersPane({
                   </select>
                 </td>
                 <td>{u.is_active ? "yes" : "no"}</td>
+                <td data-testid={`admin-user-status-${u.id}`}>
+                  {u.invited_at && u.is_active
+                    ? <span title={`Invited ${u.invited_at}`} style={{ color: "var(--warn)" }}>Invited</span>
+                    : (u.is_active ? "Active" : "Deactivated")}
+                </td>
                 <td>
                   {u.is_active ? (
                     <button
@@ -278,6 +302,291 @@ function UsersPane({
       )}
     </div>
   );
+}
+
+// ---------- Organization --------------------------------------------------
+
+function OrganizationPane({
+  identity,
+  flash,
+}: {
+  identity: string;
+  flash: (kind: "ok" | "error", msg: string) => void;
+}) {
+  const [org, setOrg] = useState<Organization | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const [settingsText, setSettingsText] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const o = await getOrganization(identity);
+      setOrg(o);
+      setName(o.name);
+      setSettingsText(o.settings ? JSON.stringify(o.settings, null, 2) : "{}");
+    } catch (e) {
+      setError(friendly(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [identity]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const onSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!org) return;
+    setSaving(true);
+    try {
+      let settings: Record<string, unknown> | null = null;
+      const trimmed = settingsText.trim();
+      if (trimmed) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+            throw new Error("settings must be a JSON object");
+          }
+          settings = parsed as Record<string, unknown>;
+        } catch (parseErr) {
+          flash("error", `settings JSON: ${(parseErr as Error).message}`);
+          setSaving(false);
+          return;
+        }
+      } else {
+        settings = null;
+      }
+
+      const patch: { name?: string; settings?: Record<string, unknown> | null } = {};
+      if (name.trim() && name !== org.name) patch.name = name.trim();
+      if (JSON.stringify(settings) !== JSON.stringify(org.settings || null)) {
+        patch.settings = settings ?? {};
+      }
+      if (Object.keys(patch).length === 0) {
+        flash("ok", "No changes");
+        setSaving(false);
+        return;
+      }
+      const updated = await updateOrganization(identity, patch);
+      setOrg(updated);
+      flash("ok", `Organization saved`);
+    } catch (err) {
+      flash("error", friendly(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return <div className="subtle-note">Loading…</div>;
+  if (error) return <div className="banner banner--error" role="alert">{error}</div>;
+  if (!org) return null;
+
+  return (
+    <form
+      className="event-form"
+      data-testid="admin-org-form"
+      onSubmit={onSave}
+    >
+      <label>
+        Slug (immutable)
+        <input value={org.slug} readOnly disabled data-testid="admin-org-slug" />
+      </label>
+      <label>
+        Name *
+        <input
+          data-testid="admin-org-name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+        />
+      </label>
+      <label>
+        Settings (JSON object, ≤16 KB)
+        <textarea
+          data-testid="admin-org-settings"
+          value={settingsText}
+          onChange={(e) => setSettingsText(e.target.value)}
+          style={{ minHeight: 160 }}
+        />
+      </label>
+      <div className="row" style={{ justifyContent: "flex-end" }}>
+        <button
+          type="submit"
+          className="btn btn--primary"
+          data-testid="admin-org-submit"
+          disabled={saving}
+        >
+          {saving ? "Saving…" : "Save organization"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+// ---------- Audit log -----------------------------------------------------
+
+function AuditPane({
+  identity,
+  flash,
+}: {
+  identity: string;
+  flash: (kind: "ok" | "error", msg: string) => void;
+}) {
+  const [rows, setRows] = useState<SecurityAuditEvent[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const PAGE_SIZE = 25;
+  const [offset, setOffset] = useState(0);
+  const [filters, setFilters] = useState<AuditFilters>({});
+
+  const filterKey = useMemo(() => JSON.stringify(filters), [filters]);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { items, total } = await listAuditEvents(identity, filters, {
+        limit: PAGE_SIZE,
+        offset,
+      });
+      setRows(items);
+      setTotal(total);
+    } catch (e) {
+      flash("error", friendly(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [identity, offset, filterKey, flash]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const update = (k: keyof AuditFilters, v: string) => {
+    const next = { ...filters };
+    if (v.trim()) (next as any)[k] = v.trim();
+    else delete (next as any)[k];
+    setFilters(next);
+    setOffset(0);
+  };
+
+  return (
+    <div>
+      <div className="filters" data-testid="admin-audit-filters" style={{ position: "static", padding: 0 }}>
+        <label>
+          Event type
+          <input
+            data-testid="admin-audit-event-type"
+            placeholder="cross_org_access_forbidden"
+            value={filters.event_type ?? ""}
+            onChange={(e) => update("event_type", e.target.value)}
+          />
+        </label>
+        <label>
+          Actor email
+          <input
+            data-testid="admin-audit-actor-email"
+            placeholder="admin@chartnav.local"
+            value={filters.actor_email ?? ""}
+            onChange={(e) => update("actor_email", e.target.value)}
+          />
+        </label>
+        <label>
+          Path / detail contains
+          <input
+            data-testid="admin-audit-q"
+            placeholder="/encounters"
+            value={filters.q ?? ""}
+            onChange={(e) => update("q", e.target.value)}
+          />
+        </label>
+      </div>
+      <div className="admin-list-head">
+        <h3>
+          Audit events ({total}
+          {total > PAGE_SIZE ? `, showing ${offset + 1}-${Math.min(offset + PAGE_SIZE, total)}` : ""})
+        </h3>
+        <button className="btn" onClick={refresh} data-testid="admin-audit-refresh">
+          Refresh
+        </button>
+      </div>
+      {loading ? (
+        <div className="subtle-note">Loading…</div>
+      ) : (
+        <table className="admin-table" data-testid="admin-audit-table">
+          <thead>
+            <tr>
+              <th>When</th>
+              <th>Event</th>
+              <th>Actor</th>
+              <th>Path</th>
+              <th>Error</th>
+              <th>Request</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id} data-testid={`admin-audit-row-${r.id}`}>
+                <td>{fmtTs(r.created_at)}</td>
+                <td><code>{r.event_type}</code></td>
+                <td>{r.actor_email ?? "—"}</td>
+                <td>
+                  <code>{r.method ?? ""} {r.path ?? ""}</code>
+                </td>
+                <td>{r.error_code ?? "—"}</td>
+                <td>
+                  <code style={{ fontSize: 11 }}>
+                    {r.request_id ? r.request_id.slice(0, 8) : "—"}
+                  </code>
+                </td>
+              </tr>
+            ))}
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={6} className="subtle-note" style={{ padding: 16, textAlign: "center" }}>
+                  No audit events match these filters.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      )}
+      {total > PAGE_SIZE && (
+        <div className="pagination" data-testid="admin-audit-pagination" style={{ marginTop: 10 }}>
+          <button
+            className="btn"
+            disabled={offset === 0}
+            data-testid="admin-audit-prev"
+            onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
+          >
+            ← Prev
+          </button>
+          <span className="subtle-note">
+            {offset + 1}–{Math.min(offset + PAGE_SIZE, total)} of {total}
+          </span>
+          <button
+            className="btn"
+            disabled={offset + PAGE_SIZE >= total}
+            data-testid="admin-audit-next"
+            onClick={() => setOffset(offset + PAGE_SIZE)}
+          >
+            Next →
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function fmtTs(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso.replace(" ", "T"));
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleString();
 }
 
 // ---------- Locations -----------------------------------------------------

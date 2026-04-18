@@ -39,7 +39,7 @@
   <div class="sub">Backend phases 1–5: spine → state machine → auth → RBAC → CI/hardening<br>
   Repo: <code>thekidd2227/chartnav-platform</code></div>
 </header>
-<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth, org scoping, RBAC</a></li><li><a href="#sec-9">08 — Test strategy</a></li><li><a href="#sec-10">09 — CI & deploy hardening</a></li><li><a href="#sec-11">10 — Doc artifact pipeline</a></li><li><a href="#sec-12">11 — Production-auth seam</a></li><li><a href="#sec-13">12 — Runtime config</a></li><li><a href="#sec-14">13 — Deploy target</a></li><li><a href="#sec-15">14 — Postgres parity</a></li><li><a href="#sec-16">15 — Frontend integration</a></li><li><a href="#sec-17">16 — Frontend test strategy</a></li><li><a href="#sec-18">17 — E2E & release</a></li><li><a href="#sec-19">18 — Operational hardening</a></li><li><a href="#sec-20">19 — Staging deployment</a></li><li><a href="#sec-21">20 — Observability</a></li><li><a href="#sec-22">21 — Staging runbook</a></li><li><a href="#sec-23">22 — Admin governance</a></li><li><a href="#sec-24">Diagram — System architecture</a></li><li><a href="#sec-25">Diagram — Encounter status machine</a></li><li><a href="#sec-26">Diagram — ER</a></li><li><a href="#sec-27">Diagram — API / data flow</a></li></ol></nav>
+<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth, org scoping, RBAC</a></li><li><a href="#sec-9">08 — Test strategy</a></li><li><a href="#sec-10">09 — CI & deploy hardening</a></li><li><a href="#sec-11">10 — Doc artifact pipeline</a></li><li><a href="#sec-12">11 — Production-auth seam</a></li><li><a href="#sec-13">12 — Runtime config</a></li><li><a href="#sec-14">13 — Deploy target</a></li><li><a href="#sec-15">14 — Postgres parity</a></li><li><a href="#sec-16">15 — Frontend integration</a></li><li><a href="#sec-17">16 — Frontend test strategy</a></li><li><a href="#sec-18">17 — E2E & release</a></li><li><a href="#sec-19">18 — Operational hardening</a></li><li><a href="#sec-20">19 — Staging deployment</a></li><li><a href="#sec-21">20 — Observability</a></li><li><a href="#sec-22">21 — Staging runbook</a></li><li><a href="#sec-23">22 — Admin governance</a></li><li><a href="#sec-24">23 — Operator control plane</a></li><li><a href="#sec-25">Diagram — System architecture</a></li><li><a href="#sec-26">Diagram — Encounter status machine</a></li><li><a href="#sec-27">Diagram — ER</a></li><li><a href="#sec-28">Diagram — API / data flow</a></li></ol></nav>
 <section id="sec-1"><h2>Executive summary</h2>
 <p>This document consolidates <strong>all</strong> ChartNav backend phases delivered to</p>
 <p>date.</p>
@@ -54,91 +54,78 @@
 <p><strong>Phase 9 — Playwright E2E + release pipeline.</strong> Playwright boots backend + frontend together, 8 Chromium scenarios, new <code>e2e</code> CI job. <code>release.yml</code> workflow on <code>v*.*.*</code> tags: GHCR push + release bundle + GitHub Release with tarballs and MANIFEST.</p>
 <p><strong>Phase 10 — Real JWT bearer auth + operational hardening.</strong> Real PyJWT validation against a JWKS URL (signature + iss + aud + exp + claim mapping). Request correlation (<code>X-Request-ID</code>), structured JSON logs, <code>security_audit_events</code> table (<code>b2c3d4e5f6a7</code>), CORS driven by config, per-process rate limiter.</p>
 <p><strong>Phase 11 — Staging deployment + observability.</strong> New <code>/ready</code> + <code>/metrics</code> surfaces. Pinned-image staging compose + runbook scripts + release-bundled staging tarball. <code>deploy-config</code> CI job validates compose + shellcheck.</p>
-<p><strong>Phase 12 — Admin governance + event discipline + pagination (this phase).</strong> Migration <code>c3d4e5f6a7b8</code> adds a CHECK constraint on <code>users.role</code> (DB-level rejection of anything outside <code>{admin, clinician, reviewer}</code>) plus <code>is_active</code> flags on <code>users</code> and <code>locations</code> for soft-delete. Admin CRUD arrives: <code>POST/PATCH/DELETE /users</code> and <code>POST/PATCH/DELETE /locations</code>, admin-only, strictly org-scoped, with self-protection against demote/deactivate. <code>EVENT_SCHEMAS</code> makes workflow events schema-bound (invalid type or payload → 400). <code>GET /encounters</code> paginates via <code>limit</code>+<code>offset</code> query params with <code>X-Total-Count</code>/<code>X-Limit</code>/<code>X-Offset</code> headers — backward-compatible array body. Frontend gains an <code>AdminPanel</code> modal (Users + Locations tabs), an Admin button gated on <code>isAdmin(role)</code>, a Prev/Next pager, and an event-type <code>&lt;select&gt;</code> wired to the backend allowlist. Backend suite jumps to 91 tests (+20 admin/governance), Vitest to 18 (+6 admin UI), Playwright to 10 (+2 admin scenarios).</p>
+<p><strong>Phase 12 — Admin governance + event discipline + pagination.</strong> DB CHECK on <code>users.role</code>, <code>is_active</code> soft-delete flags, admin CRUD for users + locations, <code>EVENT_SCHEMAS</code> allowlist, encounter pagination via <code>limit</code>/<code>offset</code> + <code>X-Total-Count</code>. <code>AdminPanel</code> modal with Users + Locations tabs.</p>
+<p><strong>Phase 13 — Operator control plane (this phase).</strong> Migration <code>d4e5f6a7b8c9</code> adds <code>organizations.settings TEXT</code> and <code>users.invited_at DATETIME</code>. New endpoints: <code>GET /organization</code> (any authed role) + <code>PATCH /organization</code> (admin, 16 KB settings cap, slug immutable), and <code>GET /security-audit-events</code> (admin, org-scoped <code>OR organization_id IS NULL</code>, filterable by <code>event_type</code> / <code>actor_email</code> / free-text <code>q</code>, paginated with <code>X-Total-Count</code>). Admin panel expands to four tabs (Users, Locations, Organization, Audit log); admin-create stamps <code>invited_at</code> and the Users tab shows an &quot;Invited&quot; badge. Suites grow to <strong>88 pytest / 22 Vitest / 11 Playwright</strong>.</p>
 <p>Preserved untouched: <code>/health</code>, <code>/</code>, SQLite dev workflow, state machine + filtering surface, workflow_events model, existing endpoint contracts.</p>
 </section>
 <section id="sec-2"><h2>01 — Current state</h2>
 <h1>ChartNav — Current State</h1>
-<p><strong>As of:</strong> 2026-04-18 (phase: admin governance + event discipline + pagination)</p>
+<p><strong>As of:</strong> 2026-04-18 (phase: operator control plane — org settings, audit read, user-lifecycle signal)</p>
 <h2>Repo layout (relevant)</h2>
 <pre class="code lang-"><code>
 chartnav-platform/
-├── .github/workflows/
-│   ├── ci.yml            # backend-sqlite · backend-postgres · frontend · e2e · docker-build · deploy-config · docs
-│   └── release.yml
-├── Makefile              # staging-up/verify/rollback · web-* · e2e · release-build · dev
-├── scripts/              # build_docs.py · verify.sh · pg_verify.sh · release_build.sh · staging_*.sh
+├── .github/workflows/{ci.yml,release.yml}
+├── Makefile
+├── scripts/                # build_docs.py · verify.sh · pg_verify.sh · release_build.sh · staging_*.sh
 ├── apps/
 │   ├── api/
 │   │   ├── app/
 │   │   │   ├── main.py · config.py · db.py · auth.py · authz.py
 │   │   │   ├── audit.py · logging_config.py · middleware.py · metrics.py
-│   │   │   └── api/routes.py    # + admin CRUD, event schemas, pagination
-│   │   ├── alembic/versions/    # 4 migrations through c3d4e5f6a7b8
-│   │   ├── scripts_seed.py
-│   │   ├── scripts/smoke.sh
-│   │   ├── tests/               # 91 pytest (+20 admin, +3 observability)
+│   │   │   └── api/routes.py      # + /organization + /security-audit-events
+│   │   ├── alembic/versions/      # 5 migrations through d4e5f6a7b8c9
+│   │   ├── tests/                 # 88 pytest (+17 control-plane)
 │   │   └── Dockerfile · entrypoint.sh · .env.example
 │   └── web/
-│       ├── package.json · playwright.config.ts · vite.config.ts · tsconfig.json
 │       ├── src/
-│       │   ├── App.tsx          # + Admin button, pagination, event-type dropdown
-│       │   ├── AdminPanel.tsx   # NEW — users + locations tabs
-│       │   ├── api.ts           # + admin methods + listEncountersPage
+│       │   ├── App.tsx
+│       │   ├── AdminPanel.tsx     # 4 tabs — Users · Locations · Organization · Audit log
+│       │   ├── api.ts             # + org + audit helpers
 │       │   ├── identity.ts · styles.css · main.tsx
-│       │   └── test/            # 18 Vitest (+6 admin, +1 app)
-│       └── tests/e2e/           # 10 Playwright (+2 admin)
-├── infra/docker/{docker-compose,docker-compose.prod,docker-compose.staging}.yml
-└── docs/build/ 01 … 22
+│       │   └── test/              # 22 Vitest (+4 control-plane)
+│       └── tests/e2e/             # 11 Playwright (+1 org/audit)
+├── infra/docker/
+└── docs/build/ 01 … 23
 </code></pre>
 <h2>Runtime baseline</h2>
 <ul>
 <li>Backend: FastAPI + SQLAlchemy Core + PyJWT.</li>
 <li>Frontend: Vite 5 + React 18 + TypeScript + Vitest + Playwright.</li>
 <li>Auth: <code>header</code> (dev) or <code>bearer</code> (prod JWT via JWKS).</li>
-<li>RBAC: <code>admin</code> / <code>clinician</code> / <code>reviewer</code>. Enforced at <strong>app level AND DB level</strong> via CHECK constraint (migration <code>c3d4e5f6a7b8</code>).</li>
+<li>RBAC: <code>admin</code> / <code>clinician</code> / <code>reviewer</code> (CHECK-constrained at DB level).</li>
 <li>Error envelope: <code>{&quot;detail&quot;: {&quot;error_code&quot;: &quot;...&quot;, &quot;reason&quot;: &quot;...&quot;}}</code>.</li>
-<li><strong>Admin governance</strong>: <code>POST/PATCH/DELETE /users</code> + <code>POST/PATCH/DELETE /locations</code> (admin only, org-scoped, soft-delete via <code>is_active</code>).</li>
-<li><strong>Event discipline</strong>: <code>EVENT_SCHEMAS</code> allowlist with per-type required keys; invalid <code>event_type</code> or <code>event_data</code> → 400.</li>
-<li><strong>Pagination</strong>: <code>GET /encounters?limit=&amp;offset=</code> + <code>X-Total-Count</code>/<code>X-Limit</code>/<code>X-Offset</code> headers.</li>
+<li><strong>Org settings</strong>: <code>GET /organization</code> (any authed role), <code>PATCH /organization</code> (admin). 16 KB cap on <code>settings</code> JSON; slug immutable.</li>
+<li><strong>Audit read</strong>: <code>GET /security-audit-events</code> (admin, org-scoped <code>OR organization_id IS NULL</code>, filterable, paginated).</li>
+<li><strong>User lifecycle</strong>: <code>invited_at</code> stamped on admin create; UI renders &quot;Invited&quot; badge.</li>
+<li>Event discipline: <code>EVENT_SCHEMAS</code> allowlist with per-type required keys.</li>
+<li>Encounter pagination: <code>limit</code>/<code>offset</code> + <code>X-Total-Count</code>/<code>X-Limit</code>/<code>X-Offset</code> headers.</li>
 <li>Observability: <code>/health</code> · <code>/ready</code> · <code>/metrics</code> (Prometheus text).</li>
-<li>Audit trail: <code>security_audit_events</code> table.</li>
 <li>CORS + rate-limit + request-id + structured logs: unchanged.</li>
-<li>Alembic head: <code>c3d4e5f6a7b8</code>.</li>
+<li>Alembic head: <code>d4e5f6a7b8c9</code>.</li>
 </ul>
 <h2>Testing layers</h2>
-<table><thead><tr><th>Layer</th><th>Tool</th><th>Count</th><th>Scope</th></tr></thead><tbody>
-<tr><td>pytest</td><td>pytest</td><td>91</td><td>backend (auth, RBAC, scoping, state machine, JWT, operational, observability, admin/governance/events/pagination)</td></tr>
-<tr><td>shell smoke</td><td>smoke.sh</td><td>9</td><td>live HTTP contract (SQLite + Postgres)</td></tr>
-<tr><td>vitest</td><td>vitest</td><td>18</td><td>frontend integration (mocked API, incl. AdminPanel)</td></tr>
-<tr><td>Playwright</td><td>@playwright</td><td>10</td><td>full-stack browser (incl. admin create-user/location, non-admin denial)</td></tr>
-<tr><td>staging</td><td>staging_verify.sh</td><td>9</td><td>live staging stack</td></tr>
+<table><thead><tr><th>Layer</th><th>Tool</th><th>Count</th><th>Notes</th></tr></thead><tbody>
+<tr><td>pytest</td><td>pytest</td><td>88</td><td>+17 <code>test_control_plane.py</code> (org settings, audit read, invited_at)</td></tr>
+<tr><td>shell smoke</td><td>smoke.sh</td><td>9</td><td>unchanged</td></tr>
+<tr><td>vitest</td><td>vitest</td><td>22</td><td>+4 admin-panel tests for Organization + Audit tabs</td></tr>
+<tr><td>Playwright</td><td>@playwright</td><td>11</td><td>+1 org settings + audit tab E2E</td></tr>
+<tr><td>staging</td><td>staging_verify.sh</td><td>9</td><td>unchanged</td></tr>
 </tbody></table>
 <h2>Verified working endpoints</h2>
-<h3>Open</h3>
+<p>Additions this phase:</p>
 <ul>
-<li><code>GET /health</code>, <code>GET /</code></li>
-<li><code>GET /ready</code>, <code>GET /metrics</code></li>
+<li><code>GET /organization</code>, <code>PATCH /organization</code></li>
+<li><code>GET /security-audit-events</code></li>
 </ul>
-<h3>Authenticated (any role)</h3>
-<ul>
-<li><code>GET /me</code></li>
-<li><code>GET /organizations</code>, <code>GET /locations</code>, <code>GET /users</code> (+ <code>?include_inactive=1</code>)</li>
-<li><code>GET /encounters</code> (filters + pagination), <code>GET /encounters/{id}</code>, <code>GET /encounters/{id}/events</code></li>
-<li><code>POST /encounters</code> (admin, clinician)</li>
-<li><code>POST /encounters/{id}/events</code> (admin, clinician; event-type + schema validated)</li>
-<li><code>POST /encounters/{id}/status</code> (per-edge RBAC)</li>
-</ul>
-<h3>Admin only (org-scoped, soft-delete semantics)</h3>
-<ul>
-<li><code>POST /users</code>, <code>PATCH /users/{id}</code>, <code>DELETE /users/{id}</code></li>
-<li><code>POST /locations</code>, <code>PATCH /locations/{id}</code>, <code>DELETE /locations/{id}</code></li>
-</ul>
+<p>Unchanged from phase 12: <code>/health</code>, <code>/</code>, <code>/ready</code>, <code>/metrics</code>, <code>/me</code>,</p>
+<p><code>/organizations</code>, <code>/locations</code>, <code>/users</code>, <code>/encounters</code> (+ pagination +</p>
+<p>filters), admin CRUD for users + locations, event-validated</p>
+<p><code>POST /encounters/{id}/events</code>, per-edge RBAC on status transitions.</p>
 <h2>Automation</h2>
 <ul>
-<li><code>make verify</code> — backend gate (91 pytest + 9 smoke)</li>
-<li><code>make web-verify</code> — frontend gate (18 vitest + typecheck + build)</li>
-<li><code>make e2e</code> — Playwright (10 scenarios)</li>
+<li><code>make verify</code> → 88 pytest + 9 smoke</li>
+<li><code>make web-verify</code> → 22 vitest + typecheck + build</li>
+<li><code>make e2e</code> → 11 Playwright</li>
 <li><code>make pg-verify</code> — Postgres parity</li>
 <li><code>make staging-up / staging-verify / staging-rollback TAG=... / staging-down</code></li>
 <li><code>make release-build VERSION=v0.1.0</code></li>
@@ -283,6 +270,30 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <li><code>user_not_found</code> / <code>location_not_found</code> (404) — includes cross-org lookups (no existence leak).</li>
 </ul>
 <p>See <code>22-admin-governance.md</code> for the governance model.</p>
+<h3>Organization settings (🔒 org-scoped)</h3>
+<table><thead><tr><th>Method</th><th>Path</th><th>Auth</th><th>Body</th></tr></thead><tbody>
+<tr><td>GET</td><td><code>/organization</code></td><td>any authed role</td><td>—</td></tr>
+<tr><td>PATCH</td><td><code>/organization</code></td><td>admin only</td><td><code>{ name?, settings? }</code></td></tr>
+</tbody></table>
+<p>Rules:</p>
+<ul>
+<li><code>slug</code> is <strong>immutable</strong> — not accepted by PATCH.</li>
+<li><code>settings</code> is a JSON object; non-object → 422; serialized &gt; 16 KB → 400 <code>settings_too_large</code>.</li>
+<li>PATCH always scopes to caller&#x27;s org — no cross-org parameter exists.</li>
+</ul>
+<h3>Security audit read (🔒 admin only)</h3>
+<table><thead><tr><th>Method</th><th>Path</th></tr></thead><tbody>
+<tr><td>GET</td><td><code>/security-audit-events</code></td></tr>
+</tbody></table>
+<p>Query: <code>event_type</code>, <code>error_code</code>, <code>actor_email</code>, <code>q</code> (substring</p>
+<p>match against <code>path</code> or <code>detail</code>), <code>limit</code> (1..500, default 50),</p>
+<p><code>offset</code> (≥0). Response: array ordered newest-first; pagination</p>
+<p>metadata on <code>X-Total-Count</code> / <code>X-Limit</code> / <code>X-Offset</code> headers.</p>
+<p>Scoping: rows where <code>organization_id = caller.org</code> <strong>OR</strong></p>
+<p><code>organization_id IS NULL</code> (pre-auth failures have no caller and are</p>
+<p>visible to every admin; cross-org denials with an identity stay</p>
+<p>private to that identity&#x27;s org). See <code>23-operator-control-plane.md</code></p>
+<p>for the rationale.</p>
 <h2>Event validation (phase 12)</h2>
 <p><code>POST /encounters/{id}/events</code> is now schema-bound:</p>
 <table><thead><tr><th>event_type</th><th>required keys</th></tr></thead><tbody>
@@ -332,7 +343,8 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <table><thead><tr><th>column</th><th>type</th><th>constraints</th></tr></thead><tbody>
 <tr><td>id</td><td>INTEGER</td><td>PK</td></tr>
 <tr><td>name</td><td>VARCHAR(255)</td><td>NOT NULL</td></tr>
-<tr><td>slug</td><td>VARCHAR(255)</td><td>NOT NULL, UNIQUE</td></tr>
+<tr><td>slug</td><td>VARCHAR(255)</td><td>NOT NULL, UNIQUE — <strong>immutable via API</strong></td></tr>
+<tr><td>settings</td><td>TEXT</td><td>NULL — JSON object, ≤ 16 KB (phase 13, <code>d4e5f6a7b8c9</code>)</td></tr>
 <tr><td>created_at</td><td>DATETIME</td><td>NOT NULL default now()</td></tr>
 </tbody></table>
 <h3><code>locations</code></h3>
@@ -350,6 +362,7 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <tr><td>full_name</td><td>VARCHAR</td><td>NULL</td></tr>
 <tr><td>role</td><td>VARCHAR</td><td>NOT NULL default <code>&quot;admin&quot;</code>, <strong>CHECK (<code>admin</code>/<code>clinician</code>/<code>reviewer</code>)</strong></td></tr>
 <tr><td>is_active</td><td>BOOLEAN</td><td>NOT NULL default <code>true</code></td></tr>
+<tr><td>invited_at</td><td>DATETIME</td><td>NULL — stamped on admin create (phase 13, <code>d4e5f6a7b8c9</code>)</td></tr>
 <tr><td>created_at</td><td>DATETIME</td><td>NOT NULL default now()</td></tr>
 </tbody></table>
 <p><strong>Role vocabulary</strong> is enforced at BOTH layers since phase 12:</p>
@@ -421,99 +434,83 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <h1>Build Log</h1>
 <p>Reverse-chronological.</p>
 <p>---</p>
-<h2>2026-04-18 — Phase 12: admin governance + event discipline + pagination</h2>
+<h2>2026-04-18 — Phase 13: operator control plane (org settings + audit read + user lifecycle)</h2>
 <h3>Step 1 — Baseline</h3>
 <ul>
-<li>Head: <code>ee7cf43</code> (staging deployment + observability).</li>
-<li>51 pytest + 12 vitest + 8 Playwright green.</li>
+<li>Head: <code>4ff4e28</code> (admin governance + event discipline + pagination).</li>
+<li>71 pytest + 18 vitest + 10 Playwright green.</li>
 </ul>
-<h3>Step 2 — DB role constraint + soft-delete columns</h3>
+<h3>Step 2 — Migration <code>d4e5f6a7b8c9</code></h3>
 <ul>
-<li>New Alembic migration <code>c3d4e5f6a7b8</code>:</li>
-<li><code>CHECK (role IN (&#x27;admin&#x27;,&#x27;clinician&#x27;,&#x27;reviewer&#x27;))</code> on <code>users.role</code> via <code>batch_alter_table</code> (works on SQLite + Postgres).</li>
-<li><code>is_active BOOLEAN NOT NULL DEFAULT true</code> on <code>users</code> and <code>locations</code>.</li>
-<li>Applied cleanly; seed still idempotent.</li>
+<li><code>organizations.settings TEXT NULL</code> for tenant preference JSON.</li>
+<li><code>users.invited_at DATETIME NULL</code>; server stamps it on admin-create.</li>
+<li>Applied cleanly; seed still idempotent; seeded users keep <code>invited_at = NULL</code>.</li>
 </ul>
-<h3>Step 3 — Admin authz dependency</h3>
+<h3>Step 3 — Backend endpoints</h3>
 <ul>
-<li><code>app.authz.require_admin</code>: FastAPI dep that 403s non-admins with <code>role_admin_required</code>.</li>
+<li><code>GET /organization</code> (any authed role), <code>PATCH /organization</code> (admin only).</li>
+<li>Slug immutable by construction — no PATCH accepts it.</li>
+<li><code>settings</code> must be a JSON object; ≤ 16 KB after serialization or 400 <code>settings_too_large</code>.</li>
+<li><code>GET /security-audit-events</code> (admin only):</li>
+<li>Filters: <code>event_type</code>, <code>error_code</code>, <code>actor_email</code>, <code>q</code> (substring over <code>path</code> / <code>detail</code>).</li>
+<li>Pagination: <code>limit</code> (1..500, default 50), <code>offset</code> (≥0); returns <code>X-Total-Count</code>, <code>X-Limit</code>, <code>X-Offset</code>.</li>
+<li>Org scoping: <code>organization_id = caller.org OR organization_id IS NULL</code>. Pre-auth failures (no caller) are visible to every admin; cross-org denials with an identity stay private to that identity&#x27;s org.</li>
+<li><code>POST /users</code> now sets <code>invited_at = now()</code>.</li>
+<li><code>list_users</code> / <code>list_users?include_inactive=1</code> include the <code>invited_at</code> column.</li>
 </ul>
-<h3>Step 4 — Event schema discipline</h3>
+<h3>Step 4 — Backend tests (<code>test_control_plane.py</code>, 17 new)</h3>
 <ul>
-<li>New <code>EVENT_SCHEMAS</code> map in <code>routes.py</code> with per-type required keys for <code>encounter_created</code>, <code>status_changed</code>, <code>note_draft_requested</code>, <code>note_draft_completed</code>, <code>note_reviewed</code>, <code>manual_note</code>.</li>
-<li>New <code>_validate_event(event_type, event_data)</code> — rejects unknown types, non-object payloads, and missing required keys with stable error codes (<code>invalid_event_type</code>, <code>invalid_event_data</code>).</li>
-<li><code>POST /encounters/{id}/events</code> runs through the validator. Server-written events bypass (known-good by construction).</li>
+<li><code>/organization</code> reads (all 3 roles + 401), admin PATCH name + settings, non-object settings → 422, oversized settings → 400, non-admin PATCH → 403, cross-org isolation on PATCH.</li>
+<li>Audit read admin-only; filters for <code>event_type</code>, <code>actor_email</code>, <code>q</code>; pagination with disjoint pages and correct headers; org-scoping never leaks cross-org rows.</li>
+<li><code>invited_at</code> stamped on create; seeded rows are null.</li>
+<li><strong>Full backend suite: 88/88 passed</strong> (~45s).</li>
 </ul>
-<h3>Step 5 — Pagination</h3>
+<h3>Step 5 — Frontend API + UI</h3>
 <ul>
-<li><code>GET /encounters</code> accepts <code>limit</code> (default 50, 1..500) and <code>offset</code> (≥0). Returns headers <code>X-Total-Count</code>, <code>X-Limit</code>, <code>X-Offset</code>. Response body stays a JSON array — backward compatible with clients that ignore headers.</li>
+<li><code>api.ts</code>:</li>
+<li>Types: <code>Organization</code>, <code>SecurityAuditEvent</code>, <code>AuditFilters</code>; <code>invited_at</code> added to <code>User</code>.</li>
+<li>Functions: <code>getOrganization</code>, <code>updateOrganization</code>, <code>listAuditEvents</code> (returns <code>{items, total, limit, offset}</code> from the header-based paginator).</li>
+<li><code>AdminPanel.tsx</code> becomes 4 tabs:</li>
+<li><strong>Users</strong> — adds an &quot;Invited&quot; badge for active users with <code>invited_at</code> set.</li>
+<li><strong>Locations</strong> — unchanged.</li>
+<li><strong>Organization</strong> — loads current org, readonly slug, editable name + settings textarea (local JSON parse, server 16 KB cap).</li>
+<li><strong>Audit log</strong> — filter row (event_type / actor_email / free-text q), paginated table (25/page), newest-first.</li>
+<li><code>styles.css</code> — textarea styling added to <code>.modal__body</code>.</li>
+<li>Typecheck clean; <code>vite build</code> emits 175 KB JS / 8.2 KB CSS.</li>
 </ul>
-<h3>Step 6 — Admin CRUD endpoints</h3>
+<h3>Step 6 — Frontend tests</h3>
 <ul>
-<li><code>POST/PATCH/DELETE /users</code>, <code>POST/PATCH/DELETE /locations</code>, all admin-only, strictly org-scoped.</li>
-<li>Self-protection: admin cannot demote self (<code>cannot_demote_self</code>) or deactivate self (<code>cannot_deactivate_self</code>).</li>
-<li>Cross-org mutation → <code>404 *_not_found</code> (no existence leak).</li>
-<li>Email uniqueness check (<code>user_email_taken</code> 409); email format via Pydantic regex (422 on invalid).</li>
-<li>Soft-delete flips <code>is_active = 0</code>; <code>GET</code> lists filter to active by default, <code>?include_inactive=1</code> shows all.</li>
+<li><code>AdminPanel.test.tsx</code> — added 4 tests: org-tab loads current, org PATCH fires with correct body, local JSON parse error (bracket-array) surfaces without hitting backend, audit tab loads + filter dispatches + 403 surfaces.</li>
+<li><code>App.test.tsx</code> unchanged.</li>
+<li>Vitest: <strong>22/22 passed</strong>.</li>
 </ul>
-<h3>Step 7 — Backend tests</h3>
+<h3>Step 7 — E2E</h3>
 <ul>
-<li>New <code>apps/api/tests/test_admin.py</code> — <strong>20 tests</strong> covering DB role CHECK, admin create/update/deactivate users + locations, non-admin denial, cross-org denial (404), event type + data validation, pagination headers + filter combinations.</li>
-<li>Existing suites untouched by the new validator: role-gated tests still 403 before reaching the validator; status-change path writes server-constructed event data which matches the schema.</li>
-<li>Full backend suite: <strong>91/91 passed</strong>.</li>
+<li>New scenario: &quot;admin can edit organization settings and inspect audit log&quot; — drives the Organization + Audit tabs against the live stack.</li>
+<li>Playwright: <strong>11/11 passed</strong> in ~17s.</li>
 </ul>
-<h3>Step 8 — Frontend</h3>
+<h3>Step 8 — Docs</h3>
 <ul>
-<li><code>apps/web/src/api.ts</code>: typed <code>User</code>, <code>Location</code> interfaces; <code>createUser</code>, <code>updateUser</code>, <code>deactivateUser</code>, <code>listUsers</code>, <code>createLocation</code>, <code>updateLocation</code>, <code>deactivateLocation</code>, <code>listLocations</code>, <code>listEncountersPage</code>; <code>isAdmin(role)</code>; <code>EVENT_TYPES</code> + <code>EVENT_TYPE_REQUIRED</code> constants mirroring the backend schema.</li>
-<li><code>requestWithResponse(...)</code> helper exposes response headers so the pagination helper can read <code>X-Total-Count</code> / <code>X-Limit</code> / <code>X-Offset</code> cleanly.</li>
-<li><code>apps/web/src/AdminPanel.tsx</code> — NEW modal with Users + Locations tabs. Create forms with validation + in-flight disabled state. Users table exposes inline role change + deactivate/reactivate; self-row is disabled. Locations table supports inline rename + deactivate.</li>
-<li><code>App.tsx</code>:</li>
-<li>Header gains the <strong>Admin</strong> button for <code>isAdmin</code> callers.</li>
-<li>Encounter list uses <code>listEncountersPage</code> and renders Prev/Next/&quot;N-M of T&quot; controls when <code>total &gt; PAGE_SIZE</code> (25).</li>
-<li>Event composer&#x27;s <code>event_type</code> input became a <code>&lt;select&gt;</code> wired to <code>EVENT_TYPES</code> — the UI can no longer submit unknown types.</li>
-<li><code>styles.css</code> — admin modal/table/pagination layout.</li>
-</ul>
-<h3>Step 9 — Frontend tests</h3>
-<ul>
-<li>New <code>apps/web/src/test/AdminPanel.test.tsx</code> — <strong>5 Vitest tests</strong>: lists users, submits create-user, surfaces 409 error, disables self-row controls, creates a location on the Locations tab.</li>
-<li>Existing <code>App.test.tsx</code> — added 1 test for admin-button visibility across roles; updated the list mock to use <code>listEncountersPage</code>.</li>
-<li>Frontend suite: <strong>18/18 passed</strong>.</li>
-</ul>
-<h3>Step 10 — E2E</h3>
-<ul>
-<li>Updated <code>apps/web/tests/e2e/workflow.spec.ts</code>:</li>
-<li>Event composer test now uses the <code>&lt;select&gt;</code>-based event-type + <code>manual_note</code> payload.</li>
-<li>New: admin creates a user AND a location end-to-end via the admin panel, asserts they appear in the tables.</li>
-<li>New: non-admin (clinician) does not see the Admin button.</li>
-<li><code>scripts/staging_verify.sh</code> also updated to post a valid <code>manual_note</code> event.</li>
-<li>Playwright: <strong>10/10 passed</strong> in ~16s.</li>
-</ul>
-<h3>Step 11 — Verification summary</h3>
-<ul>
-<li><code>make verify</code> → 91/91 pytest + 9/9 smoke + teardown clean.</li>
-<li><code>cd apps/web &amp;&amp; npm run build</code> → 168 KB JS / 8.1 KB CSS.</li>
-<li><code>cd apps/web &amp;&amp; npx tsc --noEmit</code> → clean.</li>
-<li><code>cd apps/web &amp;&amp; npx vitest run</code> → 18/18.</li>
-<li><code>cd apps/web &amp;&amp; npx playwright test</code> → 10/10.</li>
-<li><code>scripts/build_docs.py</code> → HTML + PDF regenerated.</li>
-<li>Dev DB reset to pristine seeded state before commit.</li>
-</ul>
-<h3>Step 12 — CI</h3>
-<ul>
-<li>No workflow edits required: the new tests live in <code>apps/api/tests/</code> and <code>apps/web/src/test/</code> + <code>apps/web/tests/e2e/</code>, which the existing <code>backend-sqlite</code> / <code>frontend</code> / <code>e2e</code> jobs already pick up. New migration is applied by the same <code>alembic upgrade head</code> every job runs.</li>
-<li><code>deploy-config</code> lane (compose config + shellcheck) still applies to the modified <code>scripts/staging_verify.sh</code>.</li>
-</ul>
-<h3>Step 13 — Docs</h3>
-<ul>
-<li>New <code>docs/build/22-admin-governance.md</code>.</li>
-<li>Updated <code>01-current-state</code>, <code>05-build-log</code>, <code>06-known-gaps</code>, <code>02-workflow-state-machine</code> (event schema section), <code>03-api-endpoints</code> (admin routes + pagination), <code>04-data-model</code> (role CHECK + is_active), <code>15-frontend-integration</code> (admin UI + pagination + event dropdown), <code>16-frontend-test-strategy</code> (admin panel tests).</li>
-<li>Diagrams: <code>er-diagram</code> notes role CHECK + is_active; <code>api-data-flow</code> keeps prior flows, still accurate.</li>
-<li><code>scripts/build_docs.py</code> picks up section 22.</li>
+<li>New <code>docs/build/23-operator-control-plane.md</code>.</li>
+<li>Updated <code>01-current-state</code>, <code>05-build-log</code>, <code>06-known-gaps</code>, <code>03-api-endpoints</code> (new endpoints + error codes), <code>04-data-model</code> (new columns + migration), <code>08-test-strategy</code> / <code>16-frontend-test-strategy</code>, <code>15-frontend-integration</code> (control-plane UI), <code>18-operational-hardening</code> (audit read surface), <code>22-admin-governance</code> (user lifecycle signal note).</li>
+<li>Diagrams: <code>er-diagram</code> includes <code>settings</code> / <code>invited_at</code>; <code>api-data-flow</code> keeps phase-10/12 flows, still accurate for new admin endpoints (same dispatch model).</li>
+<li><code>scripts/build_docs.py</code> picks up section 23.</li>
 <li>Final HTML + PDF regenerated.</li>
+</ul>
+<h3>Step 9 — CI</h3>
+<ul>
+<li><strong>No workflow YAML changes required.</strong> New tests live in paths that <code>backend-sqlite</code> / <code>frontend</code> / <code>e2e</code> already collect. Alembic migration runs via the same <code>alembic upgrade head</code> step every backend job executes.</li>
+<li><code>deploy-config</code> (compose + shellcheck) untouched.</li>
+</ul>
+<h3>Step 10 — Hygiene</h3>
+<ul>
+<li>Dev DB reset to pristine seeded state before commit.</li>
+<li><code>.gitignore</code> unchanged (already excludes caches, <code>.db</code>, dist, etc.).</li>
 </ul>
 <p>---</p>
 <h2>Prior phases</h2>
 <ul>
+<li><strong>Phase 12 — Admin governance</strong> (<code>4ff4e28</code>)</li>
 <li><strong>Phase 11 — Staging deployment + observability</strong> (<code>ee7cf43</code>)</li>
 <li><strong>Phase 10 — Real JWT bearer + operational hardening</strong> (<code>cbc5184</code>)</li>
 <li><strong>Phase 9 — Playwright E2E + release pipeline</strong> (<code>74fe8dd</code>)</li>
@@ -529,61 +526,61 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 </section>
 <section id="sec-7"><h2>06 — Known gaps + verification matrix</h2>
 <h1>Known Gaps &amp; Verification Matrix</h1>
-<h2>Verification evidence — phase 12</h2>
+<h2>Verification evidence — phase 13</h2>
 <h3>Local gates</h3>
 <table><thead><tr><th>Gate</th><th>Result</th></tr></thead><tbody>
-<tr><td><code>make verify</code> (backend)</td><td>✅ <strong>91/91 pytest + 9/9 smoke</strong></td></tr>
+<tr><td><code>make verify</code> (backend)</td><td>✅ <strong>88/88 pytest + 9/9 smoke</strong></td></tr>
 <tr><td><code>cd apps/web &amp;&amp; npx tsc --noEmit</code></td><td>✅ clean</td></tr>
-<tr><td><code>cd apps/web &amp;&amp; npx vitest run</code></td><td>✅ <strong>18/18</strong></td></tr>
-<tr><td><code>cd apps/web &amp;&amp; npm run build</code></td><td>✅ 168 KB JS / 8.1 KB CSS</td></tr>
-<tr><td><code>cd apps/web &amp;&amp; npx playwright test</code></td><td>✅ <strong>10/10</strong> in ~16s</td></tr>
-<tr><td><code>bash scripts/staging_verify.sh http://127.0.0.1:8000</code></td><td>✅ 9 assertions (against local dev API)</td></tr>
-<tr><td><code>apps/api/.venv/bin/python scripts/build_docs.py</code></td><td>✅ HTML + PDF regenerated</td></tr>
+<tr><td><code>cd apps/web &amp;&amp; npx vitest run</code></td><td>✅ <strong>22/22</strong></td></tr>
+<tr><td><code>cd apps/web &amp;&amp; npm run build</code></td><td>✅ 175 KB JS / 8.2 KB CSS</td></tr>
+<tr><td><code>cd apps/web &amp;&amp; npx playwright test</code></td><td>✅ <strong>11/11</strong> in ~17s</td></tr>
+<tr><td><code>apps/api/.venv/bin/python scripts/build_docs.py</code></td><td>✅ HTML + PDF</td></tr>
 </tbody></table>
-<h3>pytest summary (91)</h3>
+<h3>pytest summary (88)</h3>
 <table><thead><tr><th>Suite</th><th>Count</th><th>Notes</th></tr></thead><tbody>
-<tr><td><code>test_admin.py</code> (new)</td><td><strong>20</strong></td><td>DB role CHECK, user/location CRUD, event-schema validation, pagination</td></tr>
+<tr><td><code>test_admin.py</code></td><td>20</td><td>admin governance (phase 12)</td></tr>
 <tr><td><code>test_auth.py</code></td><td>5</td><td>header mode</td></tr>
-<tr><td><code>test_auth_modes.py</code></td><td>11</td><td>header + real JWT bearer</td></tr>
+<tr><td><code>test_auth_modes.py</code></td><td>11</td><td>real JWT bearer</td></tr>
+<tr><td><code>test_control_plane.py</code> ✦</td><td><strong>17</strong></td><td><strong>org settings + audit read + invited_at (phase 13)</strong></td></tr>
 <tr><td><code>test_observability.py</code></td><td>3</td><td><code>/ready</code>, <code>/metrics</code></td></tr>
-<tr><td><code>test_operational.py</code></td><td>12</td><td>request id, audit trail, rate limit, CORS</td></tr>
+<tr><td><code>test_operational.py</code></td><td>12</td><td>request id, audit, rate limit, CORS</td></tr>
 <tr><td><code>test_rbac.py</code></td><td>12</td><td>role-gated writes + per-edge transitions</td></tr>
-<tr><td><code>test_scoping.py</code></td><td>8</td><td>org scoping + cross-org denial</td></tr>
-<tr><td><code>test_auth_modes.py</code> (bearer JWT — counted above)</td><td>—</td><td>—</td></tr>
+<tr><td><code>test_scoping.py</code></td><td>8</td><td>org scoping</td></tr>
 </tbody></table>
-<h3>Vitest summary (18)</h3>
+<h3>Vitest summary (22)</h3>
 <table><thead><tr><th>File</th><th>Count</th><th>Notes</th></tr></thead><tbody>
-<tr><td><code>App.test.tsx</code></td><td>13</td><td>existing 12 + new &quot;admin button visibility&quot; test</td></tr>
-<tr><td><code>AdminPanel.test.tsx</code></td><td><strong>5</strong></td><td>list users, create user, create error 409, self-row disabled, create location</td></tr>
+<tr><td><code>App.test.tsx</code></td><td>13</td><td>unchanged</td></tr>
+<tr><td><code>AdminPanel.test.tsx</code></td><td>9</td><td>+4 Organization + Audit tests</td></tr>
 </tbody></table>
-<h3>Playwright summary (10)</h3>
-<table><thead><tr><th>#</th><th>Scenario</th><th>Result</th></tr></thead><tbody>
-<tr><td>1</td><td>App boots, default identity resolves</td><td>✅</td></tr>
-<tr><td>2</td><td>Identity switch org1 → org2</td><td>✅</td></tr>
-<tr><td>3</td><td>Admin opens detail, creates encounter, sees it appear</td><td>✅</td></tr>
-<tr><td>4</td><td>Admin appends <code>manual_note</code> workflow event</td><td>✅</td></tr>
-<tr><td>5</td><td>Clinician operational transitions; review edge not offered</td><td>✅</td></tr>
-<tr><td>6</td><td>Reviewer sees review-stage controls, no create button, no event composer</td><td>✅</td></tr>
-<tr><td>7</td><td>Unknown email → <code>identity-error</code> with <code>unknown_user</code></td><td>✅</td></tr>
-<tr><td>8</td><td><strong>Admin creates user + location via admin panel</strong></td><td>✅</td></tr>
-<tr><td>9</td><td><strong>Clinician cannot see the Admin button</strong></td><td>✅</td></tr>
-<tr><td>10</td><td>Status filter narrows the list</td><td>✅</td></tr>
+<h3>Playwright summary (11)</h3>
+<table><thead><tr><th>#</th><th>Scenario</th></tr></thead><tbody>
+<tr><td>1</td><td>Default identity resolves</td></tr>
+<tr><td>2</td><td>Identity switch org1 → org2</td></tr>
+<tr><td>3</td><td>Admin opens detail, creates encounter</td></tr>
+<tr><td>4</td><td>Admin appends <code>manual_note</code> workflow event</td></tr>
+<tr><td>5</td><td>Clinician operational transitions; reviewer edge not offered</td></tr>
+<tr><td>6</td><td>Reviewer sees review-stage controls, no create, no composer</td></tr>
+<tr><td>7</td><td>Unknown email → <code>identity-error</code></td></tr>
+<tr><td>8</td><td>Admin creates user + location via admin panel</td></tr>
+<tr><td>9</td><td><strong>Admin edits organization settings and inspects audit log</strong> (new)</td></tr>
+<tr><td>10</td><td>Clinician cannot see Admin button</td></tr>
+<tr><td>11</td><td>Status filter narrows the list</td></tr>
 </tbody></table>
 <h2>Real gaps (prioritized for next phase)</h2>
 <p>1. <strong>No OpenTelemetry / distributed tracing.</strong></p>
 <p>2. <strong>Metrics + rate limiter are per-process</strong> — multi-worker needs coordination.</p>
 <p>3. <strong>No log shipping / retention policy defined.</strong></p>
-<p>4. <strong>No audit-table archival / retention.</strong></p>
-<p>5. <strong>Forward-only migrations</strong> — rollback cannot reverse destructive DDL.</p>
-<p>6. <strong>No automated staging deploy from CI</strong> — tag push publishes image; operator runs <code>make staging-up</code>.</p>
-<p>7. <strong>No signing / SBOM / provenance</strong> on release artifacts.</p>
-<p>8. <strong>No JWKS-rotation test, no refresh-token / revocation flow.</strong></p>
-<p>9. <strong>No org-level CRUD</strong> — <code>PATCH /organizations/{id}</code> is intentionally absent.</p>
-<p>10. <strong>No user-invitation / email workflow</strong> — admins type emails directly.</p>
-<p>11. <strong>No bulk-import</strong> for users or locations.</p>
-<p>12. <strong>No audit log UI</strong> — <code>security_audit_events</code> is operator-inspected only.</p>
-<p>13. <strong>Free-form event payloads beyond required keys</strong> — extra keys are accepted; deep-schema per type (values types, enums) is not enforced.</p>
-<p>14. <strong>No pagination on audit table, users, or locations</strong> — fine at current scale.</p>
+<p>4. <strong>No audit-table archival / retention.</strong> Rows accumulate indefinitely.</p>
+<p>5. <strong>No audit export</strong> (CSV/JSON download).</p>
+<p>6. <strong>Forward-only migrations.</strong></p>
+<p>7. <strong>No automated staging deploy from CI.</strong></p>
+<p>8. <strong>No signing / SBOM / provenance</strong> on release artifacts.</p>
+<p>9. <strong>No JWKS-rotation test, no refresh-token / revocation flow.</strong></p>
+<p>10. <strong>No token-based invitation workflow or email delivery.</strong> <code>invited_at</code> is a badge only.</p>
+<p>11. <strong>No org-level slug change</strong> — intentionally immutable.</p>
+<p>12. <strong>No bulk-import for users or locations.</strong></p>
+<p>13. <strong>No organization settings schema</strong> — the column is free-form JSON; no specific keys are consumed by the app yet.</p>
+<p>14. <strong>No pagination/search on users and locations lists</strong> (fine at current scale).</p>
 <p>15. <strong>No visual-regression / a11y audits</strong> on the frontend.</p>
 <p>16. <strong>pytest matrix on Postgres</strong> not wired (fixture env-driven, ready to flip).</p>
 </section>
@@ -782,6 +779,10 @@ make docker-build
 <li><code>pytest</code>: <strong>28 passed in ~19s</strong></li>
 <li><code>make verify</code> (SQLite): 28 pytest + 9 smoke — all green</li>
 <li><code>scripts/pg_verify.sh</code>: migrations + seed (x2) + smoke + status transition + event write — <strong>PASS</strong></li>
+</ul>
+<h2>Backend coverage (phase 13)</h2>
+<ul>
+<li>88 pytest tests. <code>test_control_plane.py</code> (17) covers org settings read/patch (all roles + unauth), JSON validation (non-object → 422, oversized → 400 <code>settings_too_large</code>), admin PATCH cross-org isolation, audit read admin-only, filters for <code>event_type</code> / <code>actor_email</code> / <code>q</code>, pagination headers, org scoping (never surfaces cross-org rows with identity), and <code>invited_at</code> stamping on admin create.</li>
 </ul>
 <h2>Backend coverage (phase 10)</h2>
 <ul>
@@ -1500,6 +1501,13 @@ make web-build        # vite build -&gt; apps/web/dist
 <li>The event composer&#x27;s event_type is now a <code>&lt;select&gt;</code> wired to the backend allowlist (<code>EVENT_TYPES</code>), so the UI can&#x27;t submit invalid types.</li>
 <li>Encounter list paginates 25 rows at a time via <code>listEncountersPage</code>, rendering Prev/Next + &quot;N-M of T&quot; when <code>total &gt; 25</code>.</li>
 </ul>
+<h2>Operator control plane (phase 13)</h2>
+<ul>
+<li>Admin panel is now <strong>4 tabs</strong>: Users, Locations, <strong>Organization</strong>, <strong>Audit log</strong>.</li>
+<li>Organization tab: readonly <code>slug</code>, editable <code>name</code> + free-form <code>settings</code> JSON (16 KB cap enforced server-side). Local JSON parse errors surface before any PATCH is fired.</li>
+<li>Audit log tab: filter row (<code>event_type</code>, <code>actor_email</code>, free-text <code>q</code>), paginated table (25/page) ordered newest-first with timestamp / event / actor / method+path / error code / request id columns. Backend 4xx surfaces as banner.</li>
+<li>Users tab renders an &quot;Invited&quot; badge for active users with <code>invited_at</code> set.</li>
+</ul>
 <h2>What this phase explicitly does NOT do</h2>
 <ul>
 <li>No real login flow — <code>X-User-Email</code> is still dev transport.</li>
@@ -1585,6 +1593,11 @@ make web-verify      # typecheck + test + build
 <p>Vitest and Playwright are fully isolated: Vitest&#x27;s <code>test.include</code> is</p>
 <p>narrowed to <code>src/**/*.test.{ts,tsx}</code> and excludes <code>tests/**</code>, so the</p>
 <p>two suites never cross-contaminate.</p>
+<h2>Operator control-plane tests (phase 13)</h2>
+<ul>
+<li><code>AdminPanel.test.tsx</code> — 4 new tests: Organization tab loads + PATCH dispatch, local JSON parse error path, Audit tab row render + filter dispatch, Audit 403 surfaces as error banner.</li>
+<li>Playwright — 1 new scenario: admin opens Organization tab → edits name → saves → opens Audit tab → audit table + filter UI render.</li>
+</ul>
 <h2>Admin governance tests (phase 12)</h2>
 <ul>
 <li><code>src/test/AdminPanel.test.tsx</code> — 5 Vitest tests: user list, create user success + 409 error, self-row disabled, location create on the Locations tab.</li>
@@ -1830,6 +1843,12 @@ docker compose -f infra/docker/docker-compose.prod.yml up -d
 <li><code>GET /metrics</code> — Prometheus text exposition. Counters cover request traffic, auth denials (by <code>error_code</code>), rate-limited responses, audit event writes (by <code>event_type</code>), and request latency sum/count.</li>
 <li>Middleware + exception handler now feed those counters as part of normal request handling. <code>audit.record</code> also bumps <code>chartnav_audit_events_total{event_type}</code> before the DB insert.</li>
 </ul>
+<h2>Audit read API (phase 13)</h2>
+<p><code>GET /security-audit-events</code> (admin only) surfaces the audit table</p>
+<p>in-product — org-scoped per <code>23-operator-control-plane.md</code>, filterable</p>
+<p>by <code>event_type</code>, <code>error_code</code>, <code>actor_email</code>, <code>q</code> (substring),</p>
+<p>paginated via <code>limit</code>/<code>offset</code> + <code>X-Total-Count</code> headers, ordered</p>
+<p>newest-first. Never exposes raw tokens or secrets.</p>
 <h2>Remaining gaps</h2>
 <ul>
 <li>Rate limiter is in-memory per process — same caveat applies to the new metrics.</li>
@@ -2324,10 +2343,154 @@ CHECK (role IN (&#x27;admin&#x27;, &#x27;clinician&#x27;, &#x27;reviewer&#x27;))
 <li>No per-org SSO configuration.</li>
 <li>No bulk-import.</li>
 <li>No invitation / email workflow.</li>
-<li>No audit log UI — the <code>security_audit_events</code> table remains operator-inspected. A tab for it is a small next step.</li>
+<li><strong>Phase 13 update — audit log UI shipped.</strong> The <code>security_audit_events</code> table is now exposed at <code>GET /security-audit-events</code> and surfaced in the Admin panel → Audit log tab with filters + pagination. See <code>23-operator-control-plane.md</code>.</li>
+</ul>
+<h2>User lifecycle signal — <code>invited_at</code> (phase 13)</h2>
+<p><code>users.invited_at</code> is stamped whenever an admin creates a user. The</p>
+<p>admin panel renders an &quot;Invited&quot; badge for active users with</p>
+<p><code>invited_at</code> set. ChartNav does not send email; the badge is a real</p>
+<p>signal that the operator should communicate out-of-band and is not a</p>
+<p>token-based invitation flow. See <code>23-operator-control-plane.md</code> for</p>
+<p>the scope trade-offs.</p>
+</section>
+<section id="sec-24"><h2>23 — Operator control plane</h2>
+<h1>Operator Control Plane</h1>
+<p>Phase 13 ships the pieces an operator actually needs to run the product:</p>
+<p>organization settings, security-audit visibility, and a minimal user</p>
+<p>lifecycle signal (<code>invited_at</code>). The admin panel becomes a four-tab</p>
+<p>console: Users, Locations, Organization, Audit log.</p>
+<h2>1. Organization settings</h2>
+<h3>API</h3>
+<table><thead><tr><th>Method</th><th>Path</th><th>Auth</th><th>Body</th></tr></thead><tbody>
+<tr><td>GET</td><td><code>/organization</code></td><td>any authed role</td><td>—</td></tr>
+<tr><td>PATCH</td><td><code>/organization</code></td><td>admin only</td><td><code>{ name?, settings? }</code></td></tr>
+</tbody></table>
+<h3>Contract</h3>
+<ul>
+<li><strong>Read</strong> is open to any authenticated caller in the org — so the UI</li>
+</ul>
+<p>can show org context in places the admin may not have visited.</p>
+<ul>
+<li><strong>Write</strong> is <code>admin</code>-only (<code>role_admin_required</code> 403 otherwise).</li>
+<li><code>slug</code> is <strong>immutable</strong> — renaming a slug ripples into URLs, audit</li>
+</ul>
+<p>search, and any downstream integration keying on it. Documented on</p>
+<p>the read response; the UI shows it readonly.</p>
+<ul>
+<li><code>name</code> is a free text field (1..255 chars).</li>
+<li><code>settings</code> is a JSON object. Server rejects non-object (pydantic</li>
+</ul>
+<p>422) and blobs &gt; 16 KB of serialized JSON (400 <code>settings_too_large</code>).</p>
+<ul>
+<li>PATCH only touches the caller&#x27;s org; there is no path to mutate</li>
+</ul>
+<p>another org (<code>organization_id</code> isn&#x27;t even a parameter).</p>
+<p>Persistence: new migration <code>d4e5f6a7b8c9</code> adds <code>organizations.settings TEXT NULL</code>.</p>
+<h2>2. Security audit read API</h2>
+<h3>Endpoint</h3>
+<table><thead><tr><th>Method</th><th>Path</th><th>Auth</th></tr></thead><tbody>
+<tr><td>GET</td><td><code>/security-audit-events</code></td><td>admin only</td></tr>
+</tbody></table>
+<p>Query parameters:</p>
+<table><thead><tr><th>Param</th><th>Type</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>event_type</code></td><td>string</td><td>Exact match (e.g. <code>cross_org_access_forbidden</code>).</td></tr>
+<tr><td><code>error_code</code></td><td>string</td><td>Exact match on the response <code>error_code</code>.</td></tr>
+<tr><td><code>actor_email</code></td><td>string</td><td>Exact match.</td></tr>
+<tr><td><code>q</code></td><td>string</td><td>Substring match against <code>path</code> or <code>detail</code>.</td></tr>
+<tr><td><code>limit</code></td><td>int</td><td>1..500, default 50.</td></tr>
+<tr><td><code>offset</code></td><td>int</td><td>≥0.</td></tr>
+</tbody></table>
+<p>Response is a JSON array ordered newest-first (by <code>id DESC</code>). The</p>
+<p>pagination triplet (<code>X-Total-Count</code>, <code>X-Limit</code>, <code>X-Offset</code>) is returned</p>
+<p>as response headers, matching the encounter pagination contract.</p>
+<h3>Scoping rule (documented here so future readers don&#x27;t have to guess)</h3>
+<pre class="code lang-sql"><code>
+WHERE organization_id = :caller.org OR organization_id IS NULL
+</code></pre>
+<p>Rows without an <code>organization_id</code> are pre-auth failures (no caller has</p>
+<p>been resolved yet — <code>missing_auth_header</code>, <code>unknown_user</code>,</p>
+<p><code>invalid_token</code>, etc.). Those have <strong>no</strong> org attribution by</p>
+<p>construction, so showing them to every admin is correct: they&#x27;re</p>
+<p>system-wide signals about unauth traffic hitting the service.</p>
+<p>Rows <strong>with</strong> a cross-org attribution are never shown — if an admin in</p>
+<p>org1 issues a cross-org denial (actor=1, <code>organization_id=1</code>), it</p>
+<p>appears in org1&#x27;s audit. If an attacker uses an org2 identity to probe</p>
+<p>org1, the audit row will be <code>organization_id=2</code> and admin1 will</p>
+<p><strong>not</strong> see it. That&#x27;s the right property: an org can&#x27;t learn about</p>
+<p>sibling orgs by reading its own audit.</p>
+<p>Backed by a pytest assertion (<code>test_audit_org_scoping</code>).</p>
+<h3>What gets written</h3>
+<p>No change from phase 10 — the HTTP exception handler still drives</p>
+<p>inserts via <code>app.audit.record(...)</code>. The read API simply surfaces what</p>
+<p>was already being persisted.</p>
+<h2>3. User lifecycle — <code>invited_at</code></h2>
+<p>Migration <code>d4e5f6a7b8c9</code> adds <code>users.invited_at DATETIME NULL</code>. Admin</p>
+<p>create sets it to &quot;now&quot;; existing seeded users stay <code>null</code>. The admin</p>
+<p>panel renders an &quot;Invited&quot; badge on any active user with <code>invited_at</code></p>
+<p>set.</p>
+<p>Email delivery is <strong>intentionally out of scope</strong> — ChartNav doesn&#x27;t</p>
+<p>send mail. The badge + timestamp are a real, testable signal that a</p>
+<p>user hasn&#x27;t been &quot;turned on&quot; by any other channel yet; what the</p>
+<p>operator does with that (Slack, in-person, external mailer) is their</p>
+<p>business.</p>
+<p>Out of scope:</p>
+<ul>
+<li>Token-based invitation links.</li>
+<li>Expiring invitations.</li>
+<li>Email delivery and templating.</li>
+<li>Self-serve signup.</li>
+</ul>
+<h2>4. Admin UI — four-tab console</h2>
+<p><code>apps/web/src/AdminPanel.tsx</code> now has:</p>
+<ul>
+<li><strong>Users</strong> — create form, table with inline role change, deactivate/reactivate, self-row disabled, &quot;Invited&quot; badge where <code>invited_at</code> is set.</li>
+<li><strong>Locations</strong> — create form, inline rename, deactivate.</li>
+<li><strong>Organization</strong> — loads <code>/organization</code>, form for <code>name</code> + <code>settings</code> JSON (16 KB cap enforced server-side); slug shown readonly; local JSON parse error surfaces inline before any PATCH is fired.</li>
+<li><strong>Audit log</strong> — filter row (<code>event_type</code>, <code>actor_email</code>, free-text <code>q</code>), paginated table (25/page), timestamp / event / actor / method+path / error code / request id columns. Backend 403 surfaces as banner.</li>
+</ul>
+<p>UX invariants preserved from earlier phases:</p>
+<ul>
+<li>Non-admin callers never see the Admin button, and the panel never renders for them.</li>
+<li>All mutations disable submit while in flight.</li>
+<li>Every 4xx surfaces the backend <code>{error_code, reason}</code> envelope.</li>
+</ul>
+<h2>5. Tests</h2>
+<h3>Backend (<code>apps/api/tests/test_control_plane.py</code>, 17 new)</h3>
+<ul>
+<li>Read <code>/organization</code> for all three roles + 401 without auth.</li>
+<li>Admin patches name, settings (valid JSON object).</li>
+<li>Non-object settings → 422.</li>
+<li>Settings &gt; 16 KB → 400 <code>settings_too_large</code>.</li>
+<li>Non-admin PATCH → 403 <code>role_admin_required</code>.</li>
+<li>Cross-org isolation: admin1 PATCHing org1 does not change org2&#x27;s row.</li>
+<li>Admin reads <code>/security-audit-events</code>.</li>
+<li>Non-admin 403.</li>
+<li>Filters by <code>event_type</code>, <code>actor_email</code>, and <code>q</code> substring match.</li>
+<li>Pagination (limit/offset, disjoint pages, X-Limit/Offset headers).</li>
+<li>Org scoping: admin1 never sees rows with <code>organization_id</code> outside <code>{1, null}</code>.</li>
+<li>New users carry <code>invited_at</code>; seeded ones do not.</li>
+</ul>
+<h3>Frontend (<code>apps/web/src/test/AdminPanel.test.tsx</code>, 4 new on top of phase 12)</h3>
+<ul>
+<li>Organization tab loads current org, readonly slug, edits dispatch PATCH.</li>
+<li>Organization settings local JSON parse error surfaces before calling backend.</li>
+<li>Audit tab loads, row rendered with <code>event_type</code>, filter dispatch hits the mocked API.</li>
+<li>Audit 403 surfaces as error banner.</li>
+</ul>
+<h3>E2E (<code>apps/web/tests/e2e/workflow.spec.ts</code>, 1 new)</h3>
+<ul>
+<li>Admin opens panel → Organization tab → edits name → Audit tab loads. End-to-end against the live backend.</li>
+</ul>
+<p>Totals: <strong>pytest 88/88, Vitest 22/22, Playwright 11/11</strong>.</p>
+<h2>6. What this phase does NOT do</h2>
+<ul>
+<li>No row-level user actions on the audit log (expand a row, pin, comment). The table is read-only.</li>
+<li>No export of audit events.</li>
+<li>No CSV download for users/locations/audit.</li>
+<li>No rich settings schema — the app doesn&#x27;t consume any specific key in <code>settings</code> yet. The field exists so operators can stash tenant preferences before we build the consumer.</li>
 </ul>
 </section>
-<section id="sec-24"><h2>Diagram — System architecture</h2>
+<section id="sec-25"><h2>Diagram — System architecture</h2>
 <h1>System Architecture</h1>
 <div class="mermaid">
 flowchart LR
@@ -2428,7 +2591,7 @@ flowchart LR
   Compose --> PG
 </div>
 </section>
-<section id="sec-25"><h2>Diagram — Encounter status machine</h2>
+<section id="sec-26"><h2>Diagram — Encounter status machine</h2>
 <h1>Encounter Status State Machine</h1>
 <div class="mermaid">
 stateDiagram-v2
@@ -2450,7 +2613,7 @@ stateDiagram-v2
 <p>Legend: any edge not shown is rejected at <code>POST /encounters/{id}/status</code></p>
 <p>with HTTP 400 <code>invalid_transition</code>.</p>
 </section>
-<section id="sec-26"><h2>Diagram — ER</h2>
+<section id="sec-27"><h2>Diagram — ER</h2>
 <h1>ER Diagram</h1>
 <div class="mermaid">
 erDiagram
@@ -2531,7 +2694,7 @@ erDiagram
 <p><code>users.organization_id</code> is the authoritative source of scope; never</p>
 <p>derived from client input.</p>
 </section>
-<section id="sec-27"><h2>Diagram — API / data flow</h2>
+<section id="sec-28"><h2>Diagram — API / data flow</h2>
 <h1>API / Data Flow &amp; CI</h1>
 <h2>UI → Backend request path</h2>
 <div class="mermaid">

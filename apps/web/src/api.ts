@@ -39,7 +39,38 @@ export interface User {
   full_name: string | null;
   role: Role;
   is_active: number | boolean;
+  invited_at: string | null;
   created_at: string;
+}
+
+export interface Organization {
+  id: number;
+  name: string;
+  slug: string;
+  settings: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface SecurityAuditEvent {
+  id: number;
+  event_type: string;
+  request_id: string | null;
+  actor_email: string | null;
+  actor_user_id: number | null;
+  organization_id: number | null;
+  path: string | null;
+  method: string | null;
+  error_code: string | null;
+  detail: string | null;
+  remote_addr: string | null;
+  created_at: string;
+}
+
+export interface AuditFilters {
+  event_type?: string;
+  error_code?: string;
+  actor_email?: string;
+  q?: string;
 }
 
 export interface Location {
@@ -269,6 +300,48 @@ export function updateUser(
 
 export function deactivateUser(email: string, id: number): Promise<User> {
   return request(`/users/${id}`, { email, method: "DELETE" });
+}
+
+// ---- Organization settings ----------------------------------------------
+
+export function getOrganization(email: string): Promise<Organization> {
+  return request("/organization", { email });
+}
+
+export function updateOrganization(
+  email: string,
+  patch: { name?: string; settings?: Record<string, unknown> | null }
+): Promise<Organization> {
+  return request("/organization", {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
+// ---- Security audit log -------------------------------------------------
+
+export async function listAuditEvents(
+  email: string,
+  filters: AuditFilters = {},
+  page: { limit?: number; offset?: number } = {}
+): Promise<{ items: SecurityAuditEvent[]; total: number; limit: number; offset: number }> {
+  const qs = new URLSearchParams();
+  if (filters.event_type) qs.set("event_type", filters.event_type);
+  if (filters.error_code) qs.set("error_code", filters.error_code);
+  if (filters.actor_email) qs.set("actor_email", filters.actor_email);
+  if (filters.q) qs.set("q", filters.q);
+  if (typeof page.limit === "number") qs.set("limit", String(page.limit));
+  if (typeof page.offset === "number") qs.set("offset", String(page.offset));
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  const { body, response } = await requestWithResponse<SecurityAuditEvent[]>(
+    `/security-audit-events${suffix}`,
+    { email }
+  );
+  const total = parseInt(response.headers.get("X-Total-Count") || "0", 10);
+  const limit = parseInt(response.headers.get("X-Limit") || String(body.length), 10);
+  const offset = parseInt(response.headers.get("X-Offset") || "0", 10);
+  return { items: body, total, limit, offset };
 }
 
 /**

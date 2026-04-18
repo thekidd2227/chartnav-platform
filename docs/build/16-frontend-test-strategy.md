@@ -81,6 +81,11 @@ Vitest and Playwright are fully isolated: Vitest's `test.include` is
 narrowed to `src/**/*.test.{ts,tsx}` and excludes `tests/**`, so the
 two suites never cross-contaminate.
 
+## Operator control-plane tests (phase 13)
+
+- `AdminPanel.test.tsx` — 4 new tests: Organization tab loads + PATCH dispatch, local JSON parse error path, Audit tab row render + filter dispatch, Audit 403 surfaces as error banner.
+- Playwright — 1 new scenario: admin opens Organization tab → edits name → saves → opens Audit tab → audit table + filter UI render.
+
 ## Admin governance tests (phase 12)
 
 - `src/test/AdminPanel.test.tsx` — 5 Vitest tests: user list, create user success + 409 error, self-row disabled, location create on the Locations tab.

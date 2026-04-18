@@ -150,4 +150,13 @@ Plus an App-level test asserting admin role sees the Admin button; clinician / r
 - No per-org SSO configuration.
 - No bulk-import.
 - No invitation / email workflow.
-- No audit log UI — the `security_audit_events` table remains operator-inspected. A tab for it is a small next step.
+- **Phase 13 update — audit log UI shipped.** The `security_audit_events` table is now exposed at `GET /security-audit-events` and surfaced in the Admin panel → Audit log tab with filters + pagination. See `23-operator-control-plane.md`.
+
+## User lifecycle signal — `invited_at` (phase 13)
+
+`users.invited_at` is stamped whenever an admin creates a user. The
+admin panel renders an "Invited" badge for active users with
+`invited_at` set. ChartNav does not send email; the badge is a real
+signal that the operator should communicate out-of-band and is not a
+token-based invitation flow. See `23-operator-control-plane.md` for
+the scope trade-offs.

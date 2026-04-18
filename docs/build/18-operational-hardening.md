@@ -111,6 +111,14 @@ This baseline now includes a live observability surface — see
 - `GET /metrics` — Prometheus text exposition. Counters cover request traffic, auth denials (by `error_code`), rate-limited responses, audit event writes (by `event_type`), and request latency sum/count.
 - Middleware + exception handler now feed those counters as part of normal request handling. `audit.record` also bumps `chartnav_audit_events_total{event_type}` before the DB insert.
 
+## Audit read API (phase 13)
+
+`GET /security-audit-events` (admin only) surfaces the audit table
+in-product — org-scoped per `23-operator-control-plane.md`, filterable
+by `event_type`, `error_code`, `actor_email`, `q` (substring),
+paginated via `limit`/`offset` + `X-Total-Count` headers, ordered
+newest-first. Never exposes raw tokens or secrets.
+
 ## Remaining gaps
 
 - Rate limiter is in-memory per process — same caveat applies to the new metrics.

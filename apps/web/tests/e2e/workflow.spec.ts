@@ -177,6 +177,30 @@ test.describe("ChartNav end-to-end", () => {
     await expect(page.getByTestId("admin-locations-table")).toContainText(locName);
   });
 
+  test("admin can edit organization settings and inspect audit log", async ({ page }) => {
+    await waitForIdentity(page, "admin");
+    await page.getByTestId("open-admin-panel").click();
+
+    // Organization tab
+    await page.getByTestId("admin-tab-organization").click();
+    const nameInput = page.getByTestId("admin-org-name");
+    await expect(nameInput).toBeVisible();
+    await expect(page.getByTestId("admin-org-slug")).toBeDisabled();
+
+    // Append " (E2E)" to the name and save.
+    await nameInput.focus();
+    await page.keyboard.press("End");
+    await page.keyboard.type(" (E2E)");
+    await page.getByTestId("admin-org-submit").click();
+    await expect(page.getByTestId("admin-banner-ok")).toContainText(/Organization saved/);
+
+    // Audit tab
+    await page.getByTestId("admin-tab-audit").click();
+    await expect(page.getByTestId("admin-audit-table")).toBeVisible();
+    await expect(page.getByTestId("admin-audit-event-type")).toBeVisible();
+    await expect(page.getByTestId("admin-audit-refresh")).toBeVisible();
+  });
+
   test("non-admin cannot see the admin button", async ({ page }) => {
     await waitForIdentity(page, "admin");
     await switchIdentity(page, CLIN1);
