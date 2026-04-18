@@ -1,6 +1,6 @@
 # ChartNav — Current State
 
-**As of:** 2026-04-18 (phase: platform mode & interoperability)
+**As of:** 2026-04-18 (phase: brand & domain alignment)
 
 ## Repo layout (relevant)
 
@@ -28,13 +28,14 @@ chartnav-platform/
 │       ├── src/
 │       │   ├── App.tsx · AdminPanel.tsx · InviteAccept.tsx · api.ts
 │       │   ├── identity.ts · styles.css · main.tsx
-│       │   └── test/            # 30 Vitest (+2 platform-mode UI)
+│       │   └── test/            # 31 Vitest (+1 brand footer)
+│       ├── public/brand/        # ChartNav logo + mark + favicon SVGs (phase 17)
 │       └── tests/e2e/
 │           ├── workflow.spec.ts (12)
 │           ├── a11y.spec.ts (5)   # axe-core — hard gate in CI
 │           └── visual.spec.ts (4) # screenshot regression — local only
 ├── infra/docker/{dev,prod,staging}.yml
-└── docs/build/ 01 … 27
+└── docs/build/ 01 … 28
 ```
 
 ## Runtime baseline
@@ -51,6 +52,8 @@ chartnav-platform/
 - **Audit retention**: `scripts/audit_retention.py` prunes old rows per `CHARTNAV_AUDIT_RETENTION_DAYS`; the app never silently prunes.
 - **Release compliance**: SBOM (`chartnav-sbom-<v>.json`) + image digest (`chartnav-api-<v>.digest.txt`) in every release bundle, attached to the GitHub Release.
 - **Platform mode** (phase 16): `CHARTNAV_PLATFORM_MODE` ∈ {`standalone`, `integrated_readthrough`, `integrated_writethrough`}. Adapter boundary (`ClinicalSystemAdapter`) separates ChartNav core from any external EHR/EMR. Ships `NativeChartNavAdapter` (standalone) + `StubClinicalSystemAdapter` (integrated placeholder); vendor adapters plug in via `register_vendor_adapter`. Config fails loudly on misconfig. `GET /platform` surfaces mode + adapter + source-of-truth to the UI.
+- **Brand alignment** (phase 17): product UI uses the ChartNav marketing site's exact token set (`--cn-*`). Inter typography, teal `#0B6E79` primary, real logo SVG in the header, subtle `Powered by ARCG Systems` footer. Axe-AA contrast preserved.
+- **Domain**: `chartnav.ai` → `https://arcgsystems.com/chartnav/` via GoDaddy 301 forwarding (external) + in-repo host-based safety-net in `arcg-live`. Runbook: `arcg-live/docs/chartnav-ai-domain-runbook.md`.
 - Alembic head: `e5f6a7b8c9d0`.
 
 ## Testing layers
@@ -59,7 +62,7 @@ chartnav-platform/
 |----------------------|--------------|:-----:|-------|
 | pytest               | pytest       |  131  | +13 platform-mode + adapter resolution |
 | shell smoke          | smoke.sh     |   9   | unchanged |
-| Vitest               | vitest       |  30   | +2 platform-mode banner (standalone + integrated variants) |
+| Vitest               | vitest       |  31   | +1 brand footer (Powered by ARCG Systems) |
 | Playwright workflow  | @playwright  |  12   | unchanged contract |
 | Playwright a11y      | @axe-core/playwright | 5 | NEW |
 | Playwright visual    | Playwright snapshots | 4 | NEW (local only) |
@@ -74,7 +77,7 @@ older callers that pass no params still see the first 100 rows.
 ## Automation
 
 - `make verify` → 131 pytest + 9 smoke
-- `make web-verify` → 30 vitest + typecheck + build
+- `make web-verify` → 31 vitest + typecheck + build
 - `make e2e` → 12 workflow + 5 a11y + 4 visual (local)
 - `make e2e-a11y` / `make e2e-visual` / `make e2e-visual-update`
 - `make audit-prune ARGS="--days 90 --dry-run"`

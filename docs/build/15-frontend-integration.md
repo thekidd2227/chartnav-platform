@@ -220,6 +220,25 @@ surface, filters. Details in `17-e2e-and-release.md`. Command:
 - No UI changes for clinicians — the banner is admin-only, inside
   the admin modal.
 
+## Brand system (phase 17)
+
+- The product UI now consumes the ChartNav marketing site's token
+  set directly — same teal (`#0B6E79`), same Inter typography, same
+  neutral scale, same radii/shadows. `apps/web/src/styles.css`
+  defines `--cn-*` tokens and keeps legacy aliases so component
+  code stayed unchanged.
+- Header renders `public/brand/chartnav-logo.svg` (the real
+  ChartNav wordmark with pulse-cross mark) instead of the old
+  `<span>Chart/Nav</span>` text approximation.
+- Shell footer (`<footer className="app-footer">`) carries a
+  single, subtle **Powered by ARCG Systems** attribution in
+  11px uppercase, letter-spacing 0.12em, muted color. Locked in
+  by a Vitest assertion + `data-testid="app-footer-arcg"`.
+- Accessibility preserved: `--cn-muted` darkened from `#64748B` →
+  `#475569` and `--cn-dim` from `#94A3B8` → `#64748B` so the
+  existing axe baseline passes without new exceptions. Visual
+  baselines regenerated deliberately.
+
 ## What this phase explicitly does NOT do
 
 - No real login flow — `X-User-Email` is still dev transport.

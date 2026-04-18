@@ -36,10 +36,10 @@
 <body>
 <header class="cover">
   <h1>ChartNav — Consolidated Build</h1>
-  <div class="sub">Backend phases 1–16: spine → state machine → auth → RBAC → CI → production seam → Postgres → frontend → E2E → JWT + ops → staging → governance → control plane → invitations → enterprise quality &amp; compliance → platform mode &amp; interoperability<br>
+  <div class="sub">Phases 1–17: spine → state machine → auth → RBAC → CI → production seam → Postgres → frontend → E2E → JWT + ops → staging → governance → control plane → invitations → enterprise quality &amp; compliance → platform mode &amp; interoperability → brand &amp; domain alignment<br>
   Repo: <code>thekidd2227/chartnav-platform</code></div>
 </header>
-<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth, org scoping, RBAC</a></li><li><a href="#sec-9">08 — Test strategy</a></li><li><a href="#sec-10">09 — CI & deploy hardening</a></li><li><a href="#sec-11">10 — Doc artifact pipeline</a></li><li><a href="#sec-12">11 — Production-auth seam</a></li><li><a href="#sec-13">12 — Runtime config</a></li><li><a href="#sec-14">13 — Deploy target</a></li><li><a href="#sec-15">14 — Postgres parity</a></li><li><a href="#sec-16">15 — Frontend integration</a></li><li><a href="#sec-17">16 — Frontend test strategy</a></li><li><a href="#sec-18">17 — E2E & release</a></li><li><a href="#sec-19">18 — Operational hardening</a></li><li><a href="#sec-20">19 — Staging deployment</a></li><li><a href="#sec-21">20 — Observability</a></li><li><a href="#sec-22">21 — Staging runbook</a></li><li><a href="#sec-23">22 — Admin governance</a></li><li><a href="#sec-24">23 — Operator control plane</a></li><li><a href="#sec-25">24 — Invitations & governance</a></li><li><a href="#sec-26">25 — Enterprise quality & compliance</a></li><li><a href="#sec-27">26 — Platform mode & interoperability</a></li><li><a href="#sec-28">27 — Adoption & implementation model</a></li><li><a href="#sec-29">Diagram — System architecture</a></li><li><a href="#sec-30">Diagram — Encounter status machine</a></li><li><a href="#sec-31">Diagram — ER</a></li><li><a href="#sec-32">Diagram — API / data flow</a></li></ol></nav>
+<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth, org scoping, RBAC</a></li><li><a href="#sec-9">08 — Test strategy</a></li><li><a href="#sec-10">09 — CI & deploy hardening</a></li><li><a href="#sec-11">10 — Doc artifact pipeline</a></li><li><a href="#sec-12">11 — Production-auth seam</a></li><li><a href="#sec-13">12 — Runtime config</a></li><li><a href="#sec-14">13 — Deploy target</a></li><li><a href="#sec-15">14 — Postgres parity</a></li><li><a href="#sec-16">15 — Frontend integration</a></li><li><a href="#sec-17">16 — Frontend test strategy</a></li><li><a href="#sec-18">17 — E2E & release</a></li><li><a href="#sec-19">18 — Operational hardening</a></li><li><a href="#sec-20">19 — Staging deployment</a></li><li><a href="#sec-21">20 — Observability</a></li><li><a href="#sec-22">21 — Staging runbook</a></li><li><a href="#sec-23">22 — Admin governance</a></li><li><a href="#sec-24">23 — Operator control plane</a></li><li><a href="#sec-25">24 — Invitations & governance</a></li><li><a href="#sec-26">25 — Enterprise quality & compliance</a></li><li><a href="#sec-27">26 — Platform mode & interoperability</a></li><li><a href="#sec-28">27 — Adoption & implementation model</a></li><li><a href="#sec-29">28 — Brand & domain alignment</a></li><li><a href="#sec-30">Diagram — System architecture</a></li><li><a href="#sec-31">Diagram — Encounter status machine</a></li><li><a href="#sec-32">Diagram — ER</a></li><li><a href="#sec-33">Diagram — API / data flow</a></li></ol></nav>
 <section id="sec-1"><h2>Executive summary</h2>
 <p>This document consolidates <strong>all</strong> ChartNav backend phases delivered to</p>
 <p>date.</p>
@@ -58,12 +58,13 @@
 <p><strong>Phase 13 — Operator control plane.</strong> <code>GET/PATCH /organization</code> + <code>GET /security-audit-events</code> + admin panel Organization &amp; Audit tabs. <code>invited_at</code> stamping on admin create.</p>
 <p><strong>Phase 14 — Invitations, settings schema, audit export, event hardening, bulk users.</strong> Migration <code>e5f6a7b8c9d0</code> adds <code>invitation_token_hash</code> (sha256-only), <code>invitation_expires_at</code>, <code>invitation_accepted_at</code>. New endpoints: <code>POST /users/{id}/invite</code>, <code>POST /invites/accept</code>, <code>POST /users/bulk</code>, <code>GET /security-audit-events/export</code>. Organization settings becomes a typed <code>OrganizationSettings</code> pydantic model (extra=forbid) with dedicated fields + an <code>extensions</code> forward-compat bucket. Event payloads enforce per-type value discipline (status enums, non-empty strings, non-negative ints). Admin UI adds per-user <strong>Invite</strong> with a one-shot raw-token banner, a <strong>Bulk import…</strong> dialog, an <strong>Export CSV</strong> button on the audit tab, typed inputs on the Organization tab, and a minimal <code>/invite?invite=&lt;token&gt;</code> accept screen. Suites grow to <strong>110 pytest / 25 Vitest / 12 Playwright</strong>.</p>
 <p><strong>Phase 15 — Enterprise quality + compliance.</strong> Five real enterprise-credibility guarantees land together. (1) <strong>Accessibility baseline</strong>: <code>@axe-core/playwright</code> over Chromium, 5 scans covering app shell + encounter list/detail + admin users/audit + invite accept; <code>serious</code>/<code>critical</code> findings are blocking; established fixes land <code>aria-label</code> on the event-type and inline role <code>&lt;select&gt;</code>s. (2) <strong>Visual regression baseline</strong>: 4 Playwright screenshots (encounter list, admin users, admin audit, invite accept) at 1280×820 with animations disabled and <code>maxDiffPixelRatio: 0.02</code>; macOS baselines committed for local dev; CI intentionally skips because Chromium renders differently on Linux (documented gap). (3) <strong>Admin list scaling</strong>: <code>GET /users</code> and <code>GET /locations</code> gain <code>limit</code>, <code>offset</code>, <code>q</code>, and (users) <code>role</code> query params with <code>X-Total-Count</code>/<code>X-Limit</code>/<code>X-Offset</code> headers; UI adds search + Prev/Next pager (25/page) on both tabs. (4) <strong>Feature-flag consumption</strong>: <code>organization.settings.feature_flags.audit_export</code> and <code>.bulk_import</code> now actually hide the <strong>Export CSV</strong> / <strong>Bulk import…</strong> buttons; defaults stay <code>true</code>; documented as a UX toggle, not a security control. (5) <strong>Release compliance signals</strong>: <code>scripts/sbom.py</code> captures project + git sha/tag/dirty + image tag + <code>pip list</code> + <code>npm list</code>; <code>scripts/release_build.sh</code> also emits <code>chartnav-api-&lt;v&gt;.digest.txt</code> via <code>docker image inspect</code>; both are attached to GitHub Releases and included in <code>MANIFEST.txt</code>. (6) <strong>Audit retention scaffolding</strong>: <code>apps/api/app/retention.py::prune_audit_events</code> + <code>scripts/audit_retention.py</code> CLI + <code>CHARTNAV_AUDIT_RETENTION_DAYS</code> env (default <code>0</code> = never); the app never silently prunes. Suites grow to <strong>118 pytest / 28 Vitest / 21 Playwright</strong> (12 workflow + 5 a11y + 4 visual-local).</p>
-<p><strong>Phase 16 — Platform mode &amp; interoperability (this phase).</strong> ChartNav is now explicitly two products in one — a standalone lightweight EMR/EHR <strong>and</strong> an integration-first overlay on top of an existing EHR/EMR. The shape is architectural, not a feature flag bolted on. Four real changes landed together: (1) <strong>Operating modes</strong>: <code>CHARTNAV_PLATFORM_MODE</code> ∈ {<code>standalone</code>, <code>integrated_readthrough</code>, <code>integrated_writethrough</code>}, validated at import time; <code>standalone</code> pins the adapter to <code>native</code>, <code>integrated_*</code> defaults to <code>stub</code>. (2) <strong>Adapter boundary</strong> — <code>app/integrations/base.py::ClinicalSystemAdapter</code> protocol (<code>fetch_patient</code>, <code>search_patients</code>, <code>fetch_encounter</code>, <code>update_encounter_status</code>, <code>write_note</code>, <code>sync_reference_data</code>, <code>info</code>), <code>AdapterError</code> / <code>AdapterNotSupported</code>, <code>SourceOfTruth</code> enum. Ships two honest implementations: <code>NativeChartNavAdapter</code> (persists to the ChartNav DB via the same SA Core surface the HTTP routes use, refuses patient ops until a native <code>patients</code> table lands), and <code>StubClinicalSystemAdapter</code> (canned reads, write-through records writes to an in-process list, read-through raises <code>AdapterNotSupported</code>). Vendor adapters plug into a mutable <code>_VENDOR_ADAPTERS</code> registry via <code>register_vendor_adapter(key, factory)</code> — no decorator magic, grep-able. (3) <strong>HTTP surface</strong> — <code>GET /platform</code> (any authenticated caller) returns mode + adapter key + display name + supports-* flags + source-of-truth map. No secret leakage (asserted). (4) <strong>Frontend awareness</strong> — <code>api.ts</code> gains <code>getPlatform</code> + types; <code>AdminPanel</code> fetches <code>/platform</code> on mount and renders a platform banner above the tabs on every admin view. CI fallout from phase 15 was repaired in the same commit window: migration <code>c3d4e5f6a7b8</code> switched from <code>sa.text(&quot;1&quot;)</code> (Postgres-incompatible BOOLEAN default) to <code>sa.text(&quot;true&quot;)</code>, and vitest was downgraded to <code>^3.2.4</code> + lockfile regenerated to fix <code>npm ci</code> on Linux/Node 20 (Vitest 4 had transitively pulled rolldown + Vite 8 + esbuild 0.28, leaving the lockfile incomplete for non-mac platforms). Suites grow to <strong>131 pytest</strong> / <strong>30 Vitest</strong> / 21 Playwright. <code>GET /platform</code> is the only new endpoint.</p>
+<p><strong>Phase 16 — Platform mode &amp; interoperability.</strong> ChartNav is now explicitly two products in one — a standalone lightweight EMR/EHR <strong>and</strong> an integration-first overlay on top of an existing EHR/EMR. The shape is architectural, not a feature flag bolted on. Four real changes landed together: (1) <strong>Operating modes</strong>: <code>CHARTNAV_PLATFORM_MODE</code> ∈ {<code>standalone</code>, <code>integrated_readthrough</code>, <code>integrated_writethrough</code>}, validated at import time; <code>standalone</code> pins the adapter to <code>native</code>, <code>integrated_*</code> defaults to <code>stub</code>. (2) <strong>Adapter boundary</strong> — <code>app/integrations/base.py::ClinicalSystemAdapter</code> protocol (<code>fetch_patient</code>, <code>search_patients</code>, <code>fetch_encounter</code>, <code>update_encounter_status</code>, <code>write_note</code>, <code>sync_reference_data</code>, <code>info</code>), <code>AdapterError</code> / <code>AdapterNotSupported</code>, <code>SourceOfTruth</code> enum. Ships two honest implementations: <code>NativeChartNavAdapter</code> (persists to the ChartNav DB via the same SA Core surface the HTTP routes use, refuses patient ops until a native <code>patients</code> table lands), and <code>StubClinicalSystemAdapter</code> (canned reads, write-through records writes to an in-process list, read-through raises <code>AdapterNotSupported</code>). Vendor adapters plug into a mutable <code>_VENDOR_ADAPTERS</code> registry via <code>register_vendor_adapter(key, factory)</code> — no decorator magic, grep-able. (3) <strong>HTTP surface</strong> — <code>GET /platform</code> (any authenticated caller) returns mode + adapter key + display name + supports-* flags + source-of-truth map. No secret leakage (asserted). (4) <strong>Frontend awareness</strong> — <code>api.ts</code> gains <code>getPlatform</code> + types; <code>AdminPanel</code> fetches <code>/platform</code> on mount and renders a platform banner above the tabs on every admin view. CI fallout from phase 15 was repaired in the same commit window: migration <code>c3d4e5f6a7b8</code> switched from <code>sa.text(&quot;1&quot;)</code> (Postgres-incompatible BOOLEAN default) to <code>sa.text(&quot;true&quot;)</code>, and vitest was downgraded to <code>^3.2.4</code> + lockfile regenerated to fix <code>npm ci</code> on Linux/Node 20 (Vitest 4 had transitively pulled rolldown + Vite 8 + esbuild 0.28, leaving the lockfile incomplete for non-mac platforms). Suites grow to <strong>131 pytest</strong> / <strong>30 Vitest</strong> / 21 Playwright. <code>GET /platform</code> is the only new endpoint.</p>
+<p><strong>Phase 17 — Brand &amp; domain alignment (this phase).</strong> Two cuts. (1) <strong>Domain</strong>: <code>chartnav.ai</code> and <code>www.chartnav.ai</code> → <code>https://arcgsystems.com/chartnav/</code> via GoDaddy 301 forwarding (primary, executed in the GoDaddy UI per <code>arcg-live/docs/chartnav-ai-domain-runbook.md</code>) plus an in-repo host-based safety-net in <code>arcg-live/index.html</code> + <code>public/404.html</code> that redirects the visitor before React mounts. The <code>CNAME</code> stays <code>arcgsystems.com</code> — Pages&#x27; primary domain is preserved. (2) <strong>Brand-aligned product UI</strong>: <code>apps/web/src/styles.css</code> now consumes the ChartNav marketing site&#x27;s token set directly (<code>--cn-*</code>). Teal <code>#0B6E79</code> primary with hover/active/tint/soft scale, Inter typography (cv02/03/04/11 features), tightened shadow scale, AA-safe muted text (<code>#475569</code>), pill admin tabs, brand-teal focus rings. The app header renders <code>public/brand/chartnav-logo.svg</code> (the real wordmark with the pulse-cross mark, copied from <code>arcg-live/public/chartnav/brand/</code>), and the app shell gains a footer with a single subtle <strong>Powered by ARCG Systems</strong> attribution (11px uppercase, 0.12em letter-spacing, <code>data-testid=&quot;app-footer-arcg&quot;</code>, Vitest-asserted copy). Legacy token names stayed as aliases so zero component code needed to change. Visual baselines regenerated (<code>visual.spec.ts-snapshots/*-darwin.png</code>); axe-AA 5/5 still green. Suites: 131 pytest, <strong>31 Vitest</strong> (+1 footer), 17 Playwright workflow+a11y, 4 visual. No endpoints changed.</p>
 <p>Preserved untouched: <code>/health</code>, <code>/</code>, SQLite dev workflow, state machine + filtering surface, workflow_events model, existing endpoint contracts.</p>
 </section>
 <section id="sec-2"><h2>01 — Current state</h2>
 <h1>ChartNav — Current State</h1>
-<p><strong>As of:</strong> 2026-04-18 (phase: platform mode &amp; interoperability)</p>
+<p><strong>As of:</strong> 2026-04-18 (phase: brand &amp; domain alignment)</p>
 <h2>Repo layout (relevant)</h2>
 <pre class="code lang-"><code>
 chartnav-platform/
@@ -89,13 +90,14 @@ chartnav-platform/
 │       ├── src/
 │       │   ├── App.tsx · AdminPanel.tsx · InviteAccept.tsx · api.ts
 │       │   ├── identity.ts · styles.css · main.tsx
-│       │   └── test/            # 30 Vitest (+2 platform-mode UI)
+│       │   └── test/            # 31 Vitest (+1 brand footer)
+│       ├── public/brand/        # ChartNav logo + mark + favicon SVGs (phase 17)
 │       └── tests/e2e/
 │           ├── workflow.spec.ts (12)
 │           ├── a11y.spec.ts (5)   # axe-core — hard gate in CI
 │           └── visual.spec.ts (4) # screenshot regression — local only
 ├── infra/docker/{dev,prod,staging}.yml
-└── docs/build/ 01 … 27
+└── docs/build/ 01 … 28
 </code></pre>
 <h2>Runtime baseline</h2>
 <ul>
@@ -111,13 +113,15 @@ chartnav-platform/
 <li><strong>Audit retention</strong>: <code>scripts/audit_retention.py</code> prunes old rows per <code>CHARTNAV_AUDIT_RETENTION_DAYS</code>; the app never silently prunes.</li>
 <li><strong>Release compliance</strong>: SBOM (<code>chartnav-sbom-&lt;v&gt;.json</code>) + image digest (<code>chartnav-api-&lt;v&gt;.digest.txt</code>) in every release bundle, attached to the GitHub Release.</li>
 <li><strong>Platform mode</strong> (phase 16): <code>CHARTNAV_PLATFORM_MODE</code> ∈ {<code>standalone</code>, <code>integrated_readthrough</code>, <code>integrated_writethrough</code>}. Adapter boundary (<code>ClinicalSystemAdapter</code>) separates ChartNav core from any external EHR/EMR. Ships <code>NativeChartNavAdapter</code> (standalone) + <code>StubClinicalSystemAdapter</code> (integrated placeholder); vendor adapters plug in via <code>register_vendor_adapter</code>. Config fails loudly on misconfig. <code>GET /platform</code> surfaces mode + adapter + source-of-truth to the UI.</li>
+<li><strong>Brand alignment</strong> (phase 17): product UI uses the ChartNav marketing site&#x27;s exact token set (<code>--cn-*</code>). Inter typography, teal <code>#0B6E79</code> primary, real logo SVG in the header, subtle <code>Powered by ARCG Systems</code> footer. Axe-AA contrast preserved.</li>
+<li><strong>Domain</strong>: <code>chartnav.ai</code> → <code>https://arcgsystems.com/chartnav/</code> via GoDaddy 301 forwarding (external) + in-repo host-based safety-net in <code>arcg-live</code>. Runbook: <code>arcg-live/docs/chartnav-ai-domain-runbook.md</code>.</li>
 <li>Alembic head: <code>e5f6a7b8c9d0</code>.</li>
 </ul>
 <h2>Testing layers</h2>
 <table><thead><tr><th>Layer</th><th>Tool</th><th>Count</th><th>Notes</th></tr></thead><tbody>
 <tr><td>pytest</td><td>pytest</td><td>131</td><td>+13 platform-mode + adapter resolution</td></tr>
 <tr><td>shell smoke</td><td>smoke.sh</td><td>9</td><td>unchanged</td></tr>
-<tr><td>Vitest</td><td>vitest</td><td>30</td><td>+2 platform-mode banner (standalone + integrated variants)</td></tr>
+<tr><td>Vitest</td><td>vitest</td><td>31</td><td>+1 brand footer (Powered by ARCG Systems)</td></tr>
 <tr><td>Playwright workflow</td><td>@playwright</td><td>12</td><td>unchanged contract</td></tr>
 <tr><td>Playwright a11y</td><td>@axe-core/playwright</td><td>5</td><td>NEW</td></tr>
 <tr><td>Playwright visual</td><td>Playwright snapshots</td><td>4</td><td>NEW (local only)</td></tr>
@@ -130,7 +134,7 @@ chartnav-platform/
 <h2>Automation</h2>
 <ul>
 <li><code>make verify</code> → 131 pytest + 9 smoke</li>
-<li><code>make web-verify</code> → 30 vitest + typecheck + build</li>
+<li><code>make web-verify</code> → 31 vitest + typecheck + build</li>
 <li><code>make e2e</code> → 12 workflow + 5 a11y + 4 visual (local)</li>
 <li><code>make e2e-a11y</code> / <code>make e2e-visual</code> / <code>make e2e-visual-update</code></li>
 <li><code>make audit-prune ARGS=&quot;--days 90 --dry-run&quot;</code></li>
@@ -498,6 +502,110 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <h1>Build Log</h1>
 <p>Reverse-chronological.</p>
 <p>---</p>
+<h2>2026-04-18 — Phase 17: brand &amp; domain alignment</h2>
+<h3>Step 1 — Locate the relevant repos</h3>
+<ul>
+<li>Product: <code>~/Desktop/ARCG/chartnav-platform</code> (this repo).</li>
+<li>Marketing/site: <code>~/arcg-live</code> (remote <code>thekidd2227/website</code>, deploys</li>
+</ul>
+<p>to GitHub Pages as <code>arcgsystems.com</code>). Serves the ChartNav public</p>
+<p>page at <code>/chartnav/...</code>.</p>
+<ul>
+<li>Brand assets source: <code>arcg-live/public/chartnav/brand/*.svg</code>.</li>
+</ul>
+<h3>Step 2 — Domain: chartnav.ai safety-net (in <code>arcg-live</code>)</h3>
+<ul>
+<li><code>index.html</code> + <code>public/404.html</code> gained a host-based redirect</li>
+</ul>
+<p>that runs before React mounts / before the SPA redirect. If any</p>
+<p>visitor lands on <code>chartnav.ai</code> or <code>www.chartnav.ai</code>, they are</p>
+<p>bounced to <code>https://arcgsystems.com/chartnav/&lt;path&gt;</code> via</p>
+<p><code>location.replace()</code>.</p>
+<ul>
+<li><code>CNAME</code> intentionally unchanged; <code>arcgsystems.com</code> stays primary.</li>
+<li><code>arcg-live/docs/chartnav-ai-domain-runbook.md</code> captures the</li>
+</ul>
+<p>operator workflow in the GoDaddy UI (exact clicks, DNS caveats,</p>
+<p>verification, rollback). GoDaddy 301 forwarding is the primary</p>
+<p>mechanism; the safety-net is belt-and-suspenders.</p>
+<h3>Step 3 — Brand assets imported</h3>
+<ul>
+<li>Copied <code>chartnav-logo.svg</code> (light variant for white backgrounds),</li>
+</ul>
+<p><code>chartnav-mark.svg</code>, and <code>chartnav-favicon.svg</code> from</p>
+<p><code>arcg-live/public/chartnav/brand/</code> into</p>
+<p><code>apps/web/public/brand/</code>. Both repos now share the same SVG</p>
+<p>source of truth.</p>
+<h3>Step 4 — Token system aligned</h3>
+<ul>
+<li>Rewrote <code>apps/web/src/styles.css</code> into an explicit ChartNav token</li>
+</ul>
+<p>system (<code>--cn-*</code>) mirroring the marketing site&#x27;s chartnav.css:</p>
+<p>teal <code>#0B6E79</code> primary + scale, surface <code>#FFFFFF</code>, page bg</p>
+<p><code>#F4F8FA</code>, inter typography with cv02/03/04/11. Legacy tokens</p>
+<p>(<code>--fg</code>, <code>--muted</code>, …) kept as aliases so every existing class</p>
+<p>renders with zero component change.</p>
+<ul>
+<li>Shadow tokens unified (<code>sm</code>/<code>md</code>/<code>lg</code>), md shadow teal-tinted.</li>
+<li><code>--cn-muted</code> tightened from <code>#64748B</code> → <code>#475569</code> and <code>--cn-dim</code></li>
+</ul>
+<p>from <code>#94A3B8</code> → <code>#64748B</code> so axe AA contrast passes cleanly.</p>
+<h3>Step 5 — App shell + footer</h3>
+<ul>
+<li><code>apps/web/index.html</code> loads Inter from Google Fonts, sets</li>
+</ul>
+<p><code>theme-color=#0B6E79</code>, sets the favicon to the brand SVG,</p>
+<p>expands title + meta description.</p>
+<ul>
+<li><code>App.tsx</code> header swaps the <code>&lt;span&gt;Chart&lt;/span&gt;&lt;span&gt;Nav&lt;/span&gt;</code></li>
+</ul>
+<p>approximation for the real <code>chartnav-logo.svg</code>. &quot;Workflow&quot;</p>
+<p>becomes a tidy pill chip next to the wordmark.</p>
+<ul>
+<li><code>App.tsx</code> wraps the shell in a fragment and adds an `&lt;footer</li>
+</ul>
+<p>className=&quot;app-footer&quot;&gt;` after the modal mounts. Footer line:</p>
+<p>&quot;ChartNav · Clinical workflow platform&quot; on the left,</p>
+<p><code>Powered by <strong>ARCG Systems</strong></code> on the right (11px uppercase,</p>
+<p>letter-spacing 0.12em, muted). Exactly one attribution per page.</p>
+<ul>
+<li><code>InviteAccept.tsx</code> inline colors swapped to the new AA muted.</li>
+</ul>
+<h3>Step 6 — Tests</h3>
+<ul>
+<li>Added `src/test/App.test.tsx::renders the brand footer with a</li>
+</ul>
+<p>subtle Powered by ARCG Systems line` — asserts the literal copy</p>
+<p>and that both test IDs (<code>app-footer</code>, <code>app-footer-arcg</code>) are</p>
+<p>present. <strong>31/31 Vitest passed.</strong></p>
+<ul>
+<li><strong>131/131 pytest.</strong> Backend untouched, run for regression</li>
+</ul>
+<p>confidence.</p>
+<ul>
+<li><strong>17/17 Playwright</strong> (workflow + a11y) after a11y fixes.</li>
+<li><strong>4/4 Playwright visual</strong>, baselines deliberately regenerated to</li>
+</ul>
+<p>reflect the new brand tokens + logo.</p>
+<h3>Step 7 — Docs</h3>
+<ul>
+<li>New <code>docs/build/28-brand-and-domain-alignment.md</code> covering both</li>
+</ul>
+<p>domain + brand work.</p>
+<ul>
+<li>Updated <code>01-current-state.md</code>, <code>05-build-log.md</code> (this entry),</li>
+</ul>
+<p><code>06-known-gaps.md</code>, <code>15-frontend-integration.md</code>.</p>
+<ul>
+<li>Final HTML + PDF regenerated (<code>scripts/build_docs.py</code>).</li>
+</ul>
+<h3>Step 8 — Hygiene</h3>
+<ul>
+<li>Dev DB reset to pristine seeded state before commit.</li>
+<li>Visual baselines committed (<code>.png</code> under</li>
+</ul>
+<p><code>tests/e2e/visual.spec.ts-snapshots/</code>).</p>
+<p>---</p>
 <h2>2026-04-18 — Phase 16: platform mode + interoperability</h2>
 <h3>Step 0 — CI fallout from phase 15 repaired first</h3>
 <ul>
@@ -860,6 +968,12 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <h3>Playwright summary (12)</h3>
 <p>Adds &quot;admin can issue an invitation and download audit CSV&quot; on top of</p>
 <p>the 11 scenarios shipped through phase 13.</p>
+<h2>Phase-17 additions</h2>
+<ul>
+<li><strong>Brand-aligned UI</strong>: <code>--cn-*</code> token system lifted from the ChartNav marketing site, real logo SVG in the header, Inter typography, subtle &quot;Powered by ARCG Systems&quot; footer, AA-safe muted text (<code>#475569</code>). Legacy token names kept as aliases — no component-level rewrites.</li>
+<li><strong><code>chartnav.ai</code> domain</strong>: safety-net host-based redirect in <code>arcg-live</code> (<code>index.html</code> + <code>public/404.html</code>). Primary 301 mechanism is GoDaddy forwarding, documented in <code>arcg-live/docs/chartnav-ai-domain-runbook.md</code>.</li>
+<li><strong>31 Vitest</strong> (+1), <strong>17 Playwright workflow+a11y</strong>, <strong>4 visual (local)</strong> — visual baselines deliberately regenerated for the new brand look.</li>
+</ul>
 <h2>Phase-16 additions</h2>
 <ul>
 <li><strong>Platform modes</strong>: <code>CHARTNAV_PLATFORM_MODE</code> wired — <code>standalone</code> / <code>integrated_readthrough</code> / <code>integrated_writethrough</code>. Config validates and refuses impossible combinations at import time.</li>
@@ -1924,6 +2038,31 @@ make web-build        # vite build -&gt; apps/web/dist
 <li>No UI changes for clinicians — the banner is admin-only, inside</li>
 </ul>
 <p>the admin modal.</p>
+<h2>Brand system (phase 17)</h2>
+<ul>
+<li>The product UI now consumes the ChartNav marketing site&#x27;s token</li>
+</ul>
+<p>set directly — same teal (<code>#0B6E79</code>), same Inter typography, same</p>
+<p>neutral scale, same radii/shadows. <code>apps/web/src/styles.css</code></p>
+<p>defines <code>--cn-*</code> tokens and keeps legacy aliases so component</p>
+<p>code stayed unchanged.</p>
+<ul>
+<li>Header renders <code>public/brand/chartnav-logo.svg</code> (the real</li>
+</ul>
+<p>ChartNav wordmark with pulse-cross mark) instead of the old</p>
+<p><code>&lt;span&gt;Chart/Nav&lt;/span&gt;</code> text approximation.</p>
+<ul>
+<li>Shell footer (<code>&lt;footer className=&quot;app-footer&quot;&gt;</code>) carries a</li>
+</ul>
+<p>single, subtle <strong>Powered by ARCG Systems</strong> attribution in</p>
+<p>11px uppercase, letter-spacing 0.12em, muted color. Locked in</p>
+<p>by a Vitest assertion + <code>data-testid=&quot;app-footer-arcg&quot;</code>.</p>
+<ul>
+<li>Accessibility preserved: <code>--cn-muted</code> darkened from <code>#64748B</code> →</li>
+</ul>
+<p><code>#475569</code> and <code>--cn-dim</code> from <code>#94A3B8</code> → <code>#64748B</code> so the</p>
+<p>existing axe baseline passes without new exceptions. Visual</p>
+<p>baselines regenerated deliberately.</p>
 <h2>What this phase explicitly does NOT do</h2>
 <ul>
 <li>No real login flow — <code>X-User-Email</code> is still dev transport.</li>
@@ -3744,7 +3883,181 @@ Day 90+ → full documentation, coding, billing extensions
 <p>This document is the operator-facing contract. The engineering</p>
 <p>contract lives in <code>26-platform-mode-and-interoperability.md</code>.</p>
 </section>
-<section id="sec-29"><h2>Diagram — System architecture</h2>
+<section id="sec-29"><h2>28 — Brand & domain alignment</h2>
+<h1>Brand &amp; Domain Alignment (phase 17)</h1>
+<p>This phase does two things: (1) links <code>chartnav.ai</code> to the existing</p>
+<p>marketing page at <code>https://arcgsystems.com/chartnav/</code>, and (2) brings</p>
+<p>the product UI into explicit visual alignment with the ChartNav brand</p>
+<p>system used by the marketing site. No behavior changes, no endpoint</p>
+<p>changes, no new dependencies.</p>
+<h2>1. Domain — <code>chartnav.ai</code> → <code>https://arcgsystems.com/chartnav/</code></h2>
+<p>Primary mechanism: <strong>GoDaddy 301 forwarding</strong> on both the apex and</p>
+<p><code>www</code>. GoDaddy does the redirect at its edge (TLS terminated by</p>
+<p>GoDaddy) and the visitor lands on the canonical marketing URL.</p>
+<p>Secondary safety-net (implemented in-repo, [<code>~/arcg-live</code>]):</p>
+<ul>
+<li><code>index.html</code> and <code>public/404.html</code> run a host-based redirect</li>
+</ul>
+<p><strong>before</strong> anything else. If DNS for <code>chartnav.ai</code> is ever pointed</p>
+<p>at GitHub Pages (instead of or in addition to GoDaddy forwarding),</p>
+<p>the site itself still bounces visitors to</p>
+<p><code>https://arcgsystems.com/chartnav/&lt;path&gt;</code>.</p>
+<ul>
+<li>The <code>CNAME</code> file stays <code>arcgsystems.com</code>; we don&#x27;t rebrand Pages&#x27;</li>
+</ul>
+<p>primary domain.</p>
+<p>Full operator runbook: <code>arcg-live/docs/chartnav-ai-domain-runbook.md</code>.</p>
+<h3>Verification</h3>
+<pre class="code lang-bash"><code>
+# Once GoDaddy forwarding is saved:
+curl -sI http://chartnav.ai       | grep -i ^location
+curl -sI https://chartnav.ai      | grep -i ^location
+curl -sI https://www.chartnav.ai  | grep -i ^location
+# All three must point at: https://arcgsystems.com/chartnav/
+</code></pre>
+<h3>What&#x27;s external vs in-repo</h3>
+<ul>
+<li><strong>External (GoDaddy UI)</strong>: the actual 301 forwarding rule creation</li>
+</ul>
+<p>on both the apex and the <code>www</code> subdomain. This is the primary path</p>
+<p>and is the only work required to flip the domain live. Cannot be</p>
+<p>automated from this repo without registrar API access.</p>
+<ul>
+<li><strong>In-repo (this commit)</strong>: safety-net redirect + runbook.</li>
+</ul>
+<h2>2. Brand alignment — ChartNav product UI</h2>
+<p>Before: a clean-but-generic muted-blue shell with ad-hoc tokens.</p>
+<p>After: an explicit med-tech light brand system that mirrors the</p>
+<p>marketing site&#x27;s tokens 1:1. The product and the marketing site now</p>
+<p>share one visual vocabulary.</p>
+<h3>Token alignment</h3>
+<p>All color, radius, and shadow tokens are lifted from</p>
+<p><code>arcg-live/src/components/chartnav/chartnav.css</code>. The same teal</p>
+<p>(<code>#0B6E79</code>) is primary. Legacy token names (<code>--fg</code>, <code>--muted</code>,</p>
+<p><code>--accent</code>, …) remain as aliases so no component needs to be</p>
+<p>rewritten.</p>
+<table><thead><tr><th>Concern</th><th>Before</th><th>After (ChartNav brand)</th></tr></thead><tbody>
+<tr><td>Primary</td><td><code>#0b6e79</code> (same teal)</td><td><code>#0B6E79</code> + <code>hover</code>/<code>active</code>/<code>tint</code>/<code>soft</code> scale</td></tr>
+<tr><td>Surface bg</td><td><code>#ffffff</code> / <code>#f8fafc</code></td><td><code>#F4F8FA</code> (page) + <code>#FFFFFF</code> (card) + <code>#F8FBFC</code> (alt)</td></tr>
+<tr><td>Muted text</td><td><code>#64748B</code> (borderline on light bg)</td><td><code>#475569</code> (AA contrast on <code>#F4F8FA</code>)</td></tr>
+<tr><td>Borders</td><td><code>#e5e7eb</code></td><td><code>#DCE5EA</code> + <code>#C4D2D9</code> strong</td></tr>
+<tr><td>Typography</td><td>System default</td><td><strong>Inter</strong> via Google Fonts + cv02/03/04/11 features</td></tr>
+<tr><td>Radii</td><td>6 / 8 / 10</td><td>6 (sm) / 10 (md) / 14 (lg) + pill</td></tr>
+<tr><td>Shadows</td><td>one flat <code>rgba(15,23,42,0.25)</code></td><td>sm / md / lg scale, teal-tinted on md</td></tr>
+</tbody></table>
+<h3>Visible changes</h3>
+<ul>
+<li>App header shows the real <strong>ChartNav logo SVG</strong> (teal <code>Chart</code> +</li>
+</ul>
+<p><code>Nav</code> wordmark with the cross-and-pulse mark) instead of the</p>
+<p><code>&lt;span&gt;Chart&lt;/span&gt;&lt;span&gt;Nav&lt;/span&gt;</code> text approximation.</p>
+<ul>
+<li>&quot;Workflow&quot; label next to the wordmark is now a subtle uppercase</li>
+</ul>
+<p>pill, not an inline span.</p>
+<ul>
+<li>Buttons: larger hit targets, brand-teal primary, focus rings use</li>
+</ul>
+<p>the primary-tint token.</p>
+<ul>
+<li>Tables + cards: proper border + shadow elevation, consistent</li>
+</ul>
+<p>radius rhythm.</p>
+<ul>
+<li>Status pills: tuned to the brand token palette; <code>in_progress</code> is</li>
+</ul>
+<p>now primary-tint (teal) instead of amber — it reads as &quot;active&quot;,</p>
+<p>not &quot;caution&quot;.</p>
+<ul>
+<li>Filters / form inputs: focus ring uses brand teal.</li>
+<li>Modal backdrop gets a subtle blur for visual depth.</li>
+<li>Admin tabs re-styled as an actual underlined tab strip (brand</li>
+</ul>
+<p>teal underline on active), not just contrasting buttons.</p>
+<ul>
+<li>Platform banner (phase 16) now uses the primary-soft background</li>
+</ul>
+<p>with a 3px teal left border — reads as an informational banner.</p>
+<h3>Footer — &quot;Powered by ARCG Systems&quot;</h3>
+<p>A single, subtle attribution line in the app shell footer:</p>
+<pre class="code lang-"><code>
+ChartNav · Clinical workflow platform        POWERED BY ARCG SYSTEMS
+</code></pre>
+<ul>
+<li>Rendered exactly once per page (inside <code>&lt;App&gt;</code> after the main</li>
+</ul>
+<p>layout).</p>
+<ul>
+<li>11px uppercase, letter-spacing 0.12em, muted color.</li>
+<li><code>data-testid=&quot;app-footer-arcg&quot;</code> for test stability.</li>
+<li>Copy is literal: <code>Powered by ARCG Systems</code>.</li>
+<li>Vitest assertion in <code>src/test/App.test.tsx</code> locks the exact</li>
+</ul>
+<p>copy in.</p>
+<h3>A11y</h3>
+<p>New tokens were chosen specifically to preserve AA contrast:</p>
+<ul>
+<li><code>--cn-muted</code> moved from <code>#64748B</code> → <code>#475569</code> (6.17:1 on page bg).</li>
+<li><code>--cn-dim</code> moved from <code>#94A3B8</code> → <code>#64748B</code> (4.54:1 on white).</li>
+</ul>
+<p>The existing axe-core baseline (<code>apps/web/tests/e2e/a11y.spec.ts</code>)</p>
+<p>passes 5/5 after this phase with zero <code>serious</code>/<code>critical</code></p>
+<p>violations. Visual-regression baselines</p>
+<p>(<code>apps/web/tests/e2e/visual.spec.ts-snapshots/*-darwin.png</code>) were</p>
+<p>intentionally regenerated — the UI *should* look different now.</p>
+<h2>3. Files changed</h2>
+<h3><code>arcg-live</code> (marketing site)</h3>
+<ul>
+<li><code>index.html</code> — host-based <code>chartnav.ai</code> safety-net redirect.</li>
+<li><code>public/404.html</code> — same safety-net before SPA redirect.</li>
+<li><code>docs/chartnav-ai-domain-runbook.md</code> — GoDaddy operator runbook.</li>
+</ul>
+<h3><code>chartnav-platform</code> (product)</h3>
+<ul>
+<li><code>apps/web/index.html</code> — Inter font, theme-color, meta description,</li>
+</ul>
+<p>favicon pointing at the brand SVG.</p>
+<ul>
+<li><code>apps/web/public/brand/</code> — logo (<code>chartnav-logo.svg</code>), mark</li>
+</ul>
+<p>(<code>chartnav-mark.svg</code>), favicon (<code>chartnav-favicon.svg</code>). Copied</p>
+<p>from <code>arcg-live/public/chartnav/brand/</code> so the product and site</p>
+<p>share one SVG source.</p>
+<ul>
+<li><code>apps/web/src/styles.css</code> — full rewrite into the ChartNav token</li>
+</ul>
+<p>system. Legacy class names preserved; legacy var names aliased.</p>
+<ul>
+<li><code>apps/web/src/App.tsx</code> — logo swap in header, <code>&lt;footer&gt;</code> with</li>
+</ul>
+<p>Powered-by line, <code>&lt;div&gt;</code> → fragment wrapper so the footer sits</p>
+<p>outside the layout grid.</p>
+<ul>
+<li><code>apps/web/src/InviteAccept.tsx</code> — inline colors moved to the new</li>
+</ul>
+<p>AA-safe muted token.</p>
+<ul>
+<li><code>apps/web/src/test/App.test.tsx</code> — new test asserting the footer</li>
+</ul>
+<p>line exists and carries the literal &quot;Powered by ARCG Systems&quot;.</p>
+<h2>4. What this phase does NOT do</h2>
+<ul>
+<li>Does <strong>not</strong> ship a new endpoint, migration, or data-model change.</li>
+<li>Does <strong>not</strong> alter the ChartNav marketing page copy or layout.</li>
+<li>Does <strong>not</strong> add a ChartNav-branded marketing landing page to the</li>
+</ul>
+<p>product repo — the product is still an operator console, not a</p>
+<p>marketing surface.</p>
+<ul>
+<li>Does <strong>not</strong> introduce a component library or design-system</li>
+</ul>
+<p>package. Tokens + plain CSS remain; that&#x27;s deliberate.</p>
+<ul>
+<li>Does <strong>not</strong> automate GoDaddy — the user completes forwarding via</li>
+</ul>
+<p>the GoDaddy UI using the runbook.</p>
+</section>
+<section id="sec-30"><h2>Diagram — System architecture</h2>
 <h1>System Architecture</h1>
 <div class="mermaid">
 flowchart LR
@@ -3855,7 +4168,7 @@ flowchart LR
   Compose --> PG
 </div>
 </section>
-<section id="sec-30"><h2>Diagram — Encounter status machine</h2>
+<section id="sec-31"><h2>Diagram — Encounter status machine</h2>
 <h1>Encounter Status State Machine</h1>
 <div class="mermaid">
 stateDiagram-v2
@@ -3877,7 +4190,7 @@ stateDiagram-v2
 <p>Legend: any edge not shown is rejected at <code>POST /encounters/{id}/status</code></p>
 <p>with HTTP 400 <code>invalid_transition</code>.</p>
 </section>
-<section id="sec-31"><h2>Diagram — ER</h2>
+<section id="sec-32"><h2>Diagram — ER</h2>
 <h1>ER Diagram</h1>
 <div class="mermaid">
 erDiagram
@@ -3962,7 +4275,7 @@ erDiagram
 <p><code>users.organization_id</code> is the authoritative source of scope; never</p>
 <p>derived from client input.</p>
 </section>
-<section id="sec-32"><h2>Diagram — API / data flow</h2>
+<section id="sec-33"><h2>Diagram — API / data flow</h2>
 <h1>API / Data Flow &amp; CI</h1>
 <h2>UI → Backend request path</h2>
 <div class="mermaid">

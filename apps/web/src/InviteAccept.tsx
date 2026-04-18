@@ -54,9 +54,9 @@ export function InviteAccept({ defaultToken = "" }: { defaultToken?: string }) {
       <h1 style={{ marginBottom: 4 }}>
         <span style={{ color: "#0F172A" }}>Chart</span>
         <span style={{ color: "#0B6E79" }}>Nav</span>{" "}
-        <span style={{ fontSize: 14, color: "#64748B" }}>· accept invitation</span>
+        <span style={{ fontSize: 14, color: "#475569" }}>· accept invitation</span>
       </h1>
-      <p className="subtle-note" style={{ color: "#64748B" }}>
+      <p className="subtle-note" style={{ color: "#475569" }}>
         Paste the invitation token you received from your admin.
       </p>
       {result ? (
@@ -68,7 +68,7 @@ export function InviteAccept({ defaultToken = "" }: { defaultToken?: string }) {
         </div>
       ) : (
         <form onSubmit={submit} style={{ display: "grid", gap: 10, marginTop: 16 }}>
-          <label style={{ fontSize: 12, color: "#64748B" }}>
+          <label style={{ fontSize: 12, color: "#475569" }}>
             Invitation token
             <textarea
               data-testid="invite-token-input"

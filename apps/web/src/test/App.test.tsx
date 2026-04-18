@@ -162,6 +162,14 @@ describe("ChartNav frontend", () => {
     );
   });
 
+  it("renders the brand footer with a subtle Powered by ARCG Systems line", async () => {
+    await waitForAdminLoaded();
+    const footer = screen.getByTestId("app-footer");
+    expect(footer).toHaveTextContent("ChartNav");
+    const powered = screen.getByTestId("app-footer-arcg");
+    expect(powered).toHaveTextContent(/powered by\s+arcg systems/i);
+  });
+
   it("renders the list from the mocked API", async () => {
     await waitForAdminLoaded();
     const list = await screen.findByTestId("enc-list");

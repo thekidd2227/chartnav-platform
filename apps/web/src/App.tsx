@@ -206,11 +206,16 @@ export default function App() {
   const canAdmin = me ? isAdmin(me.role) : false;
 
   return (
-    <div>
+    <>
       <header className="app-header">
         <div className="brand">
-          <span className="mark-a">Chart</span>
-          <span className="mark-b">Nav</span>
+          <img
+            className="brand__logo"
+            src="/brand/chartnav-logo.svg"
+            alt="ChartNav"
+            width="140"
+            height="32"
+          />
           <span className="sub">Workflow</span>
         </div>
         <div className="header-meta">
@@ -328,7 +333,25 @@ export default function App() {
           onClose={() => setShowAdmin(false)}
         />
       )}
-    </div>
+
+      <footer
+        className="app-footer"
+        role="contentinfo"
+        data-testid="app-footer"
+      >
+        <span className="app-footer__brand">
+          <strong>ChartNav</strong>
+          <span aria-hidden="true"> · </span>
+          <span>Clinical workflow platform</span>
+        </span>
+        <span
+          className="app-footer__powered"
+          data-testid="app-footer-arcg"
+        >
+          Powered by <strong>ARCG Systems</strong>
+        </span>
+      </footer>
+    </>
   );
 }
 

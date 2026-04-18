@@ -4,6 +4,84 @@ Reverse-chronological.
 
 ---
 
+## 2026-04-18 — Phase 17: brand & domain alignment
+
+### Step 1 — Locate the relevant repos
+- Product: `~/Desktop/ARCG/chartnav-platform` (this repo).
+- Marketing/site: `~/arcg-live` (remote `thekidd2227/website`, deploys
+  to GitHub Pages as `arcgsystems.com`). Serves the ChartNav public
+  page at `/chartnav/...`.
+- Brand assets source: `arcg-live/public/chartnav/brand/*.svg`.
+
+### Step 2 — Domain: chartnav.ai safety-net (in `arcg-live`)
+- `index.html` + `public/404.html` gained a host-based redirect
+  that runs before React mounts / before the SPA redirect. If any
+  visitor lands on `chartnav.ai` or `www.chartnav.ai`, they are
+  bounced to `https://arcgsystems.com/chartnav/<path>` via
+  `location.replace()`.
+- `CNAME` intentionally unchanged; `arcgsystems.com` stays primary.
+- `arcg-live/docs/chartnav-ai-domain-runbook.md` captures the
+  operator workflow in the GoDaddy UI (exact clicks, DNS caveats,
+  verification, rollback). GoDaddy 301 forwarding is the primary
+  mechanism; the safety-net is belt-and-suspenders.
+
+### Step 3 — Brand assets imported
+- Copied `chartnav-logo.svg` (light variant for white backgrounds),
+  `chartnav-mark.svg`, and `chartnav-favicon.svg` from
+  `arcg-live/public/chartnav/brand/` into
+  `apps/web/public/brand/`. Both repos now share the same SVG
+  source of truth.
+
+### Step 4 — Token system aligned
+- Rewrote `apps/web/src/styles.css` into an explicit ChartNav token
+  system (`--cn-*`) mirroring the marketing site's chartnav.css:
+  teal `#0B6E79` primary + scale, surface `#FFFFFF`, page bg
+  `#F4F8FA`, inter typography with cv02/03/04/11. Legacy tokens
+  (`--fg`, `--muted`, …) kept as aliases so every existing class
+  renders with zero component change.
+- Shadow tokens unified (`sm`/`md`/`lg`), md shadow teal-tinted.
+- `--cn-muted` tightened from `#64748B` → `#475569` and `--cn-dim`
+  from `#94A3B8` → `#64748B` so axe AA contrast passes cleanly.
+
+### Step 5 — App shell + footer
+- `apps/web/index.html` loads Inter from Google Fonts, sets
+  `theme-color=#0B6E79`, sets the favicon to the brand SVG,
+  expands title + meta description.
+- `App.tsx` header swaps the `<span>Chart</span><span>Nav</span>`
+  approximation for the real `chartnav-logo.svg`. "Workflow"
+  becomes a tidy pill chip next to the wordmark.
+- `App.tsx` wraps the shell in a fragment and adds an `<footer
+  className="app-footer">` after the modal mounts. Footer line:
+  "ChartNav · Clinical workflow platform" on the left,
+  `Powered by **ARCG Systems**` on the right (11px uppercase,
+  letter-spacing 0.12em, muted). Exactly one attribution per page.
+- `InviteAccept.tsx` inline colors swapped to the new AA muted.
+
+### Step 6 — Tests
+- Added `src/test/App.test.tsx::renders the brand footer with a
+  subtle Powered by ARCG Systems line` — asserts the literal copy
+  and that both test IDs (`app-footer`, `app-footer-arcg`) are
+  present. **31/31 Vitest passed.**
+- **131/131 pytest.** Backend untouched, run for regression
+  confidence.
+- **17/17 Playwright** (workflow + a11y) after a11y fixes.
+- **4/4 Playwright visual**, baselines deliberately regenerated to
+  reflect the new brand tokens + logo.
+
+### Step 7 — Docs
+- New `docs/build/28-brand-and-domain-alignment.md` covering both
+  domain + brand work.
+- Updated `01-current-state.md`, `05-build-log.md` (this entry),
+  `06-known-gaps.md`, `15-frontend-integration.md`.
+- Final HTML + PDF regenerated (`scripts/build_docs.py`).
+
+### Step 8 — Hygiene
+- Dev DB reset to pristine seeded state before commit.
+- Visual baselines committed (`.png` under
+  `tests/e2e/visual.spec.ts-snapshots/`).
+
+---
+
 ## 2026-04-18 — Phase 16: platform mode + interoperability
 
 ### Step 0 — CI fallout from phase 15 repaired first

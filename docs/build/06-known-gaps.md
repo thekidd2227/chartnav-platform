@@ -39,6 +39,12 @@
 Adds "admin can issue an invitation and download audit CSV" on top of
 the 11 scenarios shipped through phase 13.
 
+## Phase-17 additions
+
+- **Brand-aligned UI**: `--cn-*` token system lifted from the ChartNav marketing site, real logo SVG in the header, Inter typography, subtle "Powered by ARCG Systems" footer, AA-safe muted text (`#475569`). Legacy token names kept as aliases — no component-level rewrites.
+- **`chartnav.ai` domain**: safety-net host-based redirect in `arcg-live` (`index.html` + `public/404.html`). Primary 301 mechanism is GoDaddy forwarding, documented in `arcg-live/docs/chartnav-ai-domain-runbook.md`.
+- **31 Vitest** (+1), **17 Playwright workflow+a11y**, **4 visual (local)** — visual baselines deliberately regenerated for the new brand look.
+
 ## Phase-16 additions
 
 - **Platform modes**: `CHARTNAV_PLATFORM_MODE` wired — `standalone` / `integrated_readthrough` / `integrated_writethrough`. Config validates and refuses impossible combinations at import time.
