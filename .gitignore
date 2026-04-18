@@ -21,3 +21,6 @@
 
 # Python packaging
 *.egg-info/
+
+# Local databases
+*.db
