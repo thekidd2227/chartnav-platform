@@ -1,40 +1,29 @@
-"""Dev auth + org-scoping helpers for ChartNav.
+"""Authentication for ChartNav.
 
-This module owns *authentication* (who is the caller) only.
-Authorization (what the caller may do) lives in `app.authz`.
+Two transports, gated by `CHARTNAV_AUTH_MODE` (see `app.config`):
 
-Transport today: `X-User-Email` request header, looked up against the
-`users` table. This is a dev/local transport — trivially spoofable — and
-is NOT production identity. The production upgrade path is documented
-in `docs/build/07-auth-and-scoping.md`; when the transport changes
-(JWT/SSO), only this module needs to swap its implementation while
-every route and every authorization helper keeps working unchanged.
+    header  — dev only. Reads `X-User-Email` and resolves from the
+              `users` table. Trivially spoofable.
+    bearer  — production-shaped stub. Requires `Authorization: Bearer <jwt>`.
+              JWT signature / issuer / audience validation is NOT
+              implemented in this phase — the resolver returns 501
+              `auth_bearer_not_implemented` so deployments cannot
+              accidentally serve unauthenticated traffic.
 
-Standardized error shape:
-    { "error_code": "<stable_code>", "reason": "<human message>" }
-
-Stable error codes emitted here:
-    missing_auth_header
-    unknown_user
-    cross_org_access_forbidden
+Every transport must produce the same `Caller` contract so routes and
+authorization helpers do not need to change when the transport is
+swapped. Downstream code depends on `require_caller`, never on a header.
 """
 
 from __future__ import annotations
 
-import os
-import sqlite3
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Optional
 
 from fastapi import Header, HTTPException
 
-DB_PATH = Path(__file__).resolve().parents[1] / "chartnav.db"
-
-# Auth mode is an abstraction seam for future transports. Only "header"
-# is implemented today. Swapping to "jwt" or "oidc" would change only
-# `require_caller`; the authz layer is transport-agnostic.
-AUTH_MODE = os.environ.get("CHARTNAV_AUTH_MODE", "header")
+from app.config import settings
+from app.db import fetch_one
 
 
 @dataclass(frozen=True)
@@ -52,25 +41,7 @@ def _error(code: str, reason: str, status: int) -> HTTPException:
     )
 
 
-def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
-
-
-def _resolve_by_email(email: str) -> Optional[Caller]:
-    conn = _connect()
-    try:
-        row = conn.execute(
-            "SELECT id, email, full_name, role, organization_id "
-            "FROM users WHERE email = ?",
-            (email,),
-        ).fetchone()
-    finally:
-        conn.close()
-    if not row:
-        return None
+def _caller_from_row(row: dict) -> Caller:
     return Caller(
         user_id=row["id"],
         email=row["email"],
@@ -80,32 +51,63 @@ def _resolve_by_email(email: str) -> Optional[Caller]:
     )
 
 
+def resolve_caller_from_header(x_user_email: Optional[str]) -> Caller:
+    if not x_user_email or not x_user_email.strip():
+        raise _error("missing_auth_header", "X-User-Email is required", 401)
+    row = fetch_one(
+        "SELECT id, email, full_name, role, organization_id "
+        "FROM users WHERE email = :email",
+        {"email": x_user_email.strip()},
+    )
+    if not row:
+        raise _error("unknown_user", "no user matches X-User-Email", 401)
+    return _caller_from_row(row)
+
+
+def resolve_caller_from_bearer(authorization: Optional[str]) -> Caller:
+    """Production-shaped placeholder.
+
+    In this phase we refuse to serve bearer-authenticated traffic
+    because signature validation is not wired yet. The config module
+    has already verified that issuer / audience / JWKS URL are set if
+    `CHARTNAV_AUTH_MODE=bearer`, so operators know what they need; this
+    function is the enforcement point that prevents a half-built
+    deployment from looking "authenticated".
+    """
+    if not authorization or not authorization.strip():
+        raise _error(
+            "missing_auth_header",
+            "Authorization: Bearer <token> is required",
+            401,
+        )
+    raise _error(
+        "auth_bearer_not_implemented",
+        "bearer-token validation is not implemented in this phase; "
+        "set CHARTNAV_AUTH_MODE=header for local dev",
+        status=501,
+    )
+
+
 def require_caller(
     x_user_email: Optional[str] = Header(default=None, alias="X-User-Email"),
+    authorization: Optional[str] = Header(default=None, alias="Authorization"),
 ) -> Caller:
     """Primary authentication seam.
 
-    Swap the body of this function (or branch on AUTH_MODE) when we move
-    to a real identity transport. The return contract — a `Caller` with
-    `organization_id` and `role` — must stay the same so no route or
-    authz helper has to change.
+    Dispatches based on `settings.auth_mode`. The return contract — a
+    `Caller` with `organization_id` and `role` — is invariant across
+    transports.
     """
-    if AUTH_MODE != "header":
-        # Safety net: if AUTH_MODE is set to something we haven't wired
-        # up yet, refuse rather than silently fall back to dev auth.
-        raise _error(
-            "auth_mode_unsupported",
-            f"AUTH_MODE={AUTH_MODE!r} is not implemented",
-            status=500,
-        )
-
-    if not x_user_email or not x_user_email.strip():
-        raise _error("missing_auth_header", "X-User-Email is required", 401)
-
-    caller = _resolve_by_email(x_user_email.strip())
-    if not caller:
-        raise _error("unknown_user", "no user matches X-User-Email", 401)
-    return caller
+    mode = settings.auth_mode
+    if mode == "header":
+        return resolve_caller_from_header(x_user_email)
+    if mode == "bearer":
+        return resolve_caller_from_bearer(authorization)
+    # `app.config` already validates the mode; this is a belt-and-braces
+    # guard in case someone imports Settings manually.
+    raise _error(
+        "auth_mode_unsupported", f"unknown auth mode: {mode!r}", 500
+    )
 
 
 def ensure_same_org(caller: Caller, target_organization_id: int) -> None:

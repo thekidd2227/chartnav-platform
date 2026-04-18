@@ -1,0 +1,55 @@
+# Production-shaped compose: API + Postgres.
+#
+# Use:
+#   cd infra/docker
+#   docker compose -f docker-compose.prod.yml up --build
+#
+# Env contract (see .env.example). Everything below is overridable.
+# The compose file ships with dev-safe defaults for local parity tests;
+# real deployments should supply these from a secret store.
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: chartnav-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-chartnav}
+      POSTGRES_USER: ${POSTGRES_USER:-chartnav}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chartnav}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-chartnav} -d ${POSTGRES_DB:-chartnav}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - chartnav_pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ../../apps/api
+      dockerfile: Dockerfile
+    container_name: chartnav-api
+    environment:
+      CHARTNAV_ENV: ${CHARTNAV_ENV:-prod}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://chartnav:chartnav@db:5432/chartnav}
+      # Default to dev-auth so the container starts locally without
+      # production identity wired. Flip to `bearer` when JWT validation
+      # is implemented AND these env vars are set.
+      CHARTNAV_AUTH_MODE: ${CHARTNAV_AUTH_MODE:-header}
+      CHARTNAV_JWT_ISSUER: ${CHARTNAV_JWT_ISSUER:-}
+      CHARTNAV_JWT_AUDIENCE: ${CHARTNAV_JWT_AUDIENCE:-}
+      CHARTNAV_JWT_JWKS_URL: ${CHARTNAV_JWT_JWKS_URL:-}
+      CHARTNAV_RUN_SEED: ${CHARTNAV_RUN_SEED:-0}
+      API_PORT: 8000
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  chartnav_pgdata:

@@ -1,73 +1,72 @@
 # ChartNav — Current State
 
-**As of:** 2026-04-17 (phase: CI + runtime hardening)
+**As of:** 2026-04-18 (phase: production seam, deploy target, Postgres parity)
 
 ## Repo layout (relevant)
 
 ```
 chartnav-platform/
-├── .github/workflows/
-│   └── ci.yml                       # NEW — backend + docs CI
-├── Makefile                         # NEW — canonical local verification
+├── .github/workflows/ci.yml         # backend-sqlite + backend-postgres + docker-build + docs
+├── Makefile                         # install · migrate · seed · test · verify · pg-verify · docker-*
 ├── scripts/
-│   └── build_docs.py                # NEW — reproducible HTML/PDF builder
+│   ├── build_docs.py                # reproducible HTML/PDF build
+│   ├── verify.sh                    # boot + smoke teardown
+│   └── pg_verify.sh                 # NEW — end-to-end Postgres parity proof
 ├── apps/
 │   ├── api/
+│   │   ├── Dockerfile               # hardened: non-root, healthcheck, entrypoint
+│   │   ├── entrypoint.sh            # NEW — migrate-on-start, optional seed, exec CMD
+│   │   ├── .env.example             # runtime contract (env-first)
 │   │   ├── app/main.py
-│   │   ├── app/auth.py
-│   │   ├── app/authz.py
-│   │   ├── app/api/routes.py
+│   │   ├── app/config.py            # NEW — central settings from env
+│   │   ├── app/db.py                # NEW — SA Core, cross-dialect
+│   │   ├── app/auth.py              # header + bearer resolvers behind one seam
+│   │   ├── app/authz.py             # RBAC
+│   │   ├── app/api/routes.py        # all queries now :name-bound
 │   │   ├── alembic.ini
-│   │   ├── alembic/env.py           # honors `-x sqlalchemy.url=`
+│   │   ├── alembic/env.py           # honors `-x` AND `DATABASE_URL`
 │   │   ├── alembic/versions/        # 2 migrations (unchanged)
-│   │   ├── scripts_seed.py          # 2 orgs, 5 users, 3 roles
-│   │   ├── scripts/smoke.sh         # NEW — curl-level smoke
-│   │   ├── tests/                   # pytest suite
-│   │   └── pyproject.toml           # now declares [dev] extras + pytest config
+│   │   ├── scripts_seed.py          # rewritten on SA; cross-dialect
+│   │   ├── scripts/smoke.sh         # shell smoke (reused across envs)
+│   │   └── tests/
+│   │       ├── conftest.py          # env-based per-test DB
+│   │       ├── test_auth.py
+│   │       ├── test_auth_modes.py   # NEW — header + bearer seam
+│   │       ├── test_rbac.py
+│   │       └── test_scoping.py
 │   └── web/
-├── infra/docker/docker-compose.yml
+├── infra/docker/
+│   ├── docker-compose.yml           # dev stack
+│   └── docker-compose.prod.yml      # NEW — API + Postgres
 └── docs/
-    ├── build/                       # living docs 01–10
-    ├── diagrams/                    # Mermaid sources
-    └── final/                       # generated HTML + PDF
+    ├── build/ 01 … 14
+    ├── diagrams/
+    └── final/*.html / *.pdf
 ```
 
 ## Runtime baseline
 
-- Python 3.11+, FastAPI, raw `sqlite3` driver.
-- SQLite at `apps/api/chartnav.db` (gitignored). CI uses `$RUNNER_TEMP/chartnav_ci.db`.
-- Alembic head: `a1b2c3d4e5f6` (no new migrations this phase).
-- Auth transport: `X-User-Email` (dev). Seam: `CHARTNAV_AUTH_MODE`.
-- RBAC roles: `admin`, `clinician`, `reviewer`.
+- Python 3.11+, FastAPI, **SQLAlchemy Core** now underpins all DB access.
+- Database: `DATABASE_URL` → `sqlite:///apps/api/chartnav.db` (dev default) or `postgresql+psycopg://…` (prod / parity CI).
+- Alembic head: `a1b2c3d4e5f6`. No new migrations this phase.
+- Auth: `CHARTNAV_AUTH_MODE` (`header` dev / `bearer` prod-shaped placeholder). Config refuses to import if `bearer` is set without JWT env.
+- RBAC: `admin` / `clinician` / `reviewer`.
 - Error envelope: `{"detail": {"error_code": "...", "reason": "..."}}`.
-- Every endpoint except `/health` and `/` requires auth. All data endpoints are caller-org scoped.
+- Deploy target: Docker image + `docker-compose.prod.yml` (API + Postgres).
+- Tests: 28 pytest on SQLite (incl. 3 new auth-mode tests); Postgres parity proved end-to-end via `scripts/pg_verify.sh` and a dedicated CI job.
 
 ## Verified working endpoints
 
-Unchanged since phase 4:
-- `GET /health`, `GET /` (open)
-- `GET /me`
-- `GET /organizations`, `GET /locations`, `GET /users` (authed + scoped)
-- `GET /encounters` (+ filters)
-- `GET /encounters/{id}`, `GET /encounters/{id}/events`
-- `POST /encounters` (admin, clinician)
-- `POST /encounters/{id}/events` (admin, clinician)
-- `POST /encounters/{id}/status` (per-edge RBAC)
+Unchanged since phase 4. Now verified on BOTH SQLite and Postgres where applicable:
 
-## Automation now in place
+- Open: `GET /health`, `GET /`
+- Authed: `GET /me`, `GET /organizations`, `GET /locations`, `GET /users`, `GET /encounters` (+ filters), `GET /encounters/{id}`, `GET /encounters/{id}/events`
+- Authed + RBAC: `POST /encounters` (admin, clinician), `POST /encounters/{id}/events` (admin, clinician), `POST /encounters/{id}/status` (per-edge roles)
 
-- `make verify` — single command: reset DB, test, boot, smoke.
-- `pytest tests/ -v` — 25 tests pass.
-- `bash apps/api/scripts/smoke.sh <base>` — 9 curl assertions.
-- `python scripts/build_docs.py` — regenerates consolidated HTML + PDF.
-- `.github/workflows/ci.yml` — runs all of the above on push/PR + uploads rebuilt docs as a CI artifact.
+## Automation
 
-## Seeded tenants / users
-
-| org_id | slug               | email                    | role      |
-|--------|--------------------|--------------------------|-----------|
-| 1      | `demo-eye-clinic`  | admin@chartnav.local     | admin     |
-| 1      | `demo-eye-clinic`  | clin@chartnav.local      | clinician |
-| 1      | `demo-eye-clinic`  | rev@chartnav.local       | reviewer  |
-| 2      | `northside-retina` | admin@northside.local    | admin     |
-| 2      | `northside-retina` | clin@northside.local     | clinician |
+- `make verify` — SQLite: reset-db + pytest (28) + boot + smoke (9) + teardown.
+- `make pg-verify` — spins throwaway Postgres, migrates + seeds + boots + smokes + exercises state transition. Teardown trap-guaranteed.
+- `make docker-build` / `make docker-up` / `make docker-down`.
+- `python scripts/build_docs.py` — deterministic HTML + PDF.
+- CI: `backend-sqlite` → `backend-postgres` + `docker-build` + `docs` (each gated on its predecessor where it matters).

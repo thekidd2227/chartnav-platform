@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
+from sqlalchemy import text
 
 from app.auth import Caller, ensure_same_org, require_caller
 from app.authz import (
@@ -15,10 +14,14 @@ from app.authz import (
     require_create_encounter,
     require_create_event,
 )
+from app.db import (
+    fetch_all,
+    fetch_one,
+    insert_returning_id,
+    transaction,
+)
 
 router = APIRouter()
-
-DB_PATH = Path(__file__).resolve().parents[2] / "chartnav.db"
 
 # ----- State machine -----
 ALLOWED_STATUSES: set[str] = {
@@ -47,33 +50,6 @@ def _err(code: str, reason: str, status_code: int) -> HTTPException:
     )
 
 
-# ---------- DB helpers ----------
-
-def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
-
-
-def fetch_all(query: str, params: tuple = ()) -> list[dict]:
-    conn = _connect()
-    try:
-        rows = conn.execute(query, params).fetchall()
-        return [dict(row) for row in rows]
-    finally:
-        conn.close()
-
-
-def fetch_one(query: str, params: tuple = ()) -> Optional[dict]:
-    conn = _connect()
-    try:
-        row = conn.execute(query, params).fetchone()
-        return dict(row) if row else None
-    finally:
-        conn.close()
-
-
 def _now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
@@ -95,12 +71,9 @@ ENCOUNTER_COLUMNS = (
 
 
 def _load_encounter_for_caller(encounter_id: int, caller: Caller) -> dict:
-    """Fetch an encounter, or 404 — same response whether the encounter
-    doesn't exist at all or belongs to another org. This prevents
-    cross-org existence probing."""
     row = fetch_one(
-        f"SELECT {ENCOUNTER_COLUMNS} FROM encounters WHERE id = ?",
-        (encounter_id,),
+        f"SELECT {ENCOUNTER_COLUMNS} FROM encounters WHERE id = :id",
+        {"id": encounter_id},
     )
     if not row or row["organization_id"] != caller.organization_id:
         raise _err("encounter_not_found", "no such encounter in your organization", 404)
@@ -153,15 +126,14 @@ def me(caller: Caller = Depends(require_caller)) -> dict:
     }
 
 
-# ---------- Org metadata (now org-scoped, all roles) ----------
+# ---------- Org metadata (authed + org-scoped) ----------
 
 @router.get("/organizations")
 def list_organizations(caller: Caller = Depends(require_caller)) -> list[dict]:
-    # Caller only ever sees their own org.
     return fetch_all(
         "SELECT id, name, slug, created_at FROM organizations "
-        "WHERE id = ? ORDER BY id",
-        (caller.organization_id,),
+        "WHERE id = :org ORDER BY id",
+        {"org": caller.organization_id},
     )
 
 
@@ -169,8 +141,8 @@ def list_organizations(caller: Caller = Depends(require_caller)) -> list[dict]:
 def list_locations(caller: Caller = Depends(require_caller)) -> list[dict]:
     return fetch_all(
         "SELECT id, organization_id, name, created_at FROM locations "
-        "WHERE organization_id = ? ORDER BY id",
-        (caller.organization_id,),
+        "WHERE organization_id = :org ORDER BY id",
+        {"org": caller.organization_id},
     )
 
 
@@ -178,8 +150,8 @@ def list_locations(caller: Caller = Depends(require_caller)) -> list[dict]:
 def list_users(caller: Caller = Depends(require_caller)) -> list[dict]:
     return fetch_all(
         "SELECT id, organization_id, email, full_name, role, created_at "
-        "FROM users WHERE organization_id = ? ORDER BY id",
-        (caller.organization_id,),
+        "FROM users WHERE organization_id = :org ORDER BY id",
+        {"org": caller.organization_id},
     )
 
 
@@ -200,12 +172,12 @@ def list_encounters(
             403,
         )
 
-    clauses: list[str] = ["organization_id = ?"]
-    params: list = [caller.organization_id]
+    clauses: list[str] = ["organization_id = :org"]
+    params: dict[str, Any] = {"org": caller.organization_id}
 
     if location_id is not None:
-        clauses.append("location_id = ?")
-        params.append(location_id)
+        clauses.append("location_id = :loc")
+        params["loc"] = location_id
     if status is not None:
         if status not in ALLOWED_STATUSES:
             raise _err(
@@ -213,15 +185,17 @@ def list_encounters(
                 f"must be one of {sorted(ALLOWED_STATUSES)}",
                 400,
             )
-        clauses.append("status = ?")
-        params.append(status)
+        clauses.append("status = :status")
+        params["status"] = status
     if provider_name is not None:
-        clauses.append("provider_name = ?")
-        params.append(provider_name)
+        clauses.append("provider_name = :provider")
+        params["provider"] = provider_name
 
-    where = f" WHERE {' AND '.join(clauses)}"
-    query = f"SELECT {ENCOUNTER_COLUMNS} FROM encounters{where} ORDER BY id"
-    return fetch_all(query, tuple(params))
+    where = " WHERE " + " AND ".join(clauses)
+    return fetch_all(
+        f"SELECT {ENCOUNTER_COLUMNS} FROM encounters{where} ORDER BY id",
+        params,
+    )
 
 
 @router.get("/encounters/{encounter_id}")
@@ -238,8 +212,8 @@ def list_encounter_events(
     _load_encounter_for_caller(encounter_id, caller)
     rows = fetch_all(
         "SELECT id, encounter_id, event_type, event_data, created_at "
-        "FROM workflow_events WHERE encounter_id = ? ORDER BY id",
-        (encounter_id,),
+        "FROM workflow_events WHERE encounter_id = :enc ORDER BY id",
+        {"enc": encounter_id},
     )
     return [_hydrate_event(r) for r in rows]
 
@@ -264,12 +238,11 @@ def create_encounter(
 
     ensure_same_org(caller, payload.organization_id)
 
-    conn = _connect()
-    try:
+    with transaction() as conn:
         loc = conn.execute(
-            "SELECT id, organization_id FROM locations WHERE id = ?",
-            (payload.location_id,),
-        ).fetchone()
+            text("SELECT id, organization_id FROM locations WHERE id = :id"),
+            {"id": payload.location_id},
+        ).mappings().first()
         if not loc:
             raise _err("location_not_found", "no such location", 400)
         if loc["organization_id"] != caller.organization_id:
@@ -281,48 +254,46 @@ def create_encounter(
 
         started_at = _now_iso() if payload.status == "in_progress" else None
 
-        cur = conn.execute(
-            """
-            INSERT INTO encounters (
-                organization_id, location_id, patient_identifier, patient_name,
-                provider_name, status, scheduled_at, started_at, completed_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                caller.organization_id,
-                payload.location_id,
-                payload.patient_identifier,
-                payload.patient_name,
-                payload.provider_name,
-                payload.status,
-                payload.scheduled_at.isoformat() if payload.scheduled_at else None,
-                started_at,
-                None,
-            ),
+        new_id = insert_returning_id(
+            conn,
+            "encounters",
+            {
+                "organization_id": caller.organization_id,
+                "location_id": payload.location_id,
+                "patient_identifier": payload.patient_identifier,
+                "patient_name": payload.patient_name,
+                "provider_name": payload.provider_name,
+                "status": payload.status,
+                "scheduled_at": (
+                    payload.scheduled_at.isoformat()
+                    if payload.scheduled_at
+                    else None
+                ),
+                "started_at": started_at,
+                "completed_at": None,
+            },
         )
-        new_id = cur.lastrowid
 
         conn.execute(
-            "INSERT INTO workflow_events (encounter_id, event_type, event_data) "
-            "VALUES (?, ?, ?)",
-            (
-                new_id,
-                "encounter_created",
-                json.dumps(
+            text(
+                "INSERT INTO workflow_events (encounter_id, event_type, event_data) "
+                "VALUES (:enc, :type, :data)"
+            ),
+            {
+                "enc": new_id,
+                "type": "encounter_created",
+                "data": json.dumps(
                     {"status": payload.status, "created_by": caller.email},
                     sort_keys=True,
                 ),
-            ),
+            },
         )
-        conn.commit()
 
         row = conn.execute(
-            f"SELECT {ENCOUNTER_COLUMNS} FROM encounters WHERE id = ?",
-            (new_id,),
-        ).fetchone()
+            text(f"SELECT {ENCOUNTER_COLUMNS} FROM encounters WHERE id = :id"),
+            {"id": new_id},
+        ).mappings().first()
         return dict(row)
-    finally:
-        conn.close()
 
 
 @router.post(
@@ -342,24 +313,24 @@ def create_encounter_event(
     else:
         event_data_str = json.dumps(payload.event_data, sort_keys=True)
 
-    conn = _connect()
-    try:
-        cur = conn.execute(
-            "INSERT INTO workflow_events (encounter_id, event_type, event_data) "
-            "VALUES (?, ?, ?)",
-            (encounter_id, payload.event_type, event_data_str),
+    with transaction() as conn:
+        new_id = insert_returning_id(
+            conn,
+            "workflow_events",
+            {
+                "encounter_id": encounter_id,
+                "event_type": payload.event_type,
+                "event_data": event_data_str,
+            },
         )
-        new_id = cur.lastrowid
-        conn.commit()
-
         row = conn.execute(
-            "SELECT id, encounter_id, event_type, event_data, created_at "
-            "FROM workflow_events WHERE id = ?",
-            (new_id,),
-        ).fetchone()
+            text(
+                "SELECT id, encounter_id, event_type, event_data, created_at "
+                "FROM workflow_events WHERE id = :id"
+            ),
+            {"id": new_id},
+        ).mappings().first()
         return _hydrate_event(dict(row))
-    finally:
-        conn.close()
 
 
 @router.post("/encounters/{encounter_id}/status")
@@ -379,7 +350,7 @@ def update_encounter_status(
     row = _load_encounter_for_caller(encounter_id, caller)
     previous_status = row["status"]
 
-    # same-state = no-op (still 200 OK)
+    # same-state = no-op
     if new_status == previous_status:
         return row
 
@@ -395,7 +366,6 @@ def update_encounter_status(
             400,
         )
 
-    # RBAC gate: caller's role must cover this specific edge.
     assert_can_transition(caller, previous_status, new_status)
 
     started_at = row["started_at"]
@@ -409,20 +379,28 @@ def update_encounter_status(
         if not started_at:
             started_at = now
 
-    conn = _connect()
-    try:
+    with transaction() as conn:
         conn.execute(
-            "UPDATE encounters SET status = ?, started_at = ?, completed_at = ? "
-            "WHERE id = ?",
-            (new_status, started_at, completed_at, encounter_id),
+            text(
+                "UPDATE encounters SET status = :s, started_at = :sa, "
+                "completed_at = :ca WHERE id = :id"
+            ),
+            {
+                "s": new_status,
+                "sa": started_at,
+                "ca": completed_at,
+                "id": encounter_id,
+            },
         )
         conn.execute(
-            "INSERT INTO workflow_events (encounter_id, event_type, event_data) "
-            "VALUES (?, ?, ?)",
-            (
-                encounter_id,
-                "status_changed",
-                json.dumps(
+            text(
+                "INSERT INTO workflow_events (encounter_id, event_type, event_data) "
+                "VALUES (:enc, :type, :data)"
+            ),
+            {
+                "enc": encounter_id,
+                "type": "status_changed",
+                "data": json.dumps(
                     {
                         "old_status": previous_status,
                         "new_status": new_status,
@@ -430,14 +408,10 @@ def update_encounter_status(
                     },
                     sort_keys=True,
                 ),
-            ),
+            },
         )
-        conn.commit()
-
         updated = conn.execute(
-            f"SELECT {ENCOUNTER_COLUMNS} FROM encounters WHERE id = ?",
-            (encounter_id,),
-        ).fetchone()
+            text(f"SELECT {ENCOUNTER_COLUMNS} FROM encounters WHERE id = :id"),
+            {"id": encounter_id},
+        ).mappings().first()
         return dict(updated)
-    finally:
-        conn.close()

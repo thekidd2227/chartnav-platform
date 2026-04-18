@@ -1,59 +1,57 @@
 # Known Gaps & Verification Matrix
 
-## Verification evidence — phase 5
+## Verification evidence — phase 6
 
-### Automated pytest (unchanged contract, now in CI)
-```
-$ cd apps/api && pytest tests/ -v
-... 25 passed in ~12s
-```
+### Local `make verify` (SQLite)
 
-### `make verify` (canonical local gate)
-Steps executed in order:
+| Step                                 | Result |
+|--------------------------------------|--------|
+| `rm -f apps/api/chartnav.db`         | ✅     |
+| `alembic upgrade head`               | ✅     |
+| `scripts_seed.py` (x2 idempotent)    | ✅     |
+| `pytest tests/ -v`                   | ✅ **28/28** |
+| `uvicorn` boots                      | ✅     |
+| `scripts/smoke.sh` 9 assertions      | ✅     |
+| teardown clean                       | ✅     |
 
-| Step                                            | Result |
-|-------------------------------------------------|--------|
-| `rm -f apps/api/chartnav.db`                    | ✅     |
-| `alembic upgrade head`                          | ✅     |
-| `scripts_seed.py`                               | ✅ (idempotent)|
-| `pytest tests/ -v`                              | ✅ (25/25) |
-| `uvicorn app.main:app --port 8765` boots        | ✅     |
-| `/health` reachable within 10s                  | ✅     |
-| `scripts/smoke.sh` all 9 assertions             | ✅     |
-| boot process torn down cleanly                  | ✅     |
+### Local `make pg-verify` (Postgres 16)
 
-### Smoke assertions (`scripts/smoke.sh`)
+| Step                                      | Result |
+|-------------------------------------------|--------|
+| throwaway `postgres:16-alpine` comes up   | ✅     |
+| `alembic upgrade head` on Postgres        | ✅ both revisions applied |
+| seed on Postgres (run twice, idempotent)  | ✅     |
+| uvicorn boots against Postgres            | ✅     |
+| `scripts/smoke.sh` 9 assertions           | ✅     |
+| clinician status transition `in_progress → draft_ready` | ✅ |
+| `workflow_events` row written with `old_status`/`new_status`/`changed_by` | ✅ |
+| container torn down (trap)                | ✅     |
 
-| Assertion                                                          | Result |
+### Auth seam tests (`tests/test_auth_modes.py`)
+
+| Case                                                               | Result |
 |--------------------------------------------------------------------|--------|
-| `GET /health` → 200, body `status=ok`                              | ✅     |
-| `GET /me` without auth → 401                                       | ✅     |
-| `GET /me` with admin1 → 200, `role=admin`, `organization_id=1`     | ✅     |
-| `GET /encounters` without auth → 401                               | ✅     |
-| `GET /encounters` with admin1 → 200                                | ✅     |
-| `GET /encounters?organization_id=2` as org1 admin → 403             | ✅     |
-| `GET /encounters/1` as admin1 → 200                                | ✅     |
-| `GET /encounters/3` as admin1 (cross-org) → 404                    | ✅     |
+| `CHARTNAV_AUTH_MODE=bearer` w/o JWT env → RuntimeError at import   | ✅     |
+| bearer with JWT env, no token → 401 `missing_auth_header`          | ✅     |
+| bearer with JWT env, token present → 501 `auth_bearer_not_implemented` | ✅  |
+| header mode default → 200 + correct role/org                       | ✅     |
 
-### Doc pipeline
-- `python scripts/build_docs.py` → wrote 59KB HTML + 1.1MB PDF via headless Chrome.
-- Both artifacts regenerate deterministically from `docs/build/` + `docs/diagrams/`.
-
-### CI YAML sanity
-- YAML parses cleanly (verified by PyYAML load).
-- Limitation: no `act` binary available to run the workflow locally; CI behavior is asserted by parity with `make verify` and by the structural review of the YAML.
+### Docker build
+- `docker build -t chartnav-api:local apps/api` — runs locally.
+- CI `docker-build` job builds with buildx and smokes the live
+  container — enforced per PR.
 
 ## Real gaps (prioritized for next phase)
 
-1. **Auth transport still dev-only.** `X-User-Email` spoofable. Swap via `CHARTNAV_AUTH_MODE` + JWT/SSO.
-2. **No `act` or local workflow runner** — YAML syntactic parse only. Add `act` or accept first-push feedback loop.
-3. **No RBAC-gated write endpoints for org metadata.** `/organizations`, `/locations`, `/users` are read-only.
-4. **`users.role` free VARCHAR at the DB level** — no CHECK constraint; enforced at app layer only.
-5. **No pagination / cursor** on `GET /encounters`.
-6. **No encounter update / delete / cancel**; no `cancelled` status.
-7. **Free-form `event_data`** — no per-event_type schema.
-8. **Raw `sqlite3`** per-request connections; Postgres parity (docker compose) untested.
-9. **CORS `allow_origins=["*"]`** remains.
-10. **No distinct audit log** for auth/scoping failures (only successful workflow events).
-11. **No rate limiting, no lockout, no structured logging.**
-12. **No deploy target** — CI builds + tests but does not ship anything.
+1. **JWT/SSO validation is still a stub.** Bearer mode rejects all traffic with 501. Next phase: PyJWT + JWKS fetch/cache, issuer/audience validation, claim → user mapping.
+2. **pytest runs on SQLite only.** Postgres parity is asserted by `pg_verify.sh` + the `backend-postgres` CI job (which exercises the live surface). A pytest Postgres matrix is the next CI upgrade; `conftest.py` already reads env so this is mostly wiring.
+3. **No image push / release pipeline.** CI builds the Docker image but doesn't publish it.
+4. **Secrets are still plain env vars.** No AWS SM / Vault integration.
+5. **No RBAC-gated writes for org metadata** (`/organizations` etc. remain read-only).
+6. **`users.role` is still free VARCHAR** at DB level; no CHECK/lookup.
+7. **No pagination / cursor** on `GET /encounters`.
+8. **No encounter update / delete / cancel**; no `cancelled` status.
+9. **Free-form `event_data`** — no per-event_type schema.
+10. **CORS `allow_origins=["*"]`** still open.
+11. **No distinct audit log** for auth/scoping failures.
+12. **No rate limiting, no lockout, no structured logging.**

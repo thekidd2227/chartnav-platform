@@ -1,13 +1,20 @@
-"""Pytest fixtures — isolated SQLite + seeded tenants per test run.
+"""Pytest fixtures — isolated SQLite + seeded tenants per test.
 
-We build a fresh SQLite file in a temp dir, run the same Alembic
-migrations against it, and point `app.auth.DB_PATH` and
-`app.api.routes.DB_PATH` at it. Then we run the normal seed so tests
-get the two-tenant / three-role world the dev runs.
+Strategy:
+  1. Per test, write a fresh SQLite file in a temp dir.
+  2. Set `DATABASE_URL` to point at it BEFORE importing any `app.*`
+     module, so `app.config.settings.database_url` picks it up.
+  3. Migrate that DB with alembic, seed it, then import the FastAPI app
+     for a `TestClient`.
+
+Env-based wiring (rather than monkey-patching module attrs) works
+uniformly for both SQLite and Postgres and matches how the app reads
+config in production.
 """
 
 from __future__ import annotations
 
+import importlib
 import os
 import sqlite3
 import subprocess
@@ -15,64 +22,56 @@ import sys
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
-
 
 API_DIR = Path(__file__).resolve().parents[1]
-# Make `import app...` resolve against apps/api regardless of cwd.
 sys.path.insert(0, str(API_DIR))
 
 
-@pytest.fixture()
-def test_db(tmp_path) -> Path:
-    """Fresh migrated + seeded SQLite file per test, so tests do not
-    leak writes into each other."""
-    db_path = tmp_path / "chartnav.db"
+def _reload_app_modules() -> None:
+    """Drop cached `app.*` modules so they re-read the current env."""
+    for name in list(sys.modules):
+        if name == "app" or name.startswith("app."):
+            del sys.modules[name]
 
-    # Run alembic against the temp DB by overriding the URL via env + -x
-    env = os.environ.copy()
-    env["SQLALCHEMY_URL"] = f"sqlite:///{db_path}"
+
+@pytest.fixture()
+def test_db(tmp_path, monkeypatch):
+    db_path = tmp_path / "chartnav.db"
+    url = f"sqlite:///{db_path}"
+    monkeypatch.setenv("DATABASE_URL", url)
+    monkeypatch.setenv("CHARTNAV_AUTH_MODE", "header")
+    # Any JWT env left over from the host should not bleed into tests.
+    for k in ("CHARTNAV_JWT_ISSUER", "CHARTNAV_JWT_AUDIENCE", "CHARTNAV_JWT_JWKS_URL"):
+        monkeypatch.delenv(k, raising=False)
+
+    # Alembic migrate against the temp DB.
     subprocess.run(
         [
-            sys.executable,
-            "-m",
-            "alembic",
-            "-c",
-            str(API_DIR / "alembic.ini"),
-            "-x",
-            f"sqlalchemy.url=sqlite:///{db_path}",
-            "upgrade",
-            "head",
+            sys.executable, "-m", "alembic",
+            "-c", str(API_DIR / "alembic.ini"),
+            "-x", f"sqlalchemy.url={url}",
+            "upgrade", "head",
         ],
-        check=True,
-        cwd=API_DIR,
-        env=env,
+        check=True, cwd=API_DIR,
     )
 
-    # Point the app modules at the temp DB BEFORE importing seeding/app
-    from app import auth as auth_mod
-    from app.api import routes as routes_mod
-
-    auth_mod.DB_PATH = db_path
-    routes_mod.DB_PATH = db_path
-
-    # Seed by running the project's seed script but with its DB_PATH rebound.
-    import scripts_seed
-
-    scripts_seed.DB_PATH = db_path
+    # Seed using the app's own seed script (it reads DATABASE_URL).
+    _reload_app_modules()
+    import scripts_seed  # noqa: F401  (imports app.db which reads env)
+    importlib.reload(scripts_seed)
     scripts_seed.main()
 
     return db_path
 
 
 @pytest.fixture()
-def client(test_db) -> TestClient:
+def client(test_db):
+    _reload_app_modules()  # ensure app.main re-reads env
+    from fastapi.testclient import TestClient
     from app.main import app
 
     return TestClient(app)
 
-
-# --- Convenience header builders -----------------------------------------
 
 ADMIN1 = {"X-User-Email": "admin@chartnav.local"}
 CLIN1 = {"X-User-Email": "clin@chartnav.local"}
@@ -83,7 +82,6 @@ CLIN2 = {"X-User-Email": "clin@northside.local"}
 
 @pytest.fixture()
 def seeded_ids(test_db) -> dict:
-    """IDs of seeded rows so tests don't hardcode integers."""
     conn = sqlite3.connect(test_db)
     conn.row_factory = sqlite3.Row
     try:
@@ -91,10 +89,11 @@ def seeded_ids(test_db) -> dict:
             r["slug"]: r["id"]
             for r in conn.execute("SELECT id, slug FROM organizations").fetchall()
         }
-        locs_by_org = {}
-        for r in conn.execute("SELECT id, organization_id FROM locations").fetchall():
-            locs_by_org[r["organization_id"]] = r["id"]
-        encs_by_patient = {
+        locs_by_org = {
+            r["organization_id"]: r["id"]
+            for r in conn.execute("SELECT id, organization_id FROM locations").fetchall()
+        }
+        encs = {
             r["patient_identifier"]: (r["id"], r["organization_id"], r["status"])
             for r in conn.execute(
                 "SELECT id, organization_id, patient_identifier, status FROM encounters"
@@ -102,4 +101,4 @@ def seeded_ids(test_db) -> dict:
         }
     finally:
         conn.close()
-    return {"orgs": orgs, "locs_by_org": locs_by_org, "encs": encs_by_patient}
+    return {"orgs": orgs, "locs_by_org": locs_by_org, "encs": encs}

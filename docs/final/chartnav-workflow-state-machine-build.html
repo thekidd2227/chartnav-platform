@@ -39,7 +39,7 @@
   <div class="sub">Backend phases 1–5: spine → state machine → auth → RBAC → CI/hardening<br>
   Repo: <code>thekidd2227/chartnav-platform</code></div>
 </header>
-<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth, org scoping, RBAC</a></li><li><a href="#sec-9">08 — Test strategy</a></li><li><a href="#sec-10">09 — CI & deploy hardening</a></li><li><a href="#sec-11">10 — Doc artifact pipeline</a></li><li><a href="#sec-12">Diagram — System architecture</a></li><li><a href="#sec-13">Diagram — Encounter status machine</a></li><li><a href="#sec-14">Diagram — ER</a></li><li><a href="#sec-15">Diagram — API / data flow</a></li></ol></nav>
+<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth, org scoping, RBAC</a></li><li><a href="#sec-9">08 — Test strategy</a></li><li><a href="#sec-10">09 — CI & deploy hardening</a></li><li><a href="#sec-11">10 — Doc artifact pipeline</a></li><li><a href="#sec-12">11 — Production-auth seam</a></li><li><a href="#sec-13">12 — Runtime config</a></li><li><a href="#sec-14">13 — Deploy target</a></li><li><a href="#sec-15">14 — Postgres parity</a></li><li><a href="#sec-16">Diagram — System architecture</a></li><li><a href="#sec-17">Diagram — Encounter status machine</a></li><li><a href="#sec-18">Diagram — ER</a></li><li><a href="#sec-19">Diagram — API / data flow</a></li></ol></nav>
 <section id="sec-1"><h2>Executive summary</h2>
 <p>This document consolidates <strong>all</strong> ChartNav backend phases delivered to</p>
 <p>date.</p>
@@ -47,78 +47,79 @@
 <p><strong>Phase 2 — State machine + filtering.</strong> <code>POST /encounters/{id}/status</code> enforces explicit forward + rework edges. <code>GET /encounters</code> accepts <code>organization_id</code>, <code>location_id</code>, <code>status</code>, <code>provider_name</code> filters.</p>
 <p><strong>Phase 3 — Dev auth + org scoping.</strong> <code>apps/api/app/auth.py</code> resolves the caller from <code>X-User-Email</code>. Every encounter route became org-scoped: cross-org reads return 404, cross-org body/query assertions 403.</p>
 <p><strong>Phase 4 — RBAC + full scoping + tests.</strong> <code>apps/api/app/authz.py</code> introduces <code>admin</code> / <code>clinician</code> / <code>reviewer</code> roles and per-edge transition rules. <code>/organizations</code>, <code>/locations</code>, <code>/users</code> are now authenticated and scoped. <code>{error_code, reason}</code> envelope is standardized. 25-test pytest suite covers auth, scoping, RBAC, state-machine invariants.</p>
-<p><strong>Phase 5 — CI + runtime hardening (this phase).</strong> GitHub Actions workflow runs <code>pip install -e &quot;.[dev]&quot;</code>, Alembic upgrade on an isolated CI DB, idempotent seed (executed twice), the full pytest suite, and a live <code>/health</code>/<code>/me</code>/<code>/encounters</code> smoke boot. A separate <code>docs</code> job regenerates the final HTML/PDF and uploads them as artifacts. A root <code>Makefile</code>, <code>apps/api/scripts/smoke.sh</code>, and <code>scripts/build_docs.py</code> codify the local verification + doc-build paths.</p>
-<p>Preserved untouched: <code>/health</code>, <code>/</code>, Alembic history, SQLite dev workflow, state machine + filtering surface, workflow_events model.</p>
+<p><strong>Phase 5 — CI + runtime hardening.</strong> GitHub Actions workflow runs install + Alembic upgrade on an isolated CI DB + idempotent seed + pytest + live smoke. A separate <code>docs</code> job regenerates the final HTML/PDF. Root <code>Makefile</code>, <code>apps/api/scripts/smoke.sh</code>, and <code>scripts/build_docs.py</code> codify the local verification + doc-build paths.</p>
+<p><strong>Phase 6 — Production seam + deploy target + Postgres parity (this phase).</strong> DB layer moved to SQLAlchemy Core (<code>apps/api/app/db.py</code>) — same queries run on SQLite and Postgres via <code>:name</code> binds, <code>COALESCE</code>, and an <code>insert_returning_id</code> helper. New <code>apps/api/app/config.py</code> centralizes env-driven settings and validates auth mode at import time. <code>auth.py</code> gained a <code>resolve_caller_from_bearer</code> placeholder that returns <strong>501</strong> rather than fake-serving traffic. Dockerfile hardened (non-root, HEALTHCHECK, entrypoint that runs migrations at start). <code>infra/docker/docker-compose.prod.yml</code> brings up API + Postgres. <code>scripts/pg_verify.sh</code> spins a throwaway Postgres container and proves migrations + seed + boot + smoke + a real state transition + event write. CI expanded to four jobs: <code>backend-sqlite</code>, <code>backend-postgres</code>, <code>docker-build</code>, <code>docs</code>.</p>
+<p>Preserved untouched: <code>/health</code>, <code>/</code>, Alembic history (still 2 revisions), SQLite dev workflow, state machine + filtering surface, workflow_events model, existing endpoint contracts.</p>
 </section>
 <section id="sec-2"><h2>01 — Current state</h2>
 <h1>ChartNav — Current State</h1>
-<p><strong>As of:</strong> 2026-04-17 (phase: CI + runtime hardening)</p>
+<p><strong>As of:</strong> 2026-04-18 (phase: production seam, deploy target, Postgres parity)</p>
 <h2>Repo layout (relevant)</h2>
 <pre class="code lang-"><code>
 chartnav-platform/
-├── .github/workflows/
-│   └── ci.yml                       # NEW — backend + docs CI
-├── Makefile                         # NEW — canonical local verification
+├── .github/workflows/ci.yml         # backend-sqlite + backend-postgres + docker-build + docs
+├── Makefile                         # install · migrate · seed · test · verify · pg-verify · docker-*
 ├── scripts/
-│   └── build_docs.py                # NEW — reproducible HTML/PDF builder
+│   ├── build_docs.py                # reproducible HTML/PDF build
+│   ├── verify.sh                    # boot + smoke teardown
+│   └── pg_verify.sh                 # NEW — end-to-end Postgres parity proof
 ├── apps/
 │   ├── api/
+│   │   ├── Dockerfile               # hardened: non-root, healthcheck, entrypoint
+│   │   ├── entrypoint.sh            # NEW — migrate-on-start, optional seed, exec CMD
+│   │   ├── .env.example             # runtime contract (env-first)
 │   │   ├── app/main.py
-│   │   ├── app/auth.py
-│   │   ├── app/authz.py
-│   │   ├── app/api/routes.py
+│   │   ├── app/config.py            # NEW — central settings from env
+│   │   ├── app/db.py                # NEW — SA Core, cross-dialect
+│   │   ├── app/auth.py              # header + bearer resolvers behind one seam
+│   │   ├── app/authz.py             # RBAC
+│   │   ├── app/api/routes.py        # all queries now :name-bound
 │   │   ├── alembic.ini
-│   │   ├── alembic/env.py           # honors `-x sqlalchemy.url=`
+│   │   ├── alembic/env.py           # honors `-x` AND `DATABASE_URL`
 │   │   ├── alembic/versions/        # 2 migrations (unchanged)
-│   │   ├── scripts_seed.py          # 2 orgs, 5 users, 3 roles
-│   │   ├── scripts/smoke.sh         # NEW — curl-level smoke
-│   │   ├── tests/                   # pytest suite
-│   │   └── pyproject.toml           # now declares [dev] extras + pytest config
+│   │   ├── scripts_seed.py          # rewritten on SA; cross-dialect
+│   │   ├── scripts/smoke.sh         # shell smoke (reused across envs)
+│   │   └── tests/
+│   │       ├── conftest.py          # env-based per-test DB
+│   │       ├── test_auth.py
+│   │       ├── test_auth_modes.py   # NEW — header + bearer seam
+│   │       ├── test_rbac.py
+│   │       └── test_scoping.py
 │   └── web/
-├── infra/docker/docker-compose.yml
+├── infra/docker/
+│   ├── docker-compose.yml           # dev stack
+│   └── docker-compose.prod.yml      # NEW — API + Postgres
 └── docs/
-    ├── build/                       # living docs 01–10
-    ├── diagrams/                    # Mermaid sources
-    └── final/                       # generated HTML + PDF
+    ├── build/ 01 … 14
+    ├── diagrams/
+    └── final/*.html / *.pdf
 </code></pre>
 <h2>Runtime baseline</h2>
 <ul>
-<li>Python 3.11+, FastAPI, raw <code>sqlite3</code> driver.</li>
-<li>SQLite at <code>apps/api/chartnav.db</code> (gitignored). CI uses <code>$RUNNER_TEMP/chartnav_ci.db</code>.</li>
-<li>Alembic head: <code>a1b2c3d4e5f6</code> (no new migrations this phase).</li>
-<li>Auth transport: <code>X-User-Email</code> (dev). Seam: <code>CHARTNAV_AUTH_MODE</code>.</li>
-<li>RBAC roles: <code>admin</code>, <code>clinician</code>, <code>reviewer</code>.</li>
+<li>Python 3.11+, FastAPI, <strong>SQLAlchemy Core</strong> now underpins all DB access.</li>
+<li>Database: <code>DATABASE_URL</code> → <code>sqlite:///apps/api/chartnav.db</code> (dev default) or <code>postgresql+psycopg://…</code> (prod / parity CI).</li>
+<li>Alembic head: <code>a1b2c3d4e5f6</code>. No new migrations this phase.</li>
+<li>Auth: <code>CHARTNAV_AUTH_MODE</code> (<code>header</code> dev / <code>bearer</code> prod-shaped placeholder). Config refuses to import if <code>bearer</code> is set without JWT env.</li>
+<li>RBAC: <code>admin</code> / <code>clinician</code> / <code>reviewer</code>.</li>
 <li>Error envelope: <code>{&quot;detail&quot;: {&quot;error_code&quot;: &quot;...&quot;, &quot;reason&quot;: &quot;...&quot;}}</code>.</li>
-<li>Every endpoint except <code>/health</code> and <code>/</code> requires auth. All data endpoints are caller-org scoped.</li>
+<li>Deploy target: Docker image + <code>docker-compose.prod.yml</code> (API + Postgres).</li>
+<li>Tests: 28 pytest on SQLite (incl. 3 new auth-mode tests); Postgres parity proved end-to-end via <code>scripts/pg_verify.sh</code> and a dedicated CI job.</li>
 </ul>
 <h2>Verified working endpoints</h2>
-<p>Unchanged since phase 4:</p>
+<p>Unchanged since phase 4. Now verified on BOTH SQLite and Postgres where applicable:</p>
 <ul>
-<li><code>GET /health</code>, <code>GET /</code> (open)</li>
-<li><code>GET /me</code></li>
-<li><code>GET /organizations</code>, <code>GET /locations</code>, <code>GET /users</code> (authed + scoped)</li>
-<li><code>GET /encounters</code> (+ filters)</li>
-<li><code>GET /encounters/{id}</code>, <code>GET /encounters/{id}/events</code></li>
-<li><code>POST /encounters</code> (admin, clinician)</li>
-<li><code>POST /encounters/{id}/events</code> (admin, clinician)</li>
-<li><code>POST /encounters/{id}/status</code> (per-edge RBAC)</li>
+<li>Open: <code>GET /health</code>, <code>GET /</code></li>
+<li>Authed: <code>GET /me</code>, <code>GET /organizations</code>, <code>GET /locations</code>, <code>GET /users</code>, <code>GET /encounters</code> (+ filters), <code>GET /encounters/{id}</code>, <code>GET /encounters/{id}/events</code></li>
+<li>Authed + RBAC: <code>POST /encounters</code> (admin, clinician), <code>POST /encounters/{id}/events</code> (admin, clinician), <code>POST /encounters/{id}/status</code> (per-edge roles)</li>
 </ul>
-<h2>Automation now in place</h2>
+<h2>Automation</h2>
 <ul>
-<li><code>make verify</code> — single command: reset DB, test, boot, smoke.</li>
-<li><code>pytest tests/ -v</code> — 25 tests pass.</li>
-<li><code>bash apps/api/scripts/smoke.sh &lt;base&gt;</code> — 9 curl assertions.</li>
-<li><code>python scripts/build_docs.py</code> — regenerates consolidated HTML + PDF.</li>
-<li><code>.github/workflows/ci.yml</code> — runs all of the above on push/PR + uploads rebuilt docs as a CI artifact.</li>
+<li><code>make verify</code> — SQLite: reset-db + pytest (28) + boot + smoke (9) + teardown.</li>
+<li><code>make pg-verify</code> — spins throwaway Postgres, migrates + seeds + boots + smokes + exercises state transition. Teardown trap-guaranteed.</li>
+<li><code>make docker-build</code> / <code>make docker-up</code> / <code>make docker-down</code>.</li>
+<li><code>python scripts/build_docs.py</code> — deterministic HTML + PDF.</li>
+<li>CI: <code>backend-sqlite</code> → <code>backend-postgres</code> + <code>docker-build</code> + <code>docs</code> (each gated on its predecessor where it matters).</li>
 </ul>
-<h2>Seeded tenants / users</h2>
-<table><thead><tr><th>org_id</th><th>slug</th><th>email</th><th>role</th></tr></thead><tbody>
-<tr><td>1</td><td><code>demo-eye-clinic</code></td><td>admin@chartnav.local</td><td>admin</td></tr>
-<tr><td>1</td><td><code>demo-eye-clinic</code></td><td>clin@chartnav.local</td><td>clinician</td></tr>
-<tr><td>1</td><td><code>demo-eye-clinic</code></td><td>rev@chartnav.local</td><td>reviewer</td></tr>
-<tr><td>2</td><td><code>northside-retina</code></td><td>admin@northside.local</td><td>admin</td></tr>
-<tr><td>2</td><td><code>northside-retina</code></td><td>clin@northside.local</td><td>clinician</td></tr>
-</tbody></table>
 </section>
 <section id="sec-3"><h2>02 — Workflow state machine</h2>
 <h1>Encounter Workflow State Machine</h1>
@@ -333,121 +334,204 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <h1>Build Log</h1>
 <p>Reverse-chronological.</p>
 <p>---</p>
-<h2>2026-04-17 — Phase 5: CI + runtime hardening + doc pipeline</h2>
+<h2>2026-04-18 — Phase 6: production seam + deploy target + Postgres parity</h2>
 <h3>Step 1 — Baseline</h3>
 <ul>
-<li>Starting head: <code>c6f29e6</code> (RBAC + full scoping + pytest suite).</li>
-<li>No migrations touched this phase.</li>
-<li>Tests still green locally (25/25) before any changes.</li>
+<li>Starting head: <code>cfa8ca9</code> (CI + runtime hardening).</li>
 </ul>
-<h3>Step 2 — Packaging</h3>
+<h3>Step 2 — Runtime config module</h3>
 <ul>
-<li><code>apps/api/pyproject.toml</code> now declares <code>[project.optional-dependencies].dev = [&quot;pytest&gt;=8&quot;, &quot;httpx&gt;=0.27&quot;]</code> and <code>[tool.pytest.ini_options]</code> with <code>testpaths = [&quot;tests&quot;]</code>. CI installs with <code>pip install -e &quot;apps/api[dev]&quot;</code>.</li>
+<li>New <code>apps/api/app/config.py</code>. All env reads centralized into</li>
 </ul>
-<h3>Step 3 — CI workflow</h3>
+<p><code>settings = _load()</code>. Validates <code>CHARTNAV_AUTH_MODE</code> and demands the</p>
+<p>three <code>CHARTNAV_JWT_*</code> vars if mode is <code>bearer</code> — otherwise raises at</p>
+<p>import time. No module besides <code>app.config</code> touches <code>os.environ</code>.</p>
 <ul>
-<li>New <code>.github/workflows/ci.yml</code> with two jobs:</li>
-<li><code>backend</code> — checkout → setup-python 3.11 (pip cache) → <code>pip install -e &quot;.[dev]&quot;</code> → <code>alembic -x sqlalchemy.url=sqlite:///$RUNNER_TEMP/chartnav_ci.db upgrade head</code> → seed twice (idempotency proof) → <code>pytest tests/ -v</code> → boot uvicorn against the CI DB, poll <code>/health</code>, run <code>scripts/smoke.sh</code>.</li>
-<li><code>docs</code> (needs: backend) — apt-install Chromium → <code>python scripts/build_docs.py</code> with <code>CHARTNAV_PDF_BROWSER=chromium-browser</code> → upload the rebuilt HTML + PDF as a <code>chartnav-docs-final</code> artifact (<code>if-no-files-found: error</code>).</li>
-<li>Triggers: <code>push</code> to <code>main</code> and every <code>pull_request</code>.</li>
+<li>New <code>apps/api/.env.example</code> with the full documented contract.</li>
 </ul>
-<h3>Step 4 — Smoke script</h3>
+<h3>Step 3 — DB layer (SQLAlchemy Core, cross-dialect)</h3>
 <ul>
-<li>New <code>apps/api/scripts/smoke.sh</code>. Shell-only curl assertions: <code>/health</code>, <code>/me</code> (401 without auth, 200 role=admin org=1 with admin header), <code>/encounters</code> (401/200), cross-org <code>?organization_id=2</code> lens → 403, own encounter 200, cross-org encounter 404. Exits non-zero on first failure.</li>
-<li>First draft used a helper function with an unquoted <code>$@</code> pass-through; that word-split the <code>X-User-Email</code> header and made curl hang on DNS for <code>admin@chartnav.local</code>. Rewrote to inline each assertion with proper quoting — no magic, no hangs.</li>
+<li>New <code>apps/api/app/db.py</code> — <code>engine</code>, <code>transaction()</code>, <code>fetch_all</code>,</li>
 </ul>
-<h3>Step 5 — Reproducible doc build</h3>
+<p><code>fetch_one</code>, <code>insert_returning_id</code>. SQLite connect-args and PRAGMA</p>
+<p>FK enforcement handled automatically.</p>
 <ul>
-<li>New <code>scripts/build_docs.py</code> (repo-rooted — paths resolved from <code>__file__</code>). Walks <code>docs/build/01..10</code> + <code>docs/diagrams/*</code>, renders the markdown subset + Mermaid blocks, writes the consolidated HTML, then prints to PDF via headless Chromium. <code>CHARTNAV_PDF_BROWSER</code> env var lets CI point at <code>chromium-browser</code> without code changes. Reportlab fallback for a plain-text PDF if no browser is present.</li>
-<li>Prior script <code>/tmp/build_final_docs.py</code> was a personal scratch file — now superseded by the in-repo version.</li>
+<li>Refactored <code>apps/api/app/api/routes.py</code>: every query now uses named</li>
 </ul>
-<h3>Step 6 — Makefile (canonical local path)</h3>
+<p>(<code>:name</code>) bind parameters and <code>transaction()</code> for writes. The old</p>
+<p><code>sqlite3</code>-specific <code>lastrowid</code> is gone.</p>
 <ul>
-<li>New root <code>Makefile</code> with targets: <code>install</code>, <code>migrate</code>, <code>seed</code>, <code>test</code>, <code>boot</code>, <code>smoke</code>, <code>docs</code>, <code>reset-db</code>, <code>clean</code>, and the composite <code>verify</code> (reset-db + test + boot + smoke).</li>
+<li>Refactored <code>apps/api/scripts_seed.py</code> to the same shape. Swapped</li>
 </ul>
-<h3>Step 7 — New docs</h3>
+<p><code>IFNULL</code> → <code>COALESCE</code>. Timestamp columns still use server-side</p>
+<p><code>CURRENT_TIMESTAMP</code> for dialect-agnostic behavior.</p>
 <ul>
-<li><code>docs/build/09-ci-and-deploy-hardening.md</code> — workflow design, local path, dev/CI DB separation, smoke contract.</li>
-<li><code>docs/build/10-doc-artifact-pipeline.md</code> — builder contract, section order, fallback behavior.</li>
+<li><code>apps/api/app/auth.py</code> now reads users via <code>db.fetch_one</code>; no more</li>
 </ul>
-<h3>Step 8 — Verification</h3>
+<p>direct sqlite3 use.</p>
 <ul>
-<li><code>make reset-db &amp;&amp; make test</code> → 25/25 pytest passed (~12s).</li>
-<li><code>make verify</code> → pytest green, uvicorn boot, smoke all 9 assertions green, process torn down cleanly.</li>
-<li><code>scripts/build_docs.py</code> → regenerated <code>docs/final/chartnav-workflow-state-machine-build.{html,pdf}</code> deterministically.</li>
-<li>YAML sanity checked by loading with PyYAML; <code>act</code> not available in the shell, honest limitation documented in <code>06-known-gaps.md</code>.</li>
+<li><code>apps/api/alembic/env.py</code> now also honors <code>DATABASE_URL</code> from env</li>
 </ul>
-<h3>Step 9 — Git hygiene</h3>
+<p>(already honored <code>-x sqlalchemy.url=</code>), so Alembic works uniformly in</p>
+<p>CI and the deploy entrypoint.</p>
+<h3>Step 4 — Auth seam hardening</h3>
 <ul>
-<li><code>.pytest_cache/</code> and <code>__pycache__/</code> still ignored.</li>
-<li>No DB files committed.</li>
-<li>DB reset to clean seeded state before commit.</li>
+<li>Split resolvers: <code>resolve_caller_from_header</code> (dev) and</li>
+</ul>
+<p><code>resolve_caller_from_bearer</code> (prod-shaped placeholder). <code>require_caller</code></p>
+<p>dispatches via <code>settings.auth_mode</code>.</p>
+<ul>
+<li>Bearer mode returns <strong>501</strong> <code>auth_bearer_not_implemented</code> when a</li>
+</ul>
+<p>token is actually presented. That&#x27;s deliberate — it&#x27;s better to fail</p>
+<p>loudly than pretend half-auth.</p>
+<ul>
+<li>Added <code>apps/api/tests/test_auth_modes.py</code> (3 tests) asserting:</li>
+<li>bearer-mode without JWT env → <code>RuntimeError</code> at <code>import app.config</code></li>
+<li>bearer-mode with JWT env but a token → 501</li>
+<li>bearer-mode without a token → 401 <code>missing_auth_header</code></li>
+<li>header-mode (default) still returns correct caller</li>
+</ul>
+<h3>Step 5 — Deploy target</h3>
+<ul>
+<li><code>apps/api/Dockerfile</code> rewritten: non-root user, <code>curl</code>-based</li>
+</ul>
+<p>HEALTHCHECK, <code>entrypoint.sh</code>, installs the <code>[postgres]</code> extra.</p>
+<ul>
+<li><code>apps/api/entrypoint.sh</code> NEW: asserts <code>DATABASE_URL</code>, runs</li>
+</ul>
+<p><code>alembic upgrade head</code>, optionally runs seed when</p>
+<p><code>CHARTNAV_RUN_SEED=1</code>, then <code>exec</code>s uvicorn.</p>
+<ul>
+<li><code>infra/docker/docker-compose.prod.yml</code> NEW: API + Postgres with a</li>
+</ul>
+<p>healthcheck dependency gate and env-driven defaults.</p>
+<h3>Step 6 — Postgres parity</h3>
+<ul>
+<li><code>apps/api/pyproject.toml</code> gains a <code>[postgres]</code> extra pinning</li>
+</ul>
+<p><code>psycopg[binary]&gt;=3.2</code>.</p>
+<ul>
+<li><code>scripts/pg_verify.sh</code> NEW: throwaway <code>postgres:16-alpine</code> container</li>
+</ul>
+<p>→ migrate → seed twice (idempotency) → boot API → run the shared</p>
+<p>smoke script → live status transition → confirm <code>workflow_events</code></p>
+<p>row was written. Traps cleanup on any exit.</p>
+<ul>
+<li>Local run: <strong>PASS</strong> on 2026-04-18.</li>
+</ul>
+<h3>Step 7 — CI expansion</h3>
+<ul>
+<li><code>.github/workflows/ci.yml</code> now has four jobs:</li>
+<li><code>backend-sqlite</code> — existing pytest + SQLite smoke (unchanged contract).</li>
+<li><code>backend-postgres</code> — service-container Postgres, alembic upgrade,</li>
+</ul>
+<p>seed twice, boot, smoke, live status transition.</p>
+<ul>
+<li><code>docker-build</code> — buildx build of the API image, run it with</li>
+</ul>
+<p>SQLite + <code>CHARTNAV_RUN_SEED=1</code>, smoke the live container.</p>
+<ul>
+<li><code>docs</code> — regenerate HTML + PDF, upload as artifact.</li>
+<li><code>docker-build</code> and <code>docs</code> both <code>needs: backend-sqlite</code>;</li>
+</ul>
+<p><code>backend-postgres</code> also <code>needs: backend-sqlite</code>.</p>
+<h3>Step 8 — Makefile + tooling</h3>
+<ul>
+<li>New targets: <code>pg-verify</code>, <code>docker-build</code>, <code>docker-up</code>, <code>docker-down</code>.</li>
+<li><code>verify.sh</code> already tolerant of missing <code>.venv/bin/uvicorn</code> (falls</li>
+</ul>
+<p>back to PATH) so both local and CI paths work.</p>
+<h3>Step 9 — Tests updated</h3>
+<ul>
+<li><code>apps/api/tests/conftest.py</code> now sets <code>DATABASE_URL</code> via monkeypatch</li>
+</ul>
+<p>per test and flushes cached <code>app.*</code> modules so <code>settings</code> re-reads</p>
+<p>env cleanly. Works identically for SQLite (today) and Postgres (a</p>
+<p>matrix we&#x27;ll flip when ready).</p>
+<ul>
+<li>pytest suite: <strong>28 passed</strong> locally and in <code>backend-sqlite</code>.</li>
+</ul>
+<h3>Step 10 — Docs</h3>
+<ul>
+<li>New: <code>11-production-auth-seam.md</code>, <code>12-runtime-config.md</code>,</li>
+</ul>
+<p><code>13-deploy-target.md</code>, <code>14-postgres-parity.md</code>.</p>
+<ul>
+<li>Updated: <code>01-current-state.md</code>, <code>05-build-log.md</code>, <code>06-known-gaps.md</code>,</li>
+</ul>
+<p><code>07-auth-and-scoping.md</code>, <code>08-test-strategy.md</code>,</p>
+<p><code>09-ci-and-deploy-hardening.md</code>. Diagrams refreshed</p>
+<p>(<code>system-architecture</code>, <code>api-data-flow</code>).</p>
+<ul>
+<li><code>scripts/build_docs.py</code> now picks up <code>11…14</code> automatically.</li>
+<li>Final HTML + PDF regenerated.</li>
+</ul>
+<h3>Step 11 — Hygiene</h3>
+<ul>
+<li>Dev DB reset to seeded state before commit.</li>
+<li><code>.gitignore</code> already excludes <code>.pytest_cache</code>, <code>__pycache__</code>, <code>*.db</code>.</li>
 </ul>
 <p>---</p>
-<h2>Prior phases (preserved)</h2>
-<h3>Phase 4 — RBAC + full scoping + pytest suite</h3>
-<p><code>authz.py</code>, per-edge transition roles, <code>/organizations</code> / <code>/locations</code> / <code>/users</code> now authed + org-scoped, 25-test pytest suite with per-test temp SQLite.</p>
-<h3>Phase 3 — Dev auth + org scoping</h3>
-<p><code>auth.py</code> with <code>X-User-Email</code>, <code>Caller</code>, cross-org 404 on reads and 403 on assertions.</p>
-<h3>Phase 2 — Strict state machine + filtering</h3>
-<p><code>ALLOWED_TRANSITIONS</code> map, 400 <code>invalid_transition</code> with allowed-next listing, <code>GET /encounters</code> filters.</p>
-<h3>Phase 1 — Workflow spine</h3>
-<p>Migration <code>a1b2c3d4e5f6</code>, idempotent seed, six encounter endpoints.</p>
+<h2>Prior phases</h2>
+<ul>
+<li><strong>Phase 5 — CI + runtime hardening + doc pipeline</strong> (<code>cfa8ca9</code>)</li>
+<li><strong>Phase 4 — RBAC + full scoping + pytest</strong> (<code>c6f29e6</code>)</li>
+<li><strong>Phase 3 — Dev auth + org scoping</strong> (<code>efb5b56</code>)</li>
+<li><strong>Phase 2 — Strict state machine + filtering</strong> (<code>505f025</code>)</li>
+<li><strong>Phase 1 — Workflow spine</strong> (<code>93fceb4</code>)</li>
+</ul>
 </section>
 <section id="sec-7"><h2>06 — Known gaps + verification matrix</h2>
 <h1>Known Gaps &amp; Verification Matrix</h1>
-<h2>Verification evidence — phase 5</h2>
-<h3>Automated pytest (unchanged contract, now in CI)</h3>
-<pre class="code lang-"><code>
-$ cd apps/api &amp;&amp; pytest tests/ -v
-... 25 passed in ~12s
-</code></pre>
-<h3><code>make verify</code> (canonical local gate)</h3>
-<p>Steps executed in order:</p>
+<h2>Verification evidence — phase 6</h2>
+<h3>Local <code>make verify</code> (SQLite)</h3>
 <table><thead><tr><th>Step</th><th>Result</th></tr></thead><tbody>
 <tr><td><code>rm -f apps/api/chartnav.db</code></td><td>✅</td></tr>
 <tr><td><code>alembic upgrade head</code></td><td>✅</td></tr>
-<tr><td><code>scripts_seed.py</code></td><td>✅ (idempotent)</td></tr>
-<tr><td><code>pytest tests/ -v</code></td><td>✅ (25/25)</td></tr>
-<tr><td><code>uvicorn app.main:app --port 8765</code> boots</td><td>✅</td></tr>
-<tr><td><code>/health</code> reachable within 10s</td><td>✅</td></tr>
-<tr><td><code>scripts/smoke.sh</code> all 9 assertions</td><td>✅</td></tr>
-<tr><td>boot process torn down cleanly</td><td>✅</td></tr>
+<tr><td><code>scripts_seed.py</code> (x2 idempotent)</td><td>✅</td></tr>
+<tr><td><code>pytest tests/ -v</code></td><td>✅ <strong>28/28</strong></td></tr>
+<tr><td><code>uvicorn</code> boots</td><td>✅</td></tr>
+<tr><td><code>scripts/smoke.sh</code> 9 assertions</td><td>✅</td></tr>
+<tr><td>teardown clean</td><td>✅</td></tr>
 </tbody></table>
-<h3>Smoke assertions (<code>scripts/smoke.sh</code>)</h3>
-<table><thead><tr><th>Assertion</th><th>Result</th></tr></thead><tbody>
-<tr><td><code>GET /health</code> → 200, body <code>status=ok</code></td><td>✅</td></tr>
-<tr><td><code>GET /me</code> without auth → 401</td><td>✅</td></tr>
-<tr><td><code>GET /me</code> with admin1 → 200, <code>role=admin</code>, <code>organization_id=1</code></td><td>✅</td></tr>
-<tr><td><code>GET /encounters</code> without auth → 401</td><td>✅</td></tr>
-<tr><td><code>GET /encounters</code> with admin1 → 200</td><td>✅</td></tr>
-<tr><td><code>GET /encounters?organization_id=2</code> as org1 admin → 403</td><td>✅</td></tr>
-<tr><td><code>GET /encounters/1</code> as admin1 → 200</td><td>✅</td></tr>
-<tr><td><code>GET /encounters/3</code> as admin1 (cross-org) → 404</td><td>✅</td></tr>
+<h3>Local <code>make pg-verify</code> (Postgres 16)</h3>
+<table><thead><tr><th>Step</th><th>Result</th></tr></thead><tbody>
+<tr><td>throwaway <code>postgres:16-alpine</code> comes up</td><td>✅</td></tr>
+<tr><td><code>alembic upgrade head</code> on Postgres</td><td>✅ both revisions applied</td></tr>
+<tr><td>seed on Postgres (run twice, idempotent)</td><td>✅</td></tr>
+<tr><td>uvicorn boots against Postgres</td><td>✅</td></tr>
+<tr><td><code>scripts/smoke.sh</code> 9 assertions</td><td>✅</td></tr>
+<tr><td>clinician status transition <code>in_progress → draft_ready</code></td><td>✅</td></tr>
+<tr><td><code>workflow_events</code> row written with <code>old_status</code>/<code>new_status</code>/<code>changed_by</code></td><td>✅</td></tr>
+<tr><td>container torn down (trap)</td><td>✅</td></tr>
 </tbody></table>
-<h3>Doc pipeline</h3>
+<h3>Auth seam tests (<code>tests/test_auth_modes.py</code>)</h3>
+<table><thead><tr><th>Case</th><th>Result</th></tr></thead><tbody>
+<tr><td><code>CHARTNAV_AUTH_MODE=bearer</code> w/o JWT env → RuntimeError at import</td><td>✅</td></tr>
+<tr><td>bearer with JWT env, no token → 401 <code>missing_auth_header</code></td><td>✅</td></tr>
+<tr><td>bearer with JWT env, token present → 501 <code>auth_bearer_not_implemented</code></td><td>✅</td></tr>
+<tr><td>header mode default → 200 + correct role/org</td><td>✅</td></tr>
+</tbody></table>
+<h3>Docker build</h3>
 <ul>
-<li><code>python scripts/build_docs.py</code> → wrote 59KB HTML + 1.1MB PDF via headless Chrome.</li>
-<li>Both artifacts regenerate deterministically from <code>docs/build/</code> + <code>docs/diagrams/</code>.</li>
+<li><code>docker build -t chartnav-api:local apps/api</code> — runs locally.</li>
+<li>CI <code>docker-build</code> job builds with buildx and smokes the live</li>
 </ul>
-<h3>CI YAML sanity</h3>
-<ul>
-<li>YAML parses cleanly (verified by PyYAML load).</li>
-<li>Limitation: no <code>act</code> binary available to run the workflow locally; CI behavior is asserted by parity with <code>make verify</code> and by the structural review of the YAML.</li>
-</ul>
+<p>container — enforced per PR.</p>
 <h2>Real gaps (prioritized for next phase)</h2>
-<p>1. <strong>Auth transport still dev-only.</strong> <code>X-User-Email</code> spoofable. Swap via <code>CHARTNAV_AUTH_MODE</code> + JWT/SSO.</p>
-<p>2. <strong>No <code>act</code> or local workflow runner</strong> — YAML syntactic parse only. Add <code>act</code> or accept first-push feedback loop.</p>
-<p>3. <strong>No RBAC-gated write endpoints for org metadata.</strong> <code>/organizations</code>, <code>/locations</code>, <code>/users</code> are read-only.</p>
-<p>4. <strong><code>users.role</code> free VARCHAR at the DB level</strong> — no CHECK constraint; enforced at app layer only.</p>
-<p>5. <strong>No pagination / cursor</strong> on <code>GET /encounters</code>.</p>
-<p>6. <strong>No encounter update / delete / cancel</strong>; no <code>cancelled</code> status.</p>
-<p>7. <strong>Free-form <code>event_data</code></strong> — no per-event_type schema.</p>
-<p>8. <strong>Raw <code>sqlite3</code></strong> per-request connections; Postgres parity (docker compose) untested.</p>
-<p>9. **CORS <code>allow_origins=[&quot;*&quot;]</code>** remains.</p>
-<p>10. <strong>No distinct audit log</strong> for auth/scoping failures (only successful workflow events).</p>
-<p>11. <strong>No rate limiting, no lockout, no structured logging.</strong></p>
-<p>12. <strong>No deploy target</strong> — CI builds + tests but does not ship anything.</p>
+<p>1. <strong>JWT/SSO validation is still a stub.</strong> Bearer mode rejects all traffic with 501. Next phase: PyJWT + JWKS fetch/cache, issuer/audience validation, claim → user mapping.</p>
+<p>2. <strong>pytest runs on SQLite only.</strong> Postgres parity is asserted by <code>pg_verify.sh</code> + the <code>backend-postgres</code> CI job (which exercises the live surface). A pytest Postgres matrix is the next CI upgrade; <code>conftest.py</code> already reads env so this is mostly wiring.</p>
+<p>3. <strong>No image push / release pipeline.</strong> CI builds the Docker image but doesn&#x27;t publish it.</p>
+<p>4. <strong>Secrets are still plain env vars.</strong> No AWS SM / Vault integration.</p>
+<p>5. <strong>No RBAC-gated writes for org metadata</strong> (<code>/organizations</code> etc. remain read-only).</p>
+<p>6. <strong><code>users.role</code> is still free VARCHAR</strong> at DB level; no CHECK/lookup.</p>
+<p>7. <strong>No pagination / cursor</strong> on <code>GET /encounters</code>.</p>
+<p>8. <strong>No encounter update / delete / cancel</strong>; no <code>cancelled</code> status.</p>
+<p>9. <strong>Free-form <code>event_data</code></strong> — no per-event_type schema.</p>
+<p>10. **CORS <code>allow_origins=[&quot;*&quot;]</code>** still open.</p>
+<p>11. <strong>No distinct audit log</strong> for auth/scoping failures.</p>
+<p>12. <strong>No rate limiting, no lockout, no structured logging.</strong></p>
 </section>
 <section id="sec-8"><h2>07 — Auth, org scoping, RBAC</h2>
 <h1>Auth, Org Scoping, RBAC</h1>
@@ -585,150 +669,131 @@ sequenceDiagram
 <h2>Stack</h2>
 <ul>
 <li><code>pytest</code> + FastAPI <code>TestClient</code> for unit/integration.</li>
-<li>Per-test temporary SQLite (fresh migrate + seed per test).</li>
-<li>Shell-level smoke via <code>apps/api/scripts/smoke.sh</code> against a real</li>
-</ul>
-<p>running uvicorn.</p>
-<ul>
-<li>All of it runs in CI (<code>.github/workflows/ci.yml</code>).</li>
+<li>Per-test temporary SQLite (fresh migrate + seed per test); env-based wiring so the same fixture will later work against Postgres.</li>
+<li>Live shell smoke (<code>apps/api/scripts/smoke.sh</code>) used by:</li>
+<li><code>make verify</code> (SQLite)</li>
+<li><code>scripts/pg_verify.sh</code> (Postgres)</li>
+<li>the built Docker image smoke job</li>
+<li>CI runs all of the above on every push / PR.</li>
 </ul>
 <h2>Layout</h2>
 <pre class="code lang-"><code>
 apps/api/tests/
-├── conftest.py          # fixtures: test_db, client, seeded_ids, role headers
-├── test_auth.py         # authn surface
-├── test_scoping.py      # org scoping across every list/read endpoint
-└── test_rbac.py         # role-gated writes + state transitions
+├── conftest.py          # env-based per-test DB, header presets
+├── test_auth.py         # authn surface (5)
+├── test_auth_modes.py   # header + bearer seam (3)
+├── test_rbac.py         # role-gated writes + state transitions (12)
+└── test_scoping.py      # org scoping (8)
 
 apps/api/scripts/
-└── smoke.sh             # curl-level live smoke (health, me, encounters, cross-org)
+└── smoke.sh             # curl-level live smoke (9 checks)
+
+scripts/
+├── verify.sh            # boot + smoke + teardown (SQLite)
+└── pg_verify.sh         # same flow against a throwaway Postgres
 </code></pre>
-<h2>Coverage matrix</h2>
-<h3>Auth (5)</h3>
-<p>Health open; <code>/me</code> missing/empty/unknown/valid.</p>
-<h3>Scoping (8)</h3>
-<p>Orgs/locs/users scoped per tenant. <code>/organizations</code> 401 without auth.</p>
-<p>Encounters disjoint across tenants. Cross-org GET → 404.</p>
-<p><code>?organization_id=&lt;other&gt;</code> → 403. Filters don&#x27;t leak.</p>
-<h3>RBAC (12)</h3>
-<p>Admin + clinician create encounter. Reviewer create → 403. Reviewer</p>
-<p>event → 403. Clinician operational transition OK. Clinician review-</p>
-<p>stage transition 403. Reviewer complete/kick-back OK. Cross-org mutate</p>
-<p>→ 404. Invalid transition preserved as 400. <code>status_changed</code> carries</p>
-<p><code>old_status</code>/<code>new_status</code>/<code>changed_by</code>. Cross-org body mismatch → 403.</p>
-<h3>Smoke (9)</h3>
-<p>Exercise live HTTP. Commands in <code>09-ci-and-deploy-hardening.md</code>.</p>
+<h2>Coverage</h2>
+<table><thead><tr><th>Surface</th><th>pytest</th><th>smoke</th><th>Postgres smoke</th><th>Docker-image smoke</th></tr></thead><tbody>
+<tr><td><code>/health</code>, <code>/</code></td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td>Header-mode auth</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td>Bearer-mode seam (501 / config)</td><td>✓</td><td></td><td></td><td></td></tr>
+<tr><td>Org scoping</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td>RBAC</td><td>✓</td><td></td><td></td><td></td></tr>
+<tr><td>Filter on <code>/encounters</code></td><td>✓</td><td></td><td></td><td></td></tr>
+<tr><td>State machine invariants</td><td>✓</td><td></td><td>✓</td><td></td></tr>
+<tr><td>Event provenance (<code>changed_by</code>)</td><td>✓</td><td></td><td>✓</td><td></td></tr>
+<tr><td>Migrations</td><td></td><td></td><td>✓</td><td>✓</td></tr>
+<tr><td>Seed idempotency (x2 runs)</td><td></td><td></td><td>✓</td><td></td></tr>
+</tbody></table>
 <h2>How to run</h2>
 <pre class="code lang-bash"><code>
-# just the pytest suite
+# Fast pytest (SQLite)
 cd apps/api &amp;&amp; pytest tests/ -v
 
-# everything (reset DB + pytest + boot + smoke)
-make verify
+# Full local SQLite gate
+make verify                 # resets DB, pytest, boot, smoke, teardown
 
-# smoke only, against an already-running API
-cd apps/api &amp;&amp; bash scripts/smoke.sh http://127.0.0.1:8000
+# Postgres parity (docker required)
+make pg-verify
+
+# Docker image + smoke
+make docker-build
 </code></pre>
 <h2>Results at time of writing</h2>
 <ul>
-<li><code>pytest</code>: <strong>25 passed in ~12s</strong></li>
-<li><code>make verify</code>: all 9 smoke assertions pass after pytest succeeds</li>
+<li><code>pytest</code>: <strong>28 passed in ~19s</strong></li>
+<li><code>make verify</code> (SQLite): 28 pytest + 9 smoke — all green</li>
+<li><code>scripts/pg_verify.sh</code>: migrations + seed (x2) + smoke + status transition + event write — <strong>PASS</strong></li>
 </ul>
 <h2>Gaps not yet covered</h2>
 <ul>
-<li>Concurrent writers / race conditions</li>
-<li><code>event_data</code> schema per <code>event_type</code></li>
-<li>Pagination (not yet implemented)</li>
-<li>Auth transport swap (needs its own harness when JWT/SSO lands)</li>
-<li>Long-running soak / memory behavior</li>
+<li>pytest matrix against Postgres (the fixture is already env-driven).</li>
+<li>Concurrent writers / race conditions.</li>
+<li><code>event_data</code> schema per <code>event_type</code>.</li>
+<li>Pagination behavior (not yet implemented).</li>
+<li>Bearer-mode JWT validation (placeholder only; see <code>11-production-auth-seam.md</code>).</li>
 </ul>
 </section>
 <section id="sec-10"><h2>09 — CI & deploy hardening</h2>
 <h1>CI &amp; Deploy Hardening</h1>
-<h2>GitHub Actions workflow</h2>
-<p>File: <code>.github/workflows/ci.yml</code></p>
-<p>Triggers: <strong>push to <code>main</code></strong> and <strong>every pull request</strong>.</p>
-<h3>Job <code>backend</code> (ubuntu-latest, working directory <code>apps/api</code>)</h3>
-<p>1. <code>actions/checkout@v4</code></p>
-<p>2. <code>actions/setup-python@v5</code> — Python 3.11, pip cache on.</p>
-<p>3. <code>pip install -e &quot;.[dev]&quot;</code> — installs backend plus <code>pytest</code> + <code>httpx</code> from <code>pyproject.toml [project.optional-dependencies].dev</code>.</p>
-<p>4. <strong>Migrate (isolated CI DB)</strong> — <code>alembic -x &quot;sqlalchemy.url=sqlite:///$CI_DB_PATH&quot; upgrade head</code>. <code>CI_DB_PATH</code> lives under <code>$RUNNER_TEMP</code>, never in the repo.</p>
-<p>5. <strong>Idempotent seed run twice</strong> — proves the seed is safe to re-run in live environments.</p>
-<p>6. <strong>Tests</strong> — <code>pytest tests/ -v</code>. 25 tests must pass.</p>
-<p>7. <strong>API boot smoke</strong> — launches uvicorn in-process against the CI DB, waits up to ~10s for <code>/health</code>, then runs <code>apps/api/scripts/smoke.sh</code>. Smoke script exercises <code>/health</code>, <code>/me</code> auth paths, <code>/encounters</code> scoped list, and the cross-org 403 lens.</p>
-<h3>Job <code>docs</code> (ubuntu-latest, <code>needs: backend</code>)</h3>
-<p>1. Install Chromium via apt (<code>chromium-browser</code>).</p>
-<p>2. Run <code>python scripts/build_docs.py</code> with <code>CHARTNAV_PDF_BROWSER=chromium-browser</code>.</p>
-<p>3. Upload <code>docs/final/chartnav-workflow-state-machine-build.{html,pdf}</code> as a CI artifact — the <code>docs</code> job fails loudly if either artifact is missing.</p>
+<h2>GitHub Actions</h2>
+<p>File: <code>.github/workflows/ci.yml</code>. Triggers on <strong>push to <code>main</code></strong> and <strong>every pull request</strong>.</p>
+<h3><code>backend-sqlite</code></h3>
+<p>Install deps → <code>alembic upgrade head</code> against an isolated <code>$RUNNER_TEMP/chartnav_ci.db</code> via <code>DATABASE_URL</code> → seed <strong>twice</strong> (idempotency proof) → <code>pytest tests/ -v</code> (28 tests) → <code>bash scripts/verify.sh</code> (boots uvicorn, runs <code>scripts/smoke.sh</code>).</p>
+<h3><code>backend-postgres</code> (needs: <code>backend-sqlite</code>)</h3>
+<p>Service container <code>postgres:16-alpine</code> on localhost:5432. Install deps (incl. <code>[postgres]</code> extra) → <code>alembic upgrade head</code> on Postgres → seed twice → boot uvicorn → <code>scripts/smoke.sh</code> → live status transition asserts the returned row. Fails the workflow if Postgres parity breaks.</p>
+<h3><code>docker-build</code> (needs: <code>backend-sqlite</code>)</h3>
+<p>Buildx → build <code>chartnav-api:ci</code> from <code>apps/api/</code> → run the container with <code>DATABASE_URL=sqlite:///./chartnav.db</code> and <code>CHARTNAV_RUN_SEED=1</code> → poll <code>/health</code> → run <code>scripts/smoke.sh</code> against the live container. Proves the production image boots end-to-end.</p>
+<h3><code>docs</code> (needs: <code>backend-sqlite</code>)</h3>
+<p>apt-install Chromium → <code>python scripts/build_docs.py</code> with <code>CHARTNAV_PDF_BROWSER=chromium-browser</code> → upload HTML + PDF as <code>chartnav-docs-final</code> artifact (<code>if-no-files-found: error</code>).</p>
 <h3>What CI catches</h3>
 <table><thead><tr><th>Change</th><th>Failure surface</th></tr></thead><tbody>
-<tr><td>Broken migration</td><td><code>alembic upgrade</code> step</td></tr>
-<tr><td>Broken seed</td><td>idempotent-seed step</td></tr>
-<tr><td>Any pytest regression (auth, RBAC, scoping, state machine)</td><td>pytest step</td></tr>
-<tr><td>App can&#x27;t boot / <code>/health</code> broken</td><td>smoke script</td></tr>
-<tr><td><code>/me</code> contract drift</td><td>smoke script</td></tr>
-<tr><td>Cross-org leak introduced</td><td>smoke 403 lens check</td></tr>
+<tr><td>Broken migration</td><td>alembic step (both DBs)</td></tr>
+<tr><td>Broken seed / re-seed collision</td><td>seed step (both DBs)</td></tr>
+<tr><td>Any pytest regression</td><td><code>backend-sqlite</code> pytest</td></tr>
+<tr><td><code>/health</code> or auth drift</td><td><code>scripts/smoke.sh</code> (all envs)</td></tr>
+<tr><td>Cross-org / state-machine regression</td><td>smoke + <code>backend-postgres</code> transition</td></tr>
+<tr><td>Postgres-only SQL dialect break</td><td><code>backend-postgres</code></td></tr>
+<tr><td>Image won&#x27;t build or boot</td><td><code>docker-build</code></td></tr>
 <tr><td>Docs pipeline regression</td><td><code>docs</code> job</td></tr>
 </tbody></table>
-<h2>Local verification path (canonical)</h2>
-<p>One command:</p>
+<h2>Local verification</h2>
 <pre class="code lang-bash"><code>
-make verify
+make verify        # SQLite end-to-end
+make pg-verify     # Postgres end-to-end (Docker required)
+make docker-build  # build the production image
+make docker-up     # full API + Postgres stack (compose)
 </code></pre>
-<p>Under the hood that:</p>
-<ul>
-<li>resets the dev SQLite DB,</li>
-<li>applies Alembic migrations,</li>
-<li>re-seeds idempotently,</li>
-<li>runs pytest,</li>
-<li>boots uvicorn on port 8765,</li>
-<li>runs <code>apps/api/scripts/smoke.sh</code>,</li>
-<li>kills the boot process.</li>
-</ul>
-<p>Individual targets:</p>
-<table><thead><tr><th>Target</th><th>Purpose</th></tr></thead><tbody>
-<tr><td><code>make install</code></td><td>venv + <code>pip install -e &quot;apps/api[dev]&quot;</code></td></tr>
-<tr><td><code>make migrate</code></td><td>Alembic upgrade head on dev DB</td></tr>
-<tr><td><code>make seed</code></td><td>Idempotent seed on dev DB</td></tr>
-<tr><td><code>make test</code></td><td>Full pytest suite</td></tr>
-<tr><td><code>make boot</code></td><td>Foreground uvicorn on port 8765</td></tr>
-<tr><td><code>make smoke</code></td><td><code>scripts/smoke.sh</code> against running API</td></tr>
-<tr><td><code>make docs</code></td><td>Rebuild <code>docs/final/*.html</code> + <code>.pdf</code></td></tr>
-<tr><td><code>make reset-db</code></td><td><code>rm -f chartnav.db</code> + migrate + seed</td></tr>
-<tr><td><code>make clean</code></td><td>Remove DB + caches</td></tr>
+<table><thead><tr><th>Individual recipes: `install</th><th>migrate</th><th>seed</th><th>test</th><th>boot</th><th>smoke</th><th>docs</th><th>reset-db</th><th>clean`.</th></tr></thead><tbody>
 </tbody></table>
-<h2>Dev vs CI DB separation</h2>
+<h2>Dev / test / CI / prod DB separation</h2>
 <table><thead><tr><th>Surface</th><th>Path</th></tr></thead><tbody>
 <tr><td>Developer local</td><td><code>apps/api/chartnav.db</code> (gitignored)</td></tr>
 <tr><td>pytest per-test</td><td><code>tmp_path / &quot;chartnav.db&quot;</code> (ephemeral)</td></tr>
-<tr><td>CI</td><td><code>$RUNNER_TEMP/chartnav_ci.db</code> (ephemeral)</td></tr>
+<tr><td>CI (sqlite)</td><td><code>$RUNNER_TEMP/chartnav_ci.db</code> (ephemeral)</td></tr>
+<tr><td>CI (postgres)</td><td><code>postgres:16-alpine</code> service container</td></tr>
+<tr><td>Local pg-verify</td><td>throwaway <code>chartnav-pg-verify</code> container on port 55432</td></tr>
+<tr><td>Prod compose</td><td><code>chartnav_pgdata</code> persistent volume</td></tr>
 </tbody></table>
-<p>The only path CI or tests ever touch inside the repo is the source code;</p>
-<p>no DB file is shared between contexts.</p>
-<h2>Smoke script</h2>
-<p>File: <code>apps/api/scripts/smoke.sh</code></p>
-<p>Shell-only curl-level checks. Takes an optional <code>BASE_URL</code>:</p>
-<pre class="code lang-bash"><code>
-scripts/smoke.sh [BASE_URL=http://127.0.0.1:8000]
-</code></pre>
-<p>Exits non-zero on the first failed assertion. Exercises:</p>
+<h2>Smoke script (shared contract)</h2>
+<p><code>apps/api/scripts/smoke.sh [BASE_URL]</code> — 9 curl assertions:</p>
+<p><code>/health</code> (code + body), <code>/me</code> (401/200), <code>/encounters</code> (401/200), cross-org lens 403, own 200, cross-org 404. Exits non-zero on first failure. Used by <strong>every</strong> smoke path (local <code>make verify</code>, Postgres parity, Docker image CI).</p>
+<h2>What this phase adds beyond CI</h2>
 <ul>
-<li><code>GET /health</code> → 200 + <code>status=ok</code></li>
-<li><code>GET /me</code> → 401 without auth; 200 with seeded admin header; role equals <code>admin</code></li>
-<li><code>GET /encounters</code> → 401 without auth; 200 with admin header</li>
-<li><code>GET /encounters?organization_id=2</code> as org1 admin → 403 (cross-org lens)</li>
-<li><code>GET /encounters/1</code> as org1 admin → 200</li>
-<li><code>GET /encounters/3</code> as org1 admin → 404 (cross-org)</li>
+<li>Hardened <code>Dockerfile</code> (non-root, healthcheck).</li>
+<li><code>apps/api/entrypoint.sh</code> for deterministic migrate-on-start.</li>
+<li><code>infra/docker/docker-compose.prod.yml</code> for the API + Postgres stack.</li>
+<li><code>scripts/pg_verify.sh</code> — reproducible Postgres parity proof.</li>
 </ul>
-<h2>What this phase explicitly does NOT do</h2>
+<h2>What this phase does NOT do</h2>
 <ul>
-<li>No container image build / push.</li>
-<li>No production deploy target.</li>
-<li>No Kubernetes, Terraform, or infra-as-code.</li>
-<li>No secrets management or signed build artifacts.</li>
+<li>No image push / registry release.</li>
+<li>No Kubernetes / Terraform / cloud-specific bits.</li>
+<li>No TLS termination or edge reverse proxy.</li>
+<li>No secret store integration.</li>
 </ul>
-<p>Those belong in a future &quot;hosted deploy&quot; phase. The seam is ready: CI</p>
-<p>already reliably migrates, seeds, tests, and smokes the API.</p>
+<p>Those land in a dedicated hosted-deploy phase. This phase makes sure</p>
+<p>the seams are in place to plug any of them in without rewrites.</p>
 </section>
 <section id="sec-11"><h2>10 — Doc artifact pipeline</h2>
 <h1>Doc Artifact Pipeline</h1>
@@ -821,53 +886,384 @@ python scripts/build_docs.py          # or:  make docs
 <p>site), this builder is easy to retire because the sources are already</p>
 <p>plain markdown.</p>
 </section>
-<section id="sec-12"><h2>Diagram — System architecture</h2>
+<section id="sec-12"><h2>11 — Production-auth seam</h2>
+<h1>Production-Auth Seam</h1>
+<h2>Goal</h2>
+<p>Make auth transport swappable without touching routes or RBAC.</p>
+<h2>Where the seam lives</h2>
+<p><code>apps/api/app/auth.py</code> exposes a single FastAPI dependency:</p>
+<pre class="code lang-python"><code>
+def require_caller(x_user_email: ..., authorization: ...) -&gt; Caller:
+    mode = settings.auth_mode
+    if mode == &quot;header&quot;:  return resolve_caller_from_header(...)
+    if mode == &quot;bearer&quot;:  return resolve_caller_from_bearer(...)
+    raise ...
+</code></pre>
+<p>Both resolvers return the <strong>same</strong> <code>Caller</code> contract:</p>
+<pre class="code lang-python"><code>
+Caller(user_id, email, full_name, role, organization_id)
+</code></pre>
+<p>Every route, every RBAC helper, every test depends on <code>Caller</code>, not on a</p>
+<p>specific header. Changing transports is a one-file edit inside <code>auth.py</code>.</p>
+<h2>Mode selection</h2>
+<p><code>CHARTNAV_AUTH_MODE</code> in the environment (see <code>12-runtime-config.md</code>):</p>
+<table><thead><tr><th>Value</th><th>State</th><th>Behavior</th></tr></thead><tbody>
+<tr><td><code>header</code></td><td>implemented</td><td>Reads <code>X-User-Email</code>, looks up <code>users</code>. Dev only.</td></tr>
+<tr><td><code>bearer</code></td><td>placeholder</td><td>Requires <code>Authorization: Bearer …</code>; returns 501 because JWT validation is not yet wired.</td></tr>
+</tbody></table>
+<p>Unknown values cause <code>app.config</code> to refuse to import — fail fast.</p>
+<h2>Bearer mode — honest placeholder</h2>
+<p>When <code>CHARTNAV_AUTH_MODE=bearer</code> is selected, <code>app.config._load()</code></p>
+<p>verifies these three values are all present before letting the app come</p>
+<p>up at all:</p>
+<ul>
+<li><code>CHARTNAV_JWT_ISSUER</code></li>
+<li><code>CHARTNAV_JWT_AUDIENCE</code></li>
+<li><code>CHARTNAV_JWT_JWKS_URL</code></li>
+</ul>
+<p>Missing any one → <code>RuntimeError</code> at import time with the list of</p>
+<p>missing vars. The app will not start with a half-configured bearer</p>
+<p>setup.</p>
+<p>When bearer mode is active and fully configured, <code>resolve_caller_from_bearer</code></p>
+<p>currently returns:</p>
+<pre class="code lang-"><code>
+HTTP 501
+{&quot;detail&quot;: {&quot;error_code&quot;: &quot;auth_bearer_not_implemented&quot;,
+            &quot;reason&quot;: &quot;bearer-token validation is not implemented in this phase; set CHARTNAV_AUTH_MODE=header for local dev&quot;}}
+</code></pre>
+<p>This is intentional. A future phase will wire real JWT signature</p>
+<p>verification (PyJWT + JWKS fetch against <code>CHARTNAV_JWT_JWKS_URL</code>,</p>
+<p>issuer/audience checks, claim → <code>users</code> lookup). When it ships, only</p>
+<p>the body of <code>resolve_caller_from_bearer</code> changes.</p>
+<h2>What production-ready vs not yet implemented</h2>
+<table><thead><tr><th>Component</th><th>State</th></tr></thead><tbody>
+<tr><td>Mode selection + config</td><td>✅ production-shaped; fails fast on gaps</td></tr>
+<tr><td>Standardized error envelope</td><td>✅ <code>{error_code, reason}</code> everywhere</td></tr>
+<tr><td>Header transport</td><td>✅ works; dev only, do not expose</td></tr>
+<tr><td>Bearer transport</td><td>⚠ placeholder — returns 501 honestly</td></tr>
+<tr><td>JWT signature validation</td><td>❌ not implemented</td></tr>
+<tr><td>JWKS rotation / cache</td><td>❌ not implemented</td></tr>
+<tr><td>Token → <code>users</code> mapping</td><td>❌ not implemented (design TBD)</td></tr>
+<tr><td>RBAC integration</td><td>✅ works for any transport via <code>Caller</code></td></tr>
+<tr><td>Org scoping integration</td><td>✅ works for any transport via <code>Caller</code></td></tr>
+</tbody></table>
+<h2>Tests</h2>
+<p><code>apps/api/tests/test_auth_modes.py</code>:</p>
+<ul>
+<li><code>test_bearer_mode_requires_jwt_env</code> — setting <code>CHARTNAV_AUTH_MODE=bearer</code></li>
+</ul>
+<p>without issuer/audience/JWKS raises at <code>import app.config</code>.</p>
+<ul>
+<li><code>test_bearer_mode_refuses_to_serve_traffic</code> — with JWT config set, bearer</li>
+</ul>
+<p>requests still get a clear 501 <code>auth_bearer_not_implemented</code>; missing</p>
+<p>header returns 401 <code>missing_auth_header</code>.</p>
+<ul>
+<li><code>test_header_mode_unchanged_contract</code> — header mode (the default) still</li>
+</ul>
+<p>resolves seeded users to the expected role/org.</p>
+</section>
+<section id="sec-13"><h2>12 — Runtime config</h2>
+<h1>Runtime Configuration</h1>
+<p>Single source of truth: <code>apps/api/app/config.py</code> (<code>settings</code>). Every</p>
+<p>other module imports from there; nothing else reads <code>os.environ</code>.</p>
+<h2>The contract</h2>
+<table><thead><tr><th>Variable</th><th>Required?</th><th>Default</th><th>Purpose</th></tr></thead><tbody>
+<tr><td><code>CHARTNAV_ENV</code></td><td>no</td><td><code>dev</code></td><td>Informational label (<code>dev</code>/<code>test</code>/<code>ci</code>/<code>prod</code>).</td></tr>
+<tr><td><code>DATABASE_URL</code></td><td>no (dev default)</td><td><code>sqlite:///apps/api/chartnav.db</code></td><td>SQLAlchemy URL. Supports <code>sqlite:///...</code> and <code>postgresql+psycopg://...</code>.</td></tr>
+<tr><td><code>CHARTNAV_AUTH_MODE</code></td><td>no</td><td><code>header</code></td><td><code>header</code> (dev only) or <code>bearer</code> (prod placeholder).</td></tr>
+<tr><td><code>CHARTNAV_JWT_ISSUER</code></td><td><strong>yes iff</strong> <code>AUTH_MODE=bearer</code></td><td>—</td><td>OIDC issuer URL.</td></tr>
+<tr><td><code>CHARTNAV_JWT_AUDIENCE</code></td><td><strong>yes iff</strong> <code>AUTH_MODE=bearer</code></td><td>—</td><td>Expected <code>aud</code> claim.</td></tr>
+<tr><td><code>CHARTNAV_JWT_JWKS_URL</code></td><td><strong>yes iff</strong> <code>AUTH_MODE=bearer</code></td><td>—</td><td>JWKS endpoint for signing-key lookup.</td></tr>
+<tr><td><code>CHARTNAV_RUN_SEED</code></td><td>no</td><td><code>0</code></td><td>Entrypoint: run <code>scripts_seed.py</code> after migrations. Keep <code>0</code> in prod.</td></tr>
+<tr><td><code>API_HOST</code> / <code>API_PORT</code></td><td>no</td><td><code>0.0.0.0</code> / <code>8000</code></td><td>Uvicorn bind.</td></tr>
+</tbody></table>
+<h2>Validation on startup</h2>
+<p><code>app.config._load()</code> is evaluated at import time. It enforces:</p>
+<ul>
+<li><code>CHARTNAV_AUTH_MODE ∈ {header, bearer}</code>.</li>
+<li>If <code>AUTH_MODE=bearer</code>, <strong>all three</strong> JWT vars must be set — otherwise</li>
+</ul>
+<p>a <code>RuntimeError</code> is raised listing the missing names. The app will</p>
+<p>not boot half-configured.</p>
+<h2>Dev / CI / Prod profiles</h2>
+<table><thead><tr><th>Profile</th><th>How config is supplied</th><th>DB</th><th>Auth mode</th><th>Seed</th></tr></thead><tbody>
+<tr><td>Dev</td><td><code>apps/api/.env.example</code> → <code>.env</code>; Makefile targets</td><td><code>sqlite:///apps/api/chartnav.db</code></td><td><code>header</code></td><td>ad-hoc (<code>make seed</code>)</td></tr>
+<tr><td>Tests</td><td><code>apps/api/tests/conftest.py</code> sets env per-test</td><td>per-test SQLite in <code>tmp_path</code></td><td><code>header</code></td><td>via <code>scripts_seed.main()</code></td></tr>
+<tr><td>CI</td><td><code>.github/workflows/ci.yml</code> inline env + services</td><td>SQLite + live Postgres service</td><td><code>header</code></td><td>seed + re-seed in workflow</td></tr>
+<tr><td>Prod</td><td>platform env / secret store</td><td><code>postgresql+psycopg://...</code> via <code>infra/docker/docker-compose.prod.yml</code></td><td><code>bearer</code> (when JWT validation is wired)</td><td>off by default</td></tr>
+</tbody></table>
+<h2>Example files</h2>
+<ul>
+<li><code>apps/api/.env.example</code> — full dev contract with comments.</li>
+<li><code>infra/docker/docker-compose.prod.yml</code> — wires the API container to</li>
+</ul>
+<p>a Postgres service using these env vars; each has a documented</p>
+<p>default so the file is runnable as-is for local parity tests.</p>
+<h2>Database URL specifics</h2>
+<ul>
+<li><strong>SQLite:</strong> <code>sqlite:///relative/or/absolute/path.db</code> (three slashes +</li>
+</ul>
+<p>absolute path, or three slashes + relative path).</p>
+<ul>
+<li><strong>Postgres:</strong> <code>postgresql+psycopg://user:pass@host:5432/dbname</code>.</li>
+</ul>
+<p>The <code>+psycopg</code> driver selector is important — SQLAlchemy defaults to</p>
+<p><code>psycopg2</code> which is not installed. <code>psycopg[binary]</code> is declared in</p>
+<p><code>apps/api/pyproject.toml</code> as the <code>[postgres]</code> extra.</p>
+<h2>What this phase explicitly does NOT do</h2>
+<ul>
+<li>No secret store integration (AWS SM, Vault, etc.).</li>
+<li>No <code>.env</code> auto-loading in the API (docker-compose and operators load env).</li>
+<li>No per-request feature flags / remote config.</li>
+</ul>
+<p>Those are safe to layer on top of this contract without reshaping it.</p>
+</section>
+<section id="sec-14"><h2>13 — Deploy target</h2>
+<h1>Deploy Target</h1>
+<h2>Chosen path</h2>
+<p>Docker image built from <code>apps/api/Dockerfile</code>, wired to a Postgres</p>
+<p>service via <code>infra/docker/docker-compose.prod.yml</code>. That&#x27;s the single</p>
+<p>supported deploy surface in this phase — no Kubernetes, no Terraform,</p>
+<p>no cloud-specific glue yet.</p>
+<h2>Hardened Dockerfile</h2>
+<p><code>apps/api/Dockerfile</code>:</p>
+<ul>
+<li><code>python:3.11-slim</code> base.</li>
+<li><code>PYTHONDONTWRITEBYTECODE</code>, <code>PYTHONUNBUFFERED</code>, disabled pip cache.</li>
+<li>Installs <code>curl</code> only (for the container healthcheck).</li>
+<li>Installs the API with the <code>[postgres]</code> extra (<code>psycopg[binary]</code>).</li>
+<li>Copies <code>app/</code>, <code>alembic/</code>, <code>alembic.ini</code>, <code>scripts/</code>, <code>scripts_seed.py</code>, <code>entrypoint.sh</code>.</li>
+<li>Creates a non-root <code>chartnav</code> user (uid 1001) and runs as that user.</li>
+<li><code>HEALTHCHECK</code> hits <code>/health</code> every 15s with 3 retries.</li>
+<li><code>ENTRYPOINT</code> is <code>./entrypoint.sh</code>; <code>CMD</code> is the uvicorn invocation.</li>
+</ul>
+<h2>Entrypoint</h2>
+<p><code>apps/api/entrypoint.sh</code>:</p>
+<p>1. Asserts <code>DATABASE_URL</code> is set (fails loudly otherwise).</p>
+<p>2. <code>alembic upgrade head</code> — migrations always run at start-up.</p>
+<p>3. If <code>CHARTNAV_RUN_SEED=1</code>, runs <code>python scripts_seed.py</code> (idempotent; off by default in prod).</p>
+<p>4. <code>exec &quot;$@&quot;</code> — hands off to <code>CMD</code> so uvicorn becomes PID 1&#x27;s child.</p>
+<p>Migration-on-start is the right default for this app today. It is</p>
+<p>idempotent, small, and the seed step is gated off in production.</p>
+<h2>docker-compose.prod.yml</h2>
+<p><code>infra/docker/docker-compose.prod.yml</code> brings up two services:</p>
+<ul>
+<li><code>db</code> — <code>postgres:16-alpine</code> with a persistent volume, healthcheck,</li>
+</ul>
+<p>and dev-safe default credentials (operators must override for real</p>
+<p>deploys).</p>
+<ul>
+<li><code>api</code> — built from <code>apps/api/Dockerfile</code>, depends on <code>db</code> with</li>
+</ul>
+<p><code>condition: service_healthy</code>, reads all runtime config from env.</p>
+<p>All sensitive values (<code>POSTGRES_PASSWORD</code>, JWT settings, etc.) are</p>
+<p><code>${VAR:-default}</code> so the file is runnable locally for parity tests but</p>
+<p>ships nothing secret.</p>
+<h2>Startup path</h2>
+<pre class="code lang-bash"><code>
+# clone + cd
+cd infra/docker
+# optional: override defaults via env
+docker compose -f docker-compose.prod.yml up --build
+</code></pre>
+<p>Boot sequence per container:</p>
+<p>1. Postgres starts, becomes healthy (~5s).</p>
+<p>2. API container starts, entrypoint runs migrations.</p>
+<p>3. uvicorn binds 0.0.0.0:8000.</p>
+<p>4. HEALTHCHECK turns green.</p>
+<h2>Runtime config path</h2>
+<p>Every variable is documented in <code>12-runtime-config.md</code>. The</p>
+<p>image respects only those — there&#x27;s no bespoke <code>config.yaml</code>,</p>
+<p>Consul, etc. to reason about.</p>
+<h2>CI build verification</h2>
+<p><code>.github/workflows/ci.yml</code> → <code>docker-build</code> job:</p>
+<p>1. Buildx sets up.</p>
+<p>2. Builds <code>chartnav-api:ci</code> from <code>apps/api/</code>.</p>
+<p>3. Runs the container with <code>DATABASE_URL=sqlite:///./chartnav.db</code> and</p>
+<p><code>CHARTNAV_RUN_SEED=1</code>.</p>
+<p>4. Polls <code>/health</code>.</p>
+<p>5. Runs the same <code>scripts/smoke.sh</code> the backend-sqlite job uses.</p>
+<p>6. Tears down.</p>
+<p>If the image can&#x27;t boot, serve <code>/health</code>, or pass smoke, the job fails.</p>
+<h2>Out of scope this phase</h2>
+<ul>
+<li>Image registry push (no target credentials by default).</li>
+<li>Kubernetes manifests, Helm charts, Terraform.</li>
+<li>TLS termination — expected to be handled by a reverse proxy in front.</li>
+<li>Secret management integration (AWS SM, Vault, etc.).</li>
+<li>Blue/green or rolling deployment orchestration.</li>
+</ul>
+<p>Those are the next &quot;hosted deploy&quot; phase&#x27;s job. The Docker seam is</p>
+<p>real and ready to be plugged into any of them.</p>
+</section>
+<section id="sec-15"><h2>14 — Postgres parity</h2>
+<h1>Postgres Parity</h1>
+<h2>Why this phase</h2>
+<p>The app was born on SQLite. This phase proves the same code runs on</p>
+<p>Postgres — migrations, seed, auth, scoping, RBAC, state machine.</p>
+<h2>Code-level changes that made this possible</h2>
+<p>The DB layer was rewritten to use <strong>SQLAlchemy Core</strong> (<code>apps/api/app/db.py</code>).</p>
+<p>That single switch buys cross-dialect behavior:</p>
+<ul>
+<li>All SQL uses <strong>named</strong> bind parameters (<code>:name</code>). No more <code>?</code>.</li>
+<li>Portable functions only — <code>COALESCE</code> replaced <code>IFNULL</code>; <code>CURRENT_TIMESTAMP</code> already worked on both.</li>
+<li><code>insert_returning_id(conn, table, values)</code> helper encapsulates the</li>
+</ul>
+<p>dialect split: <code>RETURNING id</code> on Postgres, <code>cursor.lastrowid</code> on</p>
+<p>SQLite. Callers never touch either.</p>
+<ul>
+<li><code>transaction()</code> context manager gives a SA connection with <code>begin()</code></li>
+</ul>
+<p>semantics on either backend.</p>
+<p>Consumers changed:</p>
+<ul>
+<li><code>apps/api/app/api/routes.py</code> — all queries now use <code>:name</code> binds</li>
+</ul>
+<p>and <code>transaction()</code>.</p>
+<ul>
+<li><code>apps/api/scripts_seed.py</code> — rewritten to <code>transaction()</code> +</li>
+</ul>
+<p><code>insert_returning_id</code>, no more raw <code>sqlite3</code>.</p>
+<ul>
+<li><code>apps/api/app/auth.py</code> — uses <code>fetch_one</code> from the new <code>db</code> module.</li>
+<li><code>apps/api/alembic/env.py</code> — honors both <code>-x sqlalchemy.url=</code> and</li>
+</ul>
+<p><code>DATABASE_URL</code> env, so migrations can run against either backend.</p>
+<p>No existing migration (<code>43ccbf363a8f</code>, <code>a1b2c3d4e5f6</code>) needed changes.</p>
+<p>They already used SQLAlchemy constructs and portable defaults.</p>
+<h2>Proof — <code>scripts/pg_verify.sh</code></h2>
+<p>Single reproducible command. Launches <code>postgres:16-alpine</code> in a</p>
+<p>throwaway container, runs migrations + seed, boots the API against it,</p>
+<p>runs the full smoke, then does a live <strong>status transition</strong> + reads</p>
+<p>the resulting <code>workflow_events</code> row back.</p>
+<p>Local run on 2026-04-18:</p>
+<pre class="code lang-"><code>
+==&gt; alembic upgrade head on Postgres
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Running upgrade  -&gt; 43ccbf363a8f, create initial chartnav tables
+INFO  [alembic.runtime.migration] Running upgrade 43ccbf363a8f -&gt; a1b2c3d4e5f6, add encounters and workflow_events
+
+==&gt; seed (idempotent, run twice)
+Seed complete.
+  demo-eye-clinic: organization_id=1 location_id=1
+  northside-retina: organization_id=2 location_id=2
+
+==&gt; smoke: http://127.0.0.1:8766
+  ok  /health 200
+  ok  /health body.status=ok
+  ok  /me 401 without auth
+  ok  /me 200 role=admin org=1
+  ok  /encounters 401 without auth
+  ok  /encounters 200 admin1
+  ok  /encounters?organization_id=2 (cross-org) -&gt; 403
+  ok  GET /encounters/1 as admin1 -&gt; 200
+  ok  GET /encounters/3 cross-org -&gt; 404
+==&gt; all smoke checks passed
+==&gt; extra: status transition on Postgres
+  ok  PT-1001 in_progress -&gt; draft_ready (clinician)
+  ok  workflow_events row recorded on Postgres
+==&gt; Postgres parity: PASS
+</code></pre>
+<h2>CI coverage</h2>
+<p><code>.github/workflows/ci.yml</code> → <code>backend-postgres</code> job:</p>
+<p>1. Spins up a <code>postgres:16-alpine</code> service container on port 5432.</p>
+<p>2. Installs the API with the <code>[postgres]</code> extra.</p>
+<p>3. <code>alembic upgrade head</code> (direct env <code>DATABASE_URL=postgresql+psycopg://…</code>).</p>
+<p>4. Seeds twice (idempotency proof).</p>
+<p>5. Boots uvicorn, waits for <code>/health</code>.</p>
+<p>6. Runs <code>scripts/smoke.sh</code>.</p>
+<p>7. Executes the same <code>clinician → draft_ready</code> status transition and</p>
+<p>asserts the returned row.</p>
+<p>If any step fails, the job fails and nothing merges.</p>
+<h2>What&#x27;s covered / not covered</h2>
+<table><thead><tr><th>Surface</th><th>Verified on Postgres</th></tr></thead><tbody>
+<tr><td>Schema migrations</td><td>✅</td></tr>
+<tr><td>Idempotent seed</td><td>✅</td></tr>
+<tr><td>App boot</td><td>✅</td></tr>
+<tr><td><code>/health</code>, <code>/me</code></td><td>✅</td></tr>
+<tr><td><code>/encounters</code> (list + filters + cross-org 403)</td><td>✅</td></tr>
+<tr><td><code>/encounters/{id}</code> 200 / 404 cross-org</td><td>✅</td></tr>
+<tr><td>State transition write + event emit</td><td>✅</td></tr>
+<tr><td>pytest suite (28 tests)</td><td>Runs on SQLite only today — see Known Gaps.</td></tr>
+</tbody></table>
+<p>The pytest suite still targets SQLite because the TestClient fixture</p>
+<p>uses <code>tmp_path</code> file DBs. Migrating that to a Postgres matrix is the</p>
+<p>obvious next CI upgrade; the DB layer is ready for it.</p>
+</section>
+<section id="sec-16"><h2>Diagram — System architecture</h2>
 <h1>System Architecture</h1>
 <div class="mermaid">
 flowchart LR
+  subgraph Clients
+    C["Client<br/>curl · tests · apps/web"]
+  end
+
   subgraph Runtime
-    Client["Client<br/>curl · tests · apps/web"]
     FastAPI["FastAPI<br/>apps/api/app/main.py"]
-    Authn["require_caller<br/>apps/api/app/auth.py<br/>(CHARTNAV_AUTH_MODE seam)"]
-    Authz["require_* / assert_can_transition<br/>apps/api/app/authz.py"]
-    Router["APIRouter<br/>apps/api/app/api/routes.py"]
+    Config["settings<br/>apps/api/app/config.py<br/>(env-driven)"]
+    Authn["require_caller<br/>auth.py<br/>header · bearer"]
+    Authz["authz.py<br/>RBAC"]
+    Router["APIRouter<br/>routes.py"]
     SM["State Machine<br/>ALLOWED_TRANSITIONS"]
-    Scope["Org Scoping<br/>404 cross-org read · 403 assertion"]
-    DB[("SQLite<br/>apps/api/chartnav.db")]
+    DB["db.py<br/>SQLAlchemy Core"]
+    Engine[(SA Engine)]
   end
+
+  subgraph Storage
+    SQLite[("SQLite<br/>apps/api/chartnav.db")]
+    PG[("Postgres 16")]
+  end
+
+  subgraph Deploy
+    Dockerfile["Dockerfile<br/>(non-root, healthcheck)"]
+    Entry["entrypoint.sh<br/>migrate + exec"]
+    Compose["infra/docker/<br/>docker-compose.prod.yml"]
+  end
+
   subgraph Tooling
-    Alembic["Alembic<br/>apps/api/alembic/"]
-    Seed["scripts_seed.py<br/>2 orgs · 5 users · 3 roles"]
-    PyTest["pytest<br/>apps/api/tests/"]
-    Smoke["smoke.sh<br/>apps/api/scripts/"]
-    DocBuild["build_docs.py<br/>scripts/"]
-    Make["Makefile<br/>make verify"]
-    CI[".github/workflows/ci.yml<br/>backend + docs jobs"]
+    Alembic["Alembic<br/>DATABASE_URL-aware"]
+    Seed["scripts_seed.py<br/>(cross-dialect)"]
+    PyTest["pytest (28)"]
+    Smoke["scripts/smoke.sh"]
+    Verify["scripts/verify.sh"]
+    PgVerify["scripts/pg_verify.sh"]
+    DocBuild["scripts/build_docs.py"]
+    Make["Makefile"]
+    CI[".github/workflows/ci.yml<br/>backend-sqlite · backend-postgres · docker-build · docs"]
   end
 
-  Client -->|"HTTP + X-User-Email"| FastAPI
+  C -->|"HTTP + X-User-Email or Bearer"| FastAPI
   FastAPI --> Authn
-  Authn -->|"users lookup"| DB
-  Authn -->|"Caller(role, org)"| Authz
+  Authn --> Authz
   Authz --> Router
-  Router --> Scope
   Router --> SM
-  Router -->|"scoped SQL"| DB
+  Router --> DB
+  DB --> Engine
+  Engine -->|"sqlite:///..."| SQLite
+  Engine -->|"postgresql+psycopg://..."| PG
+  Config -.-> Authn
+  Config -.-> DB
 
-  Alembic -.-> DB
+  Alembic -.-> Engine
   Seed -.-> DB
-  PyTest -.->|"TestClient + temp DB"| FastAPI
+  PyTest -.->|"TestClient"| FastAPI
   Smoke -.->|"curl"| FastAPI
-  DocBuild -.->|"reads docs/build + docs/diagrams"| DocBuild
+  Verify --> Make
+  PgVerify --> Make
+  DocBuild --> Make
   Make --> Alembic
   Make --> Seed
   Make --> PyTest
-  Make --> Smoke
-  Make --> DocBuild
   CI --> Make
+  Dockerfile --> Entry
+  Entry --> Alembic
+  Entry --> FastAPI
+  Compose --> Dockerfile
+  Compose --> PG
 </div>
 </section>
-<section id="sec-13"><h2>Diagram — Encounter status machine</h2>
+<section id="sec-17"><h2>Diagram — Encounter status machine</h2>
 <h1>Encounter Status State Machine</h1>
 <div class="mermaid">
 stateDiagram-v2
@@ -889,7 +1285,7 @@ stateDiagram-v2
 <p>Legend: any edge not shown is rejected at <code>POST /encounters/{id}/status</code></p>
 <p>with HTTP 400 <code>invalid_transition</code>.</p>
 </section>
-<section id="sec-14"><h2>Diagram — ER</h2>
+<section id="sec-18"><h2>Diagram — ER</h2>
 <h1>ER Diagram</h1>
 <div class="mermaid">
 erDiagram
@@ -953,76 +1349,84 @@ erDiagram
 <p><code>users.organization_id</code> is the authoritative source of scope; never</p>
 <p>derived from client input.</p>
 </section>
-<section id="sec-15"><h2>Diagram — API / data flow</h2>
+<section id="sec-19"><h2>Diagram — API / data flow</h2>
 <h1>API / Data Flow &amp; CI</h1>
-<h2>Request path (happy + denial)</h2>
+<h2>Request path</h2>
 <div class="mermaid">
 sequenceDiagram
   autonumber
   participant C as Client
+  participant Cfg as app.config
   participant Authn as require_caller
   participant Authz as authz gate
   participant R as Route handler
   participant SM as State Machine
-  participant DB as SQLite
+  participant DB as SQLAlchemy Core → SQLite / Postgres
 
-  Note over C,DB: Happy path — clinician advances own encounter
+  Note over C,DB: header mode happy path
   C->>Authn: POST /encounters/1/status {"status":"draft_ready"}<br/>X-User-Email: clin@chartnav.local
-  Authn->>DB: SELECT user
+  Cfg-->>Authn: auth_mode=header
+  Authn->>DB: SELECT user WHERE email=:email
   DB-->>Authn: {role=clinician, org=1}
   Authn-->>Authz: Caller
-  Authz->>Authz: role in {admin, clinician}? ✓
+  Authz->>Authz: role in CAN_CREATE / TRANSITION?
   Authz-->>R: Caller
-  R->>DB: SELECT encounter 1
+  R->>DB: SELECT encounter 1 ...
   DB-->>R: row(org=1, status=in_progress)
-  R->>SM: is (in_progress → draft_ready) allowed?
+  R->>SM: (in_progress → draft_ready) allowed?
   SM-->>R: yes
-  R->>Authz: assert_can_transition(clinician, in_progress, draft_ready)
+  R->>Authz: assert_can_transition(clinician, ...)
   Authz-->>R: allowed
-  R->>DB: UPDATE + INSERT status_changed{changed_by=clin@...}
+  R->>DB: UPDATE + INSERT status_changed{changed_by}
   R-->>C: 200
 
-  Note over C,DB: Role denied — clinician tries review-stage edge
-  C->>Authn: POST /encounters/2/status {"status":"completed"}
-  Authn-->>Authz: Caller(role=clinician)
-  Authz->>SM: edge valid?
-  SM-->>Authz: yes
-  Authz->>Authz: clinician in role-set for (review_needed, completed)?
-  Authz-->>C: 403 role_cannot_transition
+  Note over C,DB: bearer mode honest refusal
+  C->>Authn: GET /me<br/>Authorization: Bearer ...
+  Cfg-->>Authn: auth_mode=bearer
+  Authn-->>C: 501 auth_bearer_not_implemented
 
-  Note over C,DB: Cross-org read — 404
-  C->>Authn: GET /encounters/3 as clin@chartnav.local
+  Note over C,DB: cross-org read
+  C->>Authn: GET /encounters/3 as org1
   R->>DB: SELECT encounter 3
   DB-->>R: row(org=2)
   R-->>C: 404 encounter_not_found
 
-  Note over C,DB: Missing / unknown identity
-  C->>Authn: GET /encounters (no header) → 401 missing_auth_header
-  C->>Authn: GET /encounters (bogus email) → 401 unknown_user
+  Note over C,DB: bad bearer config at boot
+  Cfg->>Cfg: CHARTNAV_AUTH_MODE=bearer but JWT env missing
+  Cfg-->>C: RuntimeError — app refuses to import
 </div>
 <h2>CI gate flow</h2>
 <div class="mermaid">
 flowchart TD
-  PR[["push / PR"]]
-  subgraph backend job
-    A[checkout] --> B[setup-python 3.11]
-    B --> C["pip install -e \".[dev]\""]
-    C --> D["alembic -x url=... upgrade head<br/>(isolated CI DB)"]
-    D --> E["seed twice (idempotency)"]
-    E --> F["pytest tests/ -v"]
-    F --> G["boot uvicorn + poll /health"]
-    G --> H["scripts/smoke.sh"]
+  PR[["push / PR"]] --> SQL[backend-sqlite]
+  SQL --> PG[backend-postgres]
+  SQL --> DK[docker-build]
+  SQL --> DOC[docs]
+
+  subgraph "backend-sqlite"
+    A1[install deps] --> A2[alembic upgrade]
+    A2 --> A3[seed x2]
+    A3 --> A4[pytest 28]
+    A4 --> A5[scripts/verify.sh]
   end
-  subgraph docs job
-    I[checkout] --> J[apt chromium]
-    J --> K["python scripts/build_docs.py"]
-    K --> L["upload HTML + PDF artifact"]
+
+  subgraph "backend-postgres (service: postgres:16-alpine)"
+    B1[install + psycopg] --> B2[alembic upgrade]
+    B2 --> B3[seed x2]
+    B3 --> B4[boot + scripts/smoke.sh]
+    B4 --> B5[live status transition]
   end
-  PR --> A
-  H --> I
-  classDef fail fill:#fee,stroke:#c33
-  class F,G,H,K,L fail
+
+  subgraph "docker-build"
+    D1[buildx build] --> D2[run container]
+    D2 --> D3[scripts/smoke.sh]
+  end
+
+  subgraph "docs"
+    X1[apt chromium] --> X2[scripts/build_docs.py]
+    X2 --> X3[upload artifact]
+  end
 </div>
-<p>Any failure in a red-bordered step fails CI.</p>
+<p>Any red-bordered step failing fails CI.</p>
 </section>
 </body></html>

@@ -13,7 +13,7 @@ PIP     := $(VENV)/bin/pip
 DEV_DB  := $(API_DIR)/chartnav.db
 PORT    := 8765
 
-.PHONY: help install migrate seed test boot smoke docs verify clean reset-db
+.PHONY: help install migrate seed test boot smoke docs verify clean reset-db pg-verify docker-build docker-up docker-down
 
 help:
 	@awk 'BEGIN{FS=":.*?## "} /^[a-zA-Z_-]+:.*?## /{printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -51,6 +51,18 @@ reset-db: ## Drop + recreate the dev DB (migrate + seed)
 # pipe is never entangled with uvicorn.
 verify: reset-db test ## Full local gate: reset DB, tests, boot + smoke
 	bash scripts/verify.sh
+
+pg-verify: ## Full Postgres parity proof (requires docker)
+	bash scripts/pg_verify.sh
+
+docker-build: ## Build the production API image
+	docker build -t chartnav-api:local apps/api
+
+docker-up: ## Start the production compose stack (API + Postgres)
+	cd infra/docker && docker compose -f docker-compose.prod.yml up --build
+
+docker-down: ## Stop the production compose stack
+	cd infra/docker && docker compose -f docker-compose.prod.yml down -v
 
 clean: ## Remove caches + dev DB
 	rm -f $(DEV_DB)

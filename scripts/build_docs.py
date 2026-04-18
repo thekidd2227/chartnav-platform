@@ -34,6 +34,10 @@ SECTIONS = [
     ("08 — Test strategy", BUILD / "08-test-strategy.md"),
     ("09 — CI & deploy hardening", BUILD / "09-ci-and-deploy-hardening.md"),
     ("10 — Doc artifact pipeline", BUILD / "10-doc-artifact-pipeline.md"),
+    ("11 — Production-auth seam", BUILD / "11-production-auth-seam.md"),
+    ("12 — Runtime config", BUILD / "12-runtime-config.md"),
+    ("13 — Deploy target", BUILD / "13-deploy-target.md"),
+    ("14 — Postgres parity", BUILD / "14-postgres-parity.md"),
     ("Diagram — System architecture", DIAGR / "system-architecture.md"),
     ("Diagram — Encounter status machine", DIAGR / "encounter-status-machine.md"),
     ("Diagram — ER", DIAGR / "er-diagram.md"),
@@ -52,9 +56,11 @@ date.
 
 **Phase 4 — RBAC + full scoping + tests.** `apps/api/app/authz.py` introduces `admin` / `clinician` / `reviewer` roles and per-edge transition rules. `/organizations`, `/locations`, `/users` are now authenticated and scoped. `{error_code, reason}` envelope is standardized. 25-test pytest suite covers auth, scoping, RBAC, state-machine invariants.
 
-**Phase 5 — CI + runtime hardening (this phase).** GitHub Actions workflow runs `pip install -e ".[dev]"`, Alembic upgrade on an isolated CI DB, idempotent seed (executed twice), the full pytest suite, and a live `/health`/`/me`/`/encounters` smoke boot. A separate `docs` job regenerates the final HTML/PDF and uploads them as artifacts. A root `Makefile`, `apps/api/scripts/smoke.sh`, and `scripts/build_docs.py` codify the local verification + doc-build paths.
+**Phase 5 — CI + runtime hardening.** GitHub Actions workflow runs install + Alembic upgrade on an isolated CI DB + idempotent seed + pytest + live smoke. A separate `docs` job regenerates the final HTML/PDF. Root `Makefile`, `apps/api/scripts/smoke.sh`, and `scripts/build_docs.py` codify the local verification + doc-build paths.
 
-Preserved untouched: `/health`, `/`, Alembic history, SQLite dev workflow, state machine + filtering surface, workflow_events model.
+**Phase 6 — Production seam + deploy target + Postgres parity (this phase).** DB layer moved to SQLAlchemy Core (`apps/api/app/db.py`) — same queries run on SQLite and Postgres via `:name` binds, `COALESCE`, and an `insert_returning_id` helper. New `apps/api/app/config.py` centralizes env-driven settings and validates auth mode at import time. `auth.py` gained a `resolve_caller_from_bearer` placeholder that returns **501** rather than fake-serving traffic. Dockerfile hardened (non-root, HEALTHCHECK, entrypoint that runs migrations at start). `infra/docker/docker-compose.prod.yml` brings up API + Postgres. `scripts/pg_verify.sh` spins a throwaway Postgres container and proves migrations + seed + boot + smoke + a real state transition + event write. CI expanded to four jobs: `backend-sqlite`, `backend-postgres`, `docker-build`, `docs`.
+
+Preserved untouched: `/health`, `/`, Alembic history (still 2 revisions), SQLite dev workflow, state machine + filtering surface, workflow_events model, existing endpoint contracts.
 """
 
 
