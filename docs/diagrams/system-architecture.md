@@ -2,18 +2,20 @@
 
 ```mermaid
 flowchart LR
-  subgraph Clients
-    C["Client<br/>curl · tests · apps/web"]
+  subgraph Web["Frontend (apps/web, Vite + React + TS)"]
+    UI["App.tsx<br/>list · detail · timeline · actions"]
+    ApiClient["api.ts<br/>typed client + ApiError"]
+    Ident["identity.ts<br/>localStorage dev caller"]
   end
 
-  subgraph Runtime
-    FastAPI["FastAPI<br/>apps/api/app/main.py"]
-    Config["settings<br/>apps/api/app/config.py<br/>(env-driven)"]
-    Authn["require_caller<br/>auth.py<br/>header · bearer"]
-    Authz["authz.py<br/>RBAC"]
-    Router["APIRouter<br/>routes.py"]
-    SM["State Machine<br/>ALLOWED_TRANSITIONS"]
-    DB["db.py<br/>SQLAlchemy Core"]
+  subgraph Runtime["Backend (apps/api, FastAPI)"]
+    FastAPI["main.py"]
+    Config["config.py<br/>env-driven settings"]
+    Authn["require_caller<br/>header · bearer"]
+    Authz["authz.py RBAC"]
+    Router["routes.py"]
+    SM["State Machine"]
+    DB["db.py · SA Core"]
     Engine[(SA Engine)]
   end
 
@@ -23,45 +25,49 @@ flowchart LR
   end
 
   subgraph Deploy
-    Dockerfile["Dockerfile<br/>(non-root, healthcheck)"]
+    Dockerfile["Dockerfile<br/>non-root · healthcheck"]
     Entry["entrypoint.sh<br/>migrate + exec"]
-    Compose["infra/docker/<br/>docker-compose.prod.yml"]
+    Compose["docker-compose.prod.yml"]
   end
 
   subgraph Tooling
     Alembic["Alembic<br/>DATABASE_URL-aware"]
-    Seed["scripts_seed.py<br/>(cross-dialect)"]
+    Seed["scripts_seed.py"]
     PyTest["pytest (28)"]
     Smoke["scripts/smoke.sh"]
     Verify["scripts/verify.sh"]
     PgVerify["scripts/pg_verify.sh"]
     DocBuild["scripts/build_docs.py"]
-    Make["Makefile"]
-    CI[".github/workflows/ci.yml<br/>backend-sqlite · backend-postgres · docker-build · docs"]
+    Make["Makefile<br/>install · verify · pg-verify · dev · web-*"]
+    CI[".github/workflows/ci.yml"]
   end
 
-  C -->|"HTTP + X-User-Email or Bearer"| FastAPI
+  UI --> ApiClient
+  ApiClient -->|"HTTP + X-User-Email"| FastAPI
+  Ident -. stored caller .-> ApiClient
+
   FastAPI --> Authn
   Authn --> Authz
   Authz --> Router
   Router --> SM
   Router --> DB
   DB --> Engine
-  Engine -->|"sqlite:///..."| SQLite
-  Engine -->|"postgresql+psycopg://..."| PG
+  Engine --> SQLite
+  Engine --> PG
   Config -.-> Authn
   Config -.-> DB
 
   Alembic -.-> Engine
   Seed -.-> DB
-  PyTest -.->|"TestClient"| FastAPI
-  Smoke -.->|"curl"| FastAPI
+  PyTest -.-> FastAPI
+  Smoke -.-> FastAPI
   Verify --> Make
   PgVerify --> Make
   DocBuild --> Make
   Make --> Alembic
   Make --> Seed
   Make --> PyTest
+  Make -. web-dev · web-build .-> UI
   CI --> Make
   Dockerfile --> Entry
   Entry --> Alembic

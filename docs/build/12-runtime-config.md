@@ -50,6 +50,21 @@ other module imports from there; nothing else reads `os.environ`.
   `psycopg2` which is not installed. `psycopg[binary]` is declared in
   `apps/api/pyproject.toml` as the `[postgres]` extra.
 
+## Frontend runtime config
+
+The web app reads exactly one env var at build time:
+
+| Variable        | Required? | Default                  | Purpose                              |
+|-----------------|-----------|--------------------------|--------------------------------------|
+| `VITE_API_URL`  | no        | `http://localhost:8000`  | Base URL the API client points at.   |
+
+Template: `apps/web/.env.example`. Copy to `.env` to override for a
+non-default backend.
+
+Vite substitutes `import.meta.env.VITE_API_URL` into the bundle at build.
+Nothing else about the UI comes from env today — dev identity is
+selected inside the app and stored in `localStorage`.
+
 ## What this phase explicitly does NOT do
 
 - No secret store integration (AWS SM, Vault, etc.).

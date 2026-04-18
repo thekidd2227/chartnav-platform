@@ -65,6 +65,15 @@ make docker-build
 - `make verify` (SQLite): 28 pytest + 9 smoke — all green
 - `scripts/pg_verify.sh`: migrations + seed (x2) + smoke + status transition + event write — **PASS**
 
+## Frontend verification (phase 7)
+
+- `npx tsc --noEmit` — clean.
+- `npm run build` — emits `dist/index.html` + hashed JS/CSS.
+- Live integration against uvicorn: every endpoint the UI hits
+  returns the expected status across all 5 seeded roles (see
+  `06-known-gaps.md` matrix).
+- No automated frontend tests yet — next item.
+
 ## Gaps not yet covered
 
 - pytest matrix against Postgres (the fixture is already env-driven).

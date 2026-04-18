@@ -4,106 +4,80 @@ Reverse-chronological.
 
 ---
 
-## 2026-04-18 — Phase 6: production seam + deploy target + Postgres parity
+## 2026-04-18 — Phase 7: frontend workflow UI
 
 ### Step 1 — Baseline
-- Starting head: `cfa8ca9` (CI + runtime hardening).
+- Starting head: `700bb0b` (prod auth seam + Docker + Postgres parity).
+- `apps/web/` was a placeholder — a single `App.jsx` hitting `/health` and an unrelated `main.tsx`.
 
-### Step 2 — Runtime config module
-- New `apps/api/app/config.py`. All env reads centralized into
-  `settings = _load()`. Validates `CHARTNAV_AUTH_MODE` and demands the
-  three `CHARTNAV_JWT_*` vars if mode is `bearer` — otherwise raises at
-  import time. No module besides `app.config` touches `os.environ`.
-- New `apps/api/.env.example` with the full documented contract.
+### Step 2 — Typed API client
+- New `apps/web/src/api.ts`:
+  - `API_URL` from `VITE_API_URL`, fallback `http://localhost:8000`.
+  - `ApiError(status, error_code, reason)` surfaces the backend envelope.
+  - Typed wrappers for `/health`, `/me`, `/encounters`, `/encounters/{id}`, `/encounters/{id}/events`, `POST /encounters/{id}/events`, `POST /encounters/{id}/status`, `/locations`.
+  - Pure helpers `allowedNextStatuses(role, status)` and `canCreateEvent(role)` that mirror `authz.TRANSITION_ROLES` — for UI affordances only; backend still governs.
+- New `apps/web/src/identity.ts` — seeded users list (all 5 demo identities), localStorage persistence, safe fallback.
+- New `apps/web/src/vite-env.d.ts` — Vite ambient types for `import.meta.env`.
 
-### Step 3 — DB layer (SQLAlchemy Core, cross-dialect)
-- New `apps/api/app/db.py` — `engine`, `transaction()`, `fetch_all`,
-  `fetch_one`, `insert_returning_id`. SQLite connect-args and PRAGMA
-  FK enforcement handled automatically.
-- Refactored `apps/api/app/api/routes.py`: every query now uses named
-  (`:name`) bind parameters and `transaction()` for writes. The old
-  `sqlite3`-specific `lastrowid` is gone.
-- Refactored `apps/api/scripts_seed.py` to the same shape. Swapped
-  `IFNULL` → `COALESCE`. Timestamp columns still use server-side
-  `CURRENT_TIMESTAMP` for dialect-agnostic behavior.
-- `apps/api/app/auth.py` now reads users via `db.fetch_one`; no more
-  direct sqlite3 use.
-- `apps/api/alembic/env.py` now also honors `DATABASE_URL` from env
-  (already honored `-x sqlalchemy.url=`), so Alembic works uniformly in
-  CI and the deploy entrypoint.
+### Step 3 — App shell
+- Rewrote `apps/web/src/App.tsx` as the full workflow app:
+  - Sticky header: brand, caller chip, API chip, identity picker (seeded + custom).
+  - Two-column layout (collapses on mobile).
+- `apps/web/src/main.tsx` imports `App` + `styles.css`.
+- New `apps/web/src/styles.css`: one file, CSS variables, color-coded status pills, filter/list/detail/timeline/form styles.
 
-### Step 4 — Auth seam hardening
-- Split resolvers: `resolve_caller_from_header` (dev) and
-  `resolve_caller_from_bearer` (prod-shaped placeholder). `require_caller`
-  dispatches via `settings.auth_mode`.
-- Bearer mode returns **501** `auth_bearer_not_implemented` when a
-  token is actually presented. That's deliberate — it's better to fail
-  loudly than pretend half-auth.
-- Added `apps/api/tests/test_auth_modes.py` (3 tests) asserting:
-  - bearer-mode without JWT env → `RuntimeError` at `import app.config`
-  - bearer-mode with JWT env but a token → 501
-  - bearer-mode without a token → 401 `missing_auth_header`
-  - header-mode (default) still returns correct caller
+### Step 4 — Encounter list + filters
+- Filter bar for `status`, `provider_name`, `location_id`; `clear` button when filters are set.
+- Loading / empty / error states in the list.
+- Row click selects an encounter (and keyboard Enter/Space).
 
-### Step 5 — Deploy target
-- `apps/api/Dockerfile` rewritten: non-root user, `curl`-based
-  HEALTHCHECK, `entrypoint.sh`, installs the `[postgres]` extra.
-- `apps/api/entrypoint.sh` NEW: asserts `DATABASE_URL`, runs
-  `alembic upgrade head`, optionally runs seed when
-  `CHARTNAV_RUN_SEED=1`, then `exec`s uvicorn.
-- `infra/docker/docker-compose.prod.yml` NEW: API + Postgres with a
-  healthcheck dependency gate and env-driven defaults.
+### Step 5 — Encounter detail + timeline
+- Facts grid (org, location, scheduled/started/completed/created).
+- Color-coded status pill.
+- Timeline renders `event_data` as a readable `key: value · …` line (objects), verbatim for strings; falls back to `—` when null.
 
-### Step 6 — Postgres parity
-- `apps/api/pyproject.toml` gains a `[postgres]` extra pinning
-  `psycopg[binary]>=3.2`.
-- `scripts/pg_verify.sh` NEW: throwaway `postgres:16-alpine` container
-  → migrate → seed twice (idempotency) → boot API → run the shared
-  smoke script → live status transition → confirm `workflow_events`
-  row was written. Traps cleanup on any exit.
-- Local run: **PASS** on 2026-04-18.
+### Step 6 — Role-aware actions
+- Allowed transitions rendered as buttons based on `(role, current_status)`. When none are allowed, a clean note explains why — no fake-disabled buttons.
+- Event composer hidden for reviewers with an explanation; admins + clinicians get it.
+- On success: refresh detail + events + list; show a green banner.
+- On failure: render the exact `{status} {error_code} — {reason}` string in a red banner. Nothing is silently swallowed.
 
-### Step 7 — CI expansion
-- `.github/workflows/ci.yml` now has four jobs:
-  - `backend-sqlite` — existing pytest + SQLite smoke (unchanged contract).
-  - `backend-postgres` — service-container Postgres, alembic upgrade,
-    seed twice, boot, smoke, live status transition.
-  - `docker-build` — buildx build of the API image, run it with
-    SQLite + `CHARTNAV_RUN_SEED=1`, smoke the live container.
-  - `docs` — regenerate HTML + PDF, upload as artifact.
-- `docker-build` and `docs` both `needs: backend-sqlite`;
-  `backend-postgres` also `needs: backend-sqlite`.
+### Step 7 — Dev UX
+- New `apps/web/.env.example` — `VITE_API_URL`.
+- Makefile: `web-install`, `web-dev`, `web-build`, `web-typecheck`, `dev` (boots both).
+- `make dev` uses a trap-based teardown so Ctrl-C kills both backend and frontend.
 
-### Step 8 — Makefile + tooling
-- New targets: `pg-verify`, `docker-build`, `docker-up`, `docker-down`.
-- `verify.sh` already tolerant of missing `.venv/bin/uvicorn` (falls
-  back to PATH) so both local and CI paths work.
+### Step 8 — Local verification
+- `npx tsc --noEmit` clean after adding `vite-env.d.ts`.
+- `npm run build` → `dist/` produced (154 KB JS / 6 KB CSS / 0.4 KB HTML).
+- Ran uvicorn + exercised every endpoint the UI depends on against all 5 seeded roles:
+  - `/me` returns 200 for all 5, 401 for unknown/empty.
+  - `/encounters` scoped correctly (org1 sees 2 rows, org2 sees `[3]`).
+  - Filter `status=in_progress` → `['PT-1001']`.
+  - Clinician `in_progress → draft_ready` → 200.
+  - Clinician `review_needed → completed` → 403 `role_cannot_transition`.
+  - Reviewer `review_needed → completed` → 200.
+  - Reviewer `POST event` → 403 `role_cannot_create_event`.
+  - Admin `POST event` → 201.
+- Backend tests still pass (no backend changes this phase).
 
-### Step 9 — Tests updated
-- `apps/api/tests/conftest.py` now sets `DATABASE_URL` via monkeypatch
-  per test and flushes cached `app.*` modules so `settings` re-reads
-  env cleanly. Works identically for SQLite (today) and Postgres (a
-  matrix we'll flip when ready).
-- pytest suite: **28 passed** locally and in `backend-sqlite`.
-
-### Step 10 — Docs
-- New: `11-production-auth-seam.md`, `12-runtime-config.md`,
-  `13-deploy-target.md`, `14-postgres-parity.md`.
-- Updated: `01-current-state.md`, `05-build-log.md`, `06-known-gaps.md`,
-  `07-auth-and-scoping.md`, `08-test-strategy.md`,
-  `09-ci-and-deploy-hardening.md`. Diagrams refreshed
-  (`system-architecture`, `api-data-flow`).
-- `scripts/build_docs.py` now picks up `11…14` automatically.
+### Step 9 — Docs
+- New: `15-frontend-integration.md`.
+- Updated: `01-current-state.md`, `05-build-log.md`, `06-known-gaps.md`, `08-test-strategy.md`, `12-runtime-config.md`.
+- Diagrams updated: `system-architecture`, `api-data-flow` (with frontend layer).
+- `scripts/build_docs.py` now picks up section 15.
 - Final HTML + PDF regenerated.
 
-### Step 11 — Hygiene
-- Dev DB reset to seeded state before commit.
-- `.gitignore` already excludes `.pytest_cache`, `__pycache__`, `*.db`.
+### Step 10 — Hygiene
+- Removed stale `apps/web/src/App.jsx`.
+- `.gitignore` already excludes `node_modules`, `dist`, caches; reran `npm install` and only `package-lock.json` grew.
+- Dev DB reset before commit.
 
 ---
 
 ## Prior phases
 
+- **Phase 6 — Prod auth seam + Docker + Postgres parity** (`700bb0b`)
 - **Phase 5 — CI + runtime hardening + doc pipeline** (`cfa8ca9`)
 - **Phase 4 — RBAC + full scoping + pytest** (`c6f29e6`)
 - **Phase 3 — Dev auth + org scoping** (`efb5b56`)

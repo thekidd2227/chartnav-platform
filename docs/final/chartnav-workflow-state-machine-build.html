@@ -39,7 +39,7 @@
   <div class="sub">Backend phases 1–5: spine → state machine → auth → RBAC → CI/hardening<br>
   Repo: <code>thekidd2227/chartnav-platform</code></div>
 </header>
-<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth, org scoping, RBAC</a></li><li><a href="#sec-9">08 — Test strategy</a></li><li><a href="#sec-10">09 — CI & deploy hardening</a></li><li><a href="#sec-11">10 — Doc artifact pipeline</a></li><li><a href="#sec-12">11 — Production-auth seam</a></li><li><a href="#sec-13">12 — Runtime config</a></li><li><a href="#sec-14">13 — Deploy target</a></li><li><a href="#sec-15">14 — Postgres parity</a></li><li><a href="#sec-16">Diagram — System architecture</a></li><li><a href="#sec-17">Diagram — Encounter status machine</a></li><li><a href="#sec-18">Diagram — ER</a></li><li><a href="#sec-19">Diagram — API / data flow</a></li></ol></nav>
+<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth, org scoping, RBAC</a></li><li><a href="#sec-9">08 — Test strategy</a></li><li><a href="#sec-10">09 — CI & deploy hardening</a></li><li><a href="#sec-11">10 — Doc artifact pipeline</a></li><li><a href="#sec-12">11 — Production-auth seam</a></li><li><a href="#sec-13">12 — Runtime config</a></li><li><a href="#sec-14">13 — Deploy target</a></li><li><a href="#sec-15">14 — Postgres parity</a></li><li><a href="#sec-16">15 — Frontend integration</a></li><li><a href="#sec-17">Diagram — System architecture</a></li><li><a href="#sec-18">Diagram — Encounter status machine</a></li><li><a href="#sec-19">Diagram — ER</a></li><li><a href="#sec-20">Diagram — API / data flow</a></li></ol></nav>
 <section id="sec-1"><h2>Executive summary</h2>
 <p>This document consolidates <strong>all</strong> ChartNav backend phases delivered to</p>
 <p>date.</p>
@@ -48,77 +48,71 @@
 <p><strong>Phase 3 — Dev auth + org scoping.</strong> <code>apps/api/app/auth.py</code> resolves the caller from <code>X-User-Email</code>. Every encounter route became org-scoped: cross-org reads return 404, cross-org body/query assertions 403.</p>
 <p><strong>Phase 4 — RBAC + full scoping + tests.</strong> <code>apps/api/app/authz.py</code> introduces <code>admin</code> / <code>clinician</code> / <code>reviewer</code> roles and per-edge transition rules. <code>/organizations</code>, <code>/locations</code>, <code>/users</code> are now authenticated and scoped. <code>{error_code, reason}</code> envelope is standardized. 25-test pytest suite covers auth, scoping, RBAC, state-machine invariants.</p>
 <p><strong>Phase 5 — CI + runtime hardening.</strong> GitHub Actions workflow runs install + Alembic upgrade on an isolated CI DB + idempotent seed + pytest + live smoke. A separate <code>docs</code> job regenerates the final HTML/PDF. Root <code>Makefile</code>, <code>apps/api/scripts/smoke.sh</code>, and <code>scripts/build_docs.py</code> codify the local verification + doc-build paths.</p>
-<p><strong>Phase 6 — Production seam + deploy target + Postgres parity (this phase).</strong> DB layer moved to SQLAlchemy Core (<code>apps/api/app/db.py</code>) — same queries run on SQLite and Postgres via <code>:name</code> binds, <code>COALESCE</code>, and an <code>insert_returning_id</code> helper. New <code>apps/api/app/config.py</code> centralizes env-driven settings and validates auth mode at import time. <code>auth.py</code> gained a <code>resolve_caller_from_bearer</code> placeholder that returns <strong>501</strong> rather than fake-serving traffic. Dockerfile hardened (non-root, HEALTHCHECK, entrypoint that runs migrations at start). <code>infra/docker/docker-compose.prod.yml</code> brings up API + Postgres. <code>scripts/pg_verify.sh</code> spins a throwaway Postgres container and proves migrations + seed + boot + smoke + a real state transition + event write. CI expanded to four jobs: <code>backend-sqlite</code>, <code>backend-postgres</code>, <code>docker-build</code>, <code>docs</code>.</p>
-<p>Preserved untouched: <code>/health</code>, <code>/</code>, Alembic history (still 2 revisions), SQLite dev workflow, state machine + filtering surface, workflow_events model, existing endpoint contracts.</p>
+<p><strong>Phase 6 — Production seam + deploy target + Postgres parity.</strong> DB layer moved to SQLAlchemy Core. <code>apps/api/app/config.py</code> centralizes env. <code>auth.py</code> gained a bearer stub that returns 501 honestly. Dockerfile hardened, <code>docker-compose.prod.yml</code> + <code>scripts/pg_verify.sh</code> + <code>backend-postgres</code> CI job land.</p>
+<p><strong>Phase 7 — Frontend workflow UI (this phase).</strong> <code>apps/web/</code> becomes a real app. Typed API client (<code>src/api.ts</code>) funnels every call through one surface that converts backend 4xx envelopes into <code>ApiError</code> for the UI. <code>src/identity.ts</code> persists the seeded dev caller in <code>localStorage</code>. <code>App.tsx</code> renders a two-pane workflow console: filtered encounter list, encounter detail with a facts grid and color-coded status, an event timeline, role-aware transition buttons, and a composer for adding events (hidden with explanation for reviewers). Error banners surface the exact <code>{error_code, reason}</code> the backend ships. <code>make dev</code> boots API + Vite together with trap-based teardown. No backend contract changes.</p>
+<p>Preserved untouched: <code>/health</code>, <code>/</code>, Alembic history, SQLite dev workflow, state machine + filtering surface, workflow_events model, existing endpoint contracts.</p>
 </section>
 <section id="sec-2"><h2>01 — Current state</h2>
 <h1>ChartNav — Current State</h1>
-<p><strong>As of:</strong> 2026-04-18 (phase: production seam, deploy target, Postgres parity)</p>
+<p><strong>As of:</strong> 2026-04-18 (phase: frontend workflow UI)</p>
 <h2>Repo layout (relevant)</h2>
 <pre class="code lang-"><code>
 chartnav-platform/
-├── .github/workflows/ci.yml         # backend-sqlite + backend-postgres + docker-build + docs
-├── Makefile                         # install · migrate · seed · test · verify · pg-verify · docker-*
-├── scripts/
-│   ├── build_docs.py                # reproducible HTML/PDF build
-│   ├── verify.sh                    # boot + smoke teardown
-│   └── pg_verify.sh                 # NEW — end-to-end Postgres parity proof
+├── .github/workflows/ci.yml     # backend-sqlite · backend-postgres · docker-build · docs
+├── Makefile                     # install · verify · pg-verify · docker-* · web-* · dev
+├── scripts/                     # build_docs.py · verify.sh · pg_verify.sh
 ├── apps/
 │   ├── api/
-│   │   ├── Dockerfile               # hardened: non-root, healthcheck, entrypoint
-│   │   ├── entrypoint.sh            # NEW — migrate-on-start, optional seed, exec CMD
-│   │   ├── .env.example             # runtime contract (env-first)
-│   │   ├── app/main.py
-│   │   ├── app/config.py            # NEW — central settings from env
-│   │   ├── app/db.py                # NEW — SA Core, cross-dialect
-│   │   ├── app/auth.py              # header + bearer resolvers behind one seam
-│   │   ├── app/authz.py             # RBAC
-│   │   ├── app/api/routes.py        # all queries now :name-bound
-│   │   ├── alembic.ini
-│   │   ├── alembic/env.py           # honors `-x` AND `DATABASE_URL`
-│   │   ├── alembic/versions/        # 2 migrations (unchanged)
-│   │   ├── scripts_seed.py          # rewritten on SA; cross-dialect
-│   │   ├── scripts/smoke.sh         # shell smoke (reused across envs)
-│   │   └── tests/
-│   │       ├── conftest.py          # env-based per-test DB
-│   │       ├── test_auth.py
-│   │       ├── test_auth_modes.py   # NEW — header + bearer seam
-│   │       ├── test_rbac.py
-│   │       └── test_scoping.py
+│   │   ├── Dockerfile · entrypoint.sh
+│   │   ├── .env.example
+│   │   ├── app/{main,config,db,auth,authz}.py
+│   │   ├── app/api/routes.py
+│   │   ├── alembic/
+│   │   ├── scripts_seed.py
+│   │   ├── scripts/smoke.sh
+│   │   └── tests/               # 28 pytest incl. 3 auth-mode tests
 │   └── web/
-├── infra/docker/
-│   ├── docker-compose.yml           # dev stack
-│   └── docker-compose.prod.yml      # NEW — API + Postgres
-└── docs/
-    ├── build/ 01 … 14
-    ├── diagrams/
-    └── final/*.html / *.pdf
+│       ├── .env.example         # NEW — VITE_API_URL contract
+│       ├── src/
+│       │   ├── api.ts           # NEW — typed API client
+│       │   ├── identity.ts      # NEW — dev identity helpers
+│       │   ├── App.tsx          # NEW — full workflow UI
+│       │   ├── main.tsx         # wires App.tsx + styles.css
+│       │   ├── styles.css       # NEW — single CSS file
+│       │   └── vite-env.d.ts    # NEW — Vite ambient types
+│       └── package.json
+├── infra/docker/{docker-compose.yml,docker-compose.prod.yml}
+└── docs/build/01..15            # now including 15-frontend-integration.md
 </code></pre>
 <h2>Runtime baseline</h2>
 <ul>
-<li>Python 3.11+, FastAPI, <strong>SQLAlchemy Core</strong> now underpins all DB access.</li>
-<li>Database: <code>DATABASE_URL</code> → <code>sqlite:///apps/api/chartnav.db</code> (dev default) or <code>postgresql+psycopg://…</code> (prod / parity CI).</li>
-<li>Alembic head: <code>a1b2c3d4e5f6</code>. No new migrations this phase.</li>
-<li>Auth: <code>CHARTNAV_AUTH_MODE</code> (<code>header</code> dev / <code>bearer</code> prod-shaped placeholder). Config refuses to import if <code>bearer</code> is set without JWT env.</li>
-<li>RBAC: <code>admin</code> / <code>clinician</code> / <code>reviewer</code>.</li>
-<li>Error envelope: <code>{&quot;detail&quot;: {&quot;error_code&quot;: &quot;...&quot;, &quot;reason&quot;: &quot;...&quot;}}</code>.</li>
-<li>Deploy target: Docker image + <code>docker-compose.prod.yml</code> (API + Postgres).</li>
-<li>Tests: 28 pytest on SQLite (incl. 3 new auth-mode tests); Postgres parity proved end-to-end via <code>scripts/pg_verify.sh</code> and a dedicated CI job.</li>
+<li>Backend: Python 3.11, FastAPI, SQLAlchemy Core, SQLite or Postgres.</li>
+<li>Frontend: Vite 5 + React 18 + TypeScript; vanilla CSS.</li>
+<li>Auth: <code>CHARTNAV_AUTH_MODE=header</code> (dev) or <code>bearer</code> (placeholder 501).</li>
+<li>DB: SQLite default (<code>apps/api/chartnav.db</code>), Postgres via <code>DATABASE_URL=postgresql+psycopg://…</code>.</li>
+<li>Alembic head: <code>a1b2c3d4e5f6</code>. No schema changes this phase.</li>
+<li>RBAC: <code>admin</code>, <code>clinician</code>, <code>reviewer</code>.</li>
+<li>Error envelope: <code>{&quot;detail&quot;: {&quot;error_code&quot;: &quot;...&quot;, &quot;reason&quot;: &quot;...&quot;}}</code> — the frontend surfaces these verbatim.</li>
+</ul>
+<h2>Frontend capabilities (new)</h2>
+<ul>
+<li>Header with brand, caller chip (<code>email · role · org N</code>), API base URL, identity picker (5 seeded users + custom).</li>
+<li>Encounter list with filters (<code>status</code>, <code>provider_name</code>, <code>location_id</code>) and color-coded status pills.</li>
+<li>Encounter detail with facts grid, current status, allowed transitions (role-aware), event timeline.</li>
+<li>Event composer for admin / clinician; hidden with explanation for reviewer.</li>
+<li>All API errors surface as banners with <code>error_code</code> + <code>reason</code>.</li>
+<li>Dev identity persists in <code>localStorage</code>; switching reloads <code>/me</code> and list.</li>
 </ul>
 <h2>Verified working endpoints</h2>
-<p>Unchanged since phase 4. Now verified on BOTH SQLite and Postgres where applicable:</p>
-<ul>
-<li>Open: <code>GET /health</code>, <code>GET /</code></li>
-<li>Authed: <code>GET /me</code>, <code>GET /organizations</code>, <code>GET /locations</code>, <code>GET /users</code>, <code>GET /encounters</code> (+ filters), <code>GET /encounters/{id}</code>, <code>GET /encounters/{id}/events</code></li>
-<li>Authed + RBAC: <code>POST /encounters</code> (admin, clinician), <code>POST /encounters/{id}/events</code> (admin, clinician), <code>POST /encounters/{id}/status</code> (per-edge roles)</li>
-</ul>
+<p>No endpoint behavior changed this phase. All 28 pytest tests still pass;</p>
+<p>the UI exercises the full surface through the typed client.</p>
 <h2>Automation</h2>
 <ul>
-<li><code>make verify</code> — SQLite: reset-db + pytest (28) + boot + smoke (9) + teardown.</li>
-<li><code>make pg-verify</code> — spins throwaway Postgres, migrates + seeds + boots + smokes + exercises state transition. Teardown trap-guaranteed.</li>
-<li><code>make docker-build</code> / <code>make docker-up</code> / <code>make docker-down</code>.</li>
-<li><code>python scripts/build_docs.py</code> — deterministic HTML + PDF.</li>
-<li>CI: <code>backend-sqlite</code> → <code>backend-postgres</code> + <code>docker-build</code> + <code>docs</code> (each gated on its predecessor where it matters).</li>
+<li><code>make verify</code> — SQLite: reset-db + pytest + boot + smoke.</li>
+<li><code>make pg-verify</code> — Postgres parity proof.</li>
+<li><code>make web-install</code> / <code>web-dev</code> / <code>web-build</code> / <code>web-typecheck</code>.</li>
+<li><code>make dev</code> — boots API (8000) + Vite (5173) together with a shared trap-based teardown.</li>
+<li>CI: <code>backend-sqlite</code> → <code>backend-postgres</code> + <code>docker-build</code> + <code>docs</code>.</li>
 </ul>
 </section>
 <section id="sec-3"><h2>02 — Workflow state machine</h2>
@@ -334,147 +328,88 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <h1>Build Log</h1>
 <p>Reverse-chronological.</p>
 <p>---</p>
-<h2>2026-04-18 — Phase 6: production seam + deploy target + Postgres parity</h2>
+<h2>2026-04-18 — Phase 7: frontend workflow UI</h2>
 <h3>Step 1 — Baseline</h3>
 <ul>
-<li>Starting head: <code>cfa8ca9</code> (CI + runtime hardening).</li>
+<li>Starting head: <code>700bb0b</code> (prod auth seam + Docker + Postgres parity).</li>
+<li><code>apps/web/</code> was a placeholder — a single <code>App.jsx</code> hitting <code>/health</code> and an unrelated <code>main.tsx</code>.</li>
 </ul>
-<h3>Step 2 — Runtime config module</h3>
+<h3>Step 2 — Typed API client</h3>
 <ul>
-<li>New <code>apps/api/app/config.py</code>. All env reads centralized into</li>
+<li>New <code>apps/web/src/api.ts</code>:</li>
+<li><code>API_URL</code> from <code>VITE_API_URL</code>, fallback <code>http://localhost:8000</code>.</li>
+<li><code>ApiError(status, error_code, reason)</code> surfaces the backend envelope.</li>
+<li>Typed wrappers for <code>/health</code>, <code>/me</code>, <code>/encounters</code>, <code>/encounters/{id}</code>, <code>/encounters/{id}/events</code>, <code>POST /encounters/{id}/events</code>, <code>POST /encounters/{id}/status</code>, <code>/locations</code>.</li>
+<li>Pure helpers <code>allowedNextStatuses(role, status)</code> and <code>canCreateEvent(role)</code> that mirror <code>authz.TRANSITION_ROLES</code> — for UI affordances only; backend still governs.</li>
+<li>New <code>apps/web/src/identity.ts</code> — seeded users list (all 5 demo identities), localStorage persistence, safe fallback.</li>
+<li>New <code>apps/web/src/vite-env.d.ts</code> — Vite ambient types for <code>import.meta.env</code>.</li>
 </ul>
-<p><code>settings = _load()</code>. Validates <code>CHARTNAV_AUTH_MODE</code> and demands the</p>
-<p>three <code>CHARTNAV_JWT_*</code> vars if mode is <code>bearer</code> — otherwise raises at</p>
-<p>import time. No module besides <code>app.config</code> touches <code>os.environ</code>.</p>
+<h3>Step 3 — App shell</h3>
 <ul>
-<li>New <code>apps/api/.env.example</code> with the full documented contract.</li>
+<li>Rewrote <code>apps/web/src/App.tsx</code> as the full workflow app:</li>
+<li>Sticky header: brand, caller chip, API chip, identity picker (seeded + custom).</li>
+<li>Two-column layout (collapses on mobile).</li>
+<li><code>apps/web/src/main.tsx</code> imports <code>App</code> + <code>styles.css</code>.</li>
+<li>New <code>apps/web/src/styles.css</code>: one file, CSS variables, color-coded status pills, filter/list/detail/timeline/form styles.</li>
 </ul>
-<h3>Step 3 — DB layer (SQLAlchemy Core, cross-dialect)</h3>
+<h3>Step 4 — Encounter list + filters</h3>
 <ul>
-<li>New <code>apps/api/app/db.py</code> — <code>engine</code>, <code>transaction()</code>, <code>fetch_all</code>,</li>
+<li>Filter bar for <code>status</code>, <code>provider_name</code>, <code>location_id</code>; <code>clear</code> button when filters are set.</li>
+<li>Loading / empty / error states in the list.</li>
+<li>Row click selects an encounter (and keyboard Enter/Space).</li>
 </ul>
-<p><code>fetch_one</code>, <code>insert_returning_id</code>. SQLite connect-args and PRAGMA</p>
-<p>FK enforcement handled automatically.</p>
+<h3>Step 5 — Encounter detail + timeline</h3>
 <ul>
-<li>Refactored <code>apps/api/app/api/routes.py</code>: every query now uses named</li>
+<li>Facts grid (org, location, scheduled/started/completed/created).</li>
+<li>Color-coded status pill.</li>
+<li>Timeline renders <code>event_data</code> as a readable <code>key: value · …</code> line (objects), verbatim for strings; falls back to <code>—</code> when null.</li>
 </ul>
-<p>(<code>:name</code>) bind parameters and <code>transaction()</code> for writes. The old</p>
-<p><code>sqlite3</code>-specific <code>lastrowid</code> is gone.</p>
+<h3>Step 6 — Role-aware actions</h3>
 <ul>
-<li>Refactored <code>apps/api/scripts_seed.py</code> to the same shape. Swapped</li>
+<li>Allowed transitions rendered as buttons based on <code>(role, current_status)</code>. When none are allowed, a clean note explains why — no fake-disabled buttons.</li>
+<li>Event composer hidden for reviewers with an explanation; admins + clinicians get it.</li>
+<li>On success: refresh detail + events + list; show a green banner.</li>
+<li>On failure: render the exact <code>{status} {error_code} — {reason}</code> string in a red banner. Nothing is silently swallowed.</li>
 </ul>
-<p><code>IFNULL</code> → <code>COALESCE</code>. Timestamp columns still use server-side</p>
-<p><code>CURRENT_TIMESTAMP</code> for dialect-agnostic behavior.</p>
+<h3>Step 7 — Dev UX</h3>
 <ul>
-<li><code>apps/api/app/auth.py</code> now reads users via <code>db.fetch_one</code>; no more</li>
+<li>New <code>apps/web/.env.example</code> — <code>VITE_API_URL</code>.</li>
+<li>Makefile: <code>web-install</code>, <code>web-dev</code>, <code>web-build</code>, <code>web-typecheck</code>, <code>dev</code> (boots both).</li>
+<li><code>make dev</code> uses a trap-based teardown so Ctrl-C kills both backend and frontend.</li>
 </ul>
-<p>direct sqlite3 use.</p>
+<h3>Step 8 — Local verification</h3>
 <ul>
-<li><code>apps/api/alembic/env.py</code> now also honors <code>DATABASE_URL</code> from env</li>
+<li><code>npx tsc --noEmit</code> clean after adding <code>vite-env.d.ts</code>.</li>
+<li><code>npm run build</code> → <code>dist/</code> produced (154 KB JS / 6 KB CSS / 0.4 KB HTML).</li>
+<li>Ran uvicorn + exercised every endpoint the UI depends on against all 5 seeded roles:</li>
+<li><code>/me</code> returns 200 for all 5, 401 for unknown/empty.</li>
+<li><code>/encounters</code> scoped correctly (org1 sees 2 rows, org2 sees <code>[3]</code>).</li>
+<li>Filter <code>status=in_progress</code> → <code>[&#x27;PT-1001&#x27;]</code>.</li>
+<li>Clinician <code>in_progress → draft_ready</code> → 200.</li>
+<li>Clinician <code>review_needed → completed</code> → 403 <code>role_cannot_transition</code>.</li>
+<li>Reviewer <code>review_needed → completed</code> → 200.</li>
+<li>Reviewer <code>POST event</code> → 403 <code>role_cannot_create_event</code>.</li>
+<li>Admin <code>POST event</code> → 201.</li>
+<li>Backend tests still pass (no backend changes this phase).</li>
 </ul>
-<p>(already honored <code>-x sqlalchemy.url=</code>), so Alembic works uniformly in</p>
-<p>CI and the deploy entrypoint.</p>
-<h3>Step 4 — Auth seam hardening</h3>
+<h3>Step 9 — Docs</h3>
 <ul>
-<li>Split resolvers: <code>resolve_caller_from_header</code> (dev) and</li>
-</ul>
-<p><code>resolve_caller_from_bearer</code> (prod-shaped placeholder). <code>require_caller</code></p>
-<p>dispatches via <code>settings.auth_mode</code>.</p>
-<ul>
-<li>Bearer mode returns <strong>501</strong> <code>auth_bearer_not_implemented</code> when a</li>
-</ul>
-<p>token is actually presented. That&#x27;s deliberate — it&#x27;s better to fail</p>
-<p>loudly than pretend half-auth.</p>
-<ul>
-<li>Added <code>apps/api/tests/test_auth_modes.py</code> (3 tests) asserting:</li>
-<li>bearer-mode without JWT env → <code>RuntimeError</code> at <code>import app.config</code></li>
-<li>bearer-mode with JWT env but a token → 501</li>
-<li>bearer-mode without a token → 401 <code>missing_auth_header</code></li>
-<li>header-mode (default) still returns correct caller</li>
-</ul>
-<h3>Step 5 — Deploy target</h3>
-<ul>
-<li><code>apps/api/Dockerfile</code> rewritten: non-root user, <code>curl</code>-based</li>
-</ul>
-<p>HEALTHCHECK, <code>entrypoint.sh</code>, installs the <code>[postgres]</code> extra.</p>
-<ul>
-<li><code>apps/api/entrypoint.sh</code> NEW: asserts <code>DATABASE_URL</code>, runs</li>
-</ul>
-<p><code>alembic upgrade head</code>, optionally runs seed when</p>
-<p><code>CHARTNAV_RUN_SEED=1</code>, then <code>exec</code>s uvicorn.</p>
-<ul>
-<li><code>infra/docker/docker-compose.prod.yml</code> NEW: API + Postgres with a</li>
-</ul>
-<p>healthcheck dependency gate and env-driven defaults.</p>
-<h3>Step 6 — Postgres parity</h3>
-<ul>
-<li><code>apps/api/pyproject.toml</code> gains a <code>[postgres]</code> extra pinning</li>
-</ul>
-<p><code>psycopg[binary]&gt;=3.2</code>.</p>
-<ul>
-<li><code>scripts/pg_verify.sh</code> NEW: throwaway <code>postgres:16-alpine</code> container</li>
-</ul>
-<p>→ migrate → seed twice (idempotency) → boot API → run the shared</p>
-<p>smoke script → live status transition → confirm <code>workflow_events</code></p>
-<p>row was written. Traps cleanup on any exit.</p>
-<ul>
-<li>Local run: <strong>PASS</strong> on 2026-04-18.</li>
-</ul>
-<h3>Step 7 — CI expansion</h3>
-<ul>
-<li><code>.github/workflows/ci.yml</code> now has four jobs:</li>
-<li><code>backend-sqlite</code> — existing pytest + SQLite smoke (unchanged contract).</li>
-<li><code>backend-postgres</code> — service-container Postgres, alembic upgrade,</li>
-</ul>
-<p>seed twice, boot, smoke, live status transition.</p>
-<ul>
-<li><code>docker-build</code> — buildx build of the API image, run it with</li>
-</ul>
-<p>SQLite + <code>CHARTNAV_RUN_SEED=1</code>, smoke the live container.</p>
-<ul>
-<li><code>docs</code> — regenerate HTML + PDF, upload as artifact.</li>
-<li><code>docker-build</code> and <code>docs</code> both <code>needs: backend-sqlite</code>;</li>
-</ul>
-<p><code>backend-postgres</code> also <code>needs: backend-sqlite</code>.</p>
-<h3>Step 8 — Makefile + tooling</h3>
-<ul>
-<li>New targets: <code>pg-verify</code>, <code>docker-build</code>, <code>docker-up</code>, <code>docker-down</code>.</li>
-<li><code>verify.sh</code> already tolerant of missing <code>.venv/bin/uvicorn</code> (falls</li>
-</ul>
-<p>back to PATH) so both local and CI paths work.</p>
-<h3>Step 9 — Tests updated</h3>
-<ul>
-<li><code>apps/api/tests/conftest.py</code> now sets <code>DATABASE_URL</code> via monkeypatch</li>
-</ul>
-<p>per test and flushes cached <code>app.*</code> modules so <code>settings</code> re-reads</p>
-<p>env cleanly. Works identically for SQLite (today) and Postgres (a</p>
-<p>matrix we&#x27;ll flip when ready).</p>
-<ul>
-<li>pytest suite: <strong>28 passed</strong> locally and in <code>backend-sqlite</code>.</li>
-</ul>
-<h3>Step 10 — Docs</h3>
-<ul>
-<li>New: <code>11-production-auth-seam.md</code>, <code>12-runtime-config.md</code>,</li>
-</ul>
-<p><code>13-deploy-target.md</code>, <code>14-postgres-parity.md</code>.</p>
-<ul>
-<li>Updated: <code>01-current-state.md</code>, <code>05-build-log.md</code>, <code>06-known-gaps.md</code>,</li>
-</ul>
-<p><code>07-auth-and-scoping.md</code>, <code>08-test-strategy.md</code>,</p>
-<p><code>09-ci-and-deploy-hardening.md</code>. Diagrams refreshed</p>
-<p>(<code>system-architecture</code>, <code>api-data-flow</code>).</p>
-<ul>
-<li><code>scripts/build_docs.py</code> now picks up <code>11…14</code> automatically.</li>
+<li>New: <code>15-frontend-integration.md</code>.</li>
+<li>Updated: <code>01-current-state.md</code>, <code>05-build-log.md</code>, <code>06-known-gaps.md</code>, <code>08-test-strategy.md</code>, <code>12-runtime-config.md</code>.</li>
+<li>Diagrams updated: <code>system-architecture</code>, <code>api-data-flow</code> (with frontend layer).</li>
+<li><code>scripts/build_docs.py</code> now picks up section 15.</li>
 <li>Final HTML + PDF regenerated.</li>
 </ul>
-<h3>Step 11 — Hygiene</h3>
+<h3>Step 10 — Hygiene</h3>
 <ul>
-<li>Dev DB reset to seeded state before commit.</li>
-<li><code>.gitignore</code> already excludes <code>.pytest_cache</code>, <code>__pycache__</code>, <code>*.db</code>.</li>
+<li>Removed stale <code>apps/web/src/App.jsx</code>.</li>
+<li><code>.gitignore</code> already excludes <code>node_modules</code>, <code>dist</code>, caches; reran <code>npm install</code> and only <code>package-lock.json</code> grew.</li>
+<li>Dev DB reset before commit.</li>
 </ul>
 <p>---</p>
 <h2>Prior phases</h2>
 <ul>
+<li><strong>Phase 6 — Prod auth seam + Docker + Postgres parity</strong> (<code>700bb0b</code>)</li>
 <li><strong>Phase 5 — CI + runtime hardening + doc pipeline</strong> (<code>cfa8ca9</code>)</li>
 <li><strong>Phase 4 — RBAC + full scoping + pytest</strong> (<code>c6f29e6</code>)</li>
 <li><strong>Phase 3 — Dev auth + org scoping</strong> (<code>efb5b56</code>)</li>
@@ -484,54 +419,59 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 </section>
 <section id="sec-7"><h2>06 — Known gaps + verification matrix</h2>
 <h1>Known Gaps &amp; Verification Matrix</h1>
-<h2>Verification evidence — phase 6</h2>
-<h3>Local <code>make verify</code> (SQLite)</h3>
-<table><thead><tr><th>Step</th><th>Result</th></tr></thead><tbody>
-<tr><td><code>rm -f apps/api/chartnav.db</code></td><td>✅</td></tr>
-<tr><td><code>alembic upgrade head</code></td><td>✅</td></tr>
-<tr><td><code>scripts_seed.py</code> (x2 idempotent)</td><td>✅</td></tr>
-<tr><td><code>pytest tests/ -v</code></td><td>✅ <strong>28/28</strong></td></tr>
-<tr><td><code>uvicorn</code> boots</td><td>✅</td></tr>
-<tr><td><code>scripts/smoke.sh</code> 9 assertions</td><td>✅</td></tr>
-<tr><td>teardown clean</td><td>✅</td></tr>
-</tbody></table>
-<h3>Local <code>make pg-verify</code> (Postgres 16)</h3>
-<table><thead><tr><th>Step</th><th>Result</th></tr></thead><tbody>
-<tr><td>throwaway <code>postgres:16-alpine</code> comes up</td><td>✅</td></tr>
-<tr><td><code>alembic upgrade head</code> on Postgres</td><td>✅ both revisions applied</td></tr>
-<tr><td>seed on Postgres (run twice, idempotent)</td><td>✅</td></tr>
-<tr><td>uvicorn boots against Postgres</td><td>✅</td></tr>
-<tr><td><code>scripts/smoke.sh</code> 9 assertions</td><td>✅</td></tr>
-<tr><td>clinician status transition <code>in_progress → draft_ready</code></td><td>✅</td></tr>
-<tr><td><code>workflow_events</code> row written with <code>old_status</code>/<code>new_status</code>/<code>changed_by</code></td><td>✅</td></tr>
-<tr><td>container torn down (trap)</td><td>✅</td></tr>
-</tbody></table>
-<h3>Auth seam tests (<code>tests/test_auth_modes.py</code>)</h3>
-<table><thead><tr><th>Case</th><th>Result</th></tr></thead><tbody>
-<tr><td><code>CHARTNAV_AUTH_MODE=bearer</code> w/o JWT env → RuntimeError at import</td><td>✅</td></tr>
-<tr><td>bearer with JWT env, no token → 401 <code>missing_auth_header</code></td><td>✅</td></tr>
-<tr><td>bearer with JWT env, token present → 501 <code>auth_bearer_not_implemented</code></td><td>✅</td></tr>
-<tr><td>header mode default → 200 + correct role/org</td><td>✅</td></tr>
-</tbody></table>
-<h3>Docker build</h3>
+<h2>Verification evidence — phase 7 (frontend)</h2>
+<h3>Backend still green</h3>
 <ul>
-<li><code>docker build -t chartnav-api:local apps/api</code> — runs locally.</li>
-<li>CI <code>docker-build</code> job builds with buildx and smokes the live</li>
+<li><code>make verify</code> (SQLite): <strong>28/28 pytest</strong> + 9/9 smoke + clean teardown.</li>
+<li>No backend code changed this phase. All previous verification stands.</li>
 </ul>
-<p>container — enforced per PR.</p>
+<h3>Frontend build + typecheck</h3>
+<pre class="code lang-"><code>
+$ cd apps/web &amp;&amp; npx tsc --noEmit   # clean
+$ npm run build
+✓ 33 modules transformed.
+dist/index.html                   0.40 kB │ gzip:  0.27 kB
+dist/assets/index-*.css           6.24 kB │ gzip:  1.79 kB
+dist/assets/index-*.js          154.44 kB │ gzip: 49.66 kB
+✓ built in 639ms
+</code></pre>
+<h3>Live integration (uvicorn + curl as a UI stand-in)</h3>
+<table><thead><tr><th>Flow the UI depends on</th><th>Result</th></tr></thead><tbody>
+<tr><td><code>GET /me</code> for all 5 seeded identities</td><td>✅ 200</td></tr>
+<tr><td><code>GET /me</code> unknown / empty</td><td>✅ 401 (UI shows red chip)</td></tr>
+<tr><td><code>GET /encounters</code> org1 vs org2 scoping</td><td>✅ disjoint</td></tr>
+<tr><td><code>GET /encounters?status=in_progress</code> filter</td><td>✅ <code>[&#x27;PT-1001&#x27;]</code></td></tr>
+<tr><td><code>GET /encounters/{id}</code> + <code>GET /encounters/{id}/events</code></td><td>✅ 200, 3 events</td></tr>
+<tr><td>Clinician <code>in_progress → draft_ready</code></td><td>✅ 200</td></tr>
+<tr><td>Clinician <code>review_needed → completed</code></td><td>✅ 403 <code>role_cannot_transition</code></td></tr>
+<tr><td>Reviewer <code>review_needed → completed</code></td><td>✅ 200</td></tr>
+<tr><td>Reviewer <code>POST /encounters/{id}/events</code></td><td>✅ 403 <code>role_cannot_create_event</code></td></tr>
+<tr><td>Admin <code>POST /encounters/{id}/events</code></td><td>✅ 201</td></tr>
+</tbody></table>
+<h3>UI affordances sanity</h3>
+<table><thead><tr><th>Role</th><th>Transition buttons shown</th><th>Event composer</th></tr></thead><tbody>
+<tr><td>admin</td><td>Any forward or rework edge valid from the current state</td><td>visible</td></tr>
+<tr><td>clinician</td><td><code>scheduled→in_progress</code>, <code>in_progress→draft_ready</code>, rework back</td><td>visible</td></tr>
+<tr><td>reviewer</td><td><code>draft_ready→review_needed</code>, <code>review_needed→{completed,draft_ready}</code></td><td>hidden w/ note</td></tr>
+</tbody></table>
+<p>When no transition is available (terminal <code>completed</code> or role mismatch),</p>
+<p>the UI shows a note rather than fake-disabled buttons. Backend remains</p>
+<p>authoritative — a mismatch between the UI&#x27;s <code>allowedNextStatuses</code> and</p>
+<p>the server is surfaced as a 4xx banner with the exact <code>error_code</code>.</p>
 <h2>Real gaps (prioritized for next phase)</h2>
-<p>1. <strong>JWT/SSO validation is still a stub.</strong> Bearer mode rejects all traffic with 501. Next phase: PyJWT + JWKS fetch/cache, issuer/audience validation, claim → user mapping.</p>
-<p>2. <strong>pytest runs on SQLite only.</strong> Postgres parity is asserted by <code>pg_verify.sh</code> + the <code>backend-postgres</code> CI job (which exercises the live surface). A pytest Postgres matrix is the next CI upgrade; <code>conftest.py</code> already reads env so this is mostly wiring.</p>
-<p>3. <strong>No image push / release pipeline.</strong> CI builds the Docker image but doesn&#x27;t publish it.</p>
-<p>4. <strong>Secrets are still plain env vars.</strong> No AWS SM / Vault integration.</p>
-<p>5. <strong>No RBAC-gated writes for org metadata</strong> (<code>/organizations</code> etc. remain read-only).</p>
-<p>6. <strong><code>users.role</code> is still free VARCHAR</strong> at DB level; no CHECK/lookup.</p>
-<p>7. <strong>No pagination / cursor</strong> on <code>GET /encounters</code>.</p>
-<p>8. <strong>No encounter update / delete / cancel</strong>; no <code>cancelled</code> status.</p>
-<p>9. <strong>Free-form <code>event_data</code></strong> — no per-event_type schema.</p>
-<p>10. **CORS <code>allow_origins=[&quot;*&quot;]</code>** still open.</p>
+<p>1. <strong>No automated frontend tests.</strong> All frontend verification this phase is build/typecheck + live-curl parity. Next: a small Vitest or Playwright pass.</p>
+<p>2. <strong>JWT validation still stubbed.</strong> Bearer mode returns 501; the frontend currently only implements header mode.</p>
+<p>3. <strong>No encounter creation UI.</strong> The frontend can add events and move statuses but cannot create encounters yet (backend endpoint exists).</p>
+<p>4. <strong>No pagination.</strong> Works fine at seed scale; first real dataset will need it on both ends.</p>
+<p>5. <strong>No optimistic updates.</strong> Every mutation re-fetches.</p>
+<p>6. <strong>No global state manager.</strong> Fine at this size; watch for prop-drill as flows multiply.</p>
+<p>7. <strong>No encounter update / delete / cancel.</strong> No <code>cancelled</code> status.</p>
+<p>8. <strong>Free-form <code>event_data</code></strong> still lacks per-event_type schema.</p>
+<p>9. <strong>Raw <code>sqlite3</code> → SA Core refactor complete</strong> — pytest matrix against Postgres is the next CI upgrade.</p>
+<p>10. **CORS <code>allow_origins=[&quot;*&quot;]</code>** remains.</p>
 <p>11. <strong>No distinct audit log</strong> for auth/scoping failures.</p>
-<p>12. <strong>No rate limiting, no lockout, no structured logging.</strong></p>
+<p>12. <strong>No rate limiting, lockout, or structured logging.</strong></p>
+<p>13. <strong>No CI job for the frontend.</strong> The <code>docker-build</code> + <code>docs</code> jobs don&#x27;t cover the web bundle. A <code>frontend-build</code> CI job is a small, honest addition.</p>
 </section>
 <section id="sec-8"><h2>07 — Auth, org scoping, RBAC</h2>
 <h1>Auth, Org Scoping, RBAC</h1>
@@ -724,6 +664,17 @@ make docker-build
 <li><code>pytest</code>: <strong>28 passed in ~19s</strong></li>
 <li><code>make verify</code> (SQLite): 28 pytest + 9 smoke — all green</li>
 <li><code>scripts/pg_verify.sh</code>: migrations + seed (x2) + smoke + status transition + event write — <strong>PASS</strong></li>
+</ul>
+<h2>Frontend verification (phase 7)</h2>
+<ul>
+<li><code>npx tsc --noEmit</code> — clean.</li>
+<li><code>npm run build</code> — emits <code>dist/index.html</code> + hashed JS/CSS.</li>
+<li>Live integration against uvicorn: every endpoint the UI hits</li>
+</ul>
+<p>returns the expected status across all 5 seeded roles (see</p>
+<p><code>06-known-gaps.md</code> matrix).</p>
+<ul>
+<li>No automated frontend tests yet — next item.</li>
 </ul>
 <h2>Gaps not yet covered</h2>
 <ul>
@@ -1011,6 +962,16 @@ HTTP 501
 <p>The <code>+psycopg</code> driver selector is important — SQLAlchemy defaults to</p>
 <p><code>psycopg2</code> which is not installed. <code>psycopg[binary]</code> is declared in</p>
 <p><code>apps/api/pyproject.toml</code> as the <code>[postgres]</code> extra.</p>
+<h2>Frontend runtime config</h2>
+<p>The web app reads exactly one env var at build time:</p>
+<table><thead><tr><th>Variable</th><th>Required?</th><th>Default</th><th>Purpose</th></tr></thead><tbody>
+<tr><td><code>VITE_API_URL</code></td><td>no</td><td><code>http://localhost:8000</code></td><td>Base URL the API client points at.</td></tr>
+</tbody></table>
+<p>Template: <code>apps/web/.env.example</code>. Copy to <code>.env</code> to override for a</p>
+<p>non-default backend.</p>
+<p>Vite substitutes <code>import.meta.env.VITE_API_URL</code> into the bundle at build.</p>
+<p>Nothing else about the UI comes from env today — dev identity is</p>
+<p>selected inside the app and stored in <code>localStorage</code>.</p>
 <h2>What this phase explicitly does NOT do</h2>
 <ul>
 <li>No secret store integration (AWS SM, Vault, etc.).</li>
@@ -1191,22 +1152,192 @@ Seed complete.
 <p>uses <code>tmp_path</code> file DBs. Migrating that to a Postgres matrix is the</p>
 <p>obvious next CI upgrade; the DB layer is ready for it.</p>
 </section>
-<section id="sec-16"><h2>Diagram — System architecture</h2>
+<section id="sec-16"><h2>15 — Frontend integration</h2>
+<h1>Frontend Integration</h1>
+<h2>Goal</h2>
+<p>Turn the backend workflow slice into a usable app. An operator should</p>
+<p>be able to identify themselves, filter their org&#x27;s encounters, open one,</p>
+<p>see its timeline, append events, and drive role-appropriate status</p>
+<p>transitions — all through the UI — without the backend contract changing.</p>
+<h2>Stack</h2>
+<ul>
+<li>Vite 5 + React 18 + TypeScript (already in the repo).</li>
+<li>No component library yet — one small CSS file (<code>styles.css</code>) + inline</li>
+</ul>
+<p>attributes. Easy to swap later if the UI grows.</p>
+<ul>
+<li>No state library — <code>useState</code> / <code>useEffect</code> around a typed API module.</li>
+</ul>
+<h2>Source layout</h2>
+<pre class="code lang-"><code>
+apps/web/src/
+├── api.ts            # typed API client (single fetch surface)
+├── identity.ts       # dev identity helpers (seeded list + localStorage)
+├── App.tsx           # shell, list, detail, timeline, actions
+├── main.tsx          # React entrypoint, imports styles.css
+├── styles.css        # one CSS file (CSS variables; no build config)
+└── vite-env.d.ts     # Vite ambient types
+</code></pre>
+<h2><code>api.ts</code> — contract</h2>
+<ul>
+<li><code>API_URL</code> comes from <code>VITE_API_URL</code> (falls back to <code>http://localhost:8000</code>).</li>
+<li>Every function takes an <code>email: string</code>; the client sets</li>
+</ul>
+<p><code>X-User-Email</code> on each request. When the backend moves to bearer</p>
+<p>mode, only this module changes.</p>
+<ul>
+<li><code>ApiError(status, errorCode, reason)</code> — every non-2xx response is</li>
+</ul>
+<p>converted to this, so UI code can render the backend&#x27;s</p>
+<p><code>{error_code, reason}</code> envelope directly.</p>
+<ul>
+<li>Exposed functions (match the backend 1:1):</li>
+<li><code>getHealth()</code></li>
+<li><code>getMe(email)</code></li>
+<li><code>listEncounters(email, filters)</code></li>
+<li><code>getEncounter(email, id)</code></li>
+<li><code>getEncounterEvents(email, id)</code></li>
+<li><code>createEncounterEvent(email, id, {event_type, event_data})</code></li>
+<li><code>updateEncounterStatus(email, id, status)</code></li>
+<li><code>listLocations(email)</code></li>
+<li>Pure helpers used for UI affordances only:</li>
+<li><code>allowedNextStatuses(role, currentStatus)</code> — mirrors</li>
+</ul>
+<p><code>authz.TRANSITION_ROLES</code>. Drives which transition buttons appear.</p>
+<ul>
+<li><code>canCreateEvent(role)</code> — drives the &quot;Add event&quot; composer.</li>
+<li><strong>Backend remains the source of truth</strong> — the UI never assumes the</li>
+</ul>
+<p>server will accept anything; any 4xx surfaces as a banner with the</p>
+<p>error code + reason.</p>
+<h2>Dev identity</h2>
+<ul>
+<li><code>apps/web/src/identity.ts</code> ships the seeded demo users:</li>
+<li>Org 1: <code>admin@</code>, <code>clin@</code>, <code>rev@chartnav.local</code></li>
+<li>Org 2: <code>admin@</code>, <code>clin@northside.local</code></li>
+<li>Selector in the header lets operators switch caller without editing</li>
+</ul>
+<p>code. &quot;Custom email…&quot; lets a real/unseeded email be entered for</p>
+<p>testing 401 paths.</p>
+<ul>
+<li>Selection persists in <code>localStorage.chartnav.devIdentity</code>.</li>
+</ul>
+<h2>UI layers</h2>
+<h3>Header</h3>
+<ul>
+<li>Brand wordmark.</li>
+<li>Chip showing the resolved caller (<code>email · role · org N</code>) — or the</li>
+</ul>
+<p>auth error if <code>/me</code> failed.</p>
+<ul>
+<li>Chip with the current API base URL.</li>
+<li>Identity picker.</li>
+</ul>
+<h3>Layout (two-column, collapses below 920px)</h3>
+<ul>
+<li><strong>Encounter list (left)</strong> — filter bar (<code>status</code>, <code>provider_name</code>,</li>
+</ul>
+<p><code>location_id</code>) + row list with patient id, name, provider, and a</p>
+<p>color-coded status pill.</p>
+<ul>
+<li><strong>Detail pane (right)</strong> — headline + status pill, facts grid</li>
+</ul>
+<p>(organization / location / scheduled / started / completed / created),</p>
+<p>allowed-transition buttons, timeline of events, and &quot;Add event&quot;</p>
+<p>composer when the current role is permitted to write.</p>
+<h3>Role-aware actions</h3>
+<ul>
+<li>Allowed transitions are shown as buttons. If none are available for</li>
+</ul>
+<p>the (role, current_status) pair, we show a note instead of fake</p>
+<p>disabled buttons.</p>
+<ul>
+<li>The &quot;Add event&quot; composer is hidden for reviewers (matches</li>
+</ul>
+<p><code>CAN_CREATE_EVENT</code>). Reviewers still get a subtle note explaining why.</p>
+<ul>
+<li>After any successful action the UI refreshes: detail, events, and</li>
+</ul>
+<p>list.</p>
+<ul>
+<li>After a failure, the UI shows the exact <code>error_code</code> + <code>reason</code> from</li>
+</ul>
+<p>the backend in a top banner.</p>
+<h2>UX states</h2>
+<table><thead><tr><th>State</th><th>Surface</th></tr></thead><tbody>
+<tr><td>Loading</td><td>&quot;Loading…&quot; in list / detail</td></tr>
+<tr><td>Empty list</td><td>&quot;No encounters match these filters.&quot;</td></tr>
+<tr><td>401 / unknown</td><td>Red chip in the header: <code>auth: 401 unknown_user — ...</code></td></tr>
+<tr><td>403 role</td><td>Banner: <code>403 role_cannot_transition — ...</code></td></tr>
+<tr><td>404 cross-org</td><td>Banner: <code>404 encounter_not_found — ...</code></td></tr>
+<tr><td>400 bad status</td><td>Banner: <code>400 invalid_transition — ... allowed next ...</code></td></tr>
+</tbody></table>
+<h2>Local dev</h2>
+<pre class="code lang-bash"><code>
+# one terminal — backend
+make install          # venv + pip install -e &quot;apps/api[dev,postgres]&quot;
+make reset-db         # fresh SQLite + seed
+make boot             # uvicorn on 8000
+
+# second terminal — frontend
+make web-install      # npm install
+make web-dev          # vite on 5173
+
+# or both at once (Ctrl-C to stop both)
+make dev
+</code></pre>
+<p><code>VITE_API_URL</code> in <code>apps/web/.env.example</code> defaults to</p>
+<p><code>http://localhost:8000</code>, matching <code>make boot</code>. Copy to <code>.env</code> if you</p>
+<p>need to point at a different backend.</p>
+<h2>Build / verification</h2>
+<pre class="code lang-bash"><code>
+make web-typecheck    # tsc --noEmit
+make web-build        # vite build -&gt; apps/web/dist
+</code></pre>
+<p>Verified manually on 2026-04-18:</p>
+<table><thead><tr><th>Check</th><th>Result</th></tr></thead><tbody>
+<tr><td><code>tsc --noEmit</code></td><td>✅</td></tr>
+<tr><td><code>npm run build</code> emits dist/</td><td>✅ (154 KB JS / 6 KB CSS)</td></tr>
+<tr><td><code>GET /me</code> for all 5 seeded users</td><td>✅</td></tr>
+<tr><td><code>GET /encounters</code> org-scoped (org1 → 2 rows; org2 → <code>[3]</code>)</td><td>✅</td></tr>
+<tr><td><code>GET /encounters?status=in_progress</code></td><td>✅ <code>[&#x27;PT-1001&#x27;]</code></td></tr>
+<tr><td><code>GET /encounters/{id}/events</code> hydrated</td><td>✅ 3 events</td></tr>
+<tr><td>Clinician in_progress → draft_ready</td><td>✅ 200</td></tr>
+<tr><td>Clinician review_needed → completed (denied)</td><td>✅ 403 <code>role_cannot_transition</code></td></tr>
+<tr><td>Reviewer review_needed → completed</td><td>✅ 200</td></tr>
+<tr><td>Reviewer POST event (denied)</td><td>✅ 403 <code>role_cannot_create_event</code></td></tr>
+<tr><td>Admin POST event</td><td>✅ 201</td></tr>
+<tr><td>Switching identity re-fetches <code>/me</code> and list</td><td>✅</td></tr>
+</tbody></table>
+<h2>What this phase explicitly does NOT do</h2>
+<ul>
+<li>No real login flow — <code>X-User-Email</code> is still dev transport.</li>
+<li>No global state manager (Redux/Zustand) — state lives in <code>App.tsx</code>.</li>
+<li>No UI component library.</li>
+<li>No pagination (the backend doesn&#x27;t paginate yet).</li>
+<li>No optimistic updates — every mutation re-fetches the relevant slice.</li>
+</ul>
+<p>Those are future phases. The API client + identity seam make them</p>
+<p>cheap to add without rewriting.</p>
+</section>
+<section id="sec-17"><h2>Diagram — System architecture</h2>
 <h1>System Architecture</h1>
 <div class="mermaid">
 flowchart LR
-  subgraph Clients
-    C["Client<br/>curl · tests · apps/web"]
+  subgraph Web["Frontend (apps/web, Vite + React + TS)"]
+    UI["App.tsx<br/>list · detail · timeline · actions"]
+    ApiClient["api.ts<br/>typed client + ApiError"]
+    Ident["identity.ts<br/>localStorage dev caller"]
   end
 
-  subgraph Runtime
-    FastAPI["FastAPI<br/>apps/api/app/main.py"]
-    Config["settings<br/>apps/api/app/config.py<br/>(env-driven)"]
-    Authn["require_caller<br/>auth.py<br/>header · bearer"]
-    Authz["authz.py<br/>RBAC"]
-    Router["APIRouter<br/>routes.py"]
-    SM["State Machine<br/>ALLOWED_TRANSITIONS"]
-    DB["db.py<br/>SQLAlchemy Core"]
+  subgraph Runtime["Backend (apps/api, FastAPI)"]
+    FastAPI["main.py"]
+    Config["config.py<br/>env-driven settings"]
+    Authn["require_caller<br/>header · bearer"]
+    Authz["authz.py RBAC"]
+    Router["routes.py"]
+    SM["State Machine"]
+    DB["db.py · SA Core"]
     Engine[(SA Engine)]
   end
 
@@ -1216,45 +1347,49 @@ flowchart LR
   end
 
   subgraph Deploy
-    Dockerfile["Dockerfile<br/>(non-root, healthcheck)"]
+    Dockerfile["Dockerfile<br/>non-root · healthcheck"]
     Entry["entrypoint.sh<br/>migrate + exec"]
-    Compose["infra/docker/<br/>docker-compose.prod.yml"]
+    Compose["docker-compose.prod.yml"]
   end
 
   subgraph Tooling
     Alembic["Alembic<br/>DATABASE_URL-aware"]
-    Seed["scripts_seed.py<br/>(cross-dialect)"]
+    Seed["scripts_seed.py"]
     PyTest["pytest (28)"]
     Smoke["scripts/smoke.sh"]
     Verify["scripts/verify.sh"]
     PgVerify["scripts/pg_verify.sh"]
     DocBuild["scripts/build_docs.py"]
-    Make["Makefile"]
-    CI[".github/workflows/ci.yml<br/>backend-sqlite · backend-postgres · docker-build · docs"]
+    Make["Makefile<br/>install · verify · pg-verify · dev · web-*"]
+    CI[".github/workflows/ci.yml"]
   end
 
-  C -->|"HTTP + X-User-Email or Bearer"| FastAPI
+  UI --> ApiClient
+  ApiClient -->|"HTTP + X-User-Email"| FastAPI
+  Ident -. stored caller .-> ApiClient
+
   FastAPI --> Authn
   Authn --> Authz
   Authz --> Router
   Router --> SM
   Router --> DB
   DB --> Engine
-  Engine -->|"sqlite:///..."| SQLite
-  Engine -->|"postgresql+psycopg://..."| PG
+  Engine --> SQLite
+  Engine --> PG
   Config -.-> Authn
   Config -.-> DB
 
   Alembic -.-> Engine
   Seed -.-> DB
-  PyTest -.->|"TestClient"| FastAPI
-  Smoke -.->|"curl"| FastAPI
+  PyTest -.-> FastAPI
+  Smoke -.-> FastAPI
   Verify --> Make
   PgVerify --> Make
   DocBuild --> Make
   Make --> Alembic
   Make --> Seed
   Make --> PyTest
+  Make -. web-dev · web-build .-> UI
   CI --> Make
   Dockerfile --> Entry
   Entry --> Alembic
@@ -1263,7 +1398,7 @@ flowchart LR
   Compose --> PG
 </div>
 </section>
-<section id="sec-17"><h2>Diagram — Encounter status machine</h2>
+<section id="sec-18"><h2>Diagram — Encounter status machine</h2>
 <h1>Encounter Status State Machine</h1>
 <div class="mermaid">
 stateDiagram-v2
@@ -1285,7 +1420,7 @@ stateDiagram-v2
 <p>Legend: any edge not shown is rejected at <code>POST /encounters/{id}/status</code></p>
 <p>with HTTP 400 <code>invalid_transition</code>.</p>
 </section>
-<section id="sec-18"><h2>Diagram — ER</h2>
+<section id="sec-19"><h2>Diagram — ER</h2>
 <h1>ER Diagram</h1>
 <div class="mermaid">
 erDiagram
@@ -1349,51 +1484,56 @@ erDiagram
 <p><code>users.organization_id</code> is the authoritative source of scope; never</p>
 <p>derived from client input.</p>
 </section>
-<section id="sec-19"><h2>Diagram — API / data flow</h2>
+<section id="sec-20"><h2>Diagram — API / data flow</h2>
 <h1>API / Data Flow &amp; CI</h1>
-<h2>Request path</h2>
+<h2>UI → Backend request path</h2>
 <div class="mermaid">
 sequenceDiagram
   autonumber
-  participant C as Client
+  participant U as Operator (browser)
+  participant W as apps/web (App.tsx + api.ts)
   participant Cfg as app.config
   participant Authn as require_caller
   participant Authz as authz gate
   participant R as Route handler
   participant SM as State Machine
-  participant DB as SQLAlchemy Core → SQLite / Postgres
+  participant DB as SA Core → SQLite / Postgres
 
-  Note over C,DB: header mode happy path
-  C->>Authn: POST /encounters/1/status {"status":"draft_ready"}<br/>X-User-Email: clin@chartnav.local
+  U->>W: pick identity · change filter · click transition
+  W->>Authn: fetch with X-User-Email: admin@chartnav.local
   Cfg-->>Authn: auth_mode=header
   Authn->>DB: SELECT user WHERE email=:email
-  DB-->>Authn: {role=clinician, org=1}
+  DB-->>Authn: {role, org}
   Authn-->>Authz: Caller
-  Authz->>Authz: role in CAN_CREATE / TRANSITION?
-  Authz-->>R: Caller
-  R->>DB: SELECT encounter 1 ...
-  DB-->>R: row(org=1, status=in_progress)
-  R->>SM: (in_progress → draft_ready) allowed?
-  SM-->>R: yes
-  R->>Authz: assert_can_transition(clinician, ...)
-  Authz-->>R: allowed
-  R->>DB: UPDATE + INSERT status_changed{changed_by}
-  R-->>C: 200
+  Authz->>R: Caller
+  R->>DB: scoped SQL (:name binds)
+  DB-->>R: rows
+  R-->>W: 200 + JSON (or 4xx {error_code, reason})
+  W-->>U: render list · detail · timeline · banner
 
-  Note over C,DB: bearer mode honest refusal
-  C->>Authn: GET /me<br/>Authorization: Bearer ...
-  Cfg-->>Authn: auth_mode=bearer
-  Authn-->>C: 501 auth_bearer_not_implemented
+  Note over W,R: On 4xx, api.ts wraps into ApiError(status, error_code, reason). App.tsx surfaces it verbatim as a banner.
+</div>
+<h2>Role-aware transition flow</h2>
+<div class="mermaid">
+sequenceDiagram
+  autonumber
+  participant W as App.tsx
+  participant A as api.allowedNextStatuses()
+  participant B as POST /encounters/{id}/status
+  participant Authz as authz.assert_can_transition
 
-  Note over C,DB: cross-org read
-  C->>Authn: GET /encounters/3 as org1
-  R->>DB: SELECT encounter 3
-  DB-->>R: row(org=2)
-  R-->>C: 404 encounter_not_found
-
-  Note over C,DB: bad bearer config at boot
-  Cfg->>Cfg: CHARTNAV_AUTH_MODE=bearer but JWT env missing
-  Cfg-->>C: RuntimeError — app refuses to import
+  W->>A: compute buttons for (role, current)
+  A-->>W: [next1, next2, ...]  (UI hint only)
+  W->>B: POST status=next
+  B->>Authz: validate state-machine edge + role edge
+  alt allowed
+    Authz-->>B: ok
+    B-->>W: 200 updated encounter
+    W->>W: refresh detail + events + list; green banner
+  else role forbidden
+    Authz-->>W: 403 role_cannot_transition
+    W->>W: red banner; UI affordances unchanged until next refresh
+  end
 </div>
 <h2>CI gate flow</h2>
 <div class="mermaid">
@@ -1404,29 +1544,28 @@ flowchart TD
   SQL --> DOC[docs]
 
   subgraph "backend-sqlite"
-    A1[install deps] --> A2[alembic upgrade]
+    A1[pip install -e .dev,postgres] --> A2[alembic upgrade]
     A2 --> A3[seed x2]
     A3 --> A4[pytest 28]
     A4 --> A5[scripts/verify.sh]
   end
 
   subgraph "backend-postgres (service: postgres:16-alpine)"
-    B1[install + psycopg] --> B2[alembic upgrade]
+    B1[install] --> B2[alembic upgrade]
     B2 --> B3[seed x2]
-    B3 --> B4[boot + scripts/smoke.sh]
+    B3 --> B4[boot + smoke]
     B4 --> B5[live status transition]
   end
 
   subgraph "docker-build"
     D1[buildx build] --> D2[run container]
-    D2 --> D3[scripts/smoke.sh]
+    D2 --> D3[smoke]
   end
 
   subgraph "docs"
-    X1[apt chromium] --> X2[scripts/build_docs.py]
+    X1[apt chromium] --> X2[build_docs.py]
     X2 --> X3[upload artifact]
   end
 </div>
-<p>Any red-bordered step failing fails CI.</p>
 </section>
 </body></html>

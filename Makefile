@@ -13,7 +13,7 @@ PIP     := $(VENV)/bin/pip
 DEV_DB  := $(API_DIR)/chartnav.db
 PORT    := 8765
 
-.PHONY: help install migrate seed test boot smoke docs verify clean reset-db pg-verify docker-build docker-up docker-down
+.PHONY: help install migrate seed test boot smoke docs verify clean reset-db pg-verify docker-build docker-up docker-down web-install web-dev web-build web-typecheck dev
 
 help:
 	@awk 'BEGIN{FS=":.*?## "} /^[a-zA-Z_-]+:.*?## /{printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -54,6 +54,25 @@ verify: reset-db test ## Full local gate: reset DB, tests, boot + smoke
 
 pg-verify: ## Full Postgres parity proof (requires docker)
 	bash scripts/pg_verify.sh
+
+web-install: ## Install frontend deps
+	cd apps/web && npm install
+
+web-dev: ## Run Vite dev server (expects API on :8000)
+	cd apps/web && npm run dev
+
+web-build: ## Production build of the frontend
+	cd apps/web && npm run build
+
+web-typecheck: ## tsc --noEmit on the frontend
+	cd apps/web && npm run typecheck
+
+dev: ## Boot backend (port 8000) + frontend (port 5173) together
+	@bash -c 'set -e; \
+	  cd $(API_DIR) && .venv/bin/uvicorn app.main:app --port 8000 --reload & echo $$! > /tmp/chartnav_dev_api.pid; \
+	  cd apps/web && npm run dev & echo $$! > /tmp/chartnav_dev_web.pid; \
+	  trap "kill \$$(cat /tmp/chartnav_dev_api.pid) \$$(cat /tmp/chartnav_dev_web.pid) 2>/dev/null || true" INT TERM EXIT; \
+	  wait'
 
 docker-build: ## Build the production API image
 	docker build -t chartnav-api:local apps/api

@@ -1,72 +1,66 @@
 # ChartNav — Current State
 
-**As of:** 2026-04-18 (phase: production seam, deploy target, Postgres parity)
+**As of:** 2026-04-18 (phase: frontend workflow UI)
 
 ## Repo layout (relevant)
 
 ```
 chartnav-platform/
-├── .github/workflows/ci.yml         # backend-sqlite + backend-postgres + docker-build + docs
-├── Makefile                         # install · migrate · seed · test · verify · pg-verify · docker-*
-├── scripts/
-│   ├── build_docs.py                # reproducible HTML/PDF build
-│   ├── verify.sh                    # boot + smoke teardown
-│   └── pg_verify.sh                 # NEW — end-to-end Postgres parity proof
+├── .github/workflows/ci.yml     # backend-sqlite · backend-postgres · docker-build · docs
+├── Makefile                     # install · verify · pg-verify · docker-* · web-* · dev
+├── scripts/                     # build_docs.py · verify.sh · pg_verify.sh
 ├── apps/
 │   ├── api/
-│   │   ├── Dockerfile               # hardened: non-root, healthcheck, entrypoint
-│   │   ├── entrypoint.sh            # NEW — migrate-on-start, optional seed, exec CMD
-│   │   ├── .env.example             # runtime contract (env-first)
-│   │   ├── app/main.py
-│   │   ├── app/config.py            # NEW — central settings from env
-│   │   ├── app/db.py                # NEW — SA Core, cross-dialect
-│   │   ├── app/auth.py              # header + bearer resolvers behind one seam
-│   │   ├── app/authz.py             # RBAC
-│   │   ├── app/api/routes.py        # all queries now :name-bound
-│   │   ├── alembic.ini
-│   │   ├── alembic/env.py           # honors `-x` AND `DATABASE_URL`
-│   │   ├── alembic/versions/        # 2 migrations (unchanged)
-│   │   ├── scripts_seed.py          # rewritten on SA; cross-dialect
-│   │   ├── scripts/smoke.sh         # shell smoke (reused across envs)
-│   │   └── tests/
-│   │       ├── conftest.py          # env-based per-test DB
-│   │       ├── test_auth.py
-│   │       ├── test_auth_modes.py   # NEW — header + bearer seam
-│   │       ├── test_rbac.py
-│   │       └── test_scoping.py
+│   │   ├── Dockerfile · entrypoint.sh
+│   │   ├── .env.example
+│   │   ├── app/{main,config,db,auth,authz}.py
+│   │   ├── app/api/routes.py
+│   │   ├── alembic/
+│   │   ├── scripts_seed.py
+│   │   ├── scripts/smoke.sh
+│   │   └── tests/               # 28 pytest incl. 3 auth-mode tests
 │   └── web/
-├── infra/docker/
-│   ├── docker-compose.yml           # dev stack
-│   └── docker-compose.prod.yml      # NEW — API + Postgres
-└── docs/
-    ├── build/ 01 … 14
-    ├── diagrams/
-    └── final/*.html / *.pdf
+│       ├── .env.example         # NEW — VITE_API_URL contract
+│       ├── src/
+│       │   ├── api.ts           # NEW — typed API client
+│       │   ├── identity.ts      # NEW — dev identity helpers
+│       │   ├── App.tsx          # NEW — full workflow UI
+│       │   ├── main.tsx         # wires App.tsx + styles.css
+│       │   ├── styles.css       # NEW — single CSS file
+│       │   └── vite-env.d.ts    # NEW — Vite ambient types
+│       └── package.json
+├── infra/docker/{docker-compose.yml,docker-compose.prod.yml}
+└── docs/build/01..15            # now including 15-frontend-integration.md
 ```
 
 ## Runtime baseline
 
-- Python 3.11+, FastAPI, **SQLAlchemy Core** now underpins all DB access.
-- Database: `DATABASE_URL` → `sqlite:///apps/api/chartnav.db` (dev default) or `postgresql+psycopg://…` (prod / parity CI).
-- Alembic head: `a1b2c3d4e5f6`. No new migrations this phase.
-- Auth: `CHARTNAV_AUTH_MODE` (`header` dev / `bearer` prod-shaped placeholder). Config refuses to import if `bearer` is set without JWT env.
-- RBAC: `admin` / `clinician` / `reviewer`.
-- Error envelope: `{"detail": {"error_code": "...", "reason": "..."}}`.
-- Deploy target: Docker image + `docker-compose.prod.yml` (API + Postgres).
-- Tests: 28 pytest on SQLite (incl. 3 new auth-mode tests); Postgres parity proved end-to-end via `scripts/pg_verify.sh` and a dedicated CI job.
+- Backend: Python 3.11, FastAPI, SQLAlchemy Core, SQLite or Postgres.
+- Frontend: Vite 5 + React 18 + TypeScript; vanilla CSS.
+- Auth: `CHARTNAV_AUTH_MODE=header` (dev) or `bearer` (placeholder 501).
+- DB: SQLite default (`apps/api/chartnav.db`), Postgres via `DATABASE_URL=postgresql+psycopg://…`.
+- Alembic head: `a1b2c3d4e5f6`. No schema changes this phase.
+- RBAC: `admin`, `clinician`, `reviewer`.
+- Error envelope: `{"detail": {"error_code": "...", "reason": "..."}}` — the frontend surfaces these verbatim.
+
+## Frontend capabilities (new)
+
+- Header with brand, caller chip (`email · role · org N`), API base URL, identity picker (5 seeded users + custom).
+- Encounter list with filters (`status`, `provider_name`, `location_id`) and color-coded status pills.
+- Encounter detail with facts grid, current status, allowed transitions (role-aware), event timeline.
+- Event composer for admin / clinician; hidden with explanation for reviewer.
+- All API errors surface as banners with `error_code` + `reason`.
+- Dev identity persists in `localStorage`; switching reloads `/me` and list.
 
 ## Verified working endpoints
 
-Unchanged since phase 4. Now verified on BOTH SQLite and Postgres where applicable:
-
-- Open: `GET /health`, `GET /`
-- Authed: `GET /me`, `GET /organizations`, `GET /locations`, `GET /users`, `GET /encounters` (+ filters), `GET /encounters/{id}`, `GET /encounters/{id}/events`
-- Authed + RBAC: `POST /encounters` (admin, clinician), `POST /encounters/{id}/events` (admin, clinician), `POST /encounters/{id}/status` (per-edge roles)
+No endpoint behavior changed this phase. All 28 pytest tests still pass;
+the UI exercises the full surface through the typed client.
 
 ## Automation
 
-- `make verify` — SQLite: reset-db + pytest (28) + boot + smoke (9) + teardown.
-- `make pg-verify` — spins throwaway Postgres, migrates + seeds + boots + smokes + exercises state transition. Teardown trap-guaranteed.
-- `make docker-build` / `make docker-up` / `make docker-down`.
-- `python scripts/build_docs.py` — deterministic HTML + PDF.
-- CI: `backend-sqlite` → `backend-postgres` + `docker-build` + `docs` (each gated on its predecessor where it matters).
+- `make verify` — SQLite: reset-db + pytest + boot + smoke.
+- `make pg-verify` — Postgres parity proof.
+- `make web-install` / `web-dev` / `web-build` / `web-typecheck`.
+- `make dev` — boots API (8000) + Vite (5173) together with a shared trap-based teardown.
+- CI: `backend-sqlite` → `backend-postgres` + `docker-build` + `docs`.

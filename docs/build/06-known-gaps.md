@@ -1,57 +1,62 @@
 # Known Gaps & Verification Matrix
 
-## Verification evidence — phase 6
+## Verification evidence — phase 7 (frontend)
 
-### Local `make verify` (SQLite)
+### Backend still green
+- `make verify` (SQLite): **28/28 pytest** + 9/9 smoke + clean teardown.
+- No backend code changed this phase. All previous verification stands.
 
-| Step                                 | Result |
-|--------------------------------------|--------|
-| `rm -f apps/api/chartnav.db`         | ✅     |
-| `alembic upgrade head`               | ✅     |
-| `scripts_seed.py` (x2 idempotent)    | ✅     |
-| `pytest tests/ -v`                   | ✅ **28/28** |
-| `uvicorn` boots                      | ✅     |
-| `scripts/smoke.sh` 9 assertions      | ✅     |
-| teardown clean                       | ✅     |
+### Frontend build + typecheck
+```
+$ cd apps/web && npx tsc --noEmit   # clean
+$ npm run build
+✓ 33 modules transformed.
+dist/index.html                   0.40 kB │ gzip:  0.27 kB
+dist/assets/index-*.css           6.24 kB │ gzip:  1.79 kB
+dist/assets/index-*.js          154.44 kB │ gzip: 49.66 kB
+✓ built in 639ms
+```
 
-### Local `make pg-verify` (Postgres 16)
+### Live integration (uvicorn + curl as a UI stand-in)
 
-| Step                                      | Result |
-|-------------------------------------------|--------|
-| throwaway `postgres:16-alpine` comes up   | ✅     |
-| `alembic upgrade head` on Postgres        | ✅ both revisions applied |
-| seed on Postgres (run twice, idempotent)  | ✅     |
-| uvicorn boots against Postgres            | ✅     |
-| `scripts/smoke.sh` 9 assertions           | ✅     |
-| clinician status transition `in_progress → draft_ready` | ✅ |
-| `workflow_events` row written with `old_status`/`new_status`/`changed_by` | ✅ |
-| container torn down (trap)                | ✅     |
+| Flow the UI depends on                                        | Result |
+|---------------------------------------------------------------|--------|
+| `GET /me` for all 5 seeded identities                         | ✅ 200 |
+| `GET /me` unknown / empty                                     | ✅ 401 (UI shows red chip) |
+| `GET /encounters` org1 vs org2 scoping                        | ✅ disjoint |
+| `GET /encounters?status=in_progress` filter                   | ✅ `['PT-1001']` |
+| `GET /encounters/{id}` + `GET /encounters/{id}/events`        | ✅ 200, 3 events |
+| Clinician `in_progress → draft_ready`                         | ✅ 200 |
+| Clinician `review_needed → completed`                         | ✅ 403 `role_cannot_transition` |
+| Reviewer `review_needed → completed`                          | ✅ 200 |
+| Reviewer `POST /encounters/{id}/events`                       | ✅ 403 `role_cannot_create_event` |
+| Admin `POST /encounters/{id}/events`                          | ✅ 201 |
 
-### Auth seam tests (`tests/test_auth_modes.py`)
+### UI affordances sanity
 
-| Case                                                               | Result |
-|--------------------------------------------------------------------|--------|
-| `CHARTNAV_AUTH_MODE=bearer` w/o JWT env → RuntimeError at import   | ✅     |
-| bearer with JWT env, no token → 401 `missing_auth_header`          | ✅     |
-| bearer with JWT env, token present → 501 `auth_bearer_not_implemented` | ✅  |
-| header mode default → 200 + correct role/org                       | ✅     |
+| Role      | Transition buttons shown                                         | Event composer |
+|-----------|------------------------------------------------------------------|----------------|
+| admin     | Any forward or rework edge valid from the current state          | visible        |
+| clinician | `scheduled→in_progress`, `in_progress→draft_ready`, rework back  | visible        |
+| reviewer  | `draft_ready→review_needed`, `review_needed→{completed,draft_ready}` | hidden w/ note |
 
-### Docker build
-- `docker build -t chartnav-api:local apps/api` — runs locally.
-- CI `docker-build` job builds with buildx and smokes the live
-  container — enforced per PR.
+When no transition is available (terminal `completed` or role mismatch),
+the UI shows a note rather than fake-disabled buttons. Backend remains
+authoritative — a mismatch between the UI's `allowedNextStatuses` and
+the server is surfaced as a 4xx banner with the exact `error_code`.
 
 ## Real gaps (prioritized for next phase)
 
-1. **JWT/SSO validation is still a stub.** Bearer mode rejects all traffic with 501. Next phase: PyJWT + JWKS fetch/cache, issuer/audience validation, claim → user mapping.
-2. **pytest runs on SQLite only.** Postgres parity is asserted by `pg_verify.sh` + the `backend-postgres` CI job (which exercises the live surface). A pytest Postgres matrix is the next CI upgrade; `conftest.py` already reads env so this is mostly wiring.
-3. **No image push / release pipeline.** CI builds the Docker image but doesn't publish it.
-4. **Secrets are still plain env vars.** No AWS SM / Vault integration.
-5. **No RBAC-gated writes for org metadata** (`/organizations` etc. remain read-only).
-6. **`users.role` is still free VARCHAR** at DB level; no CHECK/lookup.
-7. **No pagination / cursor** on `GET /encounters`.
-8. **No encounter update / delete / cancel**; no `cancelled` status.
-9. **Free-form `event_data`** — no per-event_type schema.
-10. **CORS `allow_origins=["*"]`** still open.
+1. **No automated frontend tests.** All frontend verification this phase is build/typecheck + live-curl parity. Next: a small Vitest or Playwright pass.
+2. **JWT validation still stubbed.** Bearer mode returns 501; the frontend currently only implements header mode.
+3. **No encounter creation UI.** The frontend can add events and move statuses but cannot create encounters yet (backend endpoint exists).
+4. **No pagination.** Works fine at seed scale; first real dataset will need it on both ends.
+5. **No optimistic updates.** Every mutation re-fetches.
+6. **No global state manager.** Fine at this size; watch for prop-drill as flows multiply.
+7. **No encounter update / delete / cancel.** No `cancelled` status.
+8. **Free-form `event_data`** still lacks per-event_type schema.
+9. **Raw `sqlite3` → SA Core refactor complete** — pytest matrix against Postgres is the next CI upgrade.
+10. **CORS `allow_origins=["*"]`** remains.
 11. **No distinct audit log** for auth/scoping failures.
-12. **No rate limiting, no lockout, no structured logging.**
+12. **No rate limiting, lockout, or structured logging.**
+13. **No CI job for the frontend.** The `docker-build` + `docs` jobs don't cover the web bundle. A `frontend-build` CI job is a small, honest addition.

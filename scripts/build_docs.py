@@ -38,6 +38,7 @@ SECTIONS = [
     ("12 — Runtime config", BUILD / "12-runtime-config.md"),
     ("13 — Deploy target", BUILD / "13-deploy-target.md"),
     ("14 — Postgres parity", BUILD / "14-postgres-parity.md"),
+    ("15 — Frontend integration", BUILD / "15-frontend-integration.md"),
     ("Diagram — System architecture", DIAGR / "system-architecture.md"),
     ("Diagram — Encounter status machine", DIAGR / "encounter-status-machine.md"),
     ("Diagram — ER", DIAGR / "er-diagram.md"),
@@ -58,9 +59,11 @@ date.
 
 **Phase 5 — CI + runtime hardening.** GitHub Actions workflow runs install + Alembic upgrade on an isolated CI DB + idempotent seed + pytest + live smoke. A separate `docs` job regenerates the final HTML/PDF. Root `Makefile`, `apps/api/scripts/smoke.sh`, and `scripts/build_docs.py` codify the local verification + doc-build paths.
 
-**Phase 6 — Production seam + deploy target + Postgres parity (this phase).** DB layer moved to SQLAlchemy Core (`apps/api/app/db.py`) — same queries run on SQLite and Postgres via `:name` binds, `COALESCE`, and an `insert_returning_id` helper. New `apps/api/app/config.py` centralizes env-driven settings and validates auth mode at import time. `auth.py` gained a `resolve_caller_from_bearer` placeholder that returns **501** rather than fake-serving traffic. Dockerfile hardened (non-root, HEALTHCHECK, entrypoint that runs migrations at start). `infra/docker/docker-compose.prod.yml` brings up API + Postgres. `scripts/pg_verify.sh` spins a throwaway Postgres container and proves migrations + seed + boot + smoke + a real state transition + event write. CI expanded to four jobs: `backend-sqlite`, `backend-postgres`, `docker-build`, `docs`.
+**Phase 6 — Production seam + deploy target + Postgres parity.** DB layer moved to SQLAlchemy Core. `apps/api/app/config.py` centralizes env. `auth.py` gained a bearer stub that returns 501 honestly. Dockerfile hardened, `docker-compose.prod.yml` + `scripts/pg_verify.sh` + `backend-postgres` CI job land.
 
-Preserved untouched: `/health`, `/`, Alembic history (still 2 revisions), SQLite dev workflow, state machine + filtering surface, workflow_events model, existing endpoint contracts.
+**Phase 7 — Frontend workflow UI (this phase).** `apps/web/` becomes a real app. Typed API client (`src/api.ts`) funnels every call through one surface that converts backend 4xx envelopes into `ApiError` for the UI. `src/identity.ts` persists the seeded dev caller in `localStorage`. `App.tsx` renders a two-pane workflow console: filtered encounter list, encounter detail with a facts grid and color-coded status, an event timeline, role-aware transition buttons, and a composer for adding events (hidden with explanation for reviewers). Error banners surface the exact `{error_code, reason}` the backend ships. `make dev` boots API + Vite together with trap-based teardown. No backend contract changes.
+
+Preserved untouched: `/health`, `/`, Alembic history, SQLite dev workflow, state machine + filtering surface, workflow_events model, existing endpoint contracts.
 """
 
 

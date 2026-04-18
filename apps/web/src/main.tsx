@@ -1,22 +1,15 @@
-import React from 'react'
-import ReactDOM from 'react-dom/client'
+import React from "react";
+import ReactDOM from "react-dom/client";
+import App from "./App";
+import "./styles.css";
 
-function App() {
-  return (
-    <div style={{ fontFamily: 'Arial, sans-serif', padding: '40px' }}>
-      <h1>ChartNav Platform</h1>
-      <p>Frontend shell is running.</p>
-    </div>
-  )
-}
-
-const root = document.getElementById('root')
+const root = document.getElementById("root");
 if (!root) {
-  throw new Error('Root element not found')
+  throw new Error("Root element not found");
 }
 
 ReactDOM.createRoot(root).render(
   <React.StrictMode>
     <App />
   </React.StrictMode>
-)
+);
