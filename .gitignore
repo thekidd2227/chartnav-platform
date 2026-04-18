@@ -24,3 +24,4 @@
 
 # Local databases
 *.db
+.pytest_cache/

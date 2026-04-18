@@ -3,7 +3,7 @@
 ```mermaid
 erDiagram
   organizations ||--o{ locations        : "has"
-  organizations ||--o{ users            : "employs (identity + org lens)"
+  organizations ||--o{ users            : "employs (identity + role)"
   organizations ||--o{ encounters       : "owns"
   locations     ||--o{ encounters       : "hosts"
   encounters    ||--o{ workflow_events  : "emits"
@@ -25,7 +25,7 @@ erDiagram
     int organization_id FK
     string email UK
     string full_name
-    string role
+    string role "admin | clinician | reviewer"
     datetime created_at
   }
   encounters {
@@ -50,15 +50,17 @@ erDiagram
   }
 ```
 
-## Dev auth note
+## Seeded tenants & users
 
-`users.email` is the authentication key consumed from the `X-User-Email`
-header. `users.organization_id` is the authoritative source of the
-caller's organization scope — never derived from body or query params.
+| org_id | slug               | email                    | role      |
+|--------|--------------------|--------------------------|-----------|
+| 1      | `demo-eye-clinic`  | admin@chartnav.local     | admin     |
+| 1      | `demo-eye-clinic`  | clin@chartnav.local      | clinician |
+| 1      | `demo-eye-clinic`  | rev@chartnav.local       | reviewer  |
+| 2      | `northside-retina` | admin@northside.local    | admin     |
+| 2      | `northside-retina` | clin@northside.local     | clinician |
 
-## Seeded tenants
-
-| org_id | slug               | admin email             | location_id | encounter_ids |
-|--------|--------------------|-------------------------|-------------|---------------|
-| 1      | `demo-eye-clinic`  | admin@chartnav.local    | 1           | 1, 2          |
-| 2      | `northside-retina` | admin@northside.local   | 2           | 3             |
+`users.email` is the authentication key consumed from `X-User-Email`.
+`users.role` is the RBAC key consumed by `app.authz`.
+`users.organization_id` is the authoritative source of scope; never
+derived from client input.

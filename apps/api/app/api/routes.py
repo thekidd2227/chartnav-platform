@@ -10,21 +10,17 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from app.auth import Caller, ensure_same_org, require_caller
+from app.authz import (
+    assert_can_transition,
+    require_create_encounter,
+    require_create_event,
+)
 
 router = APIRouter()
 
 DB_PATH = Path(__file__).resolve().parents[2] / "chartnav.db"
 
 # ----- State machine -----
-#
-# Forward flow:
-#   scheduled -> in_progress -> draft_ready -> review_needed -> completed
-#
-# Rework flow (explicit, documented):
-#   review_needed -> draft_ready      (reviewer kicks back for rewrite)
-#   draft_ready   -> in_progress      (draft rejected, return to charting)
-#
-# All other transitions are rejected with 400 invalid_transition.
 ALLOWED_STATUSES: set[str] = {
     "scheduled",
     "in_progress",
@@ -40,6 +36,15 @@ ALLOWED_TRANSITIONS: dict[str, set[str]] = {
     "review_needed": {"completed", "draft_ready"},
     "completed": set(),
 }
+
+
+# ---------- standardized errors ----------
+
+def _err(code: str, reason: str, status_code: int) -> HTTPException:
+    return HTTPException(
+        status_code=status_code,
+        detail={"error_code": code, "reason": reason},
+    )
 
 
 # ---------- DB helpers ----------
@@ -83,9 +88,13 @@ def _hydrate_event(row: dict) -> dict:
     return row
 
 
-def _load_encounter_for_caller(
-    encounter_id: int, caller: Caller
-) -> dict:
+ENCOUNTER_COLUMNS = (
+    "id, organization_id, location_id, patient_identifier, patient_name, "
+    "provider_name, status, scheduled_at, started_at, completed_at, created_at"
+)
+
+
+def _load_encounter_for_caller(encounter_id: int, caller: Caller) -> dict:
     """Fetch an encounter, or 404 — same response whether the encounter
     doesn't exist at all or belongs to another org. This prevents
     cross-org existence probing."""
@@ -94,7 +103,7 @@ def _load_encounter_for_caller(
         (encounter_id,),
     )
     if not row or row["organization_id"] != caller.organization_id:
-        raise HTTPException(status_code=404, detail="encounter_not_found")
+        raise _err("encounter_not_found", "no such encounter in your organization", 404)
     return row
 
 
@@ -119,7 +128,7 @@ class StatusUpdate(BaseModel):
     status: str
 
 
-# ---------- Core / existing endpoints ----------
+# ---------- Open endpoints ----------
 
 @router.get("/health")
 def health() -> dict[str, str]:
@@ -131,9 +140,10 @@ def root() -> dict[str, str]:
     return {"service": "chartnav-api", "version": "0.1.0"}
 
 
+# ---------- Identity ----------
+
 @router.get("/me")
 def me(caller: Caller = Depends(require_caller)) -> dict:
-    """Return the resolved caller. Proves the auth header works end-to-end."""
     return {
         "user_id": caller.user_id,
         "email": caller.email,
@@ -143,38 +153,37 @@ def me(caller: Caller = Depends(require_caller)) -> dict:
     }
 
 
-# NOTE: the following three list endpoints are intentionally UNSCOPED in
-# this phase. They are documented as such in docs/build/03-api-endpoints.md
-# and will be scoped (or role-gated) in a follow-up phase.
+# ---------- Org metadata (now org-scoped, all roles) ----------
+
 @router.get("/organizations")
-def list_organizations() -> list[dict]:
+def list_organizations(caller: Caller = Depends(require_caller)) -> list[dict]:
+    # Caller only ever sees their own org.
     return fetch_all(
-        "SELECT id, name, slug, created_at FROM organizations ORDER BY id"
+        "SELECT id, name, slug, created_at FROM organizations "
+        "WHERE id = ? ORDER BY id",
+        (caller.organization_id,),
     )
 
 
 @router.get("/locations")
-def list_locations() -> list[dict]:
+def list_locations(caller: Caller = Depends(require_caller)) -> list[dict]:
     return fetch_all(
-        "SELECT id, organization_id, name, created_at FROM locations ORDER BY id"
+        "SELECT id, organization_id, name, created_at FROM locations "
+        "WHERE organization_id = ? ORDER BY id",
+        (caller.organization_id,),
     )
 
 
 @router.get("/users")
-def list_users() -> list[dict]:
+def list_users(caller: Caller = Depends(require_caller)) -> list[dict]:
     return fetch_all(
         "SELECT id, organization_id, email, full_name, role, created_at "
-        "FROM users ORDER BY id"
+        "FROM users WHERE organization_id = ? ORDER BY id",
+        (caller.organization_id,),
     )
 
 
-# ---------- Encounter endpoints (org-scoped) ----------
-
-ENCOUNTER_COLUMNS = (
-    "id, organization_id, location_id, patient_identifier, patient_name, "
-    "provider_name, status, scheduled_at, started_at, completed_at, created_at"
-)
-
+# ---------- Encounters (authed + org-scoped + RBAC) ----------
 
 @router.get("/encounters")
 def list_encounters(
@@ -184,12 +193,12 @@ def list_encounters(
     status: Optional[str] = Query(default=None),
     provider_name: Optional[str] = Query(default=None),
 ) -> list[dict]:
-    # organization_id query param is a LENS, not an override: if it's
-    # provided and doesn't match the caller's org, reject. This prevents
-    # cross-org filtering from silently returning the caller's own data
-    # under a misleading filter.
     if organization_id is not None and organization_id != caller.organization_id:
-        raise HTTPException(status_code=403, detail="cross_org_access_forbidden")
+        raise _err(
+            "cross_org_access_forbidden",
+            "requested organization does not match caller's organization",
+            403,
+        )
 
     clauses: list[str] = ["organization_id = ?"]
     params: list = [caller.organization_id]
@@ -199,9 +208,10 @@ def list_encounters(
         params.append(location_id)
     if status is not None:
         if status not in ALLOWED_STATUSES:
-            raise HTTPException(
-                status_code=400,
-                detail=f"invalid_status: must be one of {sorted(ALLOWED_STATUSES)}",
+            raise _err(
+                "invalid_status",
+                f"must be one of {sorted(ALLOWED_STATUSES)}",
+                400,
             )
         clauses.append("status = ?")
         params.append(status)
@@ -225,7 +235,7 @@ def get_encounter(
 def list_encounter_events(
     encounter_id: int, caller: Caller = Depends(require_caller)
 ) -> list[dict]:
-    _load_encounter_for_caller(encounter_id, caller)  # 404 if cross-org
+    _load_encounter_for_caller(encounter_id, caller)
     rows = fetch_all(
         "SELECT id, encounter_id, event_type, event_data, created_at "
         "FROM workflow_events WHERE encounter_id = ? ORDER BY id",
@@ -236,20 +246,22 @@ def list_encounter_events(
 
 @router.post("/encounters", status_code=status.HTTP_201_CREATED)
 def create_encounter(
-    payload: EncounterCreate, caller: Caller = Depends(require_caller)
+    payload: EncounterCreate,
+    caller: Caller = Depends(require_create_encounter),
 ) -> dict:
     if payload.status not in ALLOWED_STATUSES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"invalid_status: must be one of {sorted(ALLOWED_STATUSES)}",
+        raise _err(
+            "invalid_status",
+            f"must be one of {sorted(ALLOWED_STATUSES)}",
+            400,
         )
     if payload.status not in {"scheduled", "in_progress"}:
-        raise HTTPException(
-            status_code=400,
-            detail="invalid_initial_status: new encounters must start at scheduled or in_progress",
+        raise _err(
+            "invalid_initial_status",
+            "new encounters must start at scheduled or in_progress",
+            400,
         )
 
-    # Caller org is authoritative. Body's organization_id must match.
     ensure_same_org(caller, payload.organization_id)
 
     conn = _connect()
@@ -259,11 +271,12 @@ def create_encounter(
             (payload.location_id,),
         ).fetchone()
         if not loc:
-            raise HTTPException(status_code=400, detail="location_not_found")
+            raise _err("location_not_found", "no such location", 400)
         if loc["organization_id"] != caller.organization_id:
-            raise HTTPException(
-                status_code=403,
-                detail="cross_org_access_forbidden",
+            raise _err(
+                "cross_org_access_forbidden",
+                "location does not belong to caller's organization",
+                403,
             )
 
         started_at = _now_iso() if payload.status == "in_progress" else None
@@ -318,9 +331,9 @@ def create_encounter(
 def create_encounter_event(
     encounter_id: int,
     payload: EventCreate,
-    caller: Caller = Depends(require_caller),
+    caller: Caller = Depends(require_create_event),
 ) -> dict:
-    _load_encounter_for_caller(encounter_id, caller)  # 404 if cross-org
+    _load_encounter_for_caller(encounter_id, caller)
 
     if payload.event_data is None:
         event_data_str: Optional[str] = None
@@ -357,28 +370,33 @@ def update_encounter_status(
 ) -> dict:
     new_status = payload.status
     if new_status not in ALLOWED_STATUSES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"invalid_status: must be one of {sorted(ALLOWED_STATUSES)}",
+        raise _err(
+            "invalid_status",
+            f"must be one of {sorted(ALLOWED_STATUSES)}",
+            400,
         )
 
-    row = _load_encounter_for_caller(encounter_id, caller)  # 404 if cross-org
+    row = _load_encounter_for_caller(encounter_id, caller)
     previous_status = row["status"]
 
-    # Idempotent no-op: same state in, same state out.
+    # same-state = no-op (still 200 OK)
     if new_status == previous_status:
         return row
 
     allowed_next = ALLOWED_TRANSITIONS.get(previous_status, set())
     if new_status not in allowed_next:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"invalid_transition: {previous_status} -> {new_status} "
-                f"is not permitted; allowed next states from "
-                f"{previous_status}: {sorted(allowed_next) or 'none (terminal)'}"
+        raise _err(
+            "invalid_transition",
+            (
+                f"{previous_status} -> {new_status} is not permitted; "
+                f"allowed next states from {previous_status}: "
+                f"{sorted(allowed_next) or 'none (terminal)'}"
             ),
+            400,
         )
+
+    # RBAC gate: caller's role must cover this specific edge.
+    assert_can_transition(caller, previous_status, new_status)
 
     started_at = row["started_at"]
     completed_at = row["completed_at"]

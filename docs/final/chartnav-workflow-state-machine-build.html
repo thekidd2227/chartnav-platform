@@ -39,7 +39,7 @@
   <div class="sub">Phase: strict encounter state machine + filtered listing<br>
   Repo: <code>thekidd2227/chartnav-platform</code> · Generated 2026-04-17</div>
 </header>
-<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth & org scoping</a></li><li><a href="#sec-9">Diagram — System architecture</a></li><li><a href="#sec-10">Diagram — Encounter status machine</a></li><li><a href="#sec-11">Diagram — ER</a></li><li><a href="#sec-12">Diagram — API / data flow</a></li></ol></nav>
+<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth, org scoping, RBAC</a></li><li><a href="#sec-9">08 — Test strategy</a></li><li><a href="#sec-10">Diagram — System architecture</a></li><li><a href="#sec-11">Diagram — Encounter status machine</a></li><li><a href="#sec-12">Diagram — ER</a></li><li><a href="#sec-13">Diagram — API / data flow</a></li></ol></nav>
 <section id="sec-1"><h2>Executive summary</h2>
 <p>This document consolidates <strong>all</strong> ChartNav backend phases delivered to</p>
 <p>date. It covers the workflow spine, the strict encounter state machine,</p>
@@ -47,63 +47,77 @@
 <p>landed.</p>
 <p><strong>Phase 1 — Workflow spine.</strong> Alembic migration <code>a1b2c3d4e5f6</code> introduced <code>encounters</code> and <code>workflow_events</code> tables with FKs and indexes. Read and write endpoints for both. Idempotent seed.</p>
 <p><strong>Phase 2 — State machine + filtering.</strong> <code>POST /encounters/{id}/status</code> enforces explicit forward + rework edges; everything else returns <code>400 invalid_transition</code> with an allowed-next-states listing. <code>GET /encounters</code> accepts <code>organization_id</code>, <code>location_id</code>, <code>status</code>, <code>provider_name</code> filters.</p>
-<p><strong>Phase 3 — Dev auth + org scoping (this phase).</strong> New <code>apps/api/app/auth.py</code> resolves the caller from <code>X-User-Email</code>, looks up the user, and attaches a <code>Caller</code> dataclass with authoritative <code>organization_id</code>. Every encounter route is now org-scoped: cross-org reads return 404, cross-org body/query assertions return 403. Seed now provisions two tenants (<code>demo-eye-clinic</code>, <code>northside-retina</code>) so scoping is actually exercised.</p>
-<p>Preserved untouched: <code>/health</code>, <code>/</code>, Alembic history, SQLite dev workflow, the entire state-machine + filtering surface, and the existing workflow_events model.</p>
+<p><strong>Phase 3 — Dev auth + org scoping.</strong> New <code>apps/api/app/auth.py</code> resolves the caller from <code>X-User-Email</code>, looks up the user, and attaches a <code>Caller</code> dataclass with authoritative <code>organization_id</code>. Every encounter route is now org-scoped: cross-org reads return 404, cross-org body/query assertions return 403.</p>
+<p><strong>Phase 4 — RBAC + full scoping + tests (this phase).</strong> New <code>apps/api/app/authz.py</code> introduces <code>admin</code> / <code>clinician</code> / <code>reviewer</code> roles and per-edge transition rules. <code>/organizations</code>, <code>/locations</code>, <code>/users</code> are now authenticated and org-scoped. The auth module gained a <code>CHARTNAV_AUTH_MODE</code> seam and a standardized <code>{error_code, reason}</code> error envelope. A real pytest suite (25 tests, TestClient + per-test SQLite) locks in auth, scoping, RBAC, state-machine invariants, and cross-org denial.</p>
+<p>Preserved untouched: <code>/health</code>, <code>/</code>, Alembic history, SQLite dev workflow, the state machine + filtering surface, and the workflow_events model.</p>
 </section>
 <section id="sec-2"><h2>01 — Current state</h2>
 <h1>ChartNav — Current State</h1>
-<p><strong>As of:</strong> 2026-04-17 (phase: dev auth + org scoping)</p>
+<p><strong>As of:</strong> 2026-04-17 (phase: RBAC + full scoping + tests)</p>
 <h2>Repo layout (relevant)</h2>
 <pre class="code lang-"><code>
 chartnav-platform/
 ├── apps/
 │   ├── api/
-│   │   ├── app/main.py              # app factory, CORS, router mount
-│   │   ├── app/auth.py              # NEW — dev auth + org-scoping helpers
-│   │   ├── app/api/routes.py        # HTTP handlers, all encounter routes org-scoped
+│   │   ├── app/main.py
+│   │   ├── app/auth.py              # authn only (header transport today)
+│   │   ├── app/authz.py             # NEW — RBAC roles + dependencies
+│   │   ├── app/api/routes.py        # all routes authed + scoped + role-gated
 │   │   ├── alembic.ini
-│   │   ├── alembic/env.py
+│   │   ├── alembic/env.py           # now honors `-x sqlalchemy.url=` for tests
 │   │   ├── alembic/versions/        # 2 migrations (unchanged this phase)
-│   │   ├── scripts_seed.py          # now seeds 2 orgs for scoping proof
+│   │   ├── scripts_seed.py          # 2 orgs, 5 users across 3 roles
+│   │   ├── tests/                   # NEW — pytest + TestClient
+│   │   │   ├── conftest.py
+│   │   │   ├── test_auth.py
+│   │   │   ├── test_scoping.py
+│   │   │   └── test_rbac.py
 │   │   └── pyproject.toml
-│   └── web/                         # untouched this phase
+│   └── web/
 ├── infra/docker/docker-compose.yml
 └── docs/
     ├── build/                       # living docs
     ├── diagrams/                    # Mermaid sources
-    ├── final/                       # consolidated HTML/PDF (regenerated)
-    └── releases/
+    └── final/                       # consolidated HTML/PDF
 </code></pre>
 <h2>Runtime baseline</h2>
 <ul>
 <li>Python 3.11+, FastAPI, raw <code>sqlite3</code> driver.</li>
 <li>SQLite at <code>apps/api/chartnav.db</code> (gitignored).</li>
 <li>Alembic head: <code>a1b2c3d4e5f6</code> (no new migrations this phase).</li>
-<li>CORS still wide-open (<code>*</code>) for local dev.</li>
-<li>Dev auth: every protected route reads <code>X-User-Email</code> and resolves the</li>
+<li>Auth transport: <code>X-User-Email</code> → <code>users</code> lookup (dev only).</li>
+<li>Auth seam: <code>app.auth.require_caller</code> with <code>CHARTNAV_AUTH_MODE</code> env flag for future JWT/SSO swap.</li>
+<li>Authorization: <code>app.authz</code> with <code>ROLE_ADMIN</code> / <code>ROLE_CLINICIAN</code> / <code>ROLE_REVIEWER</code>, role-gated dependencies for create/event/transition.</li>
+<li>Error envelope standardized: <code>{&quot;detail&quot;: {&quot;error_code&quot;: &quot;...&quot;, &quot;reason&quot;: &quot;...&quot;}}</code>.</li>
 </ul>
-<p>caller from the <code>users</code> table. See <code>07-auth-and-scoping.md</code>.</p>
 <h2>Verified working endpoints</h2>
-<h3>Open (no auth)</h3>
+<h3>Open</h3>
 <ul>
 <li><code>GET /health</code>, <code>GET /</code></li>
-<li><code>GET /organizations</code>, <code>GET /locations</code>, <code>GET /users</code></li>
 </ul>
-<p>— intentionally left open this phase; see known gaps.</p>
 <h3>Authenticated (require <code>X-User-Email</code>)</h3>
 <ul>
-<li><code>GET /me</code> — NEW. Returns the resolved caller context.</li>
-<li><code>GET /encounters</code> — caller&#x27;s org only; rejects cross-org filter.</li>
-<li><code>GET /encounters/{id}</code> — 404 if cross-org.</li>
-<li><code>GET /encounters/{id}/events</code> — 404 if cross-org.</li>
-<li><code>POST /encounters</code> — forces <code>organization_id</code> to caller&#x27;s org; location must also belong.</li>
-<li><code>POST /encounters/{id}/events</code> — 404 if cross-org.</li>
-<li><code>POST /encounters/{id}/status</code> — 404 if cross-org; strict state machine still applies.</li>
+<li><code>GET /me</code></li>
+<li><code>GET /organizations</code> — scoped to caller&#x27;s org (single row)</li>
+<li><code>GET /locations</code> — scoped to caller&#x27;s org</li>
+<li><code>GET /users</code> — scoped to caller&#x27;s org</li>
+<li><code>GET /encounters</code> — scoped + filterable</li>
+<li><code>GET /encounters/{id}</code> — 404 if cross-org</li>
+<li><code>GET /encounters/{id}/events</code> — 404 if cross-org</li>
 </ul>
-<h2>Seeded tenants</h2>
-<table><thead><tr><th>org_id</th><th>slug</th><th>admin email</th><th>encounters</th></tr></thead><tbody>
-<tr><td>1</td><td><code>demo-eye-clinic</code></td><td><code>admin@chartnav.local</code></td><td>PT-1001, PT-1002</td></tr>
-<tr><td>2</td><td><code>northside-retina</code></td><td><code>admin@northside.local</code></td><td>PT-2001</td></tr>
+<h3>Authenticated + role-gated</h3>
+<ul>
+<li><code>POST /encounters</code> — admin or clinician (RBAC); body <code>organization_id</code> must match caller</li>
+<li><code>POST /encounters/{id}/events</code> — admin or clinician</li>
+<li><code>POST /encounters/{id}/status</code> — per-edge RBAC (see <code>07-auth-and-scoping.md</code>)</li>
+</ul>
+<h2>Seeded tenants / users</h2>
+<table><thead><tr><th>org_id</th><th>slug</th><th>email</th><th>role</th></tr></thead><tbody>
+<tr><td>1</td><td><code>demo-eye-clinic</code></td><td>admin@chartnav.local</td><td>admin</td></tr>
+<tr><td>1</td><td><code>demo-eye-clinic</code></td><td>clin@chartnav.local</td><td>clinician</td></tr>
+<tr><td>1</td><td><code>demo-eye-clinic</code></td><td>rev@chartnav.local</td><td>reviewer</td></tr>
+<tr><td>2</td><td><code>northside-retina</code></td><td>admin@northside.local</td><td>admin</td></tr>
+<tr><td>2</td><td><code>northside-retina</code></td><td>clin@northside.local</td><td>clinician</td></tr>
 </tbody></table>
 </section>
 <section id="sec-3"><h2>02 — Workflow state machine</h2>
@@ -170,39 +184,41 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <h1>API Endpoints</h1>
 <p>Base URL (local dev): <code>http://127.0.0.1:8000</code>.</p>
 <p>Auth: every endpoint tagged <strong>🔒</strong> requires header <code>X-User-Email: &lt;seeded user email&gt;</code>.</p>
-<p>See <code>07-auth-and-scoping.md</code> for the full model.</p>
+<p>Some endpoints are further role-gated — see <code>07-auth-and-scoping.md</code>.</p>
+<p>All error bodies have the standardized shape:</p>
+<pre class="code lang-json"><code>
+{&quot;detail&quot;: {&quot;error_code&quot;: &quot;&lt;stable_code&gt;&quot;, &quot;reason&quot;: &quot;&lt;human message&gt;&quot;}}
+</code></pre>
 <h2>System (open)</h2>
-<table><thead><tr><th>Method</th><th>Path</th><th>Response</th></tr></thead><tbody>
-<tr><td>GET</td><td><code>/health</code></td><td><code>{&quot;status&quot;:&quot;ok&quot;}</code></td></tr>
-<tr><td>GET</td><td><code>/</code></td><td><code>{&quot;service&quot;:&quot;chartnav-api&quot;,&quot;version&quot;:&quot;0.1.0&quot;}</code></td></tr>
+<table><thead><tr><th>Method</th><th>Path</th></tr></thead><tbody>
+<tr><td>GET</td><td><code>/health</code></td></tr>
+<tr><td>GET</td><td><code>/</code></td></tr>
 </tbody></table>
 <h2>Identity</h2>
-<table><thead><tr><th>Method</th><th>Path</th><th>Auth</th><th>Response</th></tr></thead><tbody>
-<tr><td>GET</td><td><code>/me</code></td><td>🔒</td><td><code>{user_id, email, full_name, role, organization_id}</code></td></tr>
+<table><thead><tr><th>Method</th><th>Path</th><th>Auth</th><th>Roles</th></tr></thead><tbody>
+<tr><td>GET</td><td><code>/me</code></td><td>🔒</td><td>any</td></tr>
 </tbody></table>
-<h2>Org / location / user (open, read-only)</h2>
-<p>These are <strong>not</strong> org-scoped this phase. Tracked in <code>06-known-gaps.md</code>.</p>
-<table><thead><tr><th>Method</th><th>Path</th></tr></thead><tbody>
-<tr><td>GET</td><td><code>/organizations</code></td></tr>
-<tr><td>GET</td><td><code>/locations</code></td></tr>
-<tr><td>GET</td><td><code>/users</code></td></tr>
+<h2>Org metadata (🔒, org-scoped, any role)</h2>
+<table><thead><tr><th>Method</th><th>Path</th><th>Behavior</th></tr></thead><tbody>
+<tr><td>GET</td><td><code>/organizations</code></td><td>Returns only the caller&#x27;s org row.</td></tr>
+<tr><td>GET</td><td><code>/locations</code></td><td><code>WHERE organization_id = caller.org</code>.</td></tr>
+<tr><td>GET</td><td><code>/users</code></td><td><code>WHERE organization_id = caller.org</code>.</td></tr>
 </tbody></table>
-<h2>Encounters (🔒 org-scoped)</h2>
+<h2>Encounters (🔒, org-scoped + RBAC)</h2>
 <h3>GET <code>/encounters</code></h3>
-<p>Always filtered to <code>caller.organization_id</code>.</p>
-<p>Additional optional query parameters (all AND-ed, parameterized):</p>
-<table><thead><tr><th>Param</th><th>Type</th><th>Notes</th></tr></thead><tbody>
-<tr><td><code>organization_id</code></td><td>int≥1</td><td>Must equal <code>caller.organization_id</code> — else 403.</td></tr>
-<tr><td><code>location_id</code></td><td>int≥1</td><td>Narrows within caller org.</td></tr>
-<tr><td><code>status</code></td><td>string</td><td>Must be in <code>ALLOWED_STATUSES</code> or 400.</td></tr>
-<tr><td><code>provider_name</code></td><td>string</td><td>Exact match.</td></tr>
+<p>Any authenticated role. Always filtered to <code>caller.organization_id</code>.</p>
+<p>Optional query params (AND-ed, parameterized):</p>
+<table><thead><tr><th>Param</th><th>Rule</th></tr></thead><tbody>
+<tr><td><code>organization_id</code></td><td>Must equal <code>caller.org</code> — else 403.</td></tr>
+<tr><td><code>location_id</code></td><td>Narrows within caller org.</td></tr>
+<tr><td><code>status</code></td><td>Must be in <code>ALLOWED_STATUSES</code> — else 400.</td></tr>
+<tr><td><code>provider_name</code></td><td>Exact match.</td></tr>
 </tbody></table>
-<h3>GET <code>/encounters/{encounter_id}</code></h3>
-<p>Returns encounter if it belongs to caller&#x27;s org. Otherwise <strong>404 <code>encounter_not_found</code></strong> — same response whether it doesn&#x27;t exist or belongs to another org (no cross-org existence oracle).</p>
-<h3>GET <code>/encounters/{encounter_id}/events</code></h3>
-<p>404 if the parent encounter doesn&#x27;t exist or is cross-org.</p>
-<p>Returns events oldest-first; <code>event_data</code> is JSON-parsed when valid.</p>
-<h3>POST <code>/encounters</code></h3>
+<h3>GET <code>/encounters/{id}</code> — any role</h3>
+<p>404 if missing or cross-org.</p>
+<h3>GET <code>/encounters/{id}/events</code> — any role</h3>
+<p>404 if parent missing or cross-org.</p>
+<h3>POST <code>/encounters</code> — <strong>admin, clinician</strong></h3>
 <p>Body:</p>
 <pre class="code lang-json"><code>
 {
@@ -217,54 +233,60 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 </code></pre>
 <p>Rules:</p>
 <ul>
-<li><code>organization_id</code> <strong>must equal</strong> <code>caller.organization_id</code> → else 403 <code>cross_org_access_forbidden</code>.</li>
-<li><code>location_id</code> must exist and belong to caller&#x27;s org → else 400 <code>location_not_found</code> or 403.</li>
-<li><code>status</code> defaults to <code>&quot;scheduled&quot;</code>; only <code>scheduled</code> or <code>in_progress</code> permitted at creation (deeper states can&#x27;t be forged).</li>
-<li>Appends <code>workflow_events</code> row <code>encounter_created</code> with <code>{status, created_by}</code>.</li>
+<li>Reviewer → 403 <code>role_cannot_create_encounter</code>.</li>
+<li><code>organization_id</code> must match caller org → 403 otherwise.</li>
+<li><code>location_id</code> must exist and belong to caller org → 400 or 403 otherwise.</li>
+<li>Initial status restricted to <code>scheduled</code> or <code>in_progress</code>.</li>
 </ul>
-<h3>POST <code>/encounters/{encounter_id}/events</code></h3>
-<p>404 if cross-org. Body:</p>
-<pre class="code lang-json"><code>
-{ &quot;event_type&quot;: &quot;note_draft_completed&quot;, &quot;event_data&quot;: { &quot;template&quot;: &quot;glaucoma-initial&quot; } }
-</code></pre>
-<p><code>event_data</code> may be any JSON value. Objects/arrays stored as canonical JSON.</p>
-<h3>POST <code>/encounters/{encounter_id}/status</code></h3>
-<p>404 if cross-org. Body: <code>{ &quot;status&quot;: &quot;draft_ready&quot; }</code>.</p>
-<ul>
-<li>Validated against <code>ALLOWED_STATUSES</code> and <code>ALLOWED_TRANSITIONS</code> (<code>02-workflow-state-machine.md</code>).</li>
-<li>Same-status = no-op.</li>
-<li>On success: stamps <code>started_at</code>/<code>completed_at</code> per lifecycle rules, appends <code>status_changed</code> event with <code>{old_status, new_status, changed_by}</code>.</li>
-</ul>
-<h3>Error summary</h3>
-<table><thead><tr><th>Code</th><th>Detail</th><th>When</th></tr></thead><tbody>
-<tr><td>401</td><td><code>missing_auth_header</code></td><td><code>X-User-Email</code> missing or empty.</td></tr>
-<tr><td>401</td><td><code>unknown_user</code></td><td>Email not in <code>users</code>.</td></tr>
-<tr><td>403</td><td><code>cross_org_access_forbidden</code></td><td>Body/query asserts a different org or location.</td></tr>
-<tr><td>400</td><td><code>invalid_status</code></td><td>Bad status string.</td></tr>
-<tr><td>400</td><td><code>invalid_transition: a -&gt; b…</code></td><td>Disallowed state-machine edge.</td></tr>
-<tr><td>400</td><td><code>invalid_initial_status: …</code></td><td>Creating with status other than scheduled/in_progress.</td></tr>
-<tr><td>400</td><td><code>location_not_found</code></td><td><code>location_id</code> does not exist.</td></tr>
-<tr><td>404</td><td><code>encounter_not_found</code></td><td>Missing or cross-org encounter.</td></tr>
+<h3>POST <code>/encounters/{id}/events</code> — <strong>admin, clinician</strong></h3>
+<p>Reviewer → 403 <code>role_cannot_create_event</code>. 404 if cross-org.</p>
+<h3>POST <code>/encounters/{id}/status</code></h3>
+<p>404 if cross-org. Status must be valid. Transition must be legal by the</p>
+<p>state machine (<code>02-workflow-state-machine.md</code>). <strong>Per-edge</strong> RBAC:</p>
+<table><thead><tr><th>From</th><th>To</th><th>Roles allowed</th></tr></thead><tbody>
+<tr><td>scheduled</td><td>in_progress</td><td>admin, clinician</td></tr>
+<tr><td>in_progress</td><td>draft_ready</td><td>admin, clinician</td></tr>
+<tr><td>draft_ready</td><td>in_progress</td><td>admin, clinician</td></tr>
+<tr><td>draft_ready</td><td>review_needed</td><td>admin, reviewer</td></tr>
+<tr><td>review_needed</td><td>draft_ready</td><td>admin, reviewer</td></tr>
+<tr><td>review_needed</td><td>completed</td><td>admin, reviewer</td></tr>
+</tbody></table>
+<p>Same-state POST = no-op (200). Role violation → 403 <code>role_cannot_transition</code>. Invalid transition → 400 <code>invalid_transition</code>.</p>
+<h2>Error code inventory</h2>
+<table><thead><tr><th>Code</th><th>HTTP</th><th>Origin</th></tr></thead><tbody>
+<tr><td><code>missing_auth_header</code></td><td>401</td><td>auth transport</td></tr>
+<tr><td><code>unknown_user</code></td><td>401</td><td>auth transport</td></tr>
+<tr><td><code>auth_mode_unsupported</code></td><td>500</td><td><code>CHARTNAV_AUTH_MODE</code> set to unknown</td></tr>
+<tr><td><code>role_forbidden</code></td><td>403</td><td>generic <code>require_roles</code> gate</td></tr>
+<tr><td><code>role_cannot_create_encounter</code></td><td>403</td><td>POST /encounters</td></tr>
+<tr><td><code>role_cannot_create_event</code></td><td>403</td><td>POST /encounters/{id}/events</td></tr>
+<tr><td><code>role_cannot_transition</code></td><td>403</td><td>POST /encounters/{id}/status</td></tr>
+<tr><td><code>cross_org_access_forbidden</code></td><td>403</td><td>body/query asserts another org</td></tr>
+<tr><td><code>encounter_not_found</code></td><td>404</td><td>missing or cross-org encounter</td></tr>
+<tr><td><code>location_not_found</code></td><td>400</td><td>bad location_id</td></tr>
+<tr><td><code>invalid_status</code></td><td>400</td><td>unknown status string</td></tr>
+<tr><td><code>invalid_initial_status</code></td><td>400</td><td>POST /encounters with bad init</td></tr>
+<tr><td><code>invalid_transition</code></td><td>400</td><td>disallowed state-machine edge</td></tr>
 </tbody></table>
 </section>
 <section id="sec-5"><h2>04 — Data model</h2>
 <h1>Data Model</h1>
-<p>SQLite (local dev). Schema reproduced by Alembic migrations</p>
-<p><code>43ccbf363a8f → a1b2c3d4e5f6</code>. No schema changes in this auth phase.</p>
-<h2>Tables</h2>
+<p>SQLite (local dev). Schema produced by Alembic migrations</p>
+<p><code>43ccbf363a8f → a1b2c3d4e5f6</code>. No schema changes in this RBAC/scoping phase.</p>
+<h2>Tables (unchanged this phase)</h2>
 <h3><code>organizations</code></h3>
 <table><thead><tr><th>column</th><th>type</th><th>constraints</th></tr></thead><tbody>
 <tr><td>id</td><td>INTEGER</td><td>PK</td></tr>
 <tr><td>name</td><td>VARCHAR(255)</td><td>NOT NULL</td></tr>
 <tr><td>slug</td><td>VARCHAR(255)</td><td>NOT NULL, UNIQUE</td></tr>
-<tr><td>created_at</td><td>DATETIME</td><td>NOT NULL, default <code>now()</code></td></tr>
+<tr><td>created_at</td><td>DATETIME</td><td>NOT NULL default now()</td></tr>
 </tbody></table>
 <h3><code>locations</code></h3>
 <table><thead><tr><th>column</th><th>type</th><th>constraints</th></tr></thead><tbody>
 <tr><td>id</td><td>INTEGER</td><td>PK</td></tr>
 <tr><td>organization_id</td><td>INTEGER</td><td>NOT NULL, FK → organizations(id)</td></tr>
 <tr><td>name</td><td>VARCHAR</td><td>NOT NULL</td></tr>
-<tr><td>created_at</td><td>DATETIME</td><td>NOT NULL, default <code>now()</code></td></tr>
+<tr><td>created_at</td><td>DATETIME</td><td>NOT NULL default now()</td></tr>
 </tbody></table>
 <h3><code>users</code></h3>
 <table><thead><tr><th>column</th><th>type</th><th>constraints</th></tr></thead><tbody>
@@ -272,289 +294,411 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <tr><td>organization_id</td><td>INTEGER</td><td>NOT NULL, FK → organizations(id)</td></tr>
 <tr><td>email</td><td>VARCHAR</td><td>NOT NULL, UNIQUE</td></tr>
 <tr><td>full_name</td><td>VARCHAR</td><td>NULL</td></tr>
-<tr><td>role</td><td>VARCHAR</td><td>NOT NULL, default <code>&quot;admin&quot;</code></td></tr>
-<tr><td>created_at</td><td>DATETIME</td><td>NOT NULL, default <code>now()</code></td></tr>
+<tr><td>role</td><td>VARCHAR</td><td>NOT NULL default <code>&quot;admin&quot;</code></td></tr>
+<tr><td>created_at</td><td>DATETIME</td><td>NOT NULL default now()</td></tr>
 </tbody></table>
-<p><code>users.email</code> is the authentication key for the dev auth layer.</p>
-<p><code>users.organization_id</code> is the authoritative source of caller org context.</p>
-<h3><code>encounters</code></h3>
-<p>Unchanged. Indexed on <code>organization_id</code>, <code>location_id</code>, <code>patient_identifier</code>, <code>status</code>.</p>
-<h3><code>workflow_events</code></h3>
-<p>Unchanged. Indexed on <code>encounter_id</code>, <code>event_type</code>.</p>
-<h2>Relationships</h2>
-<pre class="code lang-"><code>
-organizations 1─┬─* locations
-                ├─* users          (identity source for dev auth)
-                └─* encounters ─* workflow_events
-locations     1─* encounters
-</code></pre>
-<p>See <code>docs/diagrams/er-diagram.md</code>.</p>
-<h2>Seeded tenants (two, for scoping proof)</h2>
+<p><strong>Application-level role vocabulary</strong> (enforced by <code>app/authz.py</code>):</p>
+<p><code>admin</code>, <code>clinician</code>, <code>reviewer</code>. The column remains a free VARCHAR in</p>
+<p>SQL; constraint is enforced at the app layer. If you need a DB-level</p>
+<p>CHECK constraint, add it in a future migration.</p>
+<h3><code>encounters</code> and <code>workflow_events</code></h3>
+<p>Unchanged.</p>
+<h2>Seeded tenants (two, with full role coverage)</h2>
 <h3>Org 1 — <code>demo-eye-clinic</code> (id=1)</h3>
-<ul>
-<li>Location: <code>Main Clinic</code> (id=1)</li>
-<li>Admin: <code>admin@chartnav.local</code> / id=1</li>
-</ul>
-<table><thead><tr><th>encounter_id</th><th>patient</th><th>provider</th><th>status</th><th>events</th></tr></thead><tbody>
+<p>Location: <code>Main Clinic</code> (id=1).</p>
+<table><thead><tr><th>email</th><th>role</th></tr></thead><tbody>
+<tr><td>admin@chartnav.local</td><td>admin</td></tr>
+<tr><td>clin@chartnav.local</td><td>clinician</td></tr>
+<tr><td>rev@chartnav.local</td><td>reviewer</td></tr>
+</tbody></table>
+<p>Encounters:</p>
+<table><thead><tr><th>id</th><th>patient</th><th>provider</th><th>status</th><th>events</th></tr></thead><tbody>
 <tr><td>1</td><td>PT-1001</td><td>Dr. Carter</td><td><code>in_progress</code></td><td>3</td></tr>
 <tr><td>2</td><td>PT-1002</td><td>Dr. Patel</td><td><code>review_needed</code></td><td>5</td></tr>
 </tbody></table>
 <h3>Org 2 — <code>northside-retina</code> (id=2)</h3>
-<ul>
-<li>Location: <code>Northside HQ</code> (id=2)</li>
-<li>Admin: <code>admin@northside.local</code> / id=2</li>
-</ul>
-<table><thead><tr><th>encounter_id</th><th>patient</th><th>provider</th><th>status</th><th>events</th></tr></thead><tbody>
+<p>Location: <code>Northside HQ</code> (id=2).</p>
+<table><thead><tr><th>email</th><th>role</th></tr></thead><tbody>
+<tr><td>admin@northside.local</td><td>admin</td></tr>
+<tr><td>clin@northside.local</td><td>clinician</td></tr>
+</tbody></table>
+<p>Encounters:</p>
+<table><thead><tr><th>id</th><th>patient</th><th>provider</th><th>status</th><th>events</th></tr></thead><tbody>
 <tr><td>3</td><td>PT-2001</td><td>Dr. Ahmed</td><td><code>scheduled</code></td><td>1</td></tr>
 </tbody></table>
+<h2>Relationships</h2>
+<p>Unchanged — see <code>docs/diagrams/er-diagram.md</code>.</p>
 <h2>Event taxonomy</h2>
-<table><thead><tr><th>event_type</th><th>When</th><th>Shape</th></tr></thead><tbody>
-<tr><td><code>encounter_created</code></td><td>On <code>POST /encounters</code> / seed</td><td><code>{&quot;status&quot;:&quot;...&quot;, &quot;created_by&quot;:&quot;&lt;email&gt;&quot;}</code></td></tr>
-<tr><td><code>status_changed</code></td><td>Every successful transition</td><td><code>{&quot;old_status&quot;:&quot;...&quot;, &quot;new_status&quot;:&quot;...&quot;, &quot;changed_by&quot;:&quot;&lt;email&gt;&quot;}</code></td></tr>
+<table><thead><tr><th>event_type</th><th>Writer</th><th>Shape</th></tr></thead><tbody>
+<tr><td><code>encounter_created</code></td><td><code>POST /encounters</code> / seed</td><td><code>{&quot;status&quot;: &quot;...&quot;, &quot;created_by&quot;: &quot;&lt;email&gt;&quot;}</code></td></tr>
+<tr><td><code>status_changed</code></td><td><code>POST /encounters/{id}/status</code></td><td><code>{&quot;old_status&quot;: &quot;...&quot;, &quot;new_status&quot;: &quot;...&quot;, &quot;changed_by&quot;: &quot;&lt;email&gt;&quot;}</code></td></tr>
 <tr><td>user-supplied</td><td><code>POST /encounters/{id}/events</code></td><td>Any JSON</td></tr>
 </tbody></table>
 </section>
 <section id="sec-6"><h2>05 — Build log</h2>
 <h1>Build Log</h1>
-<p>Reverse-chronological. Each entry is a concrete, verifiable step.</p>
+<p>Reverse-chronological.</p>
 <p>---</p>
-<h2>2026-04-17 — Phase: dev auth + org scoping</h2>
+<h2>2026-04-17 — Phase: RBAC + full scoping + automated tests</h2>
 <h3>Step 1 — Baseline</h3>
 <ul>
-<li>Starting head commit: <code>505f025</code> (strict state machine + filtering phase).</li>
-<li>Alembic head still <code>a1b2c3d4e5f6</code> — no schema changes needed this phase.</li>
+<li>Starting head: <code>efb5b56</code> (dev auth + org scoping).</li>
+<li>No schema changes needed this phase.</li>
 </ul>
-<h3>Step 2 — Auth foundation</h3>
+<h3>Step 2 — RBAC module</h3>
 <ul>
-<li>New <code>apps/api/app/auth.py</code>: <code>Caller</code> dataclass, <code>require_caller</code> FastAPI dependency, <code>ensure_same_org</code> guard.</li>
-<li><code>require_caller</code> reads <code>X-User-Email</code>, looks up the user by email, and returns structured context. 401 on missing/empty header; 401 on unknown email.</li>
-<li>Added <code>GET /me</code> route that echoes the resolved caller — proves the auth wiring end-to-end.</li>
+<li>New <code>apps/api/app/authz.py</code>:</li>
+<li>Role constants <code>ROLE_ADMIN</code>, <code>ROLE_CLINICIAN</code>, <code>ROLE_REVIEWER</code>.</li>
+<li><code>CAN_CREATE_ENCOUNTER</code>, <code>CAN_CREATE_EVENT</code> sets.</li>
+<li><code>TRANSITION_ROLES</code> map keyed on (from_status, to_status).</li>
+<li>Dependencies: <code>require_roles(*)</code>, <code>require_create_encounter</code>, <code>require_create_event</code>.</li>
+<li><code>assert_can_transition(caller, from, to)</code> enforces per-edge RBAC with an admin safety-net for unmapped edges.</li>
 </ul>
-<h3>Step 3 — Org scoping on encounter routes</h3>
+<h3>Step 3 — Routes wiring</h3>
 <ul>
-<li><code>apps/api/app/api/routes.py</code>:</li>
-<li><code>GET /encounters</code> now always filters <code>organization_id = caller.organization_id</code>. <code>?organization_id=</code> query becomes a lens: mismatch → 403.</li>
-<li><code>GET /encounters/{id}</code>, <code>GET /encounters/{id}/events</code>, <code>POST /encounters/{id}/events</code>, <code>POST /encounters/{id}/status</code> use a shared <code>_load_encounter_for_caller</code> helper that returns 404 on cross-org (no existence oracle).</li>
-<li><code>POST /encounters</code> forces <code>organization_id</code> to the caller&#x27;s org via <code>ensure_same_org</code>; location must also belong to caller org or 403.</li>
-<li><code>encounter_created</code> and <code>status_changed</code> events now record the acting user email (<code>created_by</code> / <code>changed_by</code>).</li>
+<li><code>POST /encounters</code> now depends on <code>require_create_encounter</code> → reviewer 403.</li>
+<li><code>POST /encounters/{id}/events</code> now depends on <code>require_create_event</code> → reviewer 403.</li>
+<li><code>POST /encounters/{id}/status</code> calls <code>assert_can_transition</code> after the state machine accepts the edge. Clinician cannot drive review-stage edges; reviewer cannot drive charting edges.</li>
+<li><code>/organizations</code>, <code>/locations</code>, <code>/users</code> now require auth and filter <code>WHERE organization_id = caller.org</code> (previously unauthenticated).</li>
+<li>Error envelope standardized: every 4xx/5xx now returns <code>{detail: {error_code, reason}}</code>. Stable error codes inventoried in <code>03-api-endpoints.md</code>.</li>
 </ul>
-<h3>Step 4 — Seed expansion</h3>
+<h3>Step 4 — Auth seam hardening</h3>
 <ul>
-<li><code>scripts_seed.py</code> now seeds two organizations (demo-eye-clinic + northside-retina) with their own admins, locations, and encounters — enough to actually exercise scoping.</li>
-<li>Still idempotent across N runs; verified with back-to-back executions.</li>
+<li><code>apps/api/app/auth.py</code> now reads <code>CHARTNAV_AUTH_MODE</code> (default <code>&quot;header&quot;</code>) as the single swap point for future transports. Module docstring calls out dev vs. prod.</li>
+<li>Errors routed through a private <code>_error(code, reason, status)</code> helper so the shape is consistent with authz.</li>
+<li>Authn vs. authz strictly separated: <code>auth.py</code> answers &quot;who&quot; only, <code>authz.py</code> answers &quot;may&quot;.</li>
 </ul>
-<h3>Step 5 — Local verification</h3>
+<h3>Step 5 — Seed expansion</h3>
 <ul>
-<li>Fixed a bug introduced during auth scaffolding: <code>auth.py</code> initially resolved <code>chartnav.db</code> from the wrong parent (<code>apps/api/app/chartnav.db</code>); corrected to <code>Path(__file__).resolve().parents[1] / &quot;chartnav.db&quot;</code> (= <code>apps/api/chartnav.db</code>). Before fix all scoped routes returned 500.</li>
-<li>Post-fix: full matrix green — see <code>06-known-gaps.md</code> for the proof table.</li>
+<li><code>scripts_seed.py</code> now provisions 5 users across 2 orgs covering all three roles (admin/clinician/reviewer in org1, admin/clinician in org2). Users upserted on re-seed so role changes in the seed converge deterministically. Still idempotent.</li>
 </ul>
-<h3>Step 6 — Documentation</h3>
+<h3>Step 6 — Automated tests</h3>
 <ul>
-<li>Updated <code>01-current-state.md</code>, <code>03-api-endpoints.md</code>, <code>04-data-model.md</code>, <code>05-build-log.md</code>, <code>06-known-gaps.md</code>.</li>
-<li>Added <code>07-auth-and-scoping.md</code>.</li>
-<li>Updated diagrams: <code>system-architecture.md</code>, <code>api-data-flow.md</code>, <code>er-diagram.md</code>.</li>
-<li>Regenerated <code>docs/final/chartnav-workflow-state-machine-build.{html,pdf}</code> so the consolidated artifact now covers Phase 1 (workflow spine) + Phase 2 (state machine + filtering) + Phase 3 (auth + scoping).</li>
+<li>New <code>apps/api/tests/</code> with pytest + FastAPI <code>TestClient</code>.</li>
+<li>Per-test temp SQLite fixture: each test gets a fresh migrated + seeded DB, so writes never leak across tests.</li>
+<li>Added <code>-x sqlalchemy.url=...</code> support in <code>alembic/env.py</code> so the test fixture can migrate an ephemeral DB without rewriting <code>alembic.ini</code>.</li>
+<li>Added <code>pytest</code> and <code>httpx</code> as dev deps.</li>
+<li>Tests cover: auth surface, org scoping across every list/read, cross-org 404, cross-org 403 lens, per-role create/event/transition rules, invalid transitions, event provenance (<code>changed_by</code>).</li>
+<li>Run: <code>pytest tests/ -v</code> → <strong>25 passed</strong> in ~12s.</li>
 </ul>
-<h3>Step 7 — Git hygiene</h3>
+<h3>Step 7 — Verification</h3>
 <ul>
-<li>DB reset to pristine seeded state before commit.</li>
-<li>SQLite <code>.db</code> file stays gitignored.</li>
-<li>One atomic commit with code + docs + regenerated final artifacts.</li>
+<li><code>alembic upgrade head</code> against a fresh DB → both migrations apply.</li>
+<li>Seed idempotent across back-to-back runs (user count stable).</li>
+<li><code>pytest</code> suite green (25/25).</li>
+<li>Full manual sanity: <code>/me</code> across all seeded roles returns correct <code>role</code> + <code>organization_id</code>.</li>
+</ul>
+<h3>Step 8 — Documentation</h3>
+<ul>
+<li>Updated <code>01-current-state.md</code>, <code>03-api-endpoints.md</code> (error inventory), <code>04-data-model.md</code> (role coverage), <code>05-build-log.md</code>, <code>06-known-gaps.md</code>, <code>07-auth-and-scoping.md</code> (RBAC section + diagram).</li>
+<li>New <code>08-test-strategy.md</code> covering harness, matrix, and run command.</li>
+<li>Regenerated <code>docs/final/chartnav-workflow-state-machine-build.{html,pdf}</code> with this phase&#x27;s evidence.</li>
+</ul>
+<h3>Step 9 — Git hygiene</h3>
+<ul>
+<li>DB reset to seeded state before commit.</li>
+<li>Gitignore already covers <code>.venv</code>, <code>__pycache__</code>, <code>.pytest_cache</code>, <code>*.db</code>.</li>
 </ul>
 <p>---</p>
-<h2>2026-04-17 — Phase: workflow state machine + filtering (prior)</h2>
-<p>See original entry preserved below for history.</p>
-<h3>Step 2 — Strict status state machine</h3>
-<ul>
-<li>Added <code>ALLOWED_TRANSITIONS</code> map.</li>
-<li>Edges: forward <code>scheduled→in_progress→draft_ready→review_needed→completed</code>; rework <code>draft_ready→in_progress</code>, <code>review_needed→draft_ready</code>.</li>
-<li>All other edges → 400 <code>invalid_transition</code> with explicit allowed-next-states listing.</li>
-<li>Same-status = no-op.</li>
-<li><code>in_progress</code> stamps <code>started_at</code> if null; <code>completed</code> stamps <code>completed_at</code> (and backfills <code>started_at</code> if null).</li>
-</ul>
-<h3>Step 3 — Filters</h3>
-<ul>
-<li><code>GET /encounters</code> accepts <code>organization_id</code>, <code>location_id</code>, <code>status</code>, <code>provider_name</code>. AND-ed, parameterized.</li>
-</ul>
-<h3>Step 4 — Seed coverage</h3>
-<ul>
-<li>Two encounters covering <code>in_progress</code> and <code>review_needed</code> with realistic event history.</li>
-</ul>
-<h3>Step 5 — Verification</h3>
-<ul>
-<li>Filter matrix + state-machine matrix all green.</li>
-</ul>
-<p>---</p>
-<h2>2026-04-17 — Phase: workflow spine (earlier)</h2>
-<h3>Migration <code>a1b2c3d4e5f6</code></h3>
-<ul>
-<li>Added <code>encounters</code> and <code>workflow_events</code> tables with FKs and indexes.</li>
-</ul>
-<h3>Seed</h3>
-<ul>
-<li>Idempotent demo org / location / admin / encounter / events.</li>
-</ul>
-<h3>Initial routes</h3>
-<ul>
-<li>6 encounter endpoints (3 read, 3 write).</li>
-</ul>
+<h2>Prior phases (preserved)</h2>
+<h3>2026-04-17 — Dev auth + org scoping (phase 3)</h3>
+<p>Auth dependency, <code>X-User-Email</code> transport, <code>Caller</code> ctx, cross-org 404/403, two-tenant seed.</p>
+<h3>2026-04-17 — Strict state machine + filtering (phase 2)</h3>
+<p><code>ALLOWED_TRANSITIONS</code> map, standardized 400 errors on invalid edges, <code>GET /encounters</code> filters.</p>
+<h3>2026-04-17 — Workflow spine (phase 1)</h3>
+<p>Alembic migration <code>a1b2c3d4e5f6</code>, idempotent seed, six encounter endpoints.</p>
 </section>
 <section id="sec-7"><h2>06 — Known gaps + verification matrix</h2>
 <h1>Known Gaps &amp; Verification Matrix</h1>
-<h2>Verification matrix — dev auth + org scoping phase</h2>
-<p>All checks executed against local <code>uvicorn</code> with a fresh seeded DB.</p>
-<h3>Auth</h3>
-<table><thead><tr><th>Case</th><th>Expected</th><th>Actual</th></tr></thead><tbody>
-<tr><td><code>GET /me</code> no header</td><td>401</td><td>401</td></tr>
-<tr><td><code>GET /me</code> unknown email</td><td>401</td><td>401</td></tr>
-<tr><td><code>GET /me</code> empty header</td><td>401</td><td>401</td></tr>
-<tr><td><code>GET /me</code> org1 admin</td><td>200 + <code>organization_id=1</code></td><td>200 + <code>organization_id=1</code></td></tr>
-<tr><td><code>GET /me</code> org2 admin</td><td>200 + <code>organization_id=2</code></td><td>200 + <code>organization_id=2</code></td></tr>
+<h2>Automated verification (this phase)</h2>
+<pre class="code lang-"><code>
+$ cd apps/api &amp;&amp; pytest tests/ -v
+... 25 passed in 12.39s
+</code></pre>
+<p>Every matrix below is now machine-asserted in <code>apps/api/tests/</code>.</p>
+<h3>Auth (5/5)</h3>
+<table><thead><tr><th>Case</th><th>Expected</th><th>Result</th></tr></thead><tbody>
+<tr><td><code>/health</code> open</td><td>200</td><td>✅</td></tr>
+<tr><td><code>/me</code> no header</td><td>401 <code>missing_auth_header</code></td><td>✅</td></tr>
+<tr><td><code>/me</code> empty header</td><td>401</td><td>✅</td></tr>
+<tr><td><code>/me</code> unknown email</td><td>401 <code>unknown_user</code></td><td>✅</td></tr>
+<tr><td><code>/me</code> admin org1</td><td>200 role=admin, org=1</td><td>✅</td></tr>
 </tbody></table>
-<h3>Encounter listing</h3>
-<table><thead><tr><th>Case</th><th>Expected</th><th>Actual</th></tr></thead><tbody>
-<tr><td><code>GET /encounters</code> no auth</td><td>401</td><td>401</td></tr>
-<tr><td>Org1 <code>GET /encounters</code></td><td><code>[1, 2]</code></td><td><code>[1, 2]</code></td></tr>
-<tr><td>Org2 <code>GET /encounters</code></td><td><code>[3]</code></td><td><code>[3]</code></td></tr>
-<tr><td>Org1 <code>GET /encounters?organization_id=2</code> (cross-org lens)</td><td>403</td><td>403</td></tr>
-<tr><td>Org1 <code>GET /encounters?organization_id=1</code> (own lens)</td><td><code>[1, 2]</code></td><td><code>[1, 2]</code></td></tr>
+<h3>Scoping (8/8)</h3>
+<table><thead><tr><th>Case</th><th>Expected</th><th>Result</th></tr></thead><tbody>
+<tr><td><code>/organizations</code> scoped per tenant</td><td>1 row each</td><td>✅</td></tr>
+<tr><td><code>/organizations</code> no auth</td><td>401</td><td>✅</td></tr>
+<tr><td><code>/locations</code> scoped</td><td>caller org only</td><td>✅</td></tr>
+<tr><td><code>/users</code> scoped</td><td>caller org only</td><td>✅</td></tr>
+<tr><td><code>/encounters</code> disjoint per tenant</td><td>no overlap</td><td>✅</td></tr>
+<tr><td>Cross-org <code>GET /encounters/{id}</code></td><td>404</td><td>✅</td></tr>
+<tr><td><code>?organization_id=&lt;other&gt;</code> lens</td><td>403</td><td>✅</td></tr>
+<tr><td>Filter within org (<code>?status=</code>)</td><td>no leakage</td><td>✅</td></tr>
 </tbody></table>
-<h3>Encounter read</h3>
-<table><thead><tr><th>Case</th><th>Expected</th><th>Actual</th></tr></thead><tbody>
-<tr><td>Org1 <code>GET /encounters/1</code></td><td>200</td><td>200</td></tr>
-<tr><td>Org1 <code>GET /encounters/3</code> (other org)</td><td>404</td><td>404</td></tr>
-<tr><td>Org2 <code>GET /encounters/3</code></td><td>200</td><td>200</td></tr>
-<tr><td>Org2 <code>GET /encounters/1</code> (other org)</td><td>404</td><td>404</td></tr>
-<tr><td>Org1 <code>GET /encounters/1/events</code></td><td>200</td><td>200</td></tr>
-<tr><td>Org1 <code>GET /encounters/3/events</code> (cross)</td><td>404</td><td>404</td></tr>
-</tbody></table>
-<h3>Encounter create</h3>
-<table><thead><tr><th>Case</th><th>Expected</th><th>Actual</th></tr></thead><tbody>
-<tr><td>Org1 POST own-org body</td><td>201</td><td>201</td></tr>
-<tr><td>Org1 POST body <code>organization_id=2</code> (cross)</td><td>403</td><td>403</td></tr>
-<tr><td>Org1 POST own org but <code>location_id</code> belongs to other org</td><td>403</td><td>403</td></tr>
-</tbody></table>
-<h3>Encounter mutate</h3>
-<table><thead><tr><th>Case</th><th>Expected</th><th>Actual</th></tr></thead><tbody>
-<tr><td>Org1 POST <code>/encounters/1/events</code> (own)</td><td>201</td><td>201</td></tr>
-<tr><td>Org1 POST <code>/encounters/3/events</code> (cross)</td><td>404</td><td>404</td></tr>
-<tr><td>Org1 POST <code>/encounters/1/status</code> <code>draft_ready</code> (valid)</td><td>200</td><td>200</td></tr>
-<tr><td>Org2 POST <code>/encounters/1/status</code> (cross)</td><td>404</td><td>404</td></tr>
-<tr><td>Org1 POST <code>/encounters/1/status</code> <code>completed</code> (invalid transition)</td><td>400</td><td>400</td></tr>
+<h3>RBAC (12/12)</h3>
+<table><thead><tr><th>Case</th><th>Expected</th><th>Result</th></tr></thead><tbody>
+<tr><td>Admin creates encounter</td><td>201</td><td>✅</td></tr>
+<tr><td>Clinician creates encounter</td><td>201</td><td>✅</td></tr>
+<tr><td>Reviewer creates encounter</td><td>403 <code>role_cannot_create_encounter</code></td><td>✅</td></tr>
+<tr><td>Reviewer adds event</td><td>403 <code>role_cannot_create_event</code></td><td>✅</td></tr>
+<tr><td>Clinician: in_progress→draft_ready</td><td>200</td><td>✅</td></tr>
+<tr><td>Clinician: review_needed→completed</td><td>403 <code>role_cannot_transition</code></td><td>✅</td></tr>
+<tr><td>Reviewer: review_needed→completed</td><td>200</td><td>✅</td></tr>
+<tr><td>Reviewer: review_needed→draft_ready (kick back)</td><td>200</td><td>✅</td></tr>
+<tr><td>Cross-org mutate</td><td>404</td><td>✅</td></tr>
+<tr><td>Invalid transition (admin: in_progress→completed)</td><td>400 <code>invalid_transition</code></td><td>✅</td></tr>
+<tr><td><code>status_changed</code> event written with <code>changed_by</code></td><td>event count +1</td><td>✅</td></tr>
+<tr><td>Cross-org create body mismatch</td><td>403 <code>cross_org_access_forbidden</code></td><td>✅</td></tr>
 </tbody></table>
 <h2>Real gaps (prioritized for next phase)</h2>
-<p>1. <strong>Dev-only auth</strong> — <code>X-User-Email</code> is trivially spoofable. Must graduate to JWT or an identity provider before any hosted deployment. The abstraction point (<code>require_caller</code>) is already in place.</p>
-<p>2. <strong>No role-based authorization</strong> — every seeded user is <code>admin</code>. Need <code>role</code>-gated actions (clinician vs. admin vs. reviewer) for the state machine edges.</p>
-<p>3. <strong><code>/organizations</code>, <code>/locations</code>, <code>/users</code> still unscoped</strong> — left open intentionally this phase. Next auth phase should either scope them to caller org or gate by role.</p>
+<p>1. <strong>Transport still dev-only.</strong> <code>X-User-Email</code> is spoofable. Swap to a signed token path via <code>CHARTNAV_AUTH_MODE</code>. The seam is in place; the dependency only needs a new branch.</p>
+<p>2. <strong>No user/org metadata writes.</strong> <code>/organizations</code>, <code>/locations</code>, <code>/users</code> are read-only. Admins can&#x27;t invite users, create locations, or edit their own org metadata through the API. Needs RBAC-gated write endpoints.</p>
+<p>3. <strong>Role constraint is app-layer only.</strong> <code>users.role</code> is a free VARCHAR. Next migration could add a CHECK constraint or a lookup table.</p>
 <p>4. <strong>No pagination / cursor</strong> on <code>GET /encounters</code>.</p>
 <p>5. <strong>No encounter update / delete / cancel</strong> path; no <code>cancelled</code> status.</p>
-<p>6. <strong>No automated tests</strong> — verification is still manual curl; need pytest + httpx <code>TestClient</code> covering auth, scoping, state machine, filters.</p>
-<p>7. <strong>No ORM / sessions</strong> — raw <code>sqlite3</code> with per-request connections. Works for SQLite; Postgres parity untested.</p>
-<p>8. **CORS <code>allow_origins=[&quot;*&quot;]</code>** — must tighten before any hosted deploy.</p>
-<p>9. <strong>No audit log distinct from workflow_events</strong> — auth failures, scoping violations are not persisted.</p>
-<p>10. <strong>No rate limiting</strong>.</p>
+<p>6. <strong>Free-form <code>event_data</code></strong>. No per-<code>event_type</code> schema validation.</p>
+<p>7. <strong>Raw <code>sqlite3</code></strong> per-request connections. Postgres parity (docker compose) untested.</p>
+<p>8. **CORS <code>allow_origins=[&quot;*&quot;]</code>** — tighten before any hosted deploy.</p>
+<p>9. <strong>No distinct audit log.</strong> Auth failures and scoping violations are not persisted; only successful workflow events are.</p>
+<p>10. <strong>No rate limiting, no lockout, no observability.</strong></p>
+<p>11. <strong>No CI.</strong> Tests exist but aren&#x27;t yet run on every PR.</p>
 </section>
-<section id="sec-8"><h2>07 — Auth & org scoping</h2>
-<h1>Auth &amp; Org Scoping</h1>
-<h2>Auth model (dev)</h2>
-<p>This is a <strong>local/dev</strong> auth layer, not production identity. There are no</p>
-<p>passwords, tokens, signatures, or sessions. The contract:</p>
-<p>1. Every protected request must include header <code>X-User-Email: &lt;email&gt;</code>.</p>
-<p>2. The server looks up that user in the <code>users</code> table.</p>
-<p>3. The caller&#x27;s <code>organization_id</code> is derived from that row.</p>
-<p>4. The caller context (<code>Caller</code> dataclass) is attached to the request via</p>
-<p>FastAPI&#x27;s <code>Depends(require_caller)</code>.</p>
-<p>**No body or query parameter can override the caller&#x27;s resolved</p>
-<p><code>organization_id</code>.** Attempts to do so are rejected with 403.</p>
-<h3>Source</h3>
+<section id="sec-8"><h2>07 — Auth, org scoping, RBAC</h2>
+<h1>Auth, Org Scoping, RBAC</h1>
+<h2>1. Authentication (authn)</h2>
+<p><strong>Source:</strong> <code>apps/api/app/auth.py</code>.</p>
 <ul>
-<li>Dependency: <code>apps/api/app/auth.py</code> — <code>require_caller</code>, <code>ensure_same_org</code>, <code>Caller</code>.</li>
-<li>Applied in: <code>apps/api/app/api/routes.py</code> on every encounter route and <code>/me</code>.</li>
+<li>Transport today: request header <code>X-User-Email: &lt;email&gt;</code>.</li>
+<li><code>require_caller</code> is a FastAPI dependency that resolves the user from</li>
 </ul>
-<h3>Responses</h3>
-<table><thead><tr><th>Situation</th><th>HTTP</th><th>Detail</th></tr></thead><tbody>
-<tr><td>Missing / empty <code>X-User-Email</code></td><td>401</td><td><code>missing_auth_header</code></td></tr>
-<tr><td>Unknown email</td><td>401</td><td><code>unknown_user</code></td></tr>
-<tr><td>Caller&#x27;s org ≠ target org (body/query/loc)</td><td>403</td><td><code>cross_org_access_forbidden</code></td></tr>
-<tr><td>Caller tries to read another org&#x27;s encounter</td><td>404</td><td><code>encounter_not_found</code></td></tr>
+<p>the <code>users</code> table and returns a <code>Caller(user_id, email, full_name, role, organization_id)</code>.</p>
+<ul>
+<li>Environment flag <code>CHARTNAV_AUTH_MODE</code> (default <code>&quot;header&quot;</code>) is the</li>
+</ul>
+<p><strong>production upgrade seam</strong>. When JWT/SSO lands, only the body of</p>
+<p><code>require_caller</code> (or a new branch in it) changes. Every route and</p>
+<p>every RBAC helper continues to work unchanged because they depend on</p>
+<p><code>Caller</code>, not on any header.</p>
+<h3>Dev-only, explicitly</h3>
+<p><code>X-User-Email</code> is trivially spoofable. This is acceptable for local</p>
+<p>development only. **Do not deploy this to a shared environment</p>
+<p>without first swapping the transport.** The seam is there; use it.</p>
+<h3>Standardized error envelope</h3>
+<p>Every auth/authz error returns:</p>
+<pre class="code lang-json"><code>
+{&quot;detail&quot;: {&quot;error_code&quot;: &quot;&lt;stable_code&gt;&quot;, &quot;reason&quot;: &quot;&lt;human message&gt;&quot;}}
+</code></pre>
+<h3>Authn error codes</h3>
+<table><thead><tr><th>Code</th><th>HTTP</th><th>When</th></tr></thead><tbody>
+<tr><td><code>missing_auth_header</code></td><td>401</td><td><code>X-User-Email</code> absent or empty.</td></tr>
+<tr><td><code>unknown_user</code></td><td>401</td><td>Email not found in <code>users</code>.</td></tr>
+<tr><td><code>auth_mode_unsupported</code></td><td>500</td><td><code>CHARTNAV_AUTH_MODE</code> set to something unwired.</td></tr>
 </tbody></table>
-<h2>Scoping model</h2>
+<h2>2. Authorization (authz / RBAC)</h2>
+<p><strong>Source:</strong> <code>apps/api/app/authz.py</code>.</p>
+<h3>Roles</h3>
+<table><thead><tr><th>Role</th><th>Intent</th></tr></thead><tbody>
+<tr><td><code>admin</code></td><td>Full read/write inside own org.</td></tr>
+<tr><td><code>clinician</code></td><td>Charting side of the workflow.</td></tr>
+<tr><td><code>reviewer</code></td><td>Review side of the workflow; read-only on create/events.</td></tr>
+</tbody></table>
+<p>All seeded users today carry exactly one of these roles.</p>
+<h3>Permission surface</h3>
+<table><thead><tr><th>Surface</th><th>admin</th><th>clinician</th><th>reviewer</th></tr></thead><tbody>
+<tr><td>Read org / locations / users</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td>List / read encounters</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td>Read encounter events</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td>Create encounter</td><td>✓</td><td>✓</td><td>✗</td></tr>
+<tr><td>Add workflow event</td><td>✓</td><td>✓</td><td>✗</td></tr>
+<tr><td>Transition scheduled→in_progress</td><td>✓</td><td>✓</td><td>✗</td></tr>
+<tr><td>Transition in_progress→draft_ready</td><td>✓</td><td>✓</td><td>✗</td></tr>
+<tr><td>Transition draft_ready→in_progress (rework)</td><td>✓</td><td>✓</td><td>✗</td></tr>
+<tr><td>Transition draft_ready→review_needed</td><td>✓</td><td>✗</td><td>✓</td></tr>
+<tr><td>Transition review_needed→draft_ready (kick back)</td><td>✓</td><td>✗</td><td>✓</td></tr>
+<tr><td>Transition review_needed→completed</td><td>✓</td><td>✗</td><td>✓</td></tr>
+</tbody></table>
+<h3>Authz dependencies</h3>
+<ul>
+<li><code>require_roles(*roles)</code> — generic gate, returns <code>Caller</code>.</li>
+<li><code>require_create_encounter</code> — applied to <code>POST /encounters</code>.</li>
+<li><code>require_create_event</code> — applied to <code>POST /encounters/{id}/events</code>.</li>
+<li><code>assert_can_transition(caller, from, to)</code> — called by the status</li>
+</ul>
+<p>handler <strong>after</strong> the state machine accepts the edge.</p>
+<h3>Authz error codes</h3>
+<table><thead><tr><th>Code</th><th>HTTP</th><th>When</th></tr></thead><tbody>
+<tr><td><code>role_forbidden</code></td><td>403</td><td>Generic <code>require_roles</code> denies.</td></tr>
+<tr><td><code>role_cannot_create_encounter</code></td><td>403</td><td>Non-admin/clinician POSTs <code>/encounters</code>.</td></tr>
+<tr><td><code>role_cannot_create_event</code></td><td>403</td><td>Non-admin/clinician POSTs event.</td></tr>
+<tr><td><code>role_cannot_transition</code></td><td>403</td><td>Role may not drive that specific state edge.</td></tr>
+</tbody></table>
+<h2>3. Org scoping</h2>
+<p>Caller&#x27;s <code>organization_id</code> is <strong>authoritative</strong>. Bodies and query</p>
+<p>strings cannot override it.</p>
 <table><thead><tr><th>Route</th><th>Scoping</th></tr></thead><tbody>
-<tr><td><code>GET /encounters</code></td><td>WHERE <code>organization_id = caller.organization_id</code>. <code>?organization_id=</code> param is a lens: if it mismatches the caller → 403. <code>?location_id=</code>, <code>?status=</code>, <code>?provider_name=</code> narrow further within the caller&#x27;s org.</td></tr>
-<tr><td><code>GET /encounters/{id}</code></td><td>Same row + cross-org check; mismatched → 404.</td></tr>
-<tr><td><code>GET /encounters/{id}/events</code></td><td>Parent-encounter scoped; cross-org → 404.</td></tr>
-<tr><td><code>POST /encounters</code></td><td><code>organization_id</code> in body must equal caller org → 403 otherwise. Location must also belong to caller org → 403 otherwise.</td></tr>
-<tr><td><code>POST /encounters/{id}/events</code></td><td>404 if cross-org.</td></tr>
-<tr><td><code>POST /encounters/{id}/status</code></td><td>404 if cross-org. Strict state machine applies after scope check.</td></tr>
-<tr><td><code>GET /me</code></td><td>Auth-only; echoes resolved caller.</td></tr>
-<tr><td><code>GET /organizations</code>, <code>/locations</code>, <code>/users</code></td><td><strong>NOT scoped</strong> this phase — intentional, documented.</td></tr>
+<tr><td><code>GET /organizations</code></td><td><code>WHERE id = caller.org</code></td></tr>
+<tr><td><code>GET /locations</code></td><td><code>WHERE organization_id = caller.org</code></td></tr>
+<tr><td><code>GET /users</code></td><td><code>WHERE organization_id = caller.org</code></td></tr>
+<tr><td><code>GET /encounters</code></td><td><code>WHERE organization_id = caller.org</code> + filters</td></tr>
+<tr><td><code>GET /encounters/{id}</code></td><td>404 if row is cross-org</td></tr>
+<tr><td><code>GET /encounters/{id}/events</code></td><td>404 if parent cross-org</td></tr>
+<tr><td><code>POST /encounters</code></td><td>Body <code>organization_id</code> must equal caller&#x27;s; location must belong</td></tr>
+<tr><td><code>POST /encounters/{id}/events</code></td><td>404 if cross-org</td></tr>
+<tr><td><code>POST /encounters/{id}/status</code></td><td>404 if cross-org</td></tr>
 </tbody></table>
-<h3>404-vs-403 rule</h3>
-<p>For encounter reads/mutates, cross-org access returns <strong>404</strong> (same shape</p>
-<p>as &quot;really doesn&#x27;t exist&quot;) so attackers cannot distinguish &quot;exists in</p>
-<p>another org&quot; from &quot;doesn&#x27;t exist at all.&quot; For explicit body/query</p>
-<p>assertions that contradict the caller (e.g. <code>POST /encounters</code> body</p>
-<p><code>organization_id=2</code> while caller is org 1), the server returns <strong>403</strong></p>
-<p>because the intent is unambiguous and should fail loudly.</p>
-<h2>Illustrated flow</h2>
+<h3>404 vs 403</h3>
+<ul>
+<li><strong>404</strong> when the target might-or-might-not exist in another org —</li>
+</ul>
+<p>returning 403 there would leak existence.</p>
+<ul>
+<li><strong>403</strong> when the client explicitly asserts a different org (body or</li>
+</ul>
+<p><code>?organization_id=</code>) — the intent is unambiguous, fail loudly.</p>
+<h2>4. Diagram</h2>
 <div class="mermaid">
 sequenceDiagram
   autonumber
   participant C as Client
   participant Auth as require_caller
-  participant DB as SQLite
+  participant RZ as authz.require_*
   participant R as Route handler
+  participant SM as State Machine
+  participant DB as SQLite
 
   C->>Auth: request + X-User-Email
-  Auth->>DB: SELECT ... FROM users WHERE email=?
-  alt user exists
-    DB-->>Auth: row
-    Auth-->>R: Caller(user_id, email, organization_id, ...)
-    R->>DB: SELECT ... WHERE organization_id = caller.organization_id
-    DB-->>R: rows
-    R-->>C: 200 scoped data
-  else unknown / missing
-    Auth-->>C: 401 missing_auth_header / unknown_user
+  Auth->>DB: SELECT user WHERE email=?
+  DB-->>Auth: row (or none)
+  alt unknown
+    Auth-->>C: 401 unknown_user
+  else known
+    Auth-->>RZ: Caller(role, org)
+    RZ->>RZ: role in allowed set?
+    alt forbidden
+      RZ-->>C: 403 role_cannot_*
+    else allowed
+      RZ-->>R: Caller
+      R->>DB: scoped SQL (WHERE org = caller.org)
+      R->>SM: is transition allowed?
+      R-->>C: 200 / 400 / 404
+    end
   end
 </div>
-<h2>What this phase explicitly does NOT do</h2>
+<h2>5. What this phase explicitly does NOT do</h2>
 <ul>
-<li>No password auth, no JWT, no session cookies.</li>
-<li>No role-based access control (admin vs. clinician etc.) — every seeded</li>
+<li>No password auth, JWT, or SSO integration.</li>
+<li>No scoped writes to organizations / locations / users (meta admin).</li>
+<li>No audit log distinct from <code>workflow_events</code>.</li>
+<li>No rate limiting.</li>
+<li>No per-tenant key management.</li>
 </ul>
-<p>user currently has <code>role = &quot;admin&quot;</code>.</p>
-<ul>
-<li>No rate limiting or audit log beyond the <code>workflow_events</code> breadcrumb.</li>
-<li><code>/organizations</code>, <code>/locations</code>, <code>/users</code> remain unauthenticated.</li>
-</ul>
-<p>These are the right handoff points for the *next* auth phase.</p>
+<p>These are the next auth/security phase&#x27;s targets.</p>
 </section>
-<section id="sec-9"><h2>Diagram — System architecture</h2>
+<section id="sec-9"><h2>08 — Test strategy</h2>
+<h1>Test Strategy</h1>
+<h2>Stack</h2>
+<ul>
+<li><code>pytest</code> + FastAPI <code>TestClient</code> (httpx under the hood).</li>
+<li>Per-test temporary SQLite file: each test gets a fresh migrated +</li>
+</ul>
+<p>seeded DB so writes from one test cannot leak into another.</p>
+<ul>
+<li>No external services; tests run offline in under ~15 seconds.</li>
+</ul>
+<h2>Layout</h2>
+<pre class="code lang-"><code>
+apps/api/tests/
+├── conftest.py          # fixtures: test_db, client, seeded_ids, role headers
+├── test_auth.py         # authn surface
+├── test_scoping.py      # org scoping across every list/read endpoint
+└── test_rbac.py         # role-gated writes + state transitions
+</code></pre>
+<h2>Coverage matrix</h2>
+<h3>Auth (<code>test_auth.py</code>)</h3>
+<ul>
+<li><code>/health</code> open.</li>
+<li><code>/me</code> without header → 401 <code>missing_auth_header</code>.</li>
+<li><code>/me</code> with empty header → 401.</li>
+<li><code>/me</code> with unknown email → 401 <code>unknown_user</code>.</li>
+<li><code>/me</code> with seeded admin → 200 + correct <code>organization_id</code> + role.</li>
+</ul>
+<h3>Scoping (<code>test_scoping.py</code>)</h3>
+<ul>
+<li><code>/organizations</code> returns only caller org row (for both orgs).</li>
+<li><code>/organizations</code> without auth → 401.</li>
+<li><code>/locations</code> scoped to caller org.</li>
+<li><code>/users</code> scoped to caller org (no cross-tenant leakage).</li>
+<li><code>/encounters</code> returns disjoint sets for org1 vs org2.</li>
+<li>Cross-org <code>GET /encounters/{id}</code> → 404.</li>
+<li><code>?organization_id=2</code> as org1 caller → 403.</li>
+<li>Filters (<code>status=</code>) work inside caller org and don&#x27;t leak.</li>
+</ul>
+<h3>RBAC (<code>test_rbac.py</code>)</h3>
+<ul>
+<li>Admin can create encounter (201).</li>
+<li>Clinician can create encounter (201).</li>
+<li>Reviewer cannot create encounter (403 <code>role_cannot_create_encounter</code>).</li>
+<li>Reviewer cannot add events (403 <code>role_cannot_create_event</code>).</li>
+<li>Clinician can perform <code>in_progress → draft_ready</code>.</li>
+<li>Clinician cannot perform <code>review_needed → completed</code> (403 <code>role_cannot_transition</code>).</li>
+<li>Reviewer can complete a review (<code>review_needed → completed</code>).</li>
+<li>Reviewer can kick back (<code>review_needed → draft_ready</code>).</li>
+<li>Cross-org mutate → 404 (existence not leaked).</li>
+<li>Invalid transition still → 400 <code>invalid_transition</code>.</li>
+<li>Successful status change writes a <code>status_changed</code> event with <code>old_status</code>/<code>new_status</code>/<code>changed_by</code>.</li>
+<li>Cross-org body mismatch on <code>POST /encounters</code> → 403 <code>cross_org_access_forbidden</code>.</li>
+</ul>
+<h2>How to run</h2>
+<p>From <code>apps/api/</code> with the venv active:</p>
+<pre class="code lang-bash"><code>
+pytest tests/ -v
+</code></pre>
+<p>Result at time of writing: <strong>25 passed in ~12s</strong>.</p>
+<h2>Guarantees we get from this suite</h2>
+<ul>
+<li>Any regression that breaks auth, scoping, or a role gate surfaces in CI (when we add it).</li>
+<li>The error-code envelope is asserted against, so rename-by-accident is caught.</li>
+<li>Seed idempotency isn&#x27;t tested directly here but is still exercised</li>
+</ul>
+<p>indirectly: each test reseeds cleanly without collision.</p>
+<h2>Gaps not yet covered</h2>
+<ul>
+<li>Concurrent writers / race conditions.</li>
+<li>Event JSON schema per <code>event_type</code>.</li>
+<li>Pagination behavior (not yet implemented).</li>
+<li>Auth transport swap (would warrant its own harness).</li>
+</ul>
+</section>
+<section id="sec-10"><h2>Diagram — System architecture</h2>
 <h1>System Architecture</h1>
 <div class="mermaid">
 flowchart LR
-  Client["Client<br/>(curl / apps/web)"]
+  Client["Client<br/>(curl / tests / apps/web)"]
   FastAPI["FastAPI<br/>apps/api/app/main.py"]
-  Auth["require_caller<br/>apps/api/app/auth.py"]
+  Authn["require_caller<br/>apps/api/app/auth.py<br/>(AUTH_MODE seam)"]
+  Authz["require_roles / assert_can_transition<br/>apps/api/app/authz.py"]
   Router["APIRouter<br/>apps/api/app/api/routes.py"]
   SM["State Machine<br/>ALLOWED_TRANSITIONS"]
-  Scope["Org Scoping<br/>ensure_same_org"]
+  Scope["Org Scoping<br/>ensure_same_org / 404 on cross-org"]
   DB[("SQLite<br/>apps/api/chartnav.db")]
   Alembic["Alembic<br/>apps/api/alembic/"]
-  Seed["scripts_seed.py<br/>(2 orgs)"]
+  Seed["scripts_seed.py<br/>2 orgs · 5 users · 3 roles"]
+  Tests["pytest<br/>apps/api/tests/"]
 
   Client -->|"HTTP + X-User-Email"| FastAPI
-  FastAPI --> Auth
-  Auth -->|"lookup by email"| DB
-  Auth -->|"Caller ctx"| Router
+  FastAPI --> Authn
+  Authn -->|"lookup by email"| DB
+  Authn -->|"Caller(role, org)"| Authz
+  Authz --> Router
   Router --> Scope
   Router --> SM
-  Router -->|"scoped SQL: WHERE organization_id = caller.org"| DB
+  Router -->|"scoped SQL"| DB
   Alembic -.->|"upgrade head"| DB
   Seed -.->|"idempotent seed"| DB
+  Tests -.->|"TestClient + temp DB"| FastAPI
 </div>
 </section>
-<section id="sec-10"><h2>Diagram — Encounter status machine</h2>
+<section id="sec-11"><h2>Diagram — Encounter status machine</h2>
 <h1>Encounter Status State Machine</h1>
 <div class="mermaid">
 stateDiagram-v2
@@ -576,12 +720,12 @@ stateDiagram-v2
 <p>Legend: any edge not shown is rejected at <code>POST /encounters/{id}/status</code></p>
 <p>with HTTP 400 <code>invalid_transition</code>.</p>
 </section>
-<section id="sec-11"><h2>Diagram — ER</h2>
+<section id="sec-12"><h2>Diagram — ER</h2>
 <h1>ER Diagram</h1>
 <div class="mermaid">
 erDiagram
   organizations ||--o{ locations        : "has"
-  organizations ||--o{ users            : "employs (identity + org lens)"
+  organizations ||--o{ users            : "employs (identity + role)"
   organizations ||--o{ encounters       : "owns"
   locations     ||--o{ encounters       : "hosts"
   encounters    ||--o{ workflow_events  : "emits"
@@ -603,7 +747,7 @@ erDiagram
     int organization_id FK
     string email UK
     string full_name
-    string role
+    string role "admin | clinician | reviewer"
     datetime created_at
   }
   encounters {
@@ -627,61 +771,75 @@ erDiagram
     datetime created_at
   }
 </div>
-<h2>Dev auth note</h2>
-<p><code>users.email</code> is the authentication key consumed from the <code>X-User-Email</code></p>
-<p>header. <code>users.organization_id</code> is the authoritative source of the</p>
-<p>caller&#x27;s organization scope — never derived from body or query params.</p>
-<h2>Seeded tenants</h2>
-<table><thead><tr><th>org_id</th><th>slug</th><th>admin email</th><th>location_id</th><th>encounter_ids</th></tr></thead><tbody>
-<tr><td>1</td><td><code>demo-eye-clinic</code></td><td>admin@chartnav.local</td><td>1</td><td>1, 2</td></tr>
-<tr><td>2</td><td><code>northside-retina</code></td><td>admin@northside.local</td><td>2</td><td>3</td></tr>
+<h2>Seeded tenants &amp; users</h2>
+<table><thead><tr><th>org_id</th><th>slug</th><th>email</th><th>role</th></tr></thead><tbody>
+<tr><td>1</td><td><code>demo-eye-clinic</code></td><td>admin@chartnav.local</td><td>admin</td></tr>
+<tr><td>1</td><td><code>demo-eye-clinic</code></td><td>clin@chartnav.local</td><td>clinician</td></tr>
+<tr><td>1</td><td><code>demo-eye-clinic</code></td><td>rev@chartnav.local</td><td>reviewer</td></tr>
+<tr><td>2</td><td><code>northside-retina</code></td><td>admin@northside.local</td><td>admin</td></tr>
+<tr><td>2</td><td><code>northside-retina</code></td><td>clin@northside.local</td><td>clinician</td></tr>
 </tbody></table>
+<p><code>users.email</code> is the authentication key consumed from <code>X-User-Email</code>.</p>
+<p><code>users.role</code> is the RBAC key consumed by <code>app.authz</code>.</p>
+<p><code>users.organization_id</code> is the authoritative source of scope; never</p>
+<p>derived from client input.</p>
 </section>
-<section id="sec-12"><h2>Diagram — API / data flow</h2>
+<section id="sec-13"><h2>Diagram — API / data flow</h2>
 <h1>API / Data Flow</h1>
 <div class="mermaid">
 sequenceDiagram
   autonumber
   participant C as Client
-  participant Auth as require_caller
+  participant Authn as require_caller
+  participant Authz as authz gate
   participant R as Route handler
   participant SM as State Machine
   participant DB as SQLite
 
-  Note over C,DB: Happy path — org1 advances own encounter
-  C->>Auth: POST /encounters/1/status {"status":"draft_ready"}<br/>X-User-Email: admin@chartnav.local
-  Auth->>DB: SELECT user WHERE email=?
-  DB-->>Auth: {user_id, organization_id=1, ...}
-  Auth-->>R: Caller(org=1)
-  R->>DB: SELECT encounter 1 ... WHERE id=?
-  DB-->>R: row(org=1)
-  R->>R: encounter.organization_id == caller.org ✓
+  Note over C,DB: Happy path — clinician advances own encounter
+  C->>Authn: POST /encounters/1/status {"status":"draft_ready"}<br/>X-User-Email: clin@chartnav.local
+  Authn->>DB: SELECT user WHERE email=?
+  DB-->>Authn: {role=clinician, organization_id=1}
+  Authn-->>R: Caller(role=clinician, org=1)
+  R->>DB: SELECT encounter 1
+  DB-->>R: row(org=1, status=in_progress)
+  R->>R: encounter.org == caller.org ✓
   R->>SM: is (in_progress → draft_ready) allowed?
   SM-->>R: yes
-  R->>DB: UPDATE + INSERT status_changed{changed_by=caller.email}
+  R->>Authz: assert_can_transition(clinician, in_progress, draft_ready)
+  Authz-->>R: allowed
+  R->>DB: UPDATE + INSERT status_changed{changed_by=clin@...}
   R-->>C: 200 updated
 
-  Note over C,DB: Cross-org read — returns 404, not 403
-  C->>Auth: GET /encounters/3<br/>X-User-Email: admin@chartnav.local
-  Auth-->>R: Caller(org=1)
+  Note over C,DB: Role denied — clinician tries review-stage edge
+  C->>Authn: POST /encounters/2/status {"status":"completed"}<br/>X-User-Email: clin@chartnav.local
+  Authn-->>R: Caller(role=clinician, org=1)
+  R->>DB: SELECT encounter 2
+  DB-->>R: row(org=1, status=review_needed)
+  R->>SM: is (review_needed → completed) allowed?
+  SM-->>R: yes
+  R->>Authz: assert_can_transition(clinician, review_needed, completed)
+  Authz-->>C: 403 role_cannot_transition
+
+  Note over C,DB: Reviewer cannot create encounter
+  C->>Authn: POST /encounters {...}<br/>X-User-Email: rev@chartnav.local
+  Authn-->>Authz: Caller(role=reviewer)
+  Authz-->>C: 403 role_cannot_create_encounter
+
+  Note over C,DB: Cross-org read — returns 404
+  C->>Authn: GET /encounters/3<br/>X-User-Email: clin@chartnav.local
+  Authn-->>R: Caller(org=1)
   R->>DB: SELECT encounter 3
   DB-->>R: row(org=2)
-  R->>R: encounter.organization_id != caller.org
   R-->>C: 404 encounter_not_found
 
-  Note over C,DB: Cross-org write assertion — returns 403
-  C->>Auth: POST /encounters {"organization_id":2,...}<br/>X-User-Email: admin@chartnav.local
-  Auth-->>R: Caller(org=1)
-  R->>R: body.organization_id != caller.org
-  R-->>C: 403 cross_org_access_forbidden
-
   Note over C,DB: Missing / unknown identity
-  C->>Auth: GET /encounters
-  Auth-->>C: 401 missing_auth_header
-  C->>Auth: GET /encounters<br/>X-User-Email: ghost@nowhere
-  Auth->>DB: SELECT user
-  DB-->>Auth: ∅
-  Auth-->>C: 401 unknown_user
+  C->>Authn: GET /encounters
+  Authn-->>C: 401 missing_auth_header
+  C->>Authn: GET /encounters<br/>X-User-Email: ghost@nowhere
+  Authn->>DB: SELECT user
+  DB-->>Authn: ∅
+  Authn-->>C: 401 unknown_user
 </div>
 </section>
 </body></html>

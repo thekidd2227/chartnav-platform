@@ -1,67 +1,64 @@
 # Known Gaps & Verification Matrix
 
-## Verification matrix — dev auth + org scoping phase
+## Automated verification (this phase)
 
-All checks executed against local `uvicorn` with a fresh seeded DB.
+```
+$ cd apps/api && pytest tests/ -v
+... 25 passed in 12.39s
+```
 
-### Auth
+Every matrix below is now machine-asserted in `apps/api/tests/`.
 
-| Case                                | Expected | Actual |
-|-------------------------------------|----------|--------|
-| `GET /me` no header                 | 401      | 401    |
-| `GET /me` unknown email             | 401      | 401    |
-| `GET /me` empty header              | 401      | 401    |
-| `GET /me` org1 admin                | 200 + `organization_id=1` | 200 + `organization_id=1` |
-| `GET /me` org2 admin                | 200 + `organization_id=2` | 200 + `organization_id=2` |
+### Auth (5/5)
 
-### Encounter listing
+| Case                                 | Expected | Result |
+|--------------------------------------|----------|--------|
+| `/health` open                       | 200      | ✅     |
+| `/me` no header                      | 401 `missing_auth_header` | ✅ |
+| `/me` empty header                   | 401      | ✅     |
+| `/me` unknown email                  | 401 `unknown_user` | ✅ |
+| `/me` admin org1                     | 200 role=admin, org=1 | ✅ |
 
-| Case                                                      | Expected | Actual |
-|-----------------------------------------------------------|----------|--------|
-| `GET /encounters` no auth                                 | 401      | 401    |
-| Org1 `GET /encounters`                                    | `[1, 2]` | `[1, 2]` |
-| Org2 `GET /encounters`                                    | `[3]`    | `[3]`  |
-| Org1 `GET /encounters?organization_id=2` (cross-org lens) | 403      | 403    |
-| Org1 `GET /encounters?organization_id=1` (own lens)       | `[1, 2]` | `[1, 2]` |
+### Scoping (8/8)
 
-### Encounter read
+| Case                                                 | Expected | Result |
+|------------------------------------------------------|----------|--------|
+| `/organizations` scoped per tenant                   | 1 row each | ✅ |
+| `/organizations` no auth                             | 401      | ✅     |
+| `/locations` scoped                                  | caller org only | ✅ |
+| `/users` scoped                                      | caller org only | ✅ |
+| `/encounters` disjoint per tenant                    | no overlap | ✅ |
+| Cross-org `GET /encounters/{id}`                     | 404      | ✅     |
+| `?organization_id=<other>` lens                      | 403      | ✅     |
+| Filter within org (`?status=`)                        | no leakage | ✅ |
 
-| Case                                     | Expected | Actual |
-|------------------------------------------|----------|--------|
-| Org1 `GET /encounters/1`                 | 200      | 200    |
-| Org1 `GET /encounters/3` (other org)     | 404      | 404    |
-| Org2 `GET /encounters/3`                 | 200      | 200    |
-| Org2 `GET /encounters/1` (other org)     | 404      | 404    |
-| Org1 `GET /encounters/1/events`          | 200      | 200    |
-| Org1 `GET /encounters/3/events` (cross)  | 404      | 404    |
+### RBAC (12/12)
 
-### Encounter create
-
-| Case                                                       | Expected | Actual |
-|------------------------------------------------------------|----------|--------|
-| Org1 POST own-org body                                     | 201      | 201    |
-| Org1 POST body `organization_id=2` (cross)                 | 403      | 403    |
-| Org1 POST own org but `location_id` belongs to other org   | 403      | 403    |
-
-### Encounter mutate
-
-| Case                                                    | Expected | Actual |
-|---------------------------------------------------------|----------|--------|
-| Org1 POST `/encounters/1/events` (own)                  | 201      | 201    |
-| Org1 POST `/encounters/3/events` (cross)                | 404      | 404    |
-| Org1 POST `/encounters/1/status` `draft_ready` (valid)  | 200      | 200    |
-| Org2 POST `/encounters/1/status` (cross)                | 404      | 404    |
-| Org1 POST `/encounters/1/status` `completed` (invalid transition) | 400 | 400 |
+| Case                                                     | Expected | Result |
+|----------------------------------------------------------|----------|--------|
+| Admin creates encounter                                  | 201      | ✅     |
+| Clinician creates encounter                              | 201      | ✅     |
+| Reviewer creates encounter                               | 403 `role_cannot_create_encounter` | ✅ |
+| Reviewer adds event                                      | 403 `role_cannot_create_event` | ✅ |
+| Clinician: in_progress→draft_ready                       | 200      | ✅     |
+| Clinician: review_needed→completed                       | 403 `role_cannot_transition` | ✅ |
+| Reviewer: review_needed→completed                        | 200      | ✅     |
+| Reviewer: review_needed→draft_ready (kick back)          | 200      | ✅     |
+| Cross-org mutate                                         | 404      | ✅     |
+| Invalid transition (admin: in_progress→completed)        | 400 `invalid_transition` | ✅ |
+| `status_changed` event written with `changed_by`         | event count +1 | ✅ |
+| Cross-org create body mismatch                           | 403 `cross_org_access_forbidden` | ✅ |
 
 ## Real gaps (prioritized for next phase)
 
-1. **Dev-only auth** — `X-User-Email` is trivially spoofable. Must graduate to JWT or an identity provider before any hosted deployment. The abstraction point (`require_caller`) is already in place.
-2. **No role-based authorization** — every seeded user is `admin`. Need `role`-gated actions (clinician vs. admin vs. reviewer) for the state machine edges.
-3. **`/organizations`, `/locations`, `/users` still unscoped** — left open intentionally this phase. Next auth phase should either scope them to caller org or gate by role.
+1. **Transport still dev-only.** `X-User-Email` is spoofable. Swap to a signed token path via `CHARTNAV_AUTH_MODE`. The seam is in place; the dependency only needs a new branch.
+2. **No user/org metadata writes.** `/organizations`, `/locations`, `/users` are read-only. Admins can't invite users, create locations, or edit their own org metadata through the API. Needs RBAC-gated write endpoints.
+3. **Role constraint is app-layer only.** `users.role` is a free VARCHAR. Next migration could add a CHECK constraint or a lookup table.
 4. **No pagination / cursor** on `GET /encounters`.
 5. **No encounter update / delete / cancel** path; no `cancelled` status.
-6. **No automated tests** — verification is still manual curl; need pytest + httpx `TestClient` covering auth, scoping, state machine, filters.
-7. **No ORM / sessions** — raw `sqlite3` with per-request connections. Works for SQLite; Postgres parity untested.
-8. **CORS `allow_origins=["*"]`** — must tighten before any hosted deploy.
-9. **No audit log distinct from workflow_events** — auth failures, scoping violations are not persisted.
-10. **No rate limiting**.
+6. **Free-form `event_data`**. No per-`event_type` schema validation.
+7. **Raw `sqlite3`** per-request connections. Postgres parity (docker compose) untested.
+8. **CORS `allow_origins=["*"]`** — tighten before any hosted deploy.
+9. **No distinct audit log.** Auth failures and scoping violations are not persisted; only successful workflow events are.
+10. **No rate limiting, no lockout, no observability.**
+11. **No CI.** Tests exist but aren't yet run on every PR.

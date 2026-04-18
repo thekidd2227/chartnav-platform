@@ -9,6 +9,12 @@ from alembic import context
 # access to the values within the .ini file in use.
 config = context.config
 
+# Honor `alembic -x sqlalchemy.url=...` for tests / ephemeral DBs so we
+# can point migrations at a temp SQLite file without rewriting the .ini.
+_x = context.get_x_argument(as_dictionary=True)
+if "sqlalchemy.url" in _x:
+    config.set_main_option("sqlalchemy.url", _x["sqlalchemy.url"])
+
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:
