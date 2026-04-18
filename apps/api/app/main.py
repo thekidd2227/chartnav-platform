@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.routes import router
+
 app = FastAPI(title="ChartNav Platform API", version="0.1.0")
 
 app.add_middleware(
@@ -11,12 +13,4 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-@app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
-
-
-@app.get("/")
-def root() -> dict[str, str]:
-    return {"service": "chartnav-api", "version": "0.1.0"}
+app.include_router(router)
