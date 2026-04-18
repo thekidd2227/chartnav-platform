@@ -39,6 +39,7 @@ SECTIONS = [
     ("13 — Deploy target", BUILD / "13-deploy-target.md"),
     ("14 — Postgres parity", BUILD / "14-postgres-parity.md"),
     ("15 — Frontend integration", BUILD / "15-frontend-integration.md"),
+    ("16 — Frontend test strategy", BUILD / "16-frontend-test-strategy.md"),
     ("Diagram — System architecture", DIAGR / "system-architecture.md"),
     ("Diagram — Encounter status machine", DIAGR / "encounter-status-machine.md"),
     ("Diagram — ER", DIAGR / "er-diagram.md"),
@@ -61,7 +62,9 @@ date.
 
 **Phase 6 — Production seam + deploy target + Postgres parity.** DB layer moved to SQLAlchemy Core. `apps/api/app/config.py` centralizes env. `auth.py` gained a bearer stub that returns 501 honestly. Dockerfile hardened, `docker-compose.prod.yml` + `scripts/pg_verify.sh` + `backend-postgres` CI job land.
 
-**Phase 7 — Frontend workflow UI (this phase).** `apps/web/` becomes a real app. Typed API client (`src/api.ts`) funnels every call through one surface that converts backend 4xx envelopes into `ApiError` for the UI. `src/identity.ts` persists the seeded dev caller in `localStorage`. `App.tsx` renders a two-pane workflow console: filtered encounter list, encounter detail with a facts grid and color-coded status, an event timeline, role-aware transition buttons, and a composer for adding events (hidden with explanation for reviewers). Error banners surface the exact `{error_code, reason}` the backend ships. `make dev` boots API + Vite together with trap-based teardown. No backend contract changes.
+**Phase 7 — Frontend workflow UI.** Typed API client + identity seam + full two-pane workflow console (list + filters + detail + timeline + role-aware actions). Error banners surface the backend envelope verbatim.
+
+**Phase 8 — Create UI + frontend tests + frontend CI (this phase).** Admin/clinician can now create encounters through a modal wired to `/locations` and `POST /encounters`; success auto-selects the new row, failure surfaces `{error_code, reason}` inline. Every mutating control (transition, append event, create) now disables while in flight. Added a real Vitest + Testing Library harness (12 integration tests mocking `./api`) that locks down identity resolution, list rendering, filtering, detail/timeline, per-role affordances, create happy + sad paths, identity switching, and status transitions. A dedicated `frontend` CI job runs `npm ci → typecheck → test → build` in parallel with the backend gate. `make web-verify` is the one-shot local gate for the frontend.
 
 Preserved untouched: `/health`, `/`, Alembic history, SQLite dev workflow, state machine + filtering surface, workflow_events model, existing endpoint contracts.
 """

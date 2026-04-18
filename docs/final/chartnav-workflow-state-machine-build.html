@@ -39,7 +39,7 @@
   <div class="sub">Backend phases 1–5: spine → state machine → auth → RBAC → CI/hardening<br>
   Repo: <code>thekidd2227/chartnav-platform</code></div>
 </header>
-<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth, org scoping, RBAC</a></li><li><a href="#sec-9">08 — Test strategy</a></li><li><a href="#sec-10">09 — CI & deploy hardening</a></li><li><a href="#sec-11">10 — Doc artifact pipeline</a></li><li><a href="#sec-12">11 — Production-auth seam</a></li><li><a href="#sec-13">12 — Runtime config</a></li><li><a href="#sec-14">13 — Deploy target</a></li><li><a href="#sec-15">14 — Postgres parity</a></li><li><a href="#sec-16">15 — Frontend integration</a></li><li><a href="#sec-17">Diagram — System architecture</a></li><li><a href="#sec-18">Diagram — Encounter status machine</a></li><li><a href="#sec-19">Diagram — ER</a></li><li><a href="#sec-20">Diagram — API / data flow</a></li></ol></nav>
+<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth, org scoping, RBAC</a></li><li><a href="#sec-9">08 — Test strategy</a></li><li><a href="#sec-10">09 — CI & deploy hardening</a></li><li><a href="#sec-11">10 — Doc artifact pipeline</a></li><li><a href="#sec-12">11 — Production-auth seam</a></li><li><a href="#sec-13">12 — Runtime config</a></li><li><a href="#sec-14">13 — Deploy target</a></li><li><a href="#sec-15">14 — Postgres parity</a></li><li><a href="#sec-16">15 — Frontend integration</a></li><li><a href="#sec-17">16 — Frontend test strategy</a></li><li><a href="#sec-18">Diagram — System architecture</a></li><li><a href="#sec-19">Diagram — Encounter status machine</a></li><li><a href="#sec-20">Diagram — ER</a></li><li><a href="#sec-21">Diagram — API / data flow</a></li></ol></nav>
 <section id="sec-1"><h2>Executive summary</h2>
 <p>This document consolidates <strong>all</strong> ChartNav backend phases delivered to</p>
 <p>date.</p>
@@ -49,70 +49,70 @@
 <p><strong>Phase 4 — RBAC + full scoping + tests.</strong> <code>apps/api/app/authz.py</code> introduces <code>admin</code> / <code>clinician</code> / <code>reviewer</code> roles and per-edge transition rules. <code>/organizations</code>, <code>/locations</code>, <code>/users</code> are now authenticated and scoped. <code>{error_code, reason}</code> envelope is standardized. 25-test pytest suite covers auth, scoping, RBAC, state-machine invariants.</p>
 <p><strong>Phase 5 — CI + runtime hardening.</strong> GitHub Actions workflow runs install + Alembic upgrade on an isolated CI DB + idempotent seed + pytest + live smoke. A separate <code>docs</code> job regenerates the final HTML/PDF. Root <code>Makefile</code>, <code>apps/api/scripts/smoke.sh</code>, and <code>scripts/build_docs.py</code> codify the local verification + doc-build paths.</p>
 <p><strong>Phase 6 — Production seam + deploy target + Postgres parity.</strong> DB layer moved to SQLAlchemy Core. <code>apps/api/app/config.py</code> centralizes env. <code>auth.py</code> gained a bearer stub that returns 501 honestly. Dockerfile hardened, <code>docker-compose.prod.yml</code> + <code>scripts/pg_verify.sh</code> + <code>backend-postgres</code> CI job land.</p>
-<p><strong>Phase 7 — Frontend workflow UI (this phase).</strong> <code>apps/web/</code> becomes a real app. Typed API client (<code>src/api.ts</code>) funnels every call through one surface that converts backend 4xx envelopes into <code>ApiError</code> for the UI. <code>src/identity.ts</code> persists the seeded dev caller in <code>localStorage</code>. <code>App.tsx</code> renders a two-pane workflow console: filtered encounter list, encounter detail with a facts grid and color-coded status, an event timeline, role-aware transition buttons, and a composer for adding events (hidden with explanation for reviewers). Error banners surface the exact <code>{error_code, reason}</code> the backend ships. <code>make dev</code> boots API + Vite together with trap-based teardown. No backend contract changes.</p>
+<p><strong>Phase 7 — Frontend workflow UI.</strong> Typed API client + identity seam + full two-pane workflow console (list + filters + detail + timeline + role-aware actions). Error banners surface the backend envelope verbatim.</p>
+<p><strong>Phase 8 — Create UI + frontend tests + frontend CI (this phase).</strong> Admin/clinician can now create encounters through a modal wired to <code>/locations</code> and <code>POST /encounters</code>; success auto-selects the new row, failure surfaces <code>{error_code, reason}</code> inline. Every mutating control (transition, append event, create) now disables while in flight. Added a real Vitest + Testing Library harness (12 integration tests mocking <code>./api</code>) that locks down identity resolution, list rendering, filtering, detail/timeline, per-role affordances, create happy + sad paths, identity switching, and status transitions. A dedicated <code>frontend</code> CI job runs <code>npm ci → typecheck → test → build</code> in parallel with the backend gate. <code>make web-verify</code> is the one-shot local gate for the frontend.</p>
 <p>Preserved untouched: <code>/health</code>, <code>/</code>, Alembic history, SQLite dev workflow, state machine + filtering surface, workflow_events model, existing endpoint contracts.</p>
 </section>
 <section id="sec-2"><h2>01 — Current state</h2>
 <h1>ChartNav — Current State</h1>
-<p><strong>As of:</strong> 2026-04-18 (phase: frontend workflow UI)</p>
+<p><strong>As of:</strong> 2026-04-18 (phase: create UI + frontend tests + frontend CI)</p>
 <h2>Repo layout (relevant)</h2>
 <pre class="code lang-"><code>
 chartnav-platform/
-├── .github/workflows/ci.yml     # backend-sqlite · backend-postgres · docker-build · docs
-├── Makefile                     # install · verify · pg-verify · docker-* · web-* · dev
-├── scripts/                     # build_docs.py · verify.sh · pg_verify.sh
+├── .github/workflows/ci.yml   # backend-sqlite · backend-postgres · frontend · docker-build · docs
+├── Makefile                   # verify · pg-verify · docker-* · web-* (incl. web-test / web-verify) · dev
+├── scripts/                   # build_docs.py · verify.sh · pg_verify.sh
 ├── apps/
-│   ├── api/
-│   │   ├── Dockerfile · entrypoint.sh
-│   │   ├── .env.example
-│   │   ├── app/{main,config,db,auth,authz}.py
-│   │   ├── app/api/routes.py
-│   │   ├── alembic/
-│   │   ├── scripts_seed.py
-│   │   ├── scripts/smoke.sh
-│   │   └── tests/               # 28 pytest incl. 3 auth-mode tests
+│   ├── api/                   # (unchanged this phase)
+│   │   ├── app/{main,config,db,auth,authz}.py + app/api/routes.py
+│   │   ├── alembic/ · scripts_seed.py · scripts/smoke.sh
+│   │   ├── tests/ (28 pytest)
+│   │   └── Dockerfile · entrypoint.sh
 │   └── web/
-│       ├── .env.example         # NEW — VITE_API_URL contract
-│       ├── src/
-│       │   ├── api.ts           # NEW — typed API client
-│       │   ├── identity.ts      # NEW — dev identity helpers
-│       │   ├── App.tsx          # NEW — full workflow UI
-│       │   ├── main.tsx         # wires App.tsx + styles.css
-│       │   ├── styles.css       # NEW — single CSS file
-│       │   └── vite-env.d.ts    # NEW — Vite ambient types
-│       └── package.json
-├── infra/docker/{docker-compose.yml,docker-compose.prod.yml}
-└── docs/build/01..15            # now including 15-frontend-integration.md
+│       ├── .env.example
+│       ├── package.json          # scripts: dev · build · preview · typecheck · test · test:watch
+│       ├── vite.config.ts        # also hosts vitest config (jsdom)
+│       ├── tsconfig.json         # includes vitest/globals + testing-library types
+│       └── src/
+│           ├── api.ts            # typed client, createEncounter, canCreateEncounter
+│           ├── identity.ts
+│           ├── App.tsx           # + CreateEncounterModal, pending-state buttons
+│           ├── styles.css        # + modal styles
+│           ├── main.tsx · vite-env.d.ts
+│           └── test/
+│               ├── setup.ts
+│               └── App.test.tsx  # 12 integration tests
+├── infra/docker/{docker-compose,docker-compose.prod}.yml
+└── docs/build/ 01 … 16          # incl. 15-frontend-integration, 16-frontend-test-strategy
 </code></pre>
 <h2>Runtime baseline</h2>
 <ul>
-<li>Backend: Python 3.11, FastAPI, SQLAlchemy Core, SQLite or Postgres.</li>
-<li>Frontend: Vite 5 + React 18 + TypeScript; vanilla CSS.</li>
-<li>Auth: <code>CHARTNAV_AUTH_MODE=header</code> (dev) or <code>bearer</code> (placeholder 501).</li>
-<li>DB: SQLite default (<code>apps/api/chartnav.db</code>), Postgres via <code>DATABASE_URL=postgresql+psycopg://…</code>.</li>
+<li>Backend: FastAPI + SQLAlchemy Core, SQLite or Postgres (via <code>DATABASE_URL</code>).</li>
+<li>Frontend: Vite 5 + React 18 + TypeScript + Vitest + Testing Library.</li>
+<li>Auth: <code>CHARTNAV_AUTH_MODE=header</code> (dev) or <code>bearer</code> (prod placeholder 501).</li>
+<li>RBAC: <code>admin</code> / <code>clinician</code> / <code>reviewer</code>.</li>
 <li>Alembic head: <code>a1b2c3d4e5f6</code>. No schema changes this phase.</li>
-<li>RBAC: <code>admin</code>, <code>clinician</code>, <code>reviewer</code>.</li>
-<li>Error envelope: <code>{&quot;detail&quot;: {&quot;error_code&quot;: &quot;...&quot;, &quot;reason&quot;: &quot;...&quot;}}</code> — the frontend surfaces these verbatim.</li>
+<li>Error envelope: <code>{&quot;detail&quot;: {&quot;error_code&quot;: &quot;...&quot;, &quot;reason&quot;: &quot;...&quot;}}</code> — surfaced verbatim in the UI.</li>
 </ul>
-<h2>Frontend capabilities (new)</h2>
+<h2>Frontend capabilities (delta this phase)</h2>
 <ul>
-<li>Header with brand, caller chip (<code>email · role · org N</code>), API base URL, identity picker (5 seeded users + custom).</li>
-<li>Encounter list with filters (<code>status</code>, <code>provider_name</code>, <code>location_id</code>) and color-coded status pills.</li>
-<li>Encounter detail with facts grid, current status, allowed transitions (role-aware), event timeline.</li>
-<li>Event composer for admin / clinician; hidden with explanation for reviewer.</li>
-<li>All API errors surface as banners with <code>error_code</code> + <code>reason</code>.</li>
-<li>Dev identity persists in <code>localStorage</code>; switching reloads <code>/me</code> and list.</li>
+<li><code>+ New encounter</code> button in the header for admin/clinician; hidden for reviewer.</li>
+<li><code>CreateEncounterModal</code>:</li>
+<li>Fetches <code>/locations</code> (already org-scoped server-side).</li>
+<li>Fields: patient_identifier*, patient_name, provider_name*, location_id*, initial status (<code>scheduled</code> / <code>in_progress</code>).</li>
+<li>Disables submit while in-flight, validates required fields.</li>
+<li>Success → refresh list, auto-select new encounter, show success banner.</li>
+<li>Failure → inline error with exact <code>error_code</code> + <code>reason</code>; modal stays open for retry.</li>
+<li>Transition / append-event buttons now show a pending label and disable while the request is in flight.</li>
+<li>Banners annotated with ARIA roles; <code>data-testid</code> hooks added to enable a11y + tests.</li>
 </ul>
-<h2>Verified working endpoints</h2>
-<p>No endpoint behavior changed this phase. All 28 pytest tests still pass;</p>
-<p>the UI exercises the full surface through the typed client.</p>
 <h2>Automation</h2>
 <ul>
-<li><code>make verify</code> — SQLite: reset-db + pytest + boot + smoke.</li>
+<li><code>make verify</code> — SQLite backend gate (reset-db + pytest + boot + smoke).</li>
 <li><code>make pg-verify</code> — Postgres parity proof.</li>
-<li><code>make web-install</code> / <code>web-dev</code> / <code>web-build</code> / <code>web-typecheck</code>.</li>
-<li><code>make dev</code> — boots API (8000) + Vite (5173) together with a shared trap-based teardown.</li>
-<li>CI: <code>backend-sqlite</code> → <code>backend-postgres</code> + <code>docker-build</code> + <code>docs</code>.</li>
+<li><code>make web-verify</code> — frontend gate (typecheck + test + build).</li>
+<li><code>make dev</code> — backend + frontend together with trap teardown.</li>
+<li>CI: <code>backend-sqlite</code> + <code>frontend</code> run in parallel; <code>backend-postgres</code> + <code>docker-build</code> + <code>docs</code> are chained after <code>backend-sqlite</code>.</li>
 </ul>
 </section>
 <section id="sec-3"><h2>02 — Workflow state machine</h2>
@@ -328,87 +328,78 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <h1>Build Log</h1>
 <p>Reverse-chronological.</p>
 <p>---</p>
-<h2>2026-04-18 — Phase 7: frontend workflow UI</h2>
+<h2>2026-04-18 — Phase 8: create UI + frontend tests + frontend CI</h2>
 <h3>Step 1 — Baseline</h3>
 <ul>
-<li>Starting head: <code>700bb0b</code> (prod auth seam + Docker + Postgres parity).</li>
-<li><code>apps/web/</code> was a placeholder — a single <code>App.jsx</code> hitting <code>/health</code> and an unrelated <code>main.tsx</code>.</li>
+<li>Head: <code>c4f6e4f</code> (frontend workflow UI).</li>
+<li>Backend unchanged; 28/28 pytest still passing.</li>
 </ul>
-<h3>Step 2 — Typed API client</h3>
+<h3>Step 2 — Encounter-create flow</h3>
 <ul>
-<li>New <code>apps/web/src/api.ts</code>:</li>
-<li><code>API_URL</code> from <code>VITE_API_URL</code>, fallback <code>http://localhost:8000</code>.</li>
-<li><code>ApiError(status, error_code, reason)</code> surfaces the backend envelope.</li>
-<li>Typed wrappers for <code>/health</code>, <code>/me</code>, <code>/encounters</code>, <code>/encounters/{id}</code>, <code>/encounters/{id}/events</code>, <code>POST /encounters/{id}/events</code>, <code>POST /encounters/{id}/status</code>, <code>/locations</code>.</li>
-<li>Pure helpers <code>allowedNextStatuses(role, status)</code> and <code>canCreateEvent(role)</code> that mirror <code>authz.TRANSITION_ROLES</code> — for UI affordances only; backend still governs.</li>
-<li>New <code>apps/web/src/identity.ts</code> — seeded users list (all 5 demo identities), localStorage persistence, safe fallback.</li>
-<li>New <code>apps/web/src/vite-env.d.ts</code> — Vite ambient types for <code>import.meta.env</code>.</li>
+<li><code>api.ts</code>: new <code>createEncounter(email, input)</code> + <code>canCreateEncounter(role)</code> helper (admin, clinician).</li>
+<li><code>App.tsx</code>: <code>+ New encounter</code> button in header (only visible for roles that can create); new <code>CreateEncounterModal</code> component. Modal fetches <code>/locations</code> (already scoped server-side), auto-selects when there&#x27;s one, validates required fields, disables submit while in-flight, and surfaces backend <code>{error_code, reason}</code> inline. On success the list is refreshed and the new encounter is auto-selected.</li>
+<li><code>styles.css</code>: small modal styles (backdrop, card, body form).</li>
 </ul>
-<h3>Step 3 — App shell</h3>
+<h3>Step 3 — UX hardening</h3>
 <ul>
-<li>Rewrote <code>apps/web/src/App.tsx</code> as the full workflow app:</li>
-<li>Sticky header: brand, caller chip, API chip, identity picker (seeded + custom).</li>
-<li>Two-column layout (collapses on mobile).</li>
-<li><code>apps/web/src/main.tsx</code> imports <code>App</code> + <code>styles.css</code>.</li>
-<li>New <code>apps/web/src/styles.css</code>: one file, CSS variables, color-coded status pills, filter/list/detail/timeline/form styles.</li>
+<li>All mutating buttons (transition / event append) now disable while their request is in flight and show a pending label.</li>
+<li>Detail pane returns <code>null</code> cleanly during loading to avoid flashing stale content after identity switches.</li>
+<li>Create and status banners annotated with <code>role=&quot;alert&quot;</code> / <code>role=&quot;status&quot;</code> and <code>data-testid</code> for accessibility + tests.</li>
+<li>Identity badge distinguishes loading (<code>identity-loading</code>), error (<code>identity-error</code>), and resolved (<code>identity-badge</code>) states.</li>
 </ul>
-<h3>Step 4 — Encounter list + filters</h3>
+<h3>Step 4 — Frontend test harness</h3>
 <ul>
-<li>Filter bar for <code>status</code>, <code>provider_name</code>, <code>location_id</code>; <code>clear</code> button when filters are set.</li>
-<li>Loading / empty / error states in the list.</li>
-<li>Row click selects an encounter (and keyboard Enter/Space).</li>
+<li>Installed <code>vitest</code>, <code>@vitest/ui</code>, <code>@testing-library/react</code>, <code>@testing-library/user-event</code>, <code>@testing-library/jest-dom</code>, <code>jsdom</code>, <code>@types/node</code>.</li>
+<li><code>vite.config.js</code> → <code>vite.config.ts</code> with a <code>test</code> block (environment <code>jsdom</code>, globals, setup file, CSS off).</li>
+<li><code>src/test/setup.ts</code>: wires jest-dom matchers + per-test cleanup (DOM + localStorage).</li>
+<li><code>tsconfig.json</code>: added <code>types: [&quot;vite/client&quot;, &quot;vitest/globals&quot;, &quot;@testing-library/jest-dom&quot;]</code> and included <code>vite.config.ts</code>.</li>
 </ul>
-<h3>Step 5 — Encounter detail + timeline</h3>
+<h3>Step 5 — Frontend tests</h3>
 <ul>
-<li>Facts grid (org, location, scheduled/started/completed/created).</li>
-<li>Color-coded status pill.</li>
-<li>Timeline renders <code>event_data</code> as a readable <code>key: value · …</code> line (objects), verbatim for strings; falls back to <code>—</code> when null.</li>
+<li><code>src/test/App.test.tsx</code>: <strong>12 integration tests</strong> mocking <code>./api</code>:</li>
+<li>Identity badge resolves from <code>/me</code>.</li>
+<li>Mocked list renders both seeded encounters.</li>
+<li>Status filter calls <code>listEncounters({status})</code> and updates the visible list.</li>
+<li>Selecting an encounter loads detail + timeline.</li>
+<li>Clinician / reviewer each see only their permitted transition buttons.</li>
+<li>Reviewer sees <code>event-denied</code> note; event composer absent.</li>
+<li>Reviewer cannot see the <code>+ New encounter</code> button; admin can.</li>
+<li>Create happy path: form submit → backend call → success banner → modal closes.</li>
+<li>Create sad path: backend 403 <code>cross_org_access_forbidden</code> surfaces inline; modal stays open.</li>
+<li>Switching identity via the picker refetches <code>/me</code> + list.</li>
+<li>Unknown email (custom input) shows <code>identity-error</code> with <code>unknown_user</code>.</li>
+<li>Status transition call refreshes detail + events and shows success banner.</li>
+<li>Known harness quirk: vitest 4 runs the tests on Node 24 where <code>localStorage</code> is a native-but-unconfigured feature, so we drive identity switches through the UI rather than writing to <code>localStorage</code> directly. The <code>./identity</code> module&#x27;s localStorage calls are already wrapped in <code>try/catch</code> — the app keeps working either way.</li>
 </ul>
-<h3>Step 6 — Role-aware actions</h3>
+<h3>Step 6 — Frontend CI</h3>
 <ul>
-<li>Allowed transitions rendered as buttons based on <code>(role, current_status)</code>. When none are allowed, a clean note explains why — no fake-disabled buttons.</li>
-<li>Event composer hidden for reviewers with an explanation; admins + clinicians get it.</li>
-<li>On success: refresh detail + events + list; show a green banner.</li>
-<li>On failure: render the exact <code>{status} {error_code} — {reason}</code> string in a red banner. Nothing is silently swallowed.</li>
+<li>New <code>frontend</code> job in <code>.github/workflows/ci.yml</code>: Node 20 + npm cache keyed on <code>apps/web/package-lock.json</code> → <code>npm ci</code> → <code>npm run typecheck</code> → <code>npm test</code> → <code>npm run build</code>.</li>
+<li>Runs on <code>push</code> to <code>main</code> and every PR, in parallel with <code>backend-sqlite</code>.</li>
 </ul>
 <h3>Step 7 — Dev UX</h3>
 <ul>
-<li>New <code>apps/web/.env.example</code> — <code>VITE_API_URL</code>.</li>
-<li>Makefile: <code>web-install</code>, <code>web-dev</code>, <code>web-build</code>, <code>web-typecheck</code>, <code>dev</code> (boots both).</li>
-<li><code>make dev</code> uses a trap-based teardown so Ctrl-C kills both backend and frontend.</li>
+<li>Makefile gains <code>web-test</code>, <code>web-verify</code> (typecheck + test + build) alongside existing <code>web-install / web-dev / web-build / web-typecheck</code>.</li>
+<li><code>make dev</code> (boot both) unchanged.</li>
+<li><code>apps/web/.env.example</code> unchanged — still <code>VITE_API_URL=http://localhost:8000</code>.</li>
 </ul>
-<h3>Step 8 — Local verification</h3>
+<h3>Step 8 — Docs</h3>
 <ul>
-<li><code>npx tsc --noEmit</code> clean after adding <code>vite-env.d.ts</code>.</li>
-<li><code>npm run build</code> → <code>dist/</code> produced (154 KB JS / 6 KB CSS / 0.4 KB HTML).</li>
-<li>Ran uvicorn + exercised every endpoint the UI depends on against all 5 seeded roles:</li>
-<li><code>/me</code> returns 200 for all 5, 401 for unknown/empty.</li>
-<li><code>/encounters</code> scoped correctly (org1 sees 2 rows, org2 sees <code>[3]</code>).</li>
-<li>Filter <code>status=in_progress</code> → <code>[&#x27;PT-1001&#x27;]</code>.</li>
-<li>Clinician <code>in_progress → draft_ready</code> → 200.</li>
-<li>Clinician <code>review_needed → completed</code> → 403 <code>role_cannot_transition</code>.</li>
-<li>Reviewer <code>review_needed → completed</code> → 200.</li>
-<li>Reviewer <code>POST event</code> → 403 <code>role_cannot_create_event</code>.</li>
-<li>Admin <code>POST event</code> → 201.</li>
-<li>Backend tests still pass (no backend changes this phase).</li>
-</ul>
-<h3>Step 9 — Docs</h3>
-<ul>
-<li>New: <code>15-frontend-integration.md</code>.</li>
-<li>Updated: <code>01-current-state.md</code>, <code>05-build-log.md</code>, <code>06-known-gaps.md</code>, <code>08-test-strategy.md</code>, <code>12-runtime-config.md</code>.</li>
-<li>Diagrams updated: <code>system-architecture</code>, <code>api-data-flow</code> (with frontend layer).</li>
-<li><code>scripts/build_docs.py</code> now picks up section 15.</li>
+<li>New: <code>16-frontend-test-strategy.md</code>.</li>
+<li>Updated: <code>01-current-state</code>, <code>05-build-log</code>, <code>06-known-gaps</code>, <code>08-test-strategy</code>, <code>09-ci-and-deploy-hardening</code>, <code>12-runtime-config</code>, <code>15-frontend-integration</code>.</li>
+<li>Diagrams refreshed: <code>system-architecture</code> (add Vitest), <code>api-data-flow</code> (include create flow + frontend CI gate).</li>
+<li><code>scripts/build_docs.py</code> picks up section 16.</li>
 <li>Final HTML + PDF regenerated.</li>
 </ul>
-<h3>Step 10 — Hygiene</h3>
+<h3>Step 9 — Hygiene</h3>
 <ul>
-<li>Removed stale <code>apps/web/src/App.jsx</code>.</li>
-<li><code>.gitignore</code> already excludes <code>node_modules</code>, <code>dist</code>, caches; reran <code>npm install</code> and only <code>package-lock.json</code> grew.</li>
-<li>Dev DB reset before commit.</li>
+<li>Removed <code>apps/web/vite.config.js</code> (superseded by <code>.ts</code>).</li>
+<li>Dev DB reset to pristine seeded state.</li>
+<li><code>.gitignore</code> already excludes <code>node_modules</code>, <code>dist</code>, <code>coverage</code> (default), caches.</li>
 </ul>
 <p>---</p>
 <h2>Prior phases</h2>
 <ul>
+<li><strong>Phase 7 — Frontend workflow UI</strong> (<code>c4f6e4f</code>)</li>
 <li><strong>Phase 6 — Prod auth seam + Docker + Postgres parity</strong> (<code>700bb0b</code>)</li>
 <li><strong>Phase 5 — CI + runtime hardening + doc pipeline</strong> (<code>cfa8ca9</code>)</li>
 <li><strong>Phase 4 — RBAC + full scoping + pytest</strong> (<code>c6f29e6</code>)</li>
@@ -419,59 +410,56 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 </section>
 <section id="sec-7"><h2>06 — Known gaps + verification matrix</h2>
 <h1>Known Gaps &amp; Verification Matrix</h1>
-<h2>Verification evidence — phase 7 (frontend)</h2>
-<h3>Backend still green</h3>
+<h2>Verification evidence — phase 8</h2>
+<h3>Frontend gate (<code>make web-verify</code>)</h3>
+<table><thead><tr><th>Step</th><th>Result</th></tr></thead><tbody>
+<tr><td><code>tsc --noEmit</code></td><td>✅ clean</td></tr>
+<tr><td><code>vitest run</code></td><td>✅ <strong>12/12</strong> in ~2.5s</td></tr>
+<tr><td><code>vite build</code></td><td>✅ 159 KB JS / 7.3 KB CSS</td></tr>
+</tbody></table>
+<h3>Frontend test matrix (12)</h3>
+<table><thead><tr><th>Scenario</th><th>Result</th></tr></thead><tbody>
+<tr><td><code>/me</code> resolves → identity badge</td><td>✅</td></tr>
+<tr><td>List renders mocked encounters</td><td>✅</td></tr>
+<tr><td>Status filter hits API + updates list</td><td>✅</td></tr>
+<tr><td>Select encounter loads detail + timeline</td><td>✅</td></tr>
+<tr><td>Clinician sees operational transitions only</td><td>✅</td></tr>
+<tr><td>Reviewer sees review-stage transitions only + event composer hidden</td><td>✅</td></tr>
+<tr><td>Reviewer cannot see <code>+ New encounter</code></td><td>✅</td></tr>
+<tr><td>Admin creates encounter → success banner, modal closed</td><td>✅</td></tr>
+<tr><td>Create 403 <code>cross_org_access_forbidden</code> surfaces inline</td><td>✅</td></tr>
+<tr><td>Identity switch refetches <code>/me</code> + list</td><td>✅</td></tr>
+<tr><td>Unknown email → <code>identity-error</code> chip with <code>unknown_user</code></td><td>✅</td></tr>
+<tr><td>Status transition refreshes detail + events</td><td>✅</td></tr>
+</tbody></table>
+<h3>Backend gate (<code>make verify</code>)</h3>
+<table><thead><tr><th>Step</th><th>Result</th></tr></thead><tbody>
+<tr><td>reset-db + alembic + seed</td><td>✅</td></tr>
+<tr><td>pytest</td><td>✅ <strong>28/28</strong></td></tr>
+<tr><td>uvicorn boot + smoke.sh</td><td>✅ 9/9</td></tr>
+<tr><td>teardown</td><td>✅</td></tr>
+</tbody></table>
+<h3>Postgres parity (<code>make pg-verify</code>)</h3>
+<p>Still green from the prior phase; no code touched this phase changes it.</p>
+<h3>CI YAML</h3>
 <ul>
-<li><code>make verify</code> (SQLite): <strong>28/28 pytest</strong> + 9/9 smoke + clean teardown.</li>
-<li>No backend code changed this phase. All previous verification stands.</li>
+<li><code>yaml.safe_load(open(&quot;.github/workflows/ci.yml&quot;))</code> — parses. Jobs now: <code>backend-sqlite</code>, <code>backend-postgres</code>, <code>frontend</code>, <code>docker-build</code>, <code>docs</code>.</li>
+<li>No <code>act</code> runner in shell — static parse + structural review only (same limitation as prior phases).</li>
 </ul>
-<h3>Frontend build + typecheck</h3>
-<pre class="code lang-"><code>
-$ cd apps/web &amp;&amp; npx tsc --noEmit   # clean
-$ npm run build
-✓ 33 modules transformed.
-dist/index.html                   0.40 kB │ gzip:  0.27 kB
-dist/assets/index-*.css           6.24 kB │ gzip:  1.79 kB
-dist/assets/index-*.js          154.44 kB │ gzip: 49.66 kB
-✓ built in 639ms
-</code></pre>
-<h3>Live integration (uvicorn + curl as a UI stand-in)</h3>
-<table><thead><tr><th>Flow the UI depends on</th><th>Result</th></tr></thead><tbody>
-<tr><td><code>GET /me</code> for all 5 seeded identities</td><td>✅ 200</td></tr>
-<tr><td><code>GET /me</code> unknown / empty</td><td>✅ 401 (UI shows red chip)</td></tr>
-<tr><td><code>GET /encounters</code> org1 vs org2 scoping</td><td>✅ disjoint</td></tr>
-<tr><td><code>GET /encounters?status=in_progress</code> filter</td><td>✅ <code>[&#x27;PT-1001&#x27;]</code></td></tr>
-<tr><td><code>GET /encounters/{id}</code> + <code>GET /encounters/{id}/events</code></td><td>✅ 200, 3 events</td></tr>
-<tr><td>Clinician <code>in_progress → draft_ready</code></td><td>✅ 200</td></tr>
-<tr><td>Clinician <code>review_needed → completed</code></td><td>✅ 403 <code>role_cannot_transition</code></td></tr>
-<tr><td>Reviewer <code>review_needed → completed</code></td><td>✅ 200</td></tr>
-<tr><td>Reviewer <code>POST /encounters/{id}/events</code></td><td>✅ 403 <code>role_cannot_create_event</code></td></tr>
-<tr><td>Admin <code>POST /encounters/{id}/events</code></td><td>✅ 201</td></tr>
-</tbody></table>
-<h3>UI affordances sanity</h3>
-<table><thead><tr><th>Role</th><th>Transition buttons shown</th><th>Event composer</th></tr></thead><tbody>
-<tr><td>admin</td><td>Any forward or rework edge valid from the current state</td><td>visible</td></tr>
-<tr><td>clinician</td><td><code>scheduled→in_progress</code>, <code>in_progress→draft_ready</code>, rework back</td><td>visible</td></tr>
-<tr><td>reviewer</td><td><code>draft_ready→review_needed</code>, <code>review_needed→{completed,draft_ready}</code></td><td>hidden w/ note</td></tr>
-</tbody></table>
-<p>When no transition is available (terminal <code>completed</code> or role mismatch),</p>
-<p>the UI shows a note rather than fake-disabled buttons. Backend remains</p>
-<p>authoritative — a mismatch between the UI&#x27;s <code>allowedNextStatuses</code> and</p>
-<p>the server is surfaced as a 4xx banner with the exact <code>error_code</code>.</p>
 <h2>Real gaps (prioritized for next phase)</h2>
-<p>1. <strong>No automated frontend tests.</strong> All frontend verification this phase is build/typecheck + live-curl parity. Next: a small Vitest or Playwright pass.</p>
-<p>2. <strong>JWT validation still stubbed.</strong> Bearer mode returns 501; the frontend currently only implements header mode.</p>
-<p>3. <strong>No encounter creation UI.</strong> The frontend can add events and move statuses but cannot create encounters yet (backend endpoint exists).</p>
-<p>4. <strong>No pagination.</strong> Works fine at seed scale; first real dataset will need it on both ends.</p>
-<p>5. <strong>No optimistic updates.</strong> Every mutation re-fetches.</p>
-<p>6. <strong>No global state manager.</strong> Fine at this size; watch for prop-drill as flows multiply.</p>
-<p>7. <strong>No encounter update / delete / cancel.</strong> No <code>cancelled</code> status.</p>
-<p>8. <strong>Free-form <code>event_data</code></strong> still lacks per-event_type schema.</p>
-<p>9. <strong>Raw <code>sqlite3</code> → SA Core refactor complete</strong> — pytest matrix against Postgres is the next CI upgrade.</p>
-<p>10. **CORS <code>allow_origins=[&quot;*&quot;]</code>** remains.</p>
-<p>11. <strong>No distinct audit log</strong> for auth/scoping failures.</p>
-<p>12. <strong>No rate limiting, lockout, or structured logging.</strong></p>
-<p>13. <strong>No CI job for the frontend.</strong> The <code>docker-build</code> + <code>docs</code> jobs don&#x27;t cover the web bundle. A <code>frontend-build</code> CI job is a small, honest addition.</p>
+<p>1. <strong>No end-to-end browser tests</strong> against a live backend. Current verification is build + unit-level integration + curl parity. Playwright is the obvious next step.</p>
+<p>2. <strong>JWT validation still stubbed</strong> — bearer mode returns 501 honestly. Needs PyJWT + JWKS cache.</p>
+<p>3. <strong>No image push / release pipeline</strong> — CI builds, doesn&#x27;t ship.</p>
+<p>4. <strong>No secret store integration.</strong> Env-var only.</p>
+<p>5. <strong><code>/organizations</code>, <code>/locations</code>, <code>/users</code></strong> remain read-only — no admin write UI for metadata.</p>
+<p>6. <strong><code>users.role</code></strong> still free VARCHAR at DB layer (CHECK or lookup table).</p>
+<p>7. <strong>No pagination</strong> on <code>GET /encounters</code> (backend or frontend).</p>
+<p>8. <strong>Free-form <code>event_data</code></strong> — no per-event_type schema.</p>
+<p>9. **CORS <code>allow_origins=[&quot;*&quot;]</code>.**</p>
+<p>10. <strong>No distinct audit log</strong> for auth/scoping failures.</p>
+<p>11. <strong>No rate limiting / lockout / structured logging.</strong></p>
+<p>12. <strong>pytest matrix on Postgres</strong> — fixture is env-driven but not yet multi-DB.</p>
+<p>13. <strong>No visual-regression / accessibility audits</strong> on the frontend.</p>
 </section>
 <section id="sec-8"><h2>07 — Auth, org scoping, RBAC</h2>
 <h1>Auth, Org Scoping, RBAC</h1>
@@ -665,17 +653,18 @@ make docker-build
 <li><code>make verify</code> (SQLite): 28 pytest + 9 smoke — all green</li>
 <li><code>scripts/pg_verify.sh</code>: migrations + seed (x2) + smoke + status transition + event write — <strong>PASS</strong></li>
 </ul>
-<h2>Frontend verification (phase 7)</h2>
+<h2>Frontend verification (phase 8)</h2>
 <ul>
-<li><code>npx tsc --noEmit</code> — clean.</li>
-<li><code>npm run build</code> — emits <code>dist/index.html</code> + hashed JS/CSS.</li>
-<li>Live integration against uvicorn: every endpoint the UI hits</li>
+<li><code>make web-verify</code> = <code>npm run typecheck</code> + <code>npm test</code> + <code>npm run build</code>.</li>
+<li>Vitest + Testing Library + jsdom. 12 integration tests mocking</li>
 </ul>
-<p>returns the expected status across all 5 seeded roles (see</p>
-<p><code>06-known-gaps.md</code> matrix).</p>
+<p><code>./api</code>. Full matrix in <code>16-frontend-test-strategy.md</code> and</p>
+<p><code>06-known-gaps.md</code>.</p>
 <ul>
-<li>No automated frontend tests yet — next item.</li>
+<li>Vite production build still emits <code>dist/</code> in ~1s.</li>
+<li>CI now runs a dedicated <code>frontend</code> job on every push/PR: node 20,</li>
 </ul>
+<p><code>npm ci</code>, typecheck, test, build.</p>
 <h2>Gaps not yet covered</h2>
 <ul>
 <li>pytest matrix against Postgres (the fixture is already env-driven).</li>
@@ -693,6 +682,8 @@ make docker-build
 <p>Install deps → <code>alembic upgrade head</code> against an isolated <code>$RUNNER_TEMP/chartnav_ci.db</code> via <code>DATABASE_URL</code> → seed <strong>twice</strong> (idempotency proof) → <code>pytest tests/ -v</code> (28 tests) → <code>bash scripts/verify.sh</code> (boots uvicorn, runs <code>scripts/smoke.sh</code>).</p>
 <h3><code>backend-postgres</code> (needs: <code>backend-sqlite</code>)</h3>
 <p>Service container <code>postgres:16-alpine</code> on localhost:5432. Install deps (incl. <code>[postgres]</code> extra) → <code>alembic upgrade head</code> on Postgres → seed twice → boot uvicorn → <code>scripts/smoke.sh</code> → live status transition asserts the returned row. Fails the workflow if Postgres parity breaks.</p>
+<h3><code>frontend</code></h3>
+<p>Node 20 + npm cache keyed on <code>apps/web/package-lock.json</code> → <code>npm ci</code> → <code>npm run typecheck</code> → <code>npm test</code> (vitest, 12 integration tests) → <code>npm run build</code>. Runs in parallel with <code>backend-sqlite</code> — the frontend is a peer quality gate, not blocked by backend CI.</p>
 <h3><code>docker-build</code> (needs: <code>backend-sqlite</code>)</h3>
 <p>Buildx → build <code>chartnav-api:ci</code> from <code>apps/api/</code> → run the container with <code>DATABASE_URL=sqlite:///./chartnav.db</code> and <code>CHARTNAV_RUN_SEED=1</code> → poll <code>/health</code> → run <code>scripts/smoke.sh</code> against the live container. Proves the production image boots end-to-end.</p>
 <h3><code>docs</code> (needs: <code>backend-sqlite</code>)</h3>
@@ -1309,6 +1300,22 @@ make web-build        # vite build -&gt; apps/web/dist
 <tr><td>Admin POST event</td><td>✅ 201</td></tr>
 <tr><td>Switching identity re-fetches <code>/me</code> and list</td><td>✅</td></tr>
 </tbody></table>
+<h2>Encounter creation (phase 8)</h2>
+<ul>
+<li>Header shows <code>+ New encounter</code> for admin + clinician; hidden for reviewer.</li>
+<li><code>CreateEncounterModal</code> fetches <code>/locations</code> (server-scoped to caller org), auto-selects when only one option exists, and submits <code>{ organization_id, location_id, patient_identifier, patient_name, provider_name, status }</code>.</li>
+<li>Required fields (<code>patient_identifier</code>, <code>provider_name</code>, <code>location_id</code>) block submit until filled.</li>
+<li>While in-flight the submit button disables and shows <code>Creating…</code>.</li>
+<li>On success the list refreshes, the new encounter auto-selects, and a green banner shows <code>#&lt;id&gt; created</code>.</li>
+<li>On failure the modal stays open and the exact <code>{error_code, reason}</code> appears inline, so reviewers can correct and retry.</li>
+</ul>
+<h2>UX hardening (phase 8)</h2>
+<ul>
+<li>Every mutating control (transition, append event, create) disables while its request is in flight and shows a pending label.</li>
+<li>Identity badge has explicit states (<code>identity-loading</code>, <code>identity-error</code>, <code>identity-badge</code>) so loading vs. failed vs. resolved are distinguishable.</li>
+<li>Banners use ARIA <code>role=&quot;alert&quot; | &quot;status&quot;</code> and <code>data-testid</code> so assistive tech + tests can target them.</li>
+<li>When no transition is legal for the current <code>(role, status)</code> pair, we show a plain note — no fake-disabled buttons.</li>
+</ul>
 <h2>What this phase explicitly does NOT do</h2>
 <ul>
 <li>No real login flow — <code>X-User-Email</code> is still dev transport.</li>
@@ -1320,7 +1327,82 @@ make web-build        # vite build -&gt; apps/web/dist
 <p>Those are future phases. The API client + identity seam make them</p>
 <p>cheap to add without rewriting.</p>
 </section>
-<section id="sec-17"><h2>Diagram — System architecture</h2>
+<section id="sec-17"><h2>16 — Frontend test strategy</h2>
+<h1>Frontend Test Strategy</h1>
+<h2>Stack</h2>
+<ul>
+<li><strong>Vitest</strong> (<code>vitest</code> + <code>@vitest/ui</code>) — same Vite runtime as the app.</li>
+<li><strong>jsdom</strong> — DOM environment.</li>
+<li><strong>@testing-library/react</strong> + <strong>@testing-library/user-event</strong> — user-centric queries, realistic events.</li>
+<li><strong>@testing-library/jest-dom</strong> — richer DOM matchers.</li>
+</ul>
+<h2>Layout</h2>
+<pre class="code lang-"><code>
+apps/web/
+├── vite.config.ts            # vitest config block (jsdom, globals, setup file)
+├── src/test/
+│   ├── setup.ts              # imports jest-dom matchers, cleans DOM + localStorage between tests
+│   └── App.test.tsx          # 12 integration tests against the mocked API layer
+└── package.json              # scripts.test = vitest run, test:watch = vitest
+</code></pre>
+<h2>Mocking strategy</h2>
+<p><code>vi.mock(&quot;../api&quot;, ...)</code> replaces every backend call with a <code>vi.fn()</code></p>
+<p>while preserving the pure helpers (<code>allowedNextStatuses</code>, <code>ApiError</code>,</p>
+<p>etc.). That keeps tests decoupled from the network, deterministic, and</p>
+<p>fast — but still exercises the real <code>App.tsx</code> component tree.</p>
+<p>The mocks emulate the server&#x27;s real error envelope so the UI code&#x27;s</p>
+<p><code>{error_code, reason}</code> branch is actually tested.</p>
+<h2>Coverage (12 tests)</h2>
+<table><thead><tr><th>Scenario</th><th>Check</th></tr></thead><tbody>
+<tr><td><code>/me</code> resolves → identity badge shows email/role/org</td><td>✅</td></tr>
+<tr><td>Mocked list renders both seeded encounters</td><td>✅</td></tr>
+<tr><td>Changing <code>status</code> filter calls <code>listEncounters</code> with filter arg, list updates</td><td>✅</td></tr>
+<tr><td>Selecting an encounter loads detail + timeline; status shown</td><td>✅</td></tr>
+<tr><td>Clinician sees only operational transition buttons (<code>draft_ready</code>)</td><td>✅</td></tr>
+<tr><td>Reviewer sees review-stage transitions (<code>completed</code>, <code>draft_ready</code>)</td><td>✅</td></tr>
+<tr><td>Reviewer sees no event composer, replaced by <code>event-denied</code> note</td><td>✅</td></tr>
+<tr><td>Reviewer cannot see the <code>+ New encounter</code> button</td><td>✅</td></tr>
+<tr><td>Admin: open create modal, submit, success banner, modal closes</td><td>✅</td></tr>
+<tr><td>Create failure: backend 403 <code>cross_org_access_forbidden</code> surfaces in modal error, modal stays open</td><td>✅</td></tr>
+<tr><td>Switching identity refetches <code>/me</code> and the list (org1 → org2)</td><td>✅</td></tr>
+<tr><td>Unknown-user identity: custom email path surfaces the 401 chip</td><td>✅</td></tr>
+<tr><td>Status transition call path refreshes detail + events, success banner</td><td>✅</td></tr>
+</tbody></table>
+<h2>Run</h2>
+<pre class="code lang-bash"><code>
+# one-shot (CI + local gate)
+cd apps/web &amp;&amp; npm test
+
+# watch mode
+cd apps/web &amp;&amp; npm run test:watch
+
+# combined frontend gate
+make web-verify      # typecheck + test + build
+</code></pre>
+<p>Result at time of writing: <strong>12 passed in ~2.5s</strong>.</p>
+<h2>Philosophy</h2>
+<ul>
+<li>The UI is tested the way a user drives it — click, select, type — not</li>
+</ul>
+<p>via internal implementation details.</p>
+<ul>
+<li>We assert the UI <strong>reflects the server&#x27;s authority</strong>: when the backend</li>
+</ul>
+<p>returns a 4xx envelope, the UI must show the <code>error_code</code> and</p>
+<p><code>reason</code> verbatim, not invent its own copy.</p>
+<ul>
+<li>Role-aware affordances are tested by identity switching in the</li>
+</ul>
+<p>picker, not by poking at internal state.</p>
+<h2>Gaps not yet covered</h2>
+<ul>
+<li>No end-to-end browser tests (Playwright) against the live API.</li>
+<li>No visual regression / accessibility audits.</li>
+<li>The create modal doesn&#x27;t exercise location-list errors yet.</li>
+<li>Loading skeletons / spinner content not asserted.</li>
+</ul>
+</section>
+<section id="sec-18"><h2>Diagram — System architecture</h2>
 <h1>System Architecture</h1>
 <div class="mermaid">
 flowchart LR
@@ -1398,7 +1480,7 @@ flowchart LR
   Compose --> PG
 </div>
 </section>
-<section id="sec-18"><h2>Diagram — Encounter status machine</h2>
+<section id="sec-19"><h2>Diagram — Encounter status machine</h2>
 <h1>Encounter Status State Machine</h1>
 <div class="mermaid">
 stateDiagram-v2
@@ -1420,7 +1502,7 @@ stateDiagram-v2
 <p>Legend: any edge not shown is rejected at <code>POST /encounters/{id}/status</code></p>
 <p>with HTTP 400 <code>invalid_transition</code>.</p>
 </section>
-<section id="sec-19"><h2>Diagram — ER</h2>
+<section id="sec-20"><h2>Diagram — ER</h2>
 <h1>ER Diagram</h1>
 <div class="mermaid">
 erDiagram
@@ -1484,7 +1566,7 @@ erDiagram
 <p><code>users.organization_id</code> is the authoritative source of scope; never</p>
 <p>derived from client input.</p>
 </section>
-<section id="sec-20"><h2>Diagram — API / data flow</h2>
+<section id="sec-21"><h2>Diagram — API / data flow</h2>
 <h1>API / Data Flow &amp; CI</h1>
 <h2>UI → Backend request path</h2>
 <div class="mermaid">

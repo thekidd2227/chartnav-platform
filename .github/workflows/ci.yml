@@ -152,6 +152,29 @@ jobs:
           bash apps/api/scripts/smoke.sh http://127.0.0.1:8000
           docker rm -f chartnav-api-smoke
 
+  frontend:
+    name: Frontend — typecheck · test · build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install deps
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Tests (vitest)
+        run: npm test
+      - name: Build
+        run: npm run build
+
   docs:
     name: Docs — regenerate HTML + PDF
     runs-on: ubuntu-latest

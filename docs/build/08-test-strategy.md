@@ -65,14 +65,15 @@ make docker-build
 - `make verify` (SQLite): 28 pytest + 9 smoke — all green
 - `scripts/pg_verify.sh`: migrations + seed (x2) + smoke + status transition + event write — **PASS**
 
-## Frontend verification (phase 7)
+## Frontend verification (phase 8)
 
-- `npx tsc --noEmit` — clean.
-- `npm run build` — emits `dist/index.html` + hashed JS/CSS.
-- Live integration against uvicorn: every endpoint the UI hits
-  returns the expected status across all 5 seeded roles (see
-  `06-known-gaps.md` matrix).
-- No automated frontend tests yet — next item.
+- `make web-verify` = `npm run typecheck` + `npm test` + `npm run build`.
+- Vitest + Testing Library + jsdom. 12 integration tests mocking
+  `./api`. Full matrix in `16-frontend-test-strategy.md` and
+  `06-known-gaps.md`.
+- Vite production build still emits `dist/` in ~1s.
+- CI now runs a dedicated `frontend` job on every push/PR: node 20,
+  `npm ci`, typecheck, test, build.
 
 ## Gaps not yet covered
 

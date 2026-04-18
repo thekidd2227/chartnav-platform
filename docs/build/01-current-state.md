@@ -1,66 +1,63 @@
 # ChartNav — Current State
 
-**As of:** 2026-04-18 (phase: frontend workflow UI)
+**As of:** 2026-04-18 (phase: create UI + frontend tests + frontend CI)
 
 ## Repo layout (relevant)
 
 ```
 chartnav-platform/
-├── .github/workflows/ci.yml     # backend-sqlite · backend-postgres · docker-build · docs
-├── Makefile                     # install · verify · pg-verify · docker-* · web-* · dev
-├── scripts/                     # build_docs.py · verify.sh · pg_verify.sh
+├── .github/workflows/ci.yml   # backend-sqlite · backend-postgres · frontend · docker-build · docs
+├── Makefile                   # verify · pg-verify · docker-* · web-* (incl. web-test / web-verify) · dev
+├── scripts/                   # build_docs.py · verify.sh · pg_verify.sh
 ├── apps/
-│   ├── api/
-│   │   ├── Dockerfile · entrypoint.sh
-│   │   ├── .env.example
-│   │   ├── app/{main,config,db,auth,authz}.py
-│   │   ├── app/api/routes.py
-│   │   ├── alembic/
-│   │   ├── scripts_seed.py
-│   │   ├── scripts/smoke.sh
-│   │   └── tests/               # 28 pytest incl. 3 auth-mode tests
+│   ├── api/                   # (unchanged this phase)
+│   │   ├── app/{main,config,db,auth,authz}.py + app/api/routes.py
+│   │   ├── alembic/ · scripts_seed.py · scripts/smoke.sh
+│   │   ├── tests/ (28 pytest)
+│   │   └── Dockerfile · entrypoint.sh
 │   └── web/
-│       ├── .env.example         # NEW — VITE_API_URL contract
-│       ├── src/
-│       │   ├── api.ts           # NEW — typed API client
-│       │   ├── identity.ts      # NEW — dev identity helpers
-│       │   ├── App.tsx          # NEW — full workflow UI
-│       │   ├── main.tsx         # wires App.tsx + styles.css
-│       │   ├── styles.css       # NEW — single CSS file
-│       │   └── vite-env.d.ts    # NEW — Vite ambient types
-│       └── package.json
-├── infra/docker/{docker-compose.yml,docker-compose.prod.yml}
-└── docs/build/01..15            # now including 15-frontend-integration.md
+│       ├── .env.example
+│       ├── package.json          # scripts: dev · build · preview · typecheck · test · test:watch
+│       ├── vite.config.ts        # also hosts vitest config (jsdom)
+│       ├── tsconfig.json         # includes vitest/globals + testing-library types
+│       └── src/
+│           ├── api.ts            # typed client, createEncounter, canCreateEncounter
+│           ├── identity.ts
+│           ├── App.tsx           # + CreateEncounterModal, pending-state buttons
+│           ├── styles.css        # + modal styles
+│           ├── main.tsx · vite-env.d.ts
+│           └── test/
+│               ├── setup.ts
+│               └── App.test.tsx  # 12 integration tests
+├── infra/docker/{docker-compose,docker-compose.prod}.yml
+└── docs/build/ 01 … 16          # incl. 15-frontend-integration, 16-frontend-test-strategy
 ```
 
 ## Runtime baseline
 
-- Backend: Python 3.11, FastAPI, SQLAlchemy Core, SQLite or Postgres.
-- Frontend: Vite 5 + React 18 + TypeScript; vanilla CSS.
-- Auth: `CHARTNAV_AUTH_MODE=header` (dev) or `bearer` (placeholder 501).
-- DB: SQLite default (`apps/api/chartnav.db`), Postgres via `DATABASE_URL=postgresql+psycopg://…`.
+- Backend: FastAPI + SQLAlchemy Core, SQLite or Postgres (via `DATABASE_URL`).
+- Frontend: Vite 5 + React 18 + TypeScript + Vitest + Testing Library.
+- Auth: `CHARTNAV_AUTH_MODE=header` (dev) or `bearer` (prod placeholder 501).
+- RBAC: `admin` / `clinician` / `reviewer`.
 - Alembic head: `a1b2c3d4e5f6`. No schema changes this phase.
-- RBAC: `admin`, `clinician`, `reviewer`.
-- Error envelope: `{"detail": {"error_code": "...", "reason": "..."}}` — the frontend surfaces these verbatim.
+- Error envelope: `{"detail": {"error_code": "...", "reason": "..."}}` — surfaced verbatim in the UI.
 
-## Frontend capabilities (new)
+## Frontend capabilities (delta this phase)
 
-- Header with brand, caller chip (`email · role · org N`), API base URL, identity picker (5 seeded users + custom).
-- Encounter list with filters (`status`, `provider_name`, `location_id`) and color-coded status pills.
-- Encounter detail with facts grid, current status, allowed transitions (role-aware), event timeline.
-- Event composer for admin / clinician; hidden with explanation for reviewer.
-- All API errors surface as banners with `error_code` + `reason`.
-- Dev identity persists in `localStorage`; switching reloads `/me` and list.
-
-## Verified working endpoints
-
-No endpoint behavior changed this phase. All 28 pytest tests still pass;
-the UI exercises the full surface through the typed client.
+- `+ New encounter` button in the header for admin/clinician; hidden for reviewer.
+- `CreateEncounterModal`:
+  - Fetches `/locations` (already org-scoped server-side).
+  - Fields: patient_identifier*, patient_name, provider_name*, location_id*, initial status (`scheduled` / `in_progress`).
+  - Disables submit while in-flight, validates required fields.
+  - Success → refresh list, auto-select new encounter, show success banner.
+  - Failure → inline error with exact `error_code` + `reason`; modal stays open for retry.
+- Transition / append-event buttons now show a pending label and disable while the request is in flight.
+- Banners annotated with ARIA roles; `data-testid` hooks added to enable a11y + tests.
 
 ## Automation
 
-- `make verify` — SQLite: reset-db + pytest + boot + smoke.
+- `make verify` — SQLite backend gate (reset-db + pytest + boot + smoke).
 - `make pg-verify` — Postgres parity proof.
-- `make web-install` / `web-dev` / `web-build` / `web-typecheck`.
-- `make dev` — boots API (8000) + Vite (5173) together with a shared trap-based teardown.
-- CI: `backend-sqlite` → `backend-postgres` + `docker-build` + `docs`.
+- `make web-verify` — frontend gate (typecheck + test + build).
+- `make dev` — backend + frontend together with trap teardown.
+- CI: `backend-sqlite` + `frontend` run in parallel; `backend-postgres` + `docker-build` + `docs` are chained after `backend-sqlite`.

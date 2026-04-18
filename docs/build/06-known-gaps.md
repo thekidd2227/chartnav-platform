@@ -1,62 +1,61 @@
 # Known Gaps & Verification Matrix
 
-## Verification evidence — phase 7 (frontend)
+## Verification evidence — phase 8
 
-### Backend still green
-- `make verify` (SQLite): **28/28 pytest** + 9/9 smoke + clean teardown.
-- No backend code changed this phase. All previous verification stands.
+### Frontend gate (`make web-verify`)
 
-### Frontend build + typecheck
-```
-$ cd apps/web && npx tsc --noEmit   # clean
-$ npm run build
-✓ 33 modules transformed.
-dist/index.html                   0.40 kB │ gzip:  0.27 kB
-dist/assets/index-*.css           6.24 kB │ gzip:  1.79 kB
-dist/assets/index-*.js          154.44 kB │ gzip: 49.66 kB
-✓ built in 639ms
-```
+| Step                                  | Result |
+|---------------------------------------|--------|
+| `tsc --noEmit`                        | ✅ clean |
+| `vitest run`                          | ✅ **12/12** in ~2.5s |
+| `vite build`                          | ✅ 159 KB JS / 7.3 KB CSS |
 
-### Live integration (uvicorn + curl as a UI stand-in)
+### Frontend test matrix (12)
 
-| Flow the UI depends on                                        | Result |
-|---------------------------------------------------------------|--------|
-| `GET /me` for all 5 seeded identities                         | ✅ 200 |
-| `GET /me` unknown / empty                                     | ✅ 401 (UI shows red chip) |
-| `GET /encounters` org1 vs org2 scoping                        | ✅ disjoint |
-| `GET /encounters?status=in_progress` filter                   | ✅ `['PT-1001']` |
-| `GET /encounters/{id}` + `GET /encounters/{id}/events`        | ✅ 200, 3 events |
-| Clinician `in_progress → draft_ready`                         | ✅ 200 |
-| Clinician `review_needed → completed`                         | ✅ 403 `role_cannot_transition` |
-| Reviewer `review_needed → completed`                          | ✅ 200 |
-| Reviewer `POST /encounters/{id}/events`                       | ✅ 403 `role_cannot_create_event` |
-| Admin `POST /encounters/{id}/events`                          | ✅ 201 |
+| Scenario                                                            | Result |
+|---------------------------------------------------------------------|--------|
+| `/me` resolves → identity badge                                     | ✅ |
+| List renders mocked encounters                                      | ✅ |
+| Status filter hits API + updates list                               | ✅ |
+| Select encounter loads detail + timeline                            | ✅ |
+| Clinician sees operational transitions only                         | ✅ |
+| Reviewer sees review-stage transitions only + event composer hidden | ✅ |
+| Reviewer cannot see `+ New encounter`                               | ✅ |
+| Admin creates encounter → success banner, modal closed              | ✅ |
+| Create 403 `cross_org_access_forbidden` surfaces inline             | ✅ |
+| Identity switch refetches `/me` + list                              | ✅ |
+| Unknown email → `identity-error` chip with `unknown_user`           | ✅ |
+| Status transition refreshes detail + events                         | ✅ |
 
-### UI affordances sanity
+### Backend gate (`make verify`)
 
-| Role      | Transition buttons shown                                         | Event composer |
-|-----------|------------------------------------------------------------------|----------------|
-| admin     | Any forward or rework edge valid from the current state          | visible        |
-| clinician | `scheduled→in_progress`, `in_progress→draft_ready`, rework back  | visible        |
-| reviewer  | `draft_ready→review_needed`, `review_needed→{completed,draft_ready}` | hidden w/ note |
+| Step                                   | Result |
+|----------------------------------------|--------|
+| reset-db + alembic + seed              | ✅ |
+| pytest                                 | ✅ **28/28** |
+| uvicorn boot + smoke.sh                | ✅ 9/9 |
+| teardown                               | ✅ |
 
-When no transition is available (terminal `completed` or role mismatch),
-the UI shows a note rather than fake-disabled buttons. Backend remains
-authoritative — a mismatch between the UI's `allowedNextStatuses` and
-the server is surfaced as a 4xx banner with the exact `error_code`.
+### Postgres parity (`make pg-verify`)
+
+Still green from the prior phase; no code touched this phase changes it.
+
+### CI YAML
+- `yaml.safe_load(open(".github/workflows/ci.yml"))` — parses. Jobs now: `backend-sqlite`, `backend-postgres`, `frontend`, `docker-build`, `docs`.
+- No `act` runner in shell — static parse + structural review only (same limitation as prior phases).
 
 ## Real gaps (prioritized for next phase)
 
-1. **No automated frontend tests.** All frontend verification this phase is build/typecheck + live-curl parity. Next: a small Vitest or Playwright pass.
-2. **JWT validation still stubbed.** Bearer mode returns 501; the frontend currently only implements header mode.
-3. **No encounter creation UI.** The frontend can add events and move statuses but cannot create encounters yet (backend endpoint exists).
-4. **No pagination.** Works fine at seed scale; first real dataset will need it on both ends.
-5. **No optimistic updates.** Every mutation re-fetches.
-6. **No global state manager.** Fine at this size; watch for prop-drill as flows multiply.
-7. **No encounter update / delete / cancel.** No `cancelled` status.
-8. **Free-form `event_data`** still lacks per-event_type schema.
-9. **Raw `sqlite3` → SA Core refactor complete** — pytest matrix against Postgres is the next CI upgrade.
-10. **CORS `allow_origins=["*"]`** remains.
-11. **No distinct audit log** for auth/scoping failures.
-12. **No rate limiting, lockout, or structured logging.**
-13. **No CI job for the frontend.** The `docker-build` + `docs` jobs don't cover the web bundle. A `frontend-build` CI job is a small, honest addition.
+1. **No end-to-end browser tests** against a live backend. Current verification is build + unit-level integration + curl parity. Playwright is the obvious next step.
+2. **JWT validation still stubbed** — bearer mode returns 501 honestly. Needs PyJWT + JWKS cache.
+3. **No image push / release pipeline** — CI builds, doesn't ship.
+4. **No secret store integration.** Env-var only.
+5. **`/organizations`, `/locations`, `/users`** remain read-only — no admin write UI for metadata.
+6. **`users.role`** still free VARCHAR at DB layer (CHECK or lookup table).
+7. **No pagination** on `GET /encounters` (backend or frontend).
+8. **Free-form `event_data`** — no per-event_type schema.
+9. **CORS `allow_origins=["*"]`.**
+10. **No distinct audit log** for auth/scoping failures.
+11. **No rate limiting / lockout / structured logging.**
+12. **pytest matrix on Postgres** — fixture is env-driven but not yet multi-DB.
+13. **No visual-regression / accessibility audits** on the frontend.

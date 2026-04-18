@@ -153,6 +153,27 @@ export function updateEncounterStatus(
   });
 }
 
+export interface NewEncounterInput {
+  organization_id: number;
+  location_id: number;
+  patient_identifier: string;
+  patient_name?: string | null;
+  provider_name: string;
+  scheduled_at?: string | null;
+  status?: "scheduled" | "in_progress";
+}
+
+export function createEncounter(
+  email: string,
+  body: NewEncounterInput
+): Promise<Encounter> {
+  return request(`/encounters`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
 export function listLocations(
   email: string
 ): Promise<{ id: number; organization_id: number; name: string }[]> {
@@ -196,5 +217,9 @@ export function allowedNextStatuses(role: Role, current: string): string[] {
 }
 
 export function canCreateEvent(role: Role): boolean {
+  return role === "admin" || role === "clinician";
+}
+
+export function canCreateEncounter(role: Role): boolean {
   return role === "admin" || role === "clinician";
 }

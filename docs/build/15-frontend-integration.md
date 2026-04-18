@@ -146,6 +146,22 @@ Verified manually on 2026-04-18:
 | Admin POST event                                         | ✅ 201 |
 | Switching identity re-fetches `/me` and list             | ✅     |
 
+## Encounter creation (phase 8)
+
+- Header shows `+ New encounter` for admin + clinician; hidden for reviewer.
+- `CreateEncounterModal` fetches `/locations` (server-scoped to caller org), auto-selects when only one option exists, and submits `{ organization_id, location_id, patient_identifier, patient_name, provider_name, status }`.
+- Required fields (`patient_identifier`, `provider_name`, `location_id`) block submit until filled.
+- While in-flight the submit button disables and shows `Creating…`.
+- On success the list refreshes, the new encounter auto-selects, and a green banner shows `#<id> created`.
+- On failure the modal stays open and the exact `{error_code, reason}` appears inline, so reviewers can correct and retry.
+
+## UX hardening (phase 8)
+
+- Every mutating control (transition, append event, create) disables while its request is in flight and shows a pending label.
+- Identity badge has explicit states (`identity-loading`, `identity-error`, `identity-badge`) so loading vs. failed vs. resolved are distinguishable.
+- Banners use ARIA `role="alert" | "status"` and `data-testid` so assistive tech + tests can target them.
+- When no transition is legal for the current `(role, status)` pair, we show a plain note — no fake-disabled buttons.
+
 ## What this phase explicitly does NOT do
 
 - No real login flow — `X-User-Email` is still dev transport.

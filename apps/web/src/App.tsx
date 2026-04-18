@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   API_URL,
   ALLOWED_STATUSES,
@@ -6,15 +6,19 @@ import {
   Encounter,
   EncounterFilters,
   Me,
+  NewEncounterInput,
   Role,
   WorkflowEvent,
   allowedNextStatuses,
+  canCreateEncounter,
   canCreateEvent,
+  createEncounter,
   createEncounterEvent,
   getEncounter,
   getEncounterEvents,
   getMe,
   listEncounters,
+  listLocations,
   updateEncounterStatus,
 } from "./api";
 import { SEEDED_IDENTITIES, loadIdentity, saveIdentity } from "./identity";
@@ -28,6 +32,7 @@ type Banner =
 export default function App() {
   const [identity, setIdentity] = useState<string>(() => loadIdentity());
   const [me, setMe] = useState<Me | null>(null);
+  const [meLoading, setMeLoading] = useState(true);
   const [meError, setMeError] = useState<string | null>(null);
 
   const [filters, setFilters] = useState<EncounterFilters>({});
@@ -40,18 +45,22 @@ export default function App() {
   const [events, setEvents] = useState<WorkflowEvent[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
-  const [banner, setBanner] = useState<Banner>(null);
 
-  // ---- data loaders ----------------------------------------------------
+  const [banner, setBanner] = useState<Banner>(null);
+  const [showCreate, setShowCreate] = useState(false);
+
+  // ---- loaders ---------------------------------------------------------
 
   const refreshMe = useCallback(async () => {
-    setMe(null);
+    setMeLoading(true);
     setMeError(null);
     try {
-      const m = await getMe(identity);
-      setMe(m);
+      setMe(await getMe(identity));
     } catch (e) {
+      setMe(null);
       setMeError(friendly(e));
+    } finally {
+      setMeLoading(false);
     }
   }, [identity]);
 
@@ -61,7 +70,6 @@ export default function App() {
     try {
       const rows = await listEncounters(identity, filters);
       setEncounters(rows);
-      // If the selected encounter disappeared from the list, clear detail.
       if (selectedId && !rows.some((r) => r.id === selectedId)) {
         setSelectedId(null);
         setEncounter(null);
@@ -106,11 +114,9 @@ export default function App() {
   useEffect(() => {
     refreshMe();
   }, [refreshMe]);
-
   useEffect(() => {
     refreshList();
   }, [refreshList]);
-
   useEffect(() => {
     refreshDetail(selectedId);
   }, [selectedId, refreshDetail]);
@@ -118,26 +124,24 @@ export default function App() {
   // ---- handlers --------------------------------------------------------
 
   const onIdentityChange = (email: string) => {
+    if (email === identity) return;
     setIdentity(email);
     saveIdentity(email);
     setSelectedId(null);
     setEncounter(null);
     setEvents([]);
+    setShowCreate(false);
     setBanner({ kind: "info", msg: `Identity switched to ${email}` });
   };
 
-  const onFilterChange = (next: EncounterFilters) => setFilters(next);
-
-  const onStatusTransition = async (status: string) => {
+  const onTransition = async (status: string) => {
     if (!encounter) return;
     setBanner(null);
     try {
       const updated = await updateEncounterStatus(identity, encounter.id, status);
       setEncounter(updated);
-      await Promise.all([
-        getEncounterEvents(identity, encounter.id).then(setEvents),
-        refreshList(),
-      ]);
+      setEvents(await getEncounterEvents(identity, encounter.id));
+      await refreshList();
       setBanner({ kind: "ok", msg: `Status → ${status}` });
     } catch (e) {
       setBanner({ kind: "error", msg: friendly(e) });
@@ -153,7 +157,7 @@ export default function App() {
       try {
         data = JSON.parse(trimmed);
       } catch {
-        data = trimmed; // pass through as a string
+        data = trimmed;
       }
     }
     try {
@@ -168,7 +172,21 @@ export default function App() {
     }
   };
 
+  const onCreateEncounter = async (input: NewEncounterInput) => {
+    setBanner(null);
+    const created = await createEncounter(identity, input);
+    await refreshList();
+    setSelectedId(created.id);
+    setShowCreate(false);
+    setBanner({
+      kind: "ok",
+      msg: `Encounter #${created.id} created (${created.patient_identifier})`,
+    });
+  };
+
   // ---- render ----------------------------------------------------------
+
+  const canCreate = me ? canCreateEncounter(me.role) : false;
 
   return (
     <div>
@@ -179,15 +197,24 @@ export default function App() {
           <span className="sub">Workflow</span>
         </div>
         <div className="header-meta">
-          <IdentityBadge me={me} meError={meError} />
+          <IdentityBadge me={me} meError={meError} meLoading={meLoading} />
           <span className="chip">API {API_URL}</span>
+          {canCreate && (
+            <button
+              className="btn btn--primary"
+              onClick={() => setShowCreate(true)}
+              data-testid="open-create-encounter"
+            >
+              + New encounter
+            </button>
+          )}
           <IdentityPicker value={identity} onChange={onIdentityChange} />
         </div>
       </header>
 
       <div className="layout">
         <aside className="layout__list">
-          <FilterBar value={filters} onChange={onFilterChange} />
+          <FilterBar value={filters} onChange={setFilters} />
           <EncounterList
             rows={encounters}
             loading={listLoading}
@@ -199,11 +226,23 @@ export default function App() {
 
         <section className="layout__detail">
           {banner && (
-            <div className={`banner banner--${banner.kind}`}>{banner.msg}</div>
+            <div
+              className={`banner banner--${banner.kind}`}
+              role={banner.kind === "error" ? "alert" : "status"}
+              data-testid={`banner-${banner.kind}`}
+            >
+              {banner.msg}
+            </div>
           )}
           {selectedId == null ? (
             <div className="empty">
               Select an encounter from the list to see details, events, and allowed actions.
+              {canCreate && (
+                <>
+                  {" "}
+                  Or click <strong>+ New encounter</strong> above to create one.
+                </>
+              )}
             </div>
           ) : (
             <EncounterDetail
@@ -212,25 +251,55 @@ export default function App() {
               encounter={encounter}
               events={events}
               me={me}
-              onTransition={onStatusTransition}
+              onTransition={onTransition}
               onAddEvent={onAddEvent}
             />
           )}
         </section>
       </div>
+
+      {showCreate && me && (
+        <CreateEncounterModal
+          identity={identity}
+          me={me}
+          onCancel={() => setShowCreate(false)}
+          onSubmit={onCreateEncounter}
+        />
+      )}
     </div>
   );
 }
 
 // ---------- subcomponents -------------------------------------------------
 
-function IdentityBadge({ me, meError }: { me: Me | null; meError: string | null }) {
-  if (meError) {
-    return <span className="chip" style={{ color: "var(--danger)" }}>auth: {meError}</span>;
-  }
-  if (!me) return <span className="chip">resolving identity…</span>;
+function IdentityBadge({
+  me,
+  meError,
+  meLoading,
+}: {
+  me: Me | null;
+  meError: string | null;
+  meLoading: boolean;
+}) {
+  if (meLoading && !me)
+    return (
+      <span className="chip" data-testid="identity-loading">
+        resolving identity…
+      </span>
+    );
+  if (meError)
+    return (
+      <span
+        className="chip"
+        style={{ color: "var(--danger)" }}
+        data-testid="identity-error"
+      >
+        auth: {meError}
+      </span>
+    );
+  if (!me) return <span className="chip">—</span>;
   return (
-    <span className="chip">
+    <span className="chip" data-testid="identity-badge">
       {me.email} · {me.role} · org {me.organization_id}
     </span>
   );
@@ -256,6 +325,7 @@ function IdentityPicker({
       {mode === "seeded" ? (
         <select
           id="dev-identity"
+          data-testid="identity-select"
           value={value}
           onChange={(e) => {
             if (e.target.value === "__custom__") {
@@ -323,6 +393,7 @@ function FilterBar({
       <label>
         Status
         <select
+          data-testid="filter-status"
           value={value.status ?? ""}
           onChange={(e) => update("status", e.target.value || undefined)}
         >
@@ -338,6 +409,7 @@ function FilterBar({
         Provider
         <input
           type="text"
+          data-testid="filter-provider"
           placeholder="Dr. Carter"
           value={value.provider_name ?? ""}
           onChange={(e) => update("provider_name", e.target.value || undefined)}
@@ -347,6 +419,7 @@ function FilterBar({
         Location ID
         <input
           type="number"
+          data-testid="filter-location"
           min={1}
           placeholder="—"
           value={value.location_id ?? ""}
@@ -378,18 +451,31 @@ function EncounterList({
   selectedId: number | null;
   onSelect: (id: number) => void;
 }) {
-  if (loading) return <div className="empty">Loading…</div>;
+  if (loading && rows.length === 0)
+    return (
+      <div className="empty" data-testid="list-loading">
+        Loading…
+      </div>
+    );
   if (error)
     return (
-      <div className="empty" style={{ color: "var(--danger)" }}>
+      <div
+        className="empty"
+        style={{ color: "var(--danger)" }}
+        data-testid="list-error"
+      >
         {error}
       </div>
     );
   if (!rows.length)
-    return <div className="empty">No encounters match these filters.</div>;
+    return (
+      <div className="empty" data-testid="list-empty">
+        No encounters match these filters.
+      </div>
+    );
 
   return (
-    <div className="enc-list">
+    <div className="enc-list" data-testid="enc-list">
       {rows.map((e) => (
         <div
           key={e.id}
@@ -397,6 +483,7 @@ function EncounterList({
           onClick={() => onSelect(e.id)}
           role="button"
           tabIndex={0}
+          data-testid={`enc-row-${e.id}`}
           onKeyDown={(ev) => {
             if (ev.key === "Enter" || ev.key === " ") onSelect(e.id);
           }}
@@ -431,11 +518,19 @@ function EncounterDetail({
   encounter: Encounter | null;
   events: WorkflowEvent[];
   me: Me | null;
-  onTransition: (status: string) => void;
-  onAddEvent: (type: string, data: string) => void;
+  onTransition: (status: string) => Promise<void> | void;
+  onAddEvent: (type: string, data: string) => Promise<void> | void;
 }) {
+  const [pendingStatus, setPendingStatus] = useState<string | null>(null);
+  const [pendingEvent, setPendingEvent] = useState(false);
+
   if (loading) return <div className="empty">Loading…</div>;
-  if (error) return <div className="banner banner--error">{error}</div>;
+  if (error)
+    return (
+      <div className="banner banner--error" role="alert">
+        {error}
+      </div>
+    );
   if (!encounter) return null;
 
   const role: Role | null = me?.role ?? null;
@@ -443,7 +538,7 @@ function EncounterDetail({
   const eventAllowed = role ? canCreateEvent(role) : false;
 
   return (
-    <div>
+    <div data-testid="encounter-detail">
       <div className="detail__head">
         <div>
           <h2>
@@ -453,7 +548,7 @@ function EncounterDetail({
             {encounter.patient_identifier} · {encounter.provider_name}
           </div>
         </div>
-        <span className="status-pill" data-status={encounter.status}>
+        <span className="status-pill" data-status={encounter.status} data-testid="detail-status">
           {encounter.status.replace(/_/g, " ")}
         </span>
       </div>
@@ -470,14 +565,23 @@ function EncounterDetail({
       <section className="section">
         <h3>Allowed transitions ({role ?? "—"})</h3>
         {nextStatuses.length ? (
-          <div className="actions">
+          <div className="actions" data-testid="transitions">
             {nextStatuses.map((s) => (
               <button
                 key={s}
                 className="btn btn--primary"
-                onClick={() => onTransition(s)}
+                data-testid={`transition-${s}`}
+                disabled={pendingStatus !== null}
+                onClick={async () => {
+                  setPendingStatus(s);
+                  try {
+                    await onTransition(s);
+                  } finally {
+                    setPendingStatus(null);
+                  }
+                }}
               >
-                Move to {s.replace(/_/g, " ")}
+                {pendingStatus === s ? "…" : `Move to ${s.replace(/_/g, " ")}`}
               </button>
             ))}
           </div>
@@ -506,9 +610,19 @@ function EncounterDetail({
       <section className="section">
         <h3>Add event</h3>
         {eventAllowed ? (
-          <EventComposer onSubmit={onAddEvent} />
+          <EventComposer
+            pending={pendingEvent}
+            onSubmit={async (type, data) => {
+              setPendingEvent(true);
+              try {
+                await onAddEvent(type, data);
+              } finally {
+                setPendingEvent(false);
+              }
+            }}
+          />
         ) : (
-          <div className="subtle-note">
+          <div className="subtle-note" data-testid="event-denied">
             Your role (<code>{role}</code>) cannot add workflow events. Switch
             to an admin or clinician identity to write.
           </div>
@@ -518,43 +632,246 @@ function EncounterDetail({
   );
 }
 
-function EventComposer({ onSubmit }: { onSubmit: (type: string, data: string) => void }) {
+function EventComposer({
+  pending,
+  onSubmit,
+}: {
+  pending: boolean;
+  onSubmit: (type: string, data: string) => void | Promise<void>;
+}) {
   const [type, setType] = useState("");
   const [data, setData] = useState("");
-  const disabled = !type.trim();
+  const disabled = !type.trim() || pending;
   return (
     <form
       className="event-form"
-      onSubmit={(e) => {
+      data-testid="event-form"
+      onSubmit={async (e) => {
         e.preventDefault();
-        if (!disabled) {
-          onSubmit(type.trim(), data);
-          setType("");
-          setData("");
-        }
+        if (disabled) return;
+        await onSubmit(type.trim(), data);
+        setType("");
+        setData("");
       }}
     >
       <input
         type="text"
+        data-testid="event-type"
         placeholder="event_type (e.g. note_reviewed)"
         value={type}
         onChange={(e) => setType(e.target.value)}
         required
       />
       <textarea
+        data-testid="event-data"
         placeholder='event_data (optional JSON, e.g. {"comment":"..."})'
         value={data}
         onChange={(e) => setData(e.target.value)}
       />
       <div className="row">
-        <button type="submit" className="btn btn--primary" disabled={disabled}>
-          Append event
+        <button
+          type="submit"
+          className="btn btn--primary"
+          disabled={disabled}
+          data-testid="event-submit"
+        >
+          {pending ? "Appending…" : "Append event"}
         </button>
         <span className="subtle-note">
           JSON is parsed if valid; otherwise sent as a string.
         </span>
       </div>
     </form>
+  );
+}
+
+function CreateEncounterModal({
+  identity,
+  me,
+  onCancel,
+  onSubmit,
+}: {
+  identity: string;
+  me: Me;
+  onCancel: () => void;
+  onSubmit: (input: NewEncounterInput) => Promise<void>;
+}) {
+  const [patientId, setPatientId] = useState("");
+  const [patientName, setPatientName] = useState("");
+  const [provider, setProvider] = useState("");
+  const [locationId, setLocationId] = useState<number | "">("");
+  const [status, setStatus] =
+    useState<"scheduled" | "in_progress">("scheduled");
+
+  const [locations, setLocations] = useState<
+    { id: number; organization_id: number; name: string }[]
+  >([]);
+  const [locLoading, setLocLoading] = useState(true);
+  const [locError, setLocError] = useState<string | null>(null);
+
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      setLocLoading(true);
+      setLocError(null);
+      try {
+        const rows = await listLocations(identity);
+        setLocations(rows);
+        if (rows.length === 1) setLocationId(rows[0].id);
+      } catch (e) {
+        setLocError(friendly(e));
+      } finally {
+        setLocLoading(false);
+      }
+    })();
+  }, [identity]);
+
+  const canSubmit =
+    !pending &&
+    patientId.trim() !== "" &&
+    provider.trim() !== "" &&
+    typeof locationId === "number";
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canSubmit) return;
+    setPending(true);
+    setError(null);
+    try {
+      await onSubmit({
+        organization_id: me.organization_id,
+        location_id: locationId as number,
+        patient_identifier: patientId.trim(),
+        patient_name: patientName.trim() || null,
+        provider_name: provider.trim(),
+        status,
+      });
+      // parent closes the modal on success
+    } catch (err) {
+      setError(friendly(err));
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <div
+      className="modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="create-title"
+      data-testid="create-modal"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !pending) onCancel();
+      }}
+    >
+      <div className="modal">
+        <div className="modal__head">
+          <h2 id="create-title">New encounter</h2>
+          <button
+            className="btn btn--muted"
+            onClick={onCancel}
+            disabled={pending}
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
+        <form className="modal__body event-form" onSubmit={submit}>
+          <label>
+            Patient ID *
+            <input
+              data-testid="create-patient-id"
+              value={patientId}
+              onChange={(e) => setPatientId(e.target.value)}
+              required
+              placeholder="PT-1234"
+            />
+          </label>
+          <label>
+            Patient name
+            <input
+              data-testid="create-patient-name"
+              value={patientName}
+              onChange={(e) => setPatientName(e.target.value)}
+              placeholder="Jane Doe"
+            />
+          </label>
+          <label>
+            Provider *
+            <input
+              data-testid="create-provider"
+              value={provider}
+              onChange={(e) => setProvider(e.target.value)}
+              required
+              placeholder="Dr. Carter"
+            />
+          </label>
+          <label>
+            Location *
+            {locLoading ? (
+              <span className="subtle-note">loading locations…</span>
+            ) : locError ? (
+              <span style={{ color: "var(--danger)" }}>{locError}</span>
+            ) : (
+              <select
+                data-testid="create-location"
+                value={locationId === "" ? "" : String(locationId)}
+                onChange={(e) =>
+                  setLocationId(e.target.value ? parseInt(e.target.value, 10) : "")
+                }
+                required
+              >
+                <option value="">Select a location</option>
+                {locations.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    #{l.id} · {l.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </label>
+          <label>
+            Initial status
+            <select
+              data-testid="create-status"
+              value={status}
+              onChange={(e) =>
+                setStatus(e.target.value as "scheduled" | "in_progress")
+              }
+            >
+              <option value="scheduled">scheduled</option>
+              <option value="in_progress">in_progress</option>
+            </select>
+          </label>
+          {error && (
+            <div className="banner banner--error" role="alert" data-testid="create-error">
+              {error}
+            </div>
+          )}
+          <div className="row" style={{ justifyContent: "flex-end" }}>
+            <button
+              type="button"
+              className="btn btn--muted"
+              onClick={onCancel}
+              disabled={pending}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="btn btn--primary"
+              data-testid="create-submit"
+              disabled={!canSubmit}
+            >
+              {pending ? "Creating…" : "Create encounter"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }
 
@@ -567,30 +884,20 @@ function fmt(iso: string | null | undefined): string {
   return d.toLocaleString();
 }
 
-const MEMO_RENDERERS = new WeakMap<object, string>();
 function renderEventData(ev: WorkflowEvent): string {
   const d = ev.event_data;
   if (d == null) return "—";
   if (typeof d === "string") return d;
   if (typeof d === "object") {
-    if (MEMO_RENDERERS.has(d as object))
-      return MEMO_RENDERERS.get(d as object)!;
-    const s = Object.entries(d as Record<string, unknown>)
+    return Object.entries(d as Record<string, unknown>)
       .map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : String(v)}`)
       .join("  ·  ");
-    MEMO_RENDERERS.set(d as object, s);
-    return s;
   }
   return String(d);
 }
 
 function friendly(e: unknown): string {
-  if (e instanceof ApiError) {
-    return `${e.status} ${e.errorCode} — ${e.reason}`;
-  }
+  if (e instanceof ApiError) return `${e.status} ${e.errorCode} — ${e.reason}`;
   if (e instanceof Error) return e.message;
   return String(e);
 }
-
-// memo-useful nothing for now; keeps eslint happy about unused imports
-void useMemo;

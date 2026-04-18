@@ -13,7 +13,7 @@ PIP     := $(VENV)/bin/pip
 DEV_DB  := $(API_DIR)/chartnav.db
 PORT    := 8765
 
-.PHONY: help install migrate seed test boot smoke docs verify clean reset-db pg-verify docker-build docker-up docker-down web-install web-dev web-build web-typecheck dev
+.PHONY: help install migrate seed test boot smoke docs verify clean reset-db pg-verify docker-build docker-up docker-down web-install web-dev web-build web-typecheck web-test web-verify dev
 
 help:
 	@awk 'BEGIN{FS=":.*?## "} /^[a-zA-Z_-]+:.*?## /{printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -66,6 +66,12 @@ web-build: ## Production build of the frontend
 
 web-typecheck: ## tsc --noEmit on the frontend
 	cd apps/web && npm run typecheck
+
+web-test: ## Run frontend unit/integration tests (vitest)
+	cd apps/web && npm test
+
+web-verify: ## Frontend gate: typecheck + test + build
+	cd apps/web && npm run typecheck && npm test && npm run build
 
 dev: ## Boot backend (port 8000) + frontend (port 5173) together
 	@bash -c 'set -e; \
