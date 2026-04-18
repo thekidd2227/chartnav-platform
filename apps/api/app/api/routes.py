@@ -6,19 +6,37 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 router = APIRouter()
 
 DB_PATH = Path(__file__).resolve().parents[2] / "chartnav.db"
 
-ALLOWED_STATUSES = {
+# ----- State machine -----
+#
+# Forward flow:
+#   scheduled -> in_progress -> draft_ready -> review_needed -> completed
+#
+# Rework flow (explicit, documented):
+#   review_needed -> draft_ready      (reviewer kicks back for rewrite)
+#   draft_ready   -> in_progress      (draft rejected, return to charting)
+#
+# All other transitions are rejected with 400 invalid_transition.
+ALLOWED_STATUSES: set[str] = {
     "scheduled",
     "in_progress",
     "draft_ready",
     "review_needed",
     "completed",
+}
+
+ALLOWED_TRANSITIONS: dict[str, set[str]] = {
+    "scheduled": {"in_progress"},
+    "in_progress": {"draft_ready"},
+    "draft_ready": {"review_needed", "in_progress"},
+    "review_needed": {"completed", "draft_ready"},
+    "completed": set(),
 }
 
 
@@ -59,7 +77,6 @@ def _hydrate_event(row: dict) -> dict:
         try:
             row["event_data"] = json.loads(data)
         except (json.JSONDecodeError, TypeError):
-            # leave as-is if not valid JSON
             pass
     return row
 
@@ -128,10 +145,36 @@ ENCOUNTER_COLUMNS = (
 
 
 @router.get("/encounters")
-def list_encounters() -> list[dict]:
-    return fetch_all(
-        f"SELECT {ENCOUNTER_COLUMNS} FROM encounters ORDER BY id"
-    )
+def list_encounters(
+    organization_id: Optional[int] = Query(default=None, ge=1),
+    location_id: Optional[int] = Query(default=None, ge=1),
+    status: Optional[str] = Query(default=None),
+    provider_name: Optional[str] = Query(default=None),
+) -> list[dict]:
+    clauses: list[str] = []
+    params: list = []
+
+    if organization_id is not None:
+        clauses.append("organization_id = ?")
+        params.append(organization_id)
+    if location_id is not None:
+        clauses.append("location_id = ?")
+        params.append(location_id)
+    if status is not None:
+        if status not in ALLOWED_STATUSES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"invalid_status: must be one of {sorted(ALLOWED_STATUSES)}",
+            )
+        clauses.append("status = ?")
+        params.append(status)
+    if provider_name is not None:
+        clauses.append("provider_name = ?")
+        params.append(provider_name)
+
+    where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+    query = f"SELECT {ENCOUNTER_COLUMNS} FROM encounters{where} ORDER BY id"
+    return fetch_all(query, tuple(params))
 
 
 @router.get("/encounters/{encounter_id}")
@@ -147,7 +190,6 @@ def get_encounter(encounter_id: int) -> dict:
 
 @router.get("/encounters/{encounter_id}/events")
 def list_encounter_events(encounter_id: int) -> list[dict]:
-    # 404 if encounter doesn't exist so clients don't silently get []
     exists = fetch_one(
         "SELECT id FROM encounters WHERE id = ?", (encounter_id,)
     )
@@ -168,10 +210,16 @@ def create_encounter(payload: EncounterCreate) -> dict:
             status_code=400,
             detail=f"invalid_status: must be one of {sorted(ALLOWED_STATUSES)}",
         )
+    # New encounters must begin at 'scheduled' OR 'in_progress' (walk-in);
+    # deeper states cannot be forged at creation time.
+    if payload.status not in {"scheduled", "in_progress"}:
+        raise HTTPException(
+            status_code=400,
+            detail="invalid_initial_status: new encounters must start at scheduled or in_progress",
+        )
 
     conn = _connect()
     try:
-        # FK sanity checks produce friendlier 400s than raw IntegrityError
         org = conn.execute(
             "SELECT id FROM organizations WHERE id = ?",
             (payload.organization_id,),
@@ -190,7 +238,6 @@ def create_encounter(payload: EncounterCreate) -> dict:
             )
 
         started_at = _now_iso() if payload.status == "in_progress" else None
-        completed_at = _now_iso() if payload.status == "completed" else None
 
         cur = conn.execute(
             """
@@ -208,12 +255,11 @@ def create_encounter(payload: EncounterCreate) -> dict:
                 payload.status,
                 payload.scheduled_at.isoformat() if payload.scheduled_at else None,
                 started_at,
-                completed_at,
+                None,
             ),
         )
         new_id = cur.lastrowid
 
-        # Record workflow breadcrumb
         conn.execute(
             "INSERT INTO workflow_events (encounter_id, event_type, event_data) "
             "VALUES (?, ?, ?)",
@@ -290,6 +336,22 @@ def update_encounter_status(encounter_id: int, payload: StatusUpdate) -> dict:
             raise HTTPException(status_code=404, detail="encounter_not_found")
 
         previous_status = row["status"]
+
+        # Idempotent no-op: same state in, same state out, no event recorded.
+        if new_status == previous_status:
+            return dict(row)
+
+        allowed_next = ALLOWED_TRANSITIONS.get(previous_status, set())
+        if new_status not in allowed_next:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"invalid_transition: {previous_status} -> {new_status} "
+                    f"is not permitted; allowed next states from "
+                    f"{previous_status}: {sorted(allowed_next) or 'none (terminal)'}"
+                ),
+            )
+
         started_at = row["started_at"]
         completed_at = row["completed_at"]
         now = _now_iso()
@@ -313,7 +375,11 @@ def update_encounter_status(encounter_id: int, payload: StatusUpdate) -> dict:
                 encounter_id,
                 "status_changed",
                 json.dumps(
-                    {"from": previous_status, "to": new_status}, sort_keys=True
+                    {
+                        "old_status": previous_status,
+                        "new_status": new_status,
+                    },
+                    sort_keys=True,
                 ),
             ),
         )

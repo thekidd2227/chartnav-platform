@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<title>ChartNav — Workflow State Machine Build</title>
+<style>
+  :root { --fg:#0F172A; --muted:#64748B; --line:#E5E7EB; --bg:#ffffff; --code:#F8FAFC; --accent:#0B6E79; }
+  html, body { background: var(--bg); color: var(--fg); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 14px; line-height: 1.55; }
+  body { max-width: 960px; margin: 0 auto; padding: 40px 32px 80px; }
+  h1 { font-size: 28px; letter-spacing: -0.01em; margin-bottom: 4px; }
+  h2 { font-size: 20px; margin-top: 36px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 16px; margin-top: 24px; }
+  h4 { font-size: 14px; color: var(--muted); }
+  code { background: var(--code); padding: 1px 5px; border-radius: 4px; font-size: 12.5px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  pre.code { background: var(--code); padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: 12px; line-height: 1.45; }
+  pre.code code { background: transparent; padding: 0; }
+  table { border-collapse: collapse; margin: 10px 0 18px; font-size: 13px; }
+  th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: #F1F5F9; }
+  ul, ol { padding-left: 22px; }
+  li { margin: 3px 0; }
+  section { page-break-after: always; }
+  section:last-of-type { page-break-after: auto; }
+  .mermaid { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin: 12px 0; }
+  header.cover { border-bottom: 2px solid var(--accent); padding-bottom: 16px; margin-bottom: 24px; }
+  header.cover .sub { color: var(--muted); font-size: 13px; }
+  nav.toc { background: #F8FAFC; border: 1px solid var(--line); border-radius: 8px; padding: 12px 18px; margin-bottom: 28px; }
+  nav.toc ol { margin: 4px 0; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+</style>
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({ startOnLoad: true, theme: 'neutral', securityLevel: 'loose' });
+</script>
+</head>
+<body>
+<header class="cover">
+  <h1>ChartNav — Workflow State Machine Build</h1>
+  <div class="sub">Phase: strict encounter state machine + filtered listing<br>
+  Repo: <code>thekidd2227/chartnav-platform</code> · Generated 2026-04-17</div>
+</header>
+<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps</a></li><li><a href="#sec-8">Diagram — System architecture</a></li><li><a href="#sec-9">Diagram — Encounter status machine</a></li><li><a href="#sec-10">Diagram — ER</a></li><li><a href="#sec-11">Diagram — API / data flow</a></li></ol></nav>
+<section id="sec-1"><h2>Executive summary</h2>
+<p>This document consolidates the ChartNav *workflow state machine + filtering*</p>
+<p>phase. It covers everything delivered in this phase:</p>
+<ul>
+<li><strong>Strict state machine</strong> on <code>POST /encounters/{id}/status</code> — only the documented forward and rework edges succeed; everything else returns <code>400 invalid_transition</code> with an explicit message.</li>
+<li><strong>Filtered listing</strong> on <code>GET /encounters?organization_id=&amp;location_id=&amp;status=&amp;provider_name=</code> — all filters combinable, parameterized SQL, deterministic order.</li>
+<li><strong>Expanded seed</strong> — two idempotent encounters covering <code>in_progress</code> and <code>review_needed</code>, each with a realistic event history.</li>
+<li><strong>Living documentation</strong> — Mermaid diagrams for architecture, ER, status machine, and sequence flow; plus per-concern markdown docs.</li>
+<li><strong>Verification evidence</strong> — every filter and every state transition case was exercised locally against the running API; matrices appear in §06.</li>
+</ul>
+<p>Preserved untouched: <code>/health</code>, <code>/</code>, <code>/organizations</code>, <code>/locations</code>, <code>/users</code>,</p>
+<p>the GET/POST event endpoints, Alembic history, and the SQLite dev workflow.</p>
+</section>
+<section id="sec-2"><h2>01 — Current state</h2>
+<h1>ChartNav — Current State</h1>
+<p><strong>As of:</strong> 2026-04-17 (phase: workflow state machine + filtering)</p>
+<h2>Repo layout (relevant)</h2>
+<pre class="code lang-"><code>
+chartnav-platform/
+├── apps/
+│   ├── api/                          # FastAPI service (SQLite local)
+│   │   ├── app/main.py               # app factory, CORS, router mount
+│   │   ├── app/api/routes.py         # all HTTP handlers
+│   │   ├── alembic.ini
+│   │   ├── alembic/env.py
+│   │   ├── alembic/versions/         # 2 migrations
+│   │   ├── scripts_seed.py           # idempotent demo seed
+│   │   └── pyproject.toml
+│   └── web/                          # Vite shell (untouched this phase)
+├── infra/docker/docker-compose.yml
+└── docs/
+    ├── build/                        # living docs (this set)
+    ├── diagrams/                     # Mermaid sources
+    ├── final/                        # consolidated HTML/PDF
+    └── releases/
+</code></pre>
+<h2>Runtime baseline</h2>
+<ul>
+<li>Python 3.11+, FastAPI, raw <code>sqlite3</code> driver (no ORM yet).</li>
+<li>SQLite file resolved at <code>apps/api/chartnav.db</code> (gitignored).</li>
+<li>Alembic history: <code>43ccbf363a8f → a1b2c3d4e5f6</code> (head).</li>
+<li>CORS wide-open (<code>*</code>) for local dev.</li>
+</ul>
+<h2>Verified working endpoints (preserved)</h2>
+<ul>
+<li><code>GET /health</code>, <code>GET /</code></li>
+<li><code>GET /organizations</code>, <code>GET /locations</code>, <code>GET /users</code></li>
+<li><code>GET /encounters</code> (now with filters — see <code>03-api-endpoints.md</code>)</li>
+<li><code>GET /encounters/{id}</code></li>
+<li><code>GET /encounters/{id}/events</code></li>
+<li><code>POST /encounters</code></li>
+<li><code>POST /encounters/{id}/events</code></li>
+<li><code>POST /encounters/{id}/status</code> (now strict state machine — see <code>02-workflow-state-machine.md</code>)</li>
+</ul>
+<h2>Demo data shipped by seed</h2>
+<table><thead><tr><th>id</th><th>patient_id</th><th>provider</th><th>status</th><th>events</th></tr></thead><tbody>
+<tr><td>1</td><td>PT-1001</td><td>Dr. Carter</td><td>in_progress</td><td>3</td></tr>
+<tr><td>2</td><td>PT-1002</td><td>Dr. Patel</td><td>review_needed</td><td>5</td></tr>
+</tbody></table>
+<p>See <code>04-data-model.md</code> and <code>05-build-log.md</code> for details.</p>
+</section>
+<section id="sec-3"><h2>02 — Workflow state machine</h2>
+<h1>Encounter Workflow State Machine</h1>
+<h2>Status values</h2>
+<table><thead><tr><th>Status</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>scheduled</code></td><td>Visit is booked, patient has not arrived.</td></tr>
+<tr><td><code>in_progress</code></td><td>Provider is seeing the patient / actively charting.</td></tr>
+<tr><td><code>draft_ready</code></td><td>Note draft has been generated and is awaiting review.</td></tr>
+<tr><td><code>review_needed</code></td><td>Reviewer flagged the note — needs revision or sign-off.</td></tr>
+<tr><td><code>completed</code></td><td>Note signed off; encounter closed. <strong>Terminal.</strong></td></tr>
+</tbody></table>
+<h2>Allowed transitions</h2>
+<p>Forward flow:</p>
+<pre class="code lang-"><code>
+scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ completed
+</code></pre>
+<p>Explicit rework transitions (documented + enforced):</p>
+<table><thead><tr><th>From</th><th>To</th><th>Purpose</th></tr></thead><tbody>
+<tr><td><code>draft_ready</code></td><td><code>in_progress</code></td><td>Draft rejected, return to charting.</td></tr>
+<tr><td><code>review_needed</code></td><td><code>draft_ready</code></td><td>Reviewer kicks note back for rewrite.</td></tr>
+</tbody></table>
+<h2>Rejected transitions (examples that return HTTP 400)</h2>
+<ul>
+<li><code>scheduled → completed</code></li>
+<li><code>scheduled → review_needed</code></li>
+<li><code>scheduled → draft_ready</code></li>
+<li><code>in_progress → scheduled</code></li>
+<li><code>in_progress → completed</code> (must pass through draft_ready + review_needed)</li>
+<li><code>completed → anything</code> (terminal)</li>
+<li>Any unknown status string (<code>invalid_status</code>)</li>
+</ul>
+<p>Error body format:</p>
+<pre class="code lang-json"><code>
+{&quot;detail&quot;:&quot;invalid_transition: in_progress -&gt; completed is not permitted; allowed next states from in_progress: [&#x27;draft_ready&#x27;]&quot;}
+</code></pre>
+<h2>Idempotency</h2>
+<p>Posting the <strong>same</strong> status the encounter is already in is a no-op: the row</p>
+<p>is returned unchanged and <strong>no</strong> <code>status_changed</code> event is appended.</p>
+<h2>Side effects on successful transition</h2>
+<table><thead><tr><th>Transition target</th><th>Timestamp action</th></tr></thead><tbody>
+<tr><td><code>in_progress</code></td><td>set <code>started_at = now()</code> if currently NULL</td></tr>
+<tr><td><code>completed</code></td><td>set <code>completed_at = now()</code>; also set <code>started_at = now()</code> if it was NULL</td></tr>
+<tr><td>other</td><td>no timestamp mutation</td></tr>
+</tbody></table>
+<p>Every successful transition appends a <code>workflow_events</code> row:</p>
+<pre class="code lang-json"><code>
+{
+  &quot;event_type&quot;: &quot;status_changed&quot;,
+  &quot;event_data&quot;: {&quot;old_status&quot;: &quot;...&quot;, &quot;new_status&quot;: &quot;...&quot;}
+}
+</code></pre>
+<h2>Diagram</h2>
+<p>See <code>docs/diagrams/encounter-status-machine.md</code> (Mermaid).</p>
+<h2>Source of truth</h2>
+<p><code>apps/api/app/api/routes.py</code>:</p>
+<ul>
+<li><code>ALLOWED_STATUSES</code> — the 5 permitted status strings.</li>
+<li><code>ALLOWED_TRANSITIONS</code> — <code>dict[str, set[str]]</code>, one entry per source state.</li>
+<li><code>update_encounter_status()</code> — the single enforcement point.</li>
+</ul>
+</section>
+<section id="sec-4"><h2>03 — API endpoints</h2>
+<h1>API Endpoints</h1>
+<p>Base URL (local dev): <code>http://127.0.0.1:8000</code> (or whatever port uvicorn binds).</p>
+<h2>System</h2>
+<table><thead><tr><th>Method</th><th>Path</th><th>Response</th></tr></thead><tbody>
+<tr><td>GET</td><td><code>/health</code></td><td><code>{&quot;status&quot;:&quot;ok&quot;}</code></td></tr>
+<tr><td>GET</td><td><code>/</code></td><td><code>{&quot;service&quot;:&quot;chartnav-api&quot;,&quot;version&quot;:&quot;0.1.0&quot;}</code></td></tr>
+</tbody></table>
+<h2>Org / location / user (read-only)</h2>
+<table><thead><tr><th>Method</th><th>Path</th><th>Notes</th></tr></thead><tbody>
+<tr><td>GET</td><td><code>/organizations</code></td><td>Ordered by id.</td></tr>
+<tr><td>GET</td><td><code>/locations</code></td><td>Ordered by id.</td></tr>
+<tr><td>GET</td><td><code>/users</code></td><td>Ordered by id.</td></tr>
+</tbody></table>
+<h2>Encounters</h2>
+<h3>GET <code>/encounters</code></h3>
+<p>Query parameters (all optional, combinable, AND-ed):</p>
+<table><thead><tr><th>Param</th><th>Type</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>organization_id</code></td><td>int≥1</td><td>Exact match.</td></tr>
+<tr><td><code>location_id</code></td><td>int≥1</td><td>Exact match.</td></tr>
+<tr><td><code>status</code></td><td>string</td><td>Must be in <code>ALLOWED_STATUSES</code> or 400.</td></tr>
+<tr><td><code>provider_name</code></td><td>string</td><td>Exact match (case-sensitive).</td></tr>
+</tbody></table>
+<p>Ordering: <code>ORDER BY id</code>. All SQL uses parameterized <code>?</code> placeholders.</p>
+<h3>GET <code>/encounters/{encounter_id}</code></h3>
+<p><code>404 encounter_not_found</code> if missing.</p>
+<h3>GET <code>/encounters/{encounter_id}/events</code></h3>
+<p><code>404 encounter_not_found</code> if the parent encounter does not exist.</p>
+<p>Returns events oldest-first (<code>ORDER BY id</code>). <code>event_data</code> is JSON-parsed</p>
+<p>before being returned to the client when it is valid JSON.</p>
+<h3>POST <code>/encounters</code></h3>
+<p>Body:</p>
+<pre class="code lang-json"><code>
+{
+  &quot;organization_id&quot;: 1,
+  &quot;location_id&quot;: 1,
+  &quot;patient_identifier&quot;: &quot;PT-1003&quot;,
+  &quot;patient_name&quot;: &quot;Alex Chen&quot;,
+  &quot;provider_name&quot;: &quot;Dr. Ortiz&quot;,
+  &quot;scheduled_at&quot;: &quot;2026-04-18T14:30:00Z&quot;,
+  &quot;status&quot;: &quot;scheduled&quot;
+}
+</code></pre>
+<p>Rules:</p>
+<ul>
+<li><code>status</code> defaults to <code>&quot;scheduled&quot;</code> and may only be <code>scheduled</code> or <code>in_progress</code> at creation (deeper states can&#x27;t be forged).</li>
+<li><code>organization_id</code> + <code>location_id</code> must exist and the location must belong to the organization → otherwise 400.</li>
+<li>A <code>workflow_events</code> row <code>encounter_created</code> is appended automatically.</li>
+<li>Returns the full encounter row (201).</li>
+</ul>
+<h3>POST <code>/encounters/{encounter_id}/events</code></h3>
+<p>Body:</p>
+<pre class="code lang-json"><code>
+{ &quot;event_type&quot;: &quot;note_draft_completed&quot;, &quot;event_data&quot;: { &quot;template&quot;: &quot;glaucoma-initial&quot; } }
+</code></pre>
+<p><code>event_data</code> may be any JSON value (object/array/string/number/null). Objects</p>
+<p>and arrays are stored as canonical JSON (sorted keys). Strings pass through</p>
+<p>as-is.</p>
+<h3>POST <code>/encounters/{encounter_id}/status</code></h3>
+<p>Body: <code>{ &quot;status&quot;: &quot;draft_ready&quot; }</code>.</p>
+<ul>
+<li>Validated against <code>ALLOWED_STATUSES</code> and <code>ALLOWED_TRANSITIONS</code></li>
+</ul>
+<p>(<code>02-workflow-state-machine.md</code>).</p>
+<ul>
+<li>Same-status post is a no-op (no event recorded).</li>
+<li>On success, stamps <code>started_at</code>/<code>completed_at</code> per lifecycle rules</li>
+</ul>
+<p>and appends a <code>status_changed</code> event.</p>
+<p>Error examples:</p>
+<ul>
+<li><code>400 invalid_status</code> — unknown string.</li>
+<li><code>400 invalid_transition</code> — disallowed edge in the state machine.</li>
+<li><code>404 encounter_not_found</code> — no such encounter.</li>
+</ul>
+</section>
+<section id="sec-5"><h2>04 — Data model</h2>
+<h1>Data Model</h1>
+<p>SQLite (local dev). Schema reproduced by Alembic migrations</p>
+<p><code>43ccbf363a8f → a1b2c3d4e5f6</code>.</p>
+<h2>Tables</h2>
+<h3><code>organizations</code></h3>
+<table><thead><tr><th>column</th><th>type</th><th>constraints</th></tr></thead><tbody>
+<tr><td>id</td><td>INTEGER</td><td>PK</td></tr>
+<tr><td>name</td><td>VARCHAR(255)</td><td>NOT NULL</td></tr>
+<tr><td>slug</td><td>VARCHAR(255)</td><td>NOT NULL, UNIQUE</td></tr>
+<tr><td>created_at</td><td>DATETIME</td><td>NOT NULL, default <code>now()</code></td></tr>
+</tbody></table>
+<h3><code>locations</code></h3>
+<table><thead><tr><th>column</th><th>type</th><th>constraints</th></tr></thead><tbody>
+<tr><td>id</td><td>INTEGER</td><td>PK</td></tr>
+<tr><td>organization_id</td><td>INTEGER</td><td>NOT NULL, FK → organizations(id)</td></tr>
+<tr><td>name</td><td>VARCHAR</td><td>NOT NULL</td></tr>
+<tr><td>created_at</td><td>DATETIME</td><td>NOT NULL, default <code>now()</code></td></tr>
+</tbody></table>
+<h3><code>users</code></h3>
+<table><thead><tr><th>column</th><th>type</th><th>constraints</th></tr></thead><tbody>
+<tr><td>id</td><td>INTEGER</td><td>PK</td></tr>
+<tr><td>organization_id</td><td>INTEGER</td><td>NOT NULL, FK → organizations(id)</td></tr>
+<tr><td>email</td><td>VARCHAR</td><td>NOT NULL, UNIQUE</td></tr>
+<tr><td>full_name</td><td>VARCHAR</td><td>NULL</td></tr>
+<tr><td>role</td><td>VARCHAR</td><td>NOT NULL, default <code>&quot;admin&quot;</code></td></tr>
+<tr><td>created_at</td><td>DATETIME</td><td>NOT NULL, default <code>now()</code></td></tr>
+</tbody></table>
+<h3><code>encounters</code></h3>
+<table><thead><tr><th>column</th><th>type</th><th>constraints</th></tr></thead><tbody>
+<tr><td>id</td><td>INTEGER</td><td>PK</td></tr>
+<tr><td>organization_id</td><td>INTEGER</td><td>NOT NULL, FK → organizations(id), indexed</td></tr>
+<tr><td>location_id</td><td>INTEGER</td><td>NOT NULL, FK → locations(id), indexed</td></tr>
+<tr><td>patient_identifier</td><td>VARCHAR</td><td>NOT NULL, indexed</td></tr>
+<tr><td>patient_name</td><td>VARCHAR</td><td>NULL</td></tr>
+<tr><td>provider_name</td><td>VARCHAR</td><td>NOT NULL</td></tr>
+<tr><td>status</td><td>VARCHAR</td><td>NOT NULL, default <code>&quot;scheduled&quot;</code>, indexed</td></tr>
+<tr><td>scheduled_at</td><td>DATETIME</td><td>NULL</td></tr>
+<tr><td>started_at</td><td>DATETIME</td><td>NULL (stamped on entering <code>in_progress</code>)</td></tr>
+<tr><td>completed_at</td><td>DATETIME</td><td>NULL (stamped on entering <code>completed</code>)</td></tr>
+<tr><td>created_at</td><td>DATETIME</td><td>NOT NULL, default <code>now()</code></td></tr>
+</tbody></table>
+<h3><code>workflow_events</code></h3>
+<table><thead><tr><th>column</th><th>type</th><th>constraints</th></tr></thead><tbody>
+<tr><td>id</td><td>INTEGER</td><td>PK</td></tr>
+<tr><td>encounter_id</td><td>INTEGER</td><td>NOT NULL, FK → encounters(id), indexed</td></tr>
+<tr><td>event_type</td><td>VARCHAR</td><td>NOT NULL, indexed</td></tr>
+<tr><td>event_data</td><td>TEXT</td><td>NULL (canonical JSON string)</td></tr>
+<tr><td>created_at</td><td>DATETIME</td><td>NOT NULL, default <code>now()</code></td></tr>
+</tbody></table>
+<h2>Relationships</h2>
+<pre class="code lang-"><code>
+organizations 1─┬─* locations
+                └─* users
+                └─* encounters ─* workflow_events
+locations     1─* encounters
+</code></pre>
+<p>See <code>docs/diagrams/er-diagram.md</code> for a Mermaid ER rendering.</p>
+<h2>Event taxonomy (emitted automatically)</h2>
+<table><thead><tr><th>event_type</th><th>When</th><th>Shape</th></tr></thead><tbody>
+<tr><td><code>encounter_created</code></td><td>On <code>POST /encounters</code></td><td><code>{&quot;status&quot;: &quot;&lt;initial&gt;&quot;}</code></td></tr>
+<tr><td><code>status_changed</code></td><td>On every successful status transition</td><td><code>{&quot;old_status&quot;: &quot;...&quot;, &quot;new_status&quot;: &quot;...&quot;}</code></td></tr>
+<tr><td>user-supplied</td><td><code>POST /encounters/{id}/events</code></td><td>Any JSON</td></tr>
+</tbody></table>
+<h2>Seeded demo data</h2>
+<p>Two encounters are seeded for <code>demo-eye-clinic</code> / <code>Main Clinic</code>:</p>
+<table><thead><tr><th>id</th><th>patient</th><th>provider</th><th>status</th><th>event count</th><th>lifecycle covered</th></tr></thead><tbody>
+<tr><td>1</td><td>PT-1001</td><td>Dr. Carter</td><td><code>in_progress</code></td><td>3</td><td>scheduled → in_progress</td></tr>
+<tr><td>2</td><td>PT-1002</td><td>Dr. Patel</td><td><code>review_needed</code></td><td>5</td><td>scheduled → in_progress → draft_ready → review_needed</td></tr>
+</tbody></table>
+</section>
+<section id="sec-6"><h2>05 — Build log</h2>
+<h1>Build Log</h1>
+<p>Reverse-chronological. Each entry is a concrete, verifiable step.</p>
+<p>---</p>
+<h2>2026-04-17 — Phase: workflow state machine + filtering</h2>
+<h3>Step 1 — Baseline inspection</h3>
+<ul>
+<li>Confirmed current migrations, seed, and routes compile and run as documented in <code>01-current-state.md</code>.</li>
+<li>Confirmed Alembic head: <code>a1b2c3d4e5f6</code>.</li>
+<li>No ORM in use — raw <code>sqlite3</code> calls via helpers in <code>routes.py</code>.</li>
+</ul>
+<h3>Step 2 — Strict status state machine</h3>
+<ul>
+<li>Added <code>ALLOWED_TRANSITIONS</code> map in <code>apps/api/app/api/routes.py</code>.</li>
+<li><code>update_encounter_status()</code> now:</li>
+<li>Validates <code>status</code> is in <code>ALLOWED_STATUSES</code> → else 400.</li>
+<li>Treats same-status post as a no-op (no event written).</li>
+<li>Validates the source→target edge is in <code>ALLOWED_TRANSITIONS</code> → else 400 with explicit message.</li>
+<li>Only stamps <code>started_at</code> on entry to <code>in_progress</code> if currently NULL.</li>
+<li>Stamps <code>completed_at</code> on entry to <code>completed</code> (and backfills <code>started_at</code> if null).</li>
+<li>Appends <code>status_changed</code> event with <code>old_status</code> / <code>new_status</code> (replacing the prior <code>from</code> / <code>to</code> keys).</li>
+<li><code>POST /encounters</code> now restricts initial status to <code>scheduled</code> or <code>in_progress</code> so deeper states can&#x27;t be forged at creation.</li>
+</ul>
+<h3>Step 3 — Encounter filtering</h3>
+<ul>
+<li><code>GET /encounters</code> accepts <code>organization_id</code>, <code>location_id</code>, <code>status</code>, <code>provider_name</code>.</li>
+<li>All filters use parameterized SQL; clauses AND-ed; ordering preserved.</li>
+<li>Invalid <code>status</code> filter → 400 with enumerated allowed values.</li>
+</ul>
+<h3>Step 4 — Expanded seed</h3>
+<ul>
+<li><code>scripts_seed.py</code> now seeds <strong>two</strong> encounters:</li>
+<li>PT-1001 at <code>in_progress</code> with 3 events (create, status_changed, note_draft_requested).</li>
+<li>PT-1002 at <code>review_needed</code> with 5 events walking the full forward flow.</li>
+<li>Seed remains idempotent; both encounters and their events use composite uniqueness checks before insert.</li>
+<li>Timestamp handling at seed time: <code>started_at = CURRENT_TIMESTAMP</code> for any status that implies the visit began; <code>completed_at</code> only for <code>completed</code>.</li>
+</ul>
+<h3>Step 5 — Local verification</h3>
+<ul>
+<li><code>rm -f chartnav.db &amp;&amp; alembic upgrade head</code> → both migrations ran cleanly.</li>
+<li><code>python scripts_seed.py</code> ran twice; event counts stable at 3 / 5.</li>
+<li><code>uvicorn</code> boot clean; all baseline endpoints returned 200.</li>
+<li>Filter matrix verified — see <code>06-known-gaps.md</code> for matrix.</li>
+<li>State-machine matrix verified — 4 valid transitions 200, 4 invalid transitions 400 with explicit detail.</li>
+<li>OpenAPI now exposes the four new query parameters on <code>GET /encounters</code>.</li>
+</ul>
+<h3>Step 6 — Documentation</h3>
+<ul>
+<li>Created <code>docs/build/*</code> living docs.</li>
+<li>Created <code>docs/diagrams/*</code> Mermaid sources (architecture, ER, status machine, sequence).</li>
+<li>Generated <code>docs/final/chartnav-workflow-state-machine-build.html</code> and <code>.pdf</code>.</li>
+</ul>
+<h3>Step 7 — Git hygiene</h3>
+<ul>
+<li><code>chartnav.db</code> is gitignored; not committed.</li>
+<li><code>.venv/</code> is gitignored.</li>
+<li>Committed source + docs in a single atomic commit.</li>
+</ul>
+</section>
+<section id="sec-7"><h2>06 — Known gaps</h2>
+<h1>Known Gaps</h1>
+<h2>Verification matrix (proof this phase shipped)</h2>
+<h3>Filter matrix — <code>GET /encounters?...</code></h3>
+<table><thead><tr><th>Query</th><th>Expected ids</th><th>Actual</th></tr></thead><tbody>
+<tr><td><code>status=in_progress</code></td><td><code>[1]</code></td><td><code>[1]</code></td></tr>
+<tr><td><code>status=review_needed</code></td><td><code>[2]</code></td><td><code>[2]</code></td></tr>
+<tr><td><code>provider_name=Dr. Patel</code></td><td><code>[2]</code></td><td><code>[2]</code></td></tr>
+<tr><td><code>organization_id=1&amp;location_id=1&amp;status=in_progress</code></td><td><code>[1]</code></td><td><code>[1]</code></td></tr>
+<tr><td><code>organization_id=999</code></td><td><code>[]</code></td><td><code>[]</code></td></tr>
+<tr><td><code>status=bogus</code></td><td>400</td><td>400</td></tr>
+</tbody></table>
+<h3>State machine matrix — <code>POST /encounters/{id}/status</code></h3>
+<table><thead><tr><th>Encounter</th><th>From</th><th>To</th><th>Expected</th><th>Actual</th></tr></thead><tbody>
+<tr><td>1</td><td>in_progress</td><td>draft_ready</td><td>200</td><td>200</td></tr>
+<tr><td>1</td><td>draft_ready</td><td>in_progress</td><td>200</td><td>200</td></tr>
+<tr><td>1</td><td>in_progress</td><td>completed</td><td>400</td><td>400</td></tr>
+<tr><td>1</td><td>in_progress</td><td>scheduled</td><td>400</td><td>400</td></tr>
+<tr><td>2</td><td>review_needed</td><td>completed</td><td>200</td><td>200</td></tr>
+<tr><td>2</td><td>completed</td><td>in_progress</td><td>400</td><td>400</td></tr>
+<tr><td>1</td><td>in_progress</td><td><code>&quot;whatever&quot;</code></td><td>400</td><td>400</td></tr>
+</tbody></table>
+<h2>Real gaps (prioritized)</h2>
+<p>1. <strong>No ORM / no sessions</strong> — routes still use raw <code>sqlite3</code> with per-request connections. Works for single-file SQLite; will not scale cleanly to Postgres or multi-writer.</p>
+<p>2. <strong>No auth / no tenant scoping</strong> — any caller sees any org&#x27;s data. Needs <code>organization_id</code> derived from authenticated identity, not client input.</p>
+<p>3. <strong>No pagination</strong> — <code>GET /encounters</code> returns all matching rows. Needs <code>limit</code>, <code>cursor</code>, and a stable order.</p>
+<p>4. <strong>No update / delete paths</strong> — encounters cannot be edited (patient name typo) or cancelled. Need <code>PATCH /encounters/{id}</code> and a <code>cancelled</code> status (or soft-delete).</p>
+<p>5. <strong>No automated tests</strong> — verification is manual curl matrices. Need pytest + httpx <code>TestClient</code> covering state machine + filters.</p>
+<p>6. <strong>Free-form <code>event_data</code></strong> — no per-event_type schema validation.</p>
+<p>7. <strong>SQLite-only</strong> — Alembic constructs are SQLite-compatible but Postgres parity hasn&#x27;t been exercised (docker compose has a Postgres intent but api still points at SQLite).</p>
+<p>8. <strong>Frontend not wired</strong> — <code>apps/web</code> does not yet consume <code>/encounters</code>.</p>
+<p>9. <strong>CORS wide-open</strong> (<code>allow_origins=[&quot;*&quot;]</code>) — fine for dev, must be tightened before any hosted deploy.</p>
+<p>10. <strong>No request IDs / structured logging</strong> — hard to trace a specific 400 in a busy log.</p>
+</section>
+<section id="sec-8"><h2>Diagram — System architecture</h2>
+<h1>System Architecture</h1>
+<div class="mermaid">
+flowchart LR
+  Client["Client<br/>(curl / apps/web)"]
+  FastAPI["FastAPI<br/>apps/api/app/main.py"]
+  Router["APIRouter<br/>apps/api/app/api/routes.py"]
+  SM["State Machine<br/>ALLOWED_TRANSITIONS"]
+  DB[("SQLite<br/>apps/api/chartnav.db")]
+  Alembic["Alembic<br/>apps/api/alembic/"]
+  Seed["scripts_seed.py"]
+
+  Client -->|HTTP| FastAPI --> Router
+  Router --> SM
+  Router -->|parameterized SQL| DB
+  Alembic -.->|upgrade head| DB
+  Seed -.->|idempotent seed| DB
+</div>
+</section>
+<section id="sec-9"><h2>Diagram — Encounter status machine</h2>
+<h1>Encounter Status State Machine</h1>
+<div class="mermaid">
+stateDiagram-v2
+  [*] --> scheduled
+  [*] --> in_progress : walk-in
+
+  scheduled --> in_progress
+
+  in_progress --> draft_ready
+
+  draft_ready --> review_needed
+  draft_ready --> in_progress : rework
+
+  review_needed --> completed
+  review_needed --> draft_ready : kick back
+
+  completed --> [*]
+</div>
+<p>Legend: any edge not shown is rejected at <code>POST /encounters/{id}/status</code></p>
+<p>with HTTP 400 <code>invalid_transition</code>.</p>
+</section>
+<section id="sec-10"><h2>Diagram — ER</h2>
+<h1>ER Diagram</h1>
+<div class="mermaid">
+erDiagram
+  organizations ||--o{ locations     : "has"
+  organizations ||--o{ users         : "employs"
+  organizations ||--o{ encounters    : "owns"
+  locations     ||--o{ encounters    : "hosts"
+  encounters    ||--o{ workflow_events : "emits"
+
+  organizations {
+    int id PK
+    string name
+    string slug UK
+    datetime created_at
+  }
+  locations {
+    int id PK
+    int organization_id FK
+    string name
+    datetime created_at
+  }
+  users {
+    int id PK
+    int organization_id FK
+    string email UK
+    string full_name
+    string role
+    datetime created_at
+  }
+  encounters {
+    int id PK
+    int organization_id FK
+    int location_id FK
+    string patient_identifier
+    string patient_name
+    string provider_name
+    string status
+    datetime scheduled_at
+    datetime started_at
+    datetime completed_at
+    datetime created_at
+  }
+  workflow_events {
+    int id PK
+    int encounter_id FK
+    string event_type
+    text event_data
+    datetime created_at
+  }
+</div>
+</section>
+<section id="sec-11"><h2>Diagram — API / data flow</h2>
+<h1>API / Data Flow</h1>
+<div class="mermaid">
+sequenceDiagram
+  autonumber
+  participant C as Client
+  participant A as FastAPI / routes.py
+  participant SM as State Machine
+  participant DB as SQLite
+
+  Note over C,DB: Happy-path: advance an encounter
+  C->>A: POST /encounters/{id}/status {"status":"draft_ready"}
+  A->>DB: SELECT status, started_at, completed_at FROM encounters WHERE id=?
+  DB-->>A: current row
+  A->>SM: is (in_progress → draft_ready) allowed?
+  SM-->>A: yes
+  A->>DB: UPDATE encounters SET status=?, started_at=?, completed_at=? WHERE id=?
+  A->>DB: INSERT INTO workflow_events (status_changed, {old,new})
+  DB-->>A: committed
+  A-->>C: 200 updated encounter row
+
+  Note over C,DB: Rejected transition
+  C->>A: POST /encounters/{id}/status {"status":"completed"}
+  A->>DB: SELECT status...
+  A->>SM: is (in_progress → completed) allowed?
+  SM-->>A: no
+  A-->>C: 400 invalid_transition (with allowed next states)
+
+  Note over C,DB: Filtered list
+  C->>A: GET /encounters?status=in_progress&provider_name=Dr.%20Carter
+  A->>DB: SELECT ... WHERE status=? AND provider_name=? ORDER BY id
+  DB-->>A: rows
+  A-->>C: 200 [rows]
+</div>
+</section>
+</body></html>
