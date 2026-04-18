@@ -87,6 +87,37 @@ flowchart TD
   end
 ```
 
+## Bearer mode + audit trail (phase 10)
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant C as Client
+  participant RID as RequestIdMiddleware
+  participant Rate as RateLimitMiddleware
+  participant Authn as require_caller (bearer)
+  participant JWKS as JWKS URL (PyJWKClient)
+  participant R as Route
+  participant EH as HTTPException handler
+  participant Audit as security_audit_events
+
+  C->>RID: GET /me<br/>Authorization: Bearer <jwt>
+  RID->>Rate: request + request.state.request_id
+  Rate->>Authn: request (within window)
+  Authn->>JWKS: get_signing_key_from_jwt(token)
+  JWKS-->>Authn: public key
+  Authn->>Authn: jwt.decode — sig + iss + aud + exp
+  alt invalid token / iss / aud / expired / missing claim / unknown user
+    Authn-->>EH: HTTPException(status=401, error_code=...)
+    EH->>Audit: record(event_type, request_id, path, method, remote_addr, ...)
+    EH-->>C: 401 + X-Request-ID
+  else valid
+    Authn->>Authn: SELECT users WHERE email = claim
+    Authn-->>R: Caller(user_id, role, organization_id)
+    R-->>C: 200 + X-Request-ID
+  end
+```
+
 ## Release pipeline
 
 ```mermaid

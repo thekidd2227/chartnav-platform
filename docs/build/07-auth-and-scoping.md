@@ -136,12 +136,15 @@ sequenceDiagram
   end
 ```
 
-## 5. What this phase explicitly does NOT do
+## 5. Status as of phase 10
 
-- No password auth, JWT, or SSO integration.
-- No scoped writes to organizations / locations / users (meta admin).
-- No audit log distinct from `workflow_events`.
-- No rate limiting.
-- No per-tenant key management.
+- **JWT bearer mode is now implemented** (see `11-production-auth-seam.md`). Real signature + issuer + audience + expiry validation against a JWKS URL.
+- **Dedicated audit trail** in `security_audit_events` for denied/suspicious access (see `18-operational-hardening.md`).
+- **Rate limiting** on authed paths (see `18-operational-hardening.md`).
+- Still TODO: scoped writes to organizations/locations/users, per-tenant key management.
 
-These are the next auth/security phase's targets.
+## 6. What this phase explicitly does NOT do
+
+- No password auth (IdP owns identity proof).
+- No refresh-token flow or revocation list.
+- No per-tenant JWKS — single issuer + single JWKS URL.

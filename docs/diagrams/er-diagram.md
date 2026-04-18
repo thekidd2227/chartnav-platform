@@ -8,6 +8,21 @@ erDiagram
   locations     ||--o{ encounters       : "hosts"
   encounters    ||--o{ workflow_events  : "emits"
 
+  security_audit_events {
+    int id PK
+    string event_type
+    string request_id
+    string actor_email
+    int actor_user_id
+    int organization_id
+    string path
+    string method
+    string error_code
+    text detail
+    string remote_addr
+    datetime created_at
+  }
+
   organizations {
     int id PK
     string name

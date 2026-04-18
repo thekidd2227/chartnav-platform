@@ -9,9 +9,13 @@ flowchart LR
   end
 
   subgraph Runtime["Backend (apps/api, FastAPI)"]
-    FastAPI["main.py"]
+    FastAPI["main.py<br/>+ exception handler → audit"]
+    RID["RequestIdMiddleware"]
+    Access["AccessLogMiddleware<br/>(JSON logs)"]
+    Rate["RateLimitMiddleware<br/>(60s window)"]
+    Audit[("security_audit_events")]
     Config["config.py<br/>env-driven settings"]
-    Authn["require_caller<br/>header · bearer"]
+    Authn["require_caller<br/>header · bearer (PyJWKClient)"]
     Authz["authz.py RBAC"]
     Router["routes.py"]
     SM["State Machine"]
@@ -46,7 +50,11 @@ flowchart LR
   end
 
   UI --> ApiClient
-  ApiClient -->|"HTTP + X-User-Email"| FastAPI
+  ApiClient -->|"HTTP + X-User-Email or Bearer"| RID
+  RID --> Access
+  Access --> Rate
+  Rate --> FastAPI
+  FastAPI -. audits denials .-> Audit
   Ident -. stored caller .-> ApiClient
 
   FastAPI --> Authn

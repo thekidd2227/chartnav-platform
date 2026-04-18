@@ -39,7 +39,7 @@
   <div class="sub">Backend phases 1–5: spine → state machine → auth → RBAC → CI/hardening<br>
   Repo: <code>thekidd2227/chartnav-platform</code></div>
 </header>
-<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth, org scoping, RBAC</a></li><li><a href="#sec-9">08 — Test strategy</a></li><li><a href="#sec-10">09 — CI & deploy hardening</a></li><li><a href="#sec-11">10 — Doc artifact pipeline</a></li><li><a href="#sec-12">11 — Production-auth seam</a></li><li><a href="#sec-13">12 — Runtime config</a></li><li><a href="#sec-14">13 — Deploy target</a></li><li><a href="#sec-15">14 — Postgres parity</a></li><li><a href="#sec-16">15 — Frontend integration</a></li><li><a href="#sec-17">16 — Frontend test strategy</a></li><li><a href="#sec-18">17 — E2E & release</a></li><li><a href="#sec-19">Diagram — System architecture</a></li><li><a href="#sec-20">Diagram — Encounter status machine</a></li><li><a href="#sec-21">Diagram — ER</a></li><li><a href="#sec-22">Diagram — API / data flow</a></li></ol></nav>
+<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth, org scoping, RBAC</a></li><li><a href="#sec-9">08 — Test strategy</a></li><li><a href="#sec-10">09 — CI & deploy hardening</a></li><li><a href="#sec-11">10 — Doc artifact pipeline</a></li><li><a href="#sec-12">11 — Production-auth seam</a></li><li><a href="#sec-13">12 — Runtime config</a></li><li><a href="#sec-14">13 — Deploy target</a></li><li><a href="#sec-15">14 — Postgres parity</a></li><li><a href="#sec-16">15 — Frontend integration</a></li><li><a href="#sec-17">16 — Frontend test strategy</a></li><li><a href="#sec-18">17 — E2E & release</a></li><li><a href="#sec-19">18 — Operational hardening</a></li><li><a href="#sec-20">Diagram — System architecture</a></li><li><a href="#sec-21">Diagram — Encounter status machine</a></li><li><a href="#sec-22">Diagram — ER</a></li><li><a href="#sec-23">Diagram — API / data flow</a></li></ol></nav>
 <section id="sec-1"><h2>Executive summary</h2>
 <p>This document consolidates <strong>all</strong> ChartNav backend phases delivered to</p>
 <p>date.</p>
@@ -51,75 +51,79 @@
 <p><strong>Phase 6 — Production seam + deploy target + Postgres parity.</strong> DB layer moved to SQLAlchemy Core. <code>apps/api/app/config.py</code> centralizes env. <code>auth.py</code> gained a bearer stub that returns 501 honestly. Dockerfile hardened, <code>docker-compose.prod.yml</code> + <code>scripts/pg_verify.sh</code> + <code>backend-postgres</code> CI job land.</p>
 <p><strong>Phase 7 — Frontend workflow UI.</strong> Typed API client + identity seam + full two-pane workflow console (list + filters + detail + timeline + role-aware actions). Error banners surface the backend envelope verbatim.</p>
 <p><strong>Phase 8 — Create UI + frontend tests + frontend CI.</strong> Admin/clinician can create encounters through a modal; Vitest + Testing Library harness (12 tests) locks the UI down; dedicated <code>frontend</code> CI job runs typecheck + tests + build on every push/PR.</p>
-<p><strong>Phase 9 — Playwright E2E + release pipeline (this phase).</strong> Playwright boots backend and frontend together on ephemeral ports (SQLite-backed seed), drives 8 real Chromium scenarios covering identity resolution, scope switching, encounter create, event append, role-aware transitions, reviewer restrictions, unknown-email auth surface, and filters. A new <code>e2e</code> CI job runs the full browser suite on every PR. A new <code>release.yml</code> workflow triggers on <code>v*.*.*</code> tags, pushes <code>ghcr.io/&lt;owner&gt;/chartnav-api:&lt;version&gt;</code> via Buildx, runs <code>scripts/release_build.sh</code> to produce <code>chartnav-api-&lt;version&gt;.tar</code> + <code>chartnav-web-&lt;version&gt;.tar.gz</code> + a sha256 manifest, and attaches the artifacts to an auto-generated GitHub Release. No backend contract changes.</p>
-<p>Preserved untouched: <code>/health</code>, <code>/</code>, Alembic history, SQLite dev workflow, state machine + filtering surface, workflow_events model, existing endpoint contracts.</p>
+<p><strong>Phase 9 — Playwright E2E + release pipeline.</strong> Playwright boots backend + frontend together, 8 Chromium scenarios, new <code>e2e</code> CI job. <code>release.yml</code> workflow on <code>v*.*.*</code> tags: GHCR push + release bundle + GitHub Release with tarballs and MANIFEST.</p>
+<p><strong>Phase 10 — Real JWT bearer auth + operational hardening (this phase).</strong> <code>resolve_caller_from_bearer</code> now performs real PyJWT validation against a JWKS URL (signature + iss + aud + exp + claim mapping). Every request gets a correlated <code>X-Request-ID</code>. Structured JSON access + auth-denied logs. New <code>security_audit_events</code> table (migration <code>b2c3d4e5f6a7</code>) writes one row per denied/suspicious access attempt via a central HTTP exception handler. <code>allow_origins=[&quot;*&quot;]</code> is gone — CORS is env-driven (<code>CHARTNAV_CORS_ALLOW_ORIGINS</code>). Per-process sliding-window rate limiter protects authed paths (<code>CHARTNAV_RATE_LIMIT_PER_MINUTE</code>, default 120). Backend suite grows to 48 tests including 11 bearer scenarios and 12 operational scenarios. No endpoint contract changes.</p>
+<p>Preserved untouched: <code>/health</code>, <code>/</code>, SQLite dev workflow, state machine + filtering surface, workflow_events model, existing endpoint contracts.</p>
 </section>
 <section id="sec-2"><h2>01 — Current state</h2>
 <h1>ChartNav — Current State</h1>
-<p><strong>As of:</strong> 2026-04-18 (phase: Playwright E2E + release pipeline)</p>
+<p><strong>As of:</strong> 2026-04-18 (phase: JWT bearer auth + operational hardening)</p>
 <h2>Repo layout (relevant)</h2>
 <pre class="code lang-"><code>
 chartnav-platform/
 ├── .github/workflows/
 │   ├── ci.yml            # backend-sqlite · backend-postgres · frontend · e2e · docker-build · docs
-│   └── release.yml       # NEW — tag-driven GHCR push + GitHub Release
-├── Makefile              # verify · pg-verify · docker-* · web-* · e2e · release-build · dev
-├── scripts/
-│   ├── build_docs.py
-│   ├── verify.sh
-│   ├── pg_verify.sh
-│   └── release_build.sh  # NEW — reproducible release bundle
+│   └── release.yml
+├── Makefile
+├── scripts/              # build_docs.py · verify.sh · pg_verify.sh · release_build.sh
 ├── apps/
-│   ├── api/              # unchanged
+│   ├── api/
+│   │   ├── app/
+│   │   │   ├── main.py              # CORS + middleware + exception-handler audit
+│   │   │   ├── config.py            # + CORS, rate-limit, jwt-claim config
+│   │   │   ├── db.py
+│   │   │   ├── auth.py              # real JWT bearer via PyJWKClient
+│   │   │   ├── authz.py
+│   │   │   ├── audit.py             # NEW — security_audit_events writer
+│   │   │   ├── logging_config.py    # NEW — JSON logs
+│   │   │   ├── middleware.py        # NEW — request id / access log / rate limit
+│   │   │   └── api/routes.py
+│   │   ├── alembic/versions/        # 3 migrations (now + security_audit_events)
+│   │   ├── scripts_seed.py
+│   │   ├── scripts/smoke.sh
+│   │   ├── tests/                   # 48 pytest (incl. 11 bearer + 12 operational)
+│   │   └── Dockerfile · entrypoint.sh
 │   └── web/
-│       ├── package.json           # + test:e2e / :headed / :ui
-│       ├── playwright.config.ts   # NEW — backend + frontend webServer
-│       ├── tests/e2e/
-│       │   └── workflow.spec.ts   # NEW — 8 browser tests
-│       ├── src/test/              # 12 vitest tests (phase 8)
-│       └── ...
+│       └── (unchanged this phase)
 ├── infra/docker/{docker-compose,docker-compose.prod}.yml
-└── docs/build/ 01 … 17
+└── docs/build/ 01 … 18
 </code></pre>
 <h2>Runtime baseline</h2>
 <ul>
-<li>Backend: FastAPI + SQLAlchemy Core, SQLite or Postgres.</li>
-<li>Frontend: Vite 5 + React 18 + TypeScript + Vitest + <strong>Playwright</strong>.</li>
-<li>Auth: <code>CHARTNAV_AUTH_MODE=header</code> (dev) or <code>bearer</code> (prod placeholder 501).</li>
+<li>Backend: FastAPI + SQLAlchemy Core + PyJWT. SQLite or Postgres.</li>
+<li>Frontend: Vite 5 + React 18 + TypeScript + Vitest + Playwright.</li>
+<li>Auth: <code>CHARTNAV_AUTH_MODE</code></li>
+<li><code>header</code> (dev) — <code>X-User-Email</code> → <code>users</code> lookup.</li>
+<li><code>bearer</code> (prod) — real JWT validation (signature/iss/aud/exp) against <code>CHARTNAV_JWT_JWKS_URL</code>, claim → user via <code>CHARTNAV_JWT_USER_CLAIM</code>.</li>
 <li>RBAC: <code>admin</code> / <code>clinician</code> / <code>reviewer</code>.</li>
-<li>Alembic head: <code>a1b2c3d4e5f6</code>. No schema changes this phase.</li>
-<li>Error envelope: <code>{&quot;detail&quot;: {&quot;error_code&quot;: &quot;...&quot;, &quot;reason&quot;: &quot;...&quot;}}</code>.</li>
+<li>Error envelope: <code>{&quot;detail&quot;: {&quot;error_code&quot;: &quot;...&quot;, &quot;reason&quot;: &quot;...&quot;}}</code> — audited by the HTTP exception handler for 401/403 + listed codes.</li>
+<li><strong>CORS</strong>: env-driven <code>CHARTNAV_CORS_ALLOW_ORIGINS</code>. No more <code>*</code>.</li>
+<li><strong>Rate limit</strong>: <code>CHARTNAV_RATE_LIMIT_PER_MINUTE</code> (default 120), in-memory sliding window on authed paths.</li>
+<li><strong>Request correlation</strong>: <code>X-Request-ID</code> inbound is honored, otherwise generated; always echoed.</li>
+<li><strong>Structured logs</strong>: JSON-per-line; every request logs <code>request_id</code>, <code>method</code>, <code>path</code>, <code>status</code>, <code>duration_ms</code>, <code>user_email</code>, <code>organization_id</code>.</li>
+<li><strong>Audit table</strong>: <code>security_audit_events</code> (migration <code>b2c3d4e5f6a7</code>); written on auth/scoping/role/rate-limit denials; never on success.</li>
 </ul>
+<p>Alembic head: <code>b2c3d4e5f6a7</code>.</p>
 <h2>Testing layers</h2>
 <table><thead><tr><th>Layer</th><th>Tool</th><th>Count</th><th>Scope</th></tr></thead><tbody>
-<tr><td>pytest</td><td><code>pytest</code></td><td>28</td><td>backend units + integration</td></tr>
-<tr><td>shell smoke</td><td><code>scripts/smoke.sh</code></td><td>9</td><td>live HTTP contract (SQLite + Postgres)</td></tr>
-<tr><td>vitest</td><td><code>vitest</code></td><td>12</td><td>frontend integration (mocked API)</td></tr>
-<tr><td><strong>Playwright E2E</strong></td><td><code>@playwright/test</code></td><td>8</td><td>full-stack browser (live backend + frontend)</td></tr>
+<tr><td>pytest</td><td>pytest</td><td>48</td><td>backend units + integration (auth, RBAC, scoping, state machine, bearer JWT, ops hardening)</td></tr>
+<tr><td>shell smoke</td><td>smoke.sh</td><td>9</td><td>live HTTP contract (SQLite + Postgres)</td></tr>
+<tr><td>vitest</td><td>vitest</td><td>12</td><td>frontend integration (mocked API)</td></tr>
+<tr><td>Playwright</td><td>@playwright</td><td>8</td><td>full-stack browser (live backend + frontend)</td></tr>
 </tbody></table>
 <h2>Release / deploy</h2>
 <ul>
-<li><strong>Artifacts</strong> (via <code>scripts/release_build.sh</code>):</li>
-<li><code>chartnav-api-&lt;version&gt;.tar</code> (docker save, loadable anywhere).</li>
-<li><code>chartnav-web-&lt;version&gt;.tar.gz</code> (static bundle from <code>apps/web/dist</code>).</li>
-<li><code>MANIFEST.txt</code> with git sha, ref, build time, sha256 sums.</li>
-<li><strong>Registry</strong>: <code>ghcr.io/&lt;owner&gt;/chartnav-api:&lt;version&gt;</code> (and <code>:latest</code>) on tagged builds.</li>
-<li><strong>GitHub Release</strong>: auto-created on <code>v*.*.*</code> tag pushes with notes + artifacts attached.</li>
-<li>Runtime stack: <code>infra/docker/docker-compose.prod.yml</code> (API + Postgres).</li>
+<li><code>scripts/release_build.sh</code> builds a docker-saved API tar + web bundle + sha256 manifest under <code>dist/release/&lt;version&gt;/</code>.</li>
+<li><code>.github/workflows/release.yml</code> on <code>v*.*.*</code> tags pushes <code>ghcr.io/&lt;owner&gt;/chartnav-api:&lt;version&gt;</code> + <code>:latest</code> and creates a GitHub Release with the bundle attached.</li>
 </ul>
-<h2>Verified working endpoints</h2>
-<p>No endpoint behavior changed this phase.</p>
 <h2>Automation</h2>
 <ul>
-<li><code>make verify</code> — SQLite backend gate.</li>
-<li><code>make pg-verify</code> — Postgres parity.</li>
-<li><code>make web-verify</code> — frontend unit gate.</li>
-<li><code>make e2e</code> — full-stack browser tests.</li>
-<li><code>make release-build VERSION=v0.1.0</code> — produce the release bundle locally.</li>
-<li><code>make dev</code> — boot backend + frontend together.</li>
-<li>CI: <code>backend-sqlite</code> + <code>frontend</code> run in parallel; <code>e2e</code> gates on both;</li>
+<li><code>make verify</code> (backend gate), <code>make pg-verify</code> (Postgres parity)</li>
+<li><code>make web-verify</code> (frontend unit gate), <code>make e2e</code> (browser gate)</li>
+<li><code>make release-build VERSION=v0.1.0</code> (reproducible bundle)</li>
+<li><code>make dev</code> (boot backend + frontend)</li>
+<li>CI: <code>backend-sqlite</code> + <code>frontend</code> run in parallel; <code>e2e</code> gates on both; <code>backend-postgres</code>, <code>docker-build</code>, <code>docs</code> chain on <code>backend-sqlite</code>.</li>
 </ul>
-<p><code>backend-postgres</code>, <code>docker-build</code>, <code>docs</code> chain on <code>backend-sqlite</code>.</p>
 </section>
 <section id="sec-3"><h2>02 — Workflow state machine</h2>
 <h1>Encounter Workflow State Machine</h1>
@@ -298,6 +302,24 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <p>CHECK constraint, add it in a future migration.</p>
 <h3><code>encounters</code> and <code>workflow_events</code></h3>
 <p>Unchanged.</p>
+<h3><code>security_audit_events</code> (added in phase 10)</h3>
+<table><thead><tr><th>column</th><th>type</th><th>constraints</th></tr></thead><tbody>
+<tr><td>id</td><td>INTEGER</td><td>PK</td></tr>
+<tr><td>event_type</td><td>VARCHAR(100)</td><td>NOT NULL, indexed</td></tr>
+<tr><td>request_id</td><td>VARCHAR(64)</td><td>NULL</td></tr>
+<tr><td>actor_email</td><td>VARCHAR(255)</td><td>NULL, indexed</td></tr>
+<tr><td>actor_user_id</td><td>INTEGER</td><td>NULL</td></tr>
+<tr><td>organization_id</td><td>INTEGER</td><td>NULL</td></tr>
+<tr><td>path</td><td>VARCHAR(512)</td><td>NULL</td></tr>
+<tr><td>method</td><td>VARCHAR(16)</td><td>NULL</td></tr>
+<tr><td>error_code</td><td>VARCHAR(100)</td><td>NULL</td></tr>
+<tr><td>detail</td><td>TEXT</td><td>NULL</td></tr>
+<tr><td>remote_addr</td><td>VARCHAR(64)</td><td>NULL</td></tr>
+<tr><td>created_at</td><td>DATETIME</td><td>NOT NULL default now(), indexed</td></tr>
+</tbody></table>
+<p>No FKs — audit rows must survive user/org deletion. Populated only on</p>
+<p>denied or suspicious access (see <code>18-operational-hardening.md</code>).</p>
+<p>Migration: <code>b2c3d4e5f6a7</code>.</p>
 <h2>Seeded tenants (two, with full role coverage)</h2>
 <h3>Org 1 — <code>demo-eye-clinic</code> (id=1)</h3>
 <p>Location: <code>Main Clinic</code> (id=1).</p>
@@ -334,81 +356,86 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <h1>Build Log</h1>
 <p>Reverse-chronological.</p>
 <p>---</p>
-<h2>2026-04-18 — Phase 9: Playwright E2E + release pipeline</h2>
+<h2>2026-04-18 — Phase 10: real JWT bearer + operational hardening</h2>
 <h3>Step 1 — Baseline</h3>
 <ul>
-<li>Head: <code>f83d748</code> (create UI + frontend tests + frontend CI).</li>
-<li>Backend untouched; 28/28 pytest, 12/12 vitest, all smoke green.</li>
+<li>Head: <code>74fe8dd</code> (Playwright E2E + release pipeline).</li>
+<li>28 pytest + 12 vitest + 8 Playwright + 9 smoke all green.</li>
 </ul>
-<h3>Step 2 — Playwright harness</h3>
+<h3>Step 2 — Real JWT bearer validation</h3>
 <ul>
-<li>Installed <code>@playwright/test</code>; ran <code>npx playwright install chromium --with-deps</code>.</li>
-<li>New <code>apps/web/playwright.config.ts</code>:</li>
-<li>Backend launched on <code>127.0.0.1:8001</code> against an ephemeral SQLite file <code>apps/api/.e2e.chartnav.db</code> so the operator&#x27;s dev DB is never touched.</li>
-<li>Frontend launched on <code>127.0.0.1:5174</code> with <code>VITE_API_URL</code> pointed at the E2E backend.</li>
-<li><code>webServer: [backend, frontend]</code> — Playwright waits for health + tears both down on exit.</li>
-<li><code>reuseExistingServer: !CI</code>, chromium-only project, traces/videos/screenshots on failure.</li>
-<li><code>package.json</code> now carries <code>test:e2e</code>, <code>test:e2e:headed</code>, <code>test:e2e:ui</code>.</li>
-<li><code>tsconfig.json</code> includes <code>playwright.config.ts</code> and <code>tests/</code>.</li>
-<li>Narrowed Vitest <code>test.include</code> to <code>src/**/*.test.{ts,tsx}</code> and excluded <code>tests/**</code> so Playwright specs aren&#x27;t pulled into vitest runs.</li>
+<li>Added <code>pyjwt[crypto]&gt;=2.8</code> to <code>pyproject.toml</code> dependencies (core, not an extra — bearer mode is a first-class path now).</li>
+<li><code>apps/api/app/config.py</code> gains <code>jwt_user_claim</code>, <code>cors_allow_origins</code>, <code>rate_limit_per_minute</code>; claim default <code>email</code>; CORS default covers Vite dev on <code>:5173</code> and E2E on <code>:5174</code>.</li>
+<li><code>apps/api/app/auth.py</code>:</li>
+<li>Removed the 501 placeholder.</li>
+<li>New <code>resolve_caller_from_bearer</code>: parses <code>Authorization: Bearer …</code>, runs <code>PyJWKClient(settings.jwt_jwks_url).get_signing_key_from_jwt(token)</code>, then <code>jwt.decode(...)</code> requiring <code>exp</code>, <code>iss</code>, <code>aud</code>; algorithm allowlist <code>RS256/384/512</code> + <code>ES256/384/512</code>.</li>
+<li>Distinct error codes: <code>invalid_authorization_header</code>, <code>invalid_token</code>, <code>invalid_issuer</code>, <code>invalid_audience</code>, <code>token_expired</code>, <code>missing_user_claim</code>, <code>unknown_user</code>.</li>
+<li>Module-level <code>_jwk_client</code> with <code>set_jwk_client(...)</code> test hook so tests inject a local RSA key; production uses <code>PyJWKClient</code> against the real JWKS URL.</li>
+<li><code>require_caller</code> now takes <code>Request</code> so it can stash the resolved <code>Caller</code> onto <code>request.state</code>. That&#x27;s what lets the access log and audit writer reference the caller.</li>
 </ul>
-<h3>Step 3 — E2E test suite</h3>
+<h3>Step 3 — Structured logging + request IDs</h3>
 <ul>
-<li>New <code>apps/web/tests/e2e/workflow.spec.ts</code> (8 tests):</li>
-<li>App boots + default identity resolves</li>
-<li>Identity switch (admin1 → admin2) changes visible encounter list</li>
-<li>Admin opens detail, creates a new encounter, sees it appear</li>
-<li>Admin appends a workflow event; timeline reflects it</li>
-<li>Clinician drives <code>scheduled→in_progress→draft_ready</code>; review edge not offered</li>
-<li>Reviewer sees completion + kick-back controls, no create button, no event composer</li>
-<li>Unknown email surfaces the <code>identity-error</code> chip with <code>unknown_user</code></li>
-<li>Status filter narrows the list</li>
-<li>Uses <code>role</code> / <code>placeholder</code> / <code>data-testid</code> selectors. No ad-hoc classnames.</li>
-<li>Bug fixed during first run: a strict-mode selector conflict — the new encounter&#x27;s PID appeared in both the list row AND the banner. Scoped assertion to <code>getByTestId(&quot;enc-list&quot;)</code>.</li>
+<li>New <code>apps/api/app/logging_config.py</code>: line-delimited JSON formatter, UTC timestamps, <code>extra={}</code> fields merged onto every record.</li>
+<li>New <code>apps/api/app/middleware.py::RequestIdMiddleware</code>: honors inbound <code>X-Request-ID</code> (≤ 64 chars), else generates a UUID4 hex. Echoed on every response including errors.</li>
+<li><code>AccessLogMiddleware</code>: one <code>INFO request</code> line per response with <code>request_id</code>, <code>method</code>, <code>path</code>, <code>status</code>, <code>duration_ms</code>, <code>user_email</code>, <code>organization_id</code>, <code>remote_addr</code>.</li>
 </ul>
-<h3>Step 4 — CI wiring</h3>
+<h3>Step 4 — Audit trail</h3>
 <ul>
-<li>New <code>e2e</code> job in <code>.github/workflows/ci.yml</code>: <code>needs: [backend-sqlite, frontend]</code>.</li>
-<li>Install backend + frontend deps.</li>
-<li><code>npx playwright install --with-deps chromium</code>.</li>
-<li><code>npx playwright test --reporter=list</code> (Playwright manages servers).</li>
-<li>Upload <code>playwright-report/</code> + <code>test-results/</code> on failure for debugging.</li>
+<li>New Alembic migration <code>b2c3d4e5f6a7 — add security_audit_events</code> with indexes on <code>event_type</code>, <code>actor_email</code>, <code>created_at</code>.</li>
+<li>New <code>apps/api/app/audit.py</code>:</li>
+<li><code>AUDITED_ERROR_CODES</code> set.</li>
+<li><code>record(...)</code> writes a row; never raises (internal exceptions are logged at ERROR and swallowed so they can&#x27;t mask the underlying denial).</li>
+<li><code>query_recent(limit)</code> read helper used by tests and operator debugging.</li>
+<li><code>apps/api/app/main.py</code> adds an <code>@app.exception_handler(HTTPException)</code> that:</li>
+<li>Writes an audit row on any 401/403 or known-audited <code>error_code</code>.</li>
+<li>Always copies <code>X-Request-ID</code> to the error response.</li>
+<li>Emits a <code>WARNING auth_denied</code> structured log.</li>
 </ul>
-<h3>Step 5 — Release artifacts</h3>
+<h3>Step 5 — CORS + runtime defaults</h3>
 <ul>
-<li>New <code>scripts/release_build.sh</code>:</li>
-<li>Resolves version from arg / tag / <code>dev-&lt;short-sha&gt;</code> fallback.</li>
-<li><code>docker build</code> → <code>docker save</code> → <code>chartnav-api-&lt;version&gt;.tar</code>.</li>
-<li><code>npm ci</code> + <code>npm run build</code> → <code>chartnav-web-&lt;version&gt;.tar.gz</code>.</li>
-<li><code>MANIFEST.txt</code> with git sha / ref / build time / sizes / sha256 sums.</li>
-<li>Output under <code>dist/release/&lt;version&gt;/</code> (gitignored).</li>
-<li>New <code>.github/workflows/release.yml</code>:</li>
-<li>Triggers on <code>v*.*.*</code> tag push and <code>workflow_dispatch</code> with a version input.</li>
-<li>Pushes <code>ghcr.io/&lt;owner&gt;/chartnav-api:&lt;version&gt;</code> + <code>:latest</code> via Buildx.</li>
-<li>Runs <code>scripts/release_build.sh</code> and uploads the full <code>dist/release/&lt;version&gt;/</code> as a workflow artifact.</li>
-<li>On tag pushes only, creates a GitHub Release with auto-generated notes and attaches the tarballs + manifest.</li>
+<li>Removed <code>allow_origins=[&quot;*&quot;]</code>. Driven by <code>CHARTNAV_CORS_ALLOW_ORIGINS</code>.</li>
+<li>Narrowed <code>allow_methods</code> and <code>allow_headers</code> to the set the app actually uses.</li>
+<li><code>expose_headers=[&quot;X-Request-ID&quot;]</code> so browsers can surface it for debugging.</li>
 </ul>
-<h3>Step 6 — Makefile</h3>
+<h3>Step 6 — Rate limiting</h3>
 <ul>
-<li>New targets: <code>e2e</code>, <code>e2e-headed</code>, <code>e2e-ui</code>, <code>release-build</code>.</li>
-<li><code>make release-build VERSION=v0.1.0</code> shells to <code>scripts/release_build.sh</code>.</li>
+<li><code>RateLimitMiddleware</code> — in-memory, per-process sliding 60-second window keyed on <code>(client_ip, path)</code>.</li>
+<li>Protects the authed path prefixes <code>/me</code>, <code>/encounters</code>, <code>/organizations</code>, <code>/locations</code>, <code>/users</code>. Leaves <code>/health</code> and <code>/</code> untouched.</li>
+<li><code>CHARTNAV_RATE_LIMIT_PER_MINUTE</code> (default 120). <code>0</code> disables.</li>
+<li>On limit: writes an audit row with <code>event_type=rate_limited</code>, returns HTTP 429 with the standardized envelope.</li>
+<li>Limitation documented: per-process only; multi-worker deployments should add an edge limiter.</li>
 </ul>
-<h3>Step 7 — Verification</h3>
+<h3>Step 7 — Tests</h3>
 <ul>
-<li>Local Playwright run: <strong>8/8 passed in ~14s</strong>.</li>
-<li>Vitest still <strong>12/12</strong>. Backend <code>make verify</code> still <strong>28/28 pytest + 9/9 smoke</strong>.</li>
-<li><code>apps/api/.venv/bin/python scripts/build_docs.py</code> regenerates HTML + PDF.</li>
-<li>CI YAML (both <code>ci.yml</code> and <code>release.yml</code>) parses cleanly via PyYAML.</li>
-<li>Honest limitation: no <code>act</code> in shell to execute the workflows locally; parse + structural review.</li>
+<li><code>apps/api/tests/test_auth_modes.py</code> rewritten for real JWT:</li>
+<li>Local RSA keypair, sign tokens with <code>PyJWT</code>, inject a <code>_TestJWKSClient</code> stub via <code>set_jwk_client(...)</code>.</li>
+<li>Added 9 bearer scenarios (valid, missing, malformed header, garbage, wrong iss, wrong aud, expired, unknown user, missing claim).</li>
+<li>Fixed first-run bug: initial stub built a full PyJWK dict and hit a base64 encoding mismatch — now returns a minimal object carrying just <code>.key</code>.</li>
+<li>New <code>apps/api/tests/test_operational.py</code> (12 tests): request-id round-trip, request-id generation, request-id on 401, audit on missing-auth / unknown-user / cross-org / role-forbidden, no-audit on success, 429 rate-limit behavior, rate-limit disabled when 0, CORS allowed/disallowed preflight.</li>
+<li>Full suite: <strong>48/48 passed</strong>.</li>
 </ul>
-<h3>Step 8 — Hygiene</h3>
+<h3>Step 8 — CI</h3>
 <ul>
-<li><code>.gitignore</code> now excludes <code>apps/web/playwright-report/</code>, <code>apps/web/test-results/</code>, <code>apps/web/e2e-results/</code>, and <code>dist/release/</code>.</li>
-<li>Dev DB reset to seeded state before commit.</li>
+<li>CI already installs <code>[dev,postgres]</code> in all backend jobs. Because <code>pyjwt[crypto]</code> moved to the core <code>dependencies</code> block, every backend job (sqlite / postgres / e2e / docker-build) picks it up automatically. No workflow changes were necessary.</li>
+<li>Docs build still picks up the new sections via <code>scripts/build_docs.py</code>.</li>
+</ul>
+<h3>Step 9 — Verification</h3>
+<ul>
+<li><code>make verify</code> (SQLite backend) → <strong>48/48 pytest + 9/9 smoke green</strong>.</li>
+<li>Header mode live <code>/me</code> still returns 200 for admin.</li>
+<li>YAML workflows still parse.</li>
+<li>Dev DB reset; audit log table shipped via new migration.</li>
+<li><code>apps/api/.venv/bin/python scripts/build_docs.py</code> regenerated final HTML + PDF.</li>
+</ul>
+<h3>Step 10 — Hygiene</h3>
+<ul>
+<li><code>.gitignore</code> already covers caches/<code>*.db</code>/release output.</li>
+<li>Migration is additive; Alembic head moves to <code>b2c3d4e5f6a7</code> — existing migrations untouched.</li>
 </ul>
 <p>---</p>
 <h2>Prior phases</h2>
 <ul>
+<li><strong>Phase 9 — Playwright E2E + release pipeline</strong> (<code>74fe8dd</code>)</li>
 <li><strong>Phase 8 — Create UI + vitest + frontend CI</strong> (<code>f83d748</code>)</li>
 <li><strong>Phase 7 — Frontend workflow UI</strong> (<code>c4f6e4f</code>)</li>
 <li><strong>Phase 6 — Prod auth seam + Docker + Postgres parity</strong> (<code>700bb0b</code>)</li>
@@ -421,49 +448,67 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 </section>
 <section id="sec-7"><h2>06 — Known gaps + verification matrix</h2>
 <h1>Known Gaps &amp; Verification Matrix</h1>
-<h2>Verification evidence — phase 9</h2>
+<h2>Verification evidence — phase 10</h2>
 <h3>Local gates</h3>
 <table><thead><tr><th>Gate</th><th>Result</th></tr></thead><tbody>
-<tr><td><code>make verify</code> (SQLite backend + pytest 28 + smoke 9)</td><td>✅</td></tr>
-<tr><td><code>make pg-verify</code> (Postgres parity)</td><td>✅ (from preceding phase, no backend changes here)</td></tr>
-<tr><td><code>make web-verify</code> (tsc + vitest 12 + build)</td><td>✅</td></tr>
-<tr><td><code>make e2e</code> (Playwright 8 tests in chromium)</td><td>✅ <strong>8/8 in ~14s</strong></td></tr>
+<tr><td><code>make verify</code> (backend)</td><td>✅ 48/48 pytest + 9/9 smoke</td></tr>
+<tr><td>Header <code>/me</code> live</td><td>✅ 200 admin</td></tr>
+<tr><td>Alembic upgrade head</td><td>✅ migrations 1 → 2 → <code>b2c3d4e5f6a7</code></td></tr>
+<tr><td><code>make pg-verify</code> (Postgres)</td><td>not rerun in this phase — no backend SQL changes that would break it, migration is SA-portable</td></tr>
+<tr><td><code>make web-verify</code> / <code>make e2e</code></td><td>no frontend changes this phase — previously ✅</td></tr>
 </tbody></table>
-<h3>Playwright E2E matrix (8)</h3>
-<table><thead><tr><th>#</th><th>Scenario</th><th>Result</th></tr></thead><tbody>
-<tr><td>1</td><td>App boots, default seeded identity resolves</td><td>✅</td></tr>
-<tr><td>2</td><td>Identity switch admin1 → admin2 changes visible scope</td><td>✅</td></tr>
-<tr><td>3</td><td>Admin opens detail, creates encounter, sees it in the list</td><td>✅</td></tr>
-<tr><td>4</td><td>Admin appends a workflow event; timeline reflects it</td><td>✅</td></tr>
-<tr><td>5</td><td>Clinician drives operational transitions; review edge not offered</td><td>✅</td></tr>
-<tr><td>6</td><td>Reviewer sees completion/kick-back, no create button, no event composer</td><td>✅</td></tr>
-<tr><td>7</td><td>Unknown email surfaces <code>identity-error</code> with <code>unknown_user</code></td><td>✅</td></tr>
-<tr><td>8</td><td>Status filter narrows the list</td><td>✅</td></tr>
+<h3>pytest summary (48)</h3>
+<table><thead><tr><th>Suite</th><th>Count</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>test_auth.py</code></td><td>5</td><td>header mode</td></tr>
+<tr><td><code>test_auth_modes.py</code></td><td>11</td><td>header + real JWT bearer (valid, missing, malformed, garbage, wrong iss, wrong aud, expired, unknown user, missing claim)</td></tr>
+<tr><td><code>test_rbac.py</code></td><td>12</td><td>role-gated writes + per-edge transitions</td></tr>
+<tr><td><code>test_scoping.py</code></td><td>8</td><td>org scoping + cross-org denial</td></tr>
+<tr><td><code>test_operational.py</code></td><td>12</td><td>request id, audit trail, rate limit, CORS</td></tr>
 </tbody></table>
-<h3>CI YAML</h3>
-<ul>
-<li><code>ci.yml</code> jobs: <code>backend-sqlite</code>, <code>backend-postgres</code>, <code>frontend</code>, <code>e2e</code>, <code>docker-build</code>, <code>docs</code>.</li>
-<li><code>release.yml</code> triggers: <code>push</code> on <code>v*.*.*</code> tags + <code>workflow_dispatch</code>.</li>
-<li>Both parse cleanly via PyYAML. No <code>act</code> available locally for live workflow execution.</li>
-</ul>
-<h3>Release script dry-sanity</h3>
-<ul>
-<li><code>bash scripts/release_build.sh</code> resolves version, builds the API image + web bundle, writes a MANIFEST with sha256s under <code>dist/release/&lt;version&gt;/</code>. Output directory is gitignored.</li>
-</ul>
+<h3>Audit / ops matrix (<code>test_operational.py</code>)</h3>
+<table><thead><tr><th>Scenario</th><th>Result</th></tr></thead><tbody>
+<tr><td>Inbound <code>X-Request-ID</code> roundtrips</td><td>✅</td></tr>
+<tr><td>Server generates request id when missing</td><td>✅</td></tr>
+<tr><td>Error responses carry request id</td><td>✅</td></tr>
+<tr><td>Audit on <code>missing_auth_header</code></td><td>✅</td></tr>
+<tr><td>Audit on <code>unknown_user</code></td><td>✅</td></tr>
+<tr><td>Audit on <code>cross_org_access_forbidden</code></td><td>✅</td></tr>
+<tr><td>Audit on <code>role_cannot_create_encounter</code></td><td>✅</td></tr>
+<tr><td>No audit on success</td><td>✅</td></tr>
+<tr><td>429 on rate limit with correct envelope</td><td>✅</td></tr>
+<tr><td>Rate limit disabled when 0</td><td>✅</td></tr>
+<tr><td>CORS preflight allows configured origin</td><td>✅</td></tr>
+<tr><td>CORS preflight rejects unconfigured origin</td><td>✅</td></tr>
+</tbody></table>
+<h3>Bearer JWT matrix (<code>test_auth_modes.py</code>)</h3>
+<table><thead><tr><th>Case</th><th>Result</th></tr></thead><tbody>
+<tr><td>Bearer without JWT env → <code>RuntimeError</code> at import</td><td>✅</td></tr>
+<tr><td>Header mode default contract</td><td>✅</td></tr>
+<tr><td>Valid RS256 token + known user → 200 role/org</td><td>✅</td></tr>
+<tr><td>Missing <code>Authorization</code></td><td>✅ 401 <code>missing_auth_header</code></td></tr>
+<tr><td>Non-Bearer scheme</td><td>✅ 401 <code>invalid_authorization_header</code></td></tr>
+<tr><td>Garbage token</td><td>✅ 401 <code>invalid_token</code></td></tr>
+<tr><td>Wrong issuer</td><td>✅ 401 <code>invalid_issuer</code></td></tr>
+<tr><td>Wrong audience</td><td>✅ 401 <code>invalid_audience</code></td></tr>
+<tr><td>Expired token</td><td>✅ 401 <code>token_expired</code></td></tr>
+<tr><td>Unknown user mapping</td><td>✅ 401 <code>unknown_user</code></td></tr>
+<tr><td>Missing configured claim</td><td>✅ 401 <code>missing_user_claim</code></td></tr>
+</tbody></table>
 <h2>Real gaps (prioritized for next phase)</h2>
-<p>1. <strong>JWT validation still stubbed</strong> — bearer mode returns 501 honestly. Wire PyJWT + JWKS cache.</p>
-<p>2. <strong>Release flow doesn&#x27;t deploy anywhere</strong> — GHCR push + GitHub Release is the limit. No staging / prod deploy automation, no rollback driver.</p>
-<p>3. <strong>No signing / SBOM / provenance</strong> on release artifacts.</p>
-<p>4. <strong>No automated Postgres E2E</strong> — Playwright uses SQLite for speed. <code>backend-postgres</code> still proves parity at the HTTP level.</p>
-<p>5. <strong><code>/organizations</code>, <code>/locations</code>, <code>/users</code></strong> remain read-only.</p>
-<p>6. <strong><code>users.role</code></strong> free VARCHAR at DB layer.</p>
-<p>7. <strong>No pagination</strong> on <code>GET /encounters</code>.</p>
-<p>8. <strong>Free-form <code>event_data</code></strong>; no per-event_type schema.</p>
-<p>9. **CORS <code>allow_origins=[&quot;*&quot;]</code>.**</p>
-<p>10. <strong>No distinct audit log</strong> for auth/scoping failures.</p>
-<p>11. <strong>No rate limiting / lockout / structured logging.</strong></p>
-<p>12. <strong>No visual-regression / a11y audits</strong> on the frontend.</p>
-<p>13. <strong>pytest matrix on Postgres</strong> — fixture env-driven but not yet multi-DB.</p>
+<p>1. <strong>Rate limiter is per-process, in-memory.</strong> Multi-worker / multi-node deployments need an edge limiter or a shared store (Redis) backing a distributed window.</p>
+<p>2. <strong>No OpenTelemetry tracing yet.</strong> Structured logs carry request ids, but there&#x27;s no span propagation across services.</p>
+<p>3. <strong>No log shipping / retention defined.</strong> JSON logs go to stdout; operators wire them to their stack.</p>
+<p>4. <strong>Audit table has no retention or archival.</strong> Rows accumulate indefinitely.</p>
+<p>5. <strong>No JWKS-rotation test</strong> and no HS256 path (intentionally — production should be asymmetric).</p>
+<p>6. <strong>No refresh-token flow / revocation list.</strong> If a token must die before <code>exp</code>, rotate the IdP signing key or delete the <code>users</code> row.</p>
+<p>7. <strong>Deploy flow stops at &quot;pushed image + GitHub Release&quot;.</strong> Actual rollouts / rollbacks are still operator-run.</p>
+<p>8. <strong>No signing / SBOM / provenance</strong> on release artifacts.</p>
+<p>9. <strong><code>/organizations</code>, <code>/locations</code>, <code>/users</code></strong> remain read-only.</p>
+<p>10. <strong><code>users.role</code></strong> free VARCHAR at DB layer (CHECK or lookup table).</p>
+<p>11. <strong>No pagination</strong> on <code>GET /encounters</code>.</p>
+<p>12. <strong>Free-form <code>event_data</code></strong> — no per-event_type schema.</p>
+<p>13. <strong>No visual-regression / a11y audits</strong> on the frontend.</p>
+<p>14. <strong>pytest matrix on Postgres</strong> not wired — fixture env-driven, ready to flip.</p>
 </section>
 <section id="sec-8"><h2>07 — Auth, org scoping, RBAC</h2>
 <h1>Auth, Org Scoping, RBAC</h1>
@@ -586,15 +631,19 @@ sequenceDiagram
     end
   end
 </div>
-<h2>5. What this phase explicitly does NOT do</h2>
+<h2>5. Status as of phase 10</h2>
 <ul>
-<li>No password auth, JWT, or SSO integration.</li>
-<li>No scoped writes to organizations / locations / users (meta admin).</li>
-<li>No audit log distinct from <code>workflow_events</code>.</li>
-<li>No rate limiting.</li>
-<li>No per-tenant key management.</li>
+<li><strong>JWT bearer mode is now implemented</strong> (see <code>11-production-auth-seam.md</code>). Real signature + issuer + audience + expiry validation against a JWKS URL.</li>
+<li><strong>Dedicated audit trail</strong> in <code>security_audit_events</code> for denied/suspicious access (see <code>18-operational-hardening.md</code>).</li>
+<li><strong>Rate limiting</strong> on authed paths (see <code>18-operational-hardening.md</code>).</li>
+<li>Still TODO: scoped writes to organizations/locations/users, per-tenant key management.</li>
 </ul>
-<p>These are the next auth/security phase&#x27;s targets.</p>
+<h2>6. What this phase explicitly does NOT do</h2>
+<ul>
+<li>No password auth (IdP owns identity proof).</li>
+<li>No refresh-token flow or revocation list.</li>
+<li>No per-tenant JWKS — single issuer + single JWKS URL.</li>
+</ul>
 </section>
 <section id="sec-9"><h2>08 — Test strategy</h2>
 <h1>Test &amp; Smoke Strategy</h1>
@@ -656,6 +705,12 @@ make docker-build
 <li><code>pytest</code>: <strong>28 passed in ~19s</strong></li>
 <li><code>make verify</code> (SQLite): 28 pytest + 9 smoke — all green</li>
 <li><code>scripts/pg_verify.sh</code>: migrations + seed (x2) + smoke + status transition + event write — <strong>PASS</strong></li>
+</ul>
+<h2>Backend coverage (phase 10)</h2>
+<ul>
+<li>48 pytest tests across <code>test_auth</code>, <code>test_auth_modes</code>, <code>test_rbac</code>, <code>test_scoping</code>, <code>test_operational</code>.</li>
+<li>Real JWT validation via a locally generated RSA keypair; no external IdP.</li>
+<li>Audit + request-id + rate-limit + CORS all asserted at the integration level.</li>
 </ul>
 <h2>Frontend verification (phase 8)</h2>
 <ul>
@@ -838,80 +893,71 @@ python scripts/build_docs.py          # or:  make docs
 </section>
 <section id="sec-12"><h2>11 — Production-auth seam</h2>
 <h1>Production-Auth Seam</h1>
-<h2>Goal</h2>
-<p>Make auth transport swappable without touching routes or RBAC.</p>
-<h2>Where the seam lives</h2>
-<p><code>apps/api/app/auth.py</code> exposes a single FastAPI dependency:</p>
-<pre class="code lang-python"><code>
-def require_caller(x_user_email: ..., authorization: ...) -&gt; Caller:
-    mode = settings.auth_mode
-    if mode == &quot;header&quot;:  return resolve_caller_from_header(...)
-    if mode == &quot;bearer&quot;:  return resolve_caller_from_bearer(...)
-    raise ...
-</code></pre>
-<p>Both resolvers return the <strong>same</strong> <code>Caller</code> contract:</p>
-<pre class="code lang-python"><code>
-Caller(user_id, email, full_name, role, organization_id)
-</code></pre>
-<p>Every route, every RBAC helper, every test depends on <code>Caller</code>, not on a</p>
-<p>specific header. Changing transports is a one-file edit inside <code>auth.py</code>.</p>
-<h2>Mode selection</h2>
-<p><code>CHARTNAV_AUTH_MODE</code> in the environment (see <code>12-runtime-config.md</code>):</p>
-<table><thead><tr><th>Value</th><th>State</th><th>Behavior</th></tr></thead><tbody>
-<tr><td><code>header</code></td><td>implemented</td><td>Reads <code>X-User-Email</code>, looks up <code>users</code>. Dev only.</td></tr>
-<tr><td><code>bearer</code></td><td>placeholder</td><td>Requires <code>Authorization: Bearer …</code>; returns 501 because JWT validation is not yet wired.</td></tr>
+<h2>State (after phase 10)</h2>
+<p>Bearer mode is no longer a placeholder — it performs real JWT validation</p>
+<p>against a JWKS endpoint. Header mode is preserved for local/dev.</p>
+<h2>Transports</h2>
+<table><thead><tr><th>Mode</th><th>State</th><th>Behavior</th></tr></thead><tbody>
+<tr><td><code>header</code></td><td>implemented</td><td>Reads <code>X-User-Email</code>, resolves from <code>users</code>. Dev only.</td></tr>
+<tr><td><code>bearer</code></td><td>implemented</td><td>Reads <code>Authorization: Bearer &lt;jwt&gt;</code>, validates signature/iss/aud/exp against <code>CHARTNAV_JWT_JWKS_URL</code>, maps to a <code>users</code> row by <code>CHARTNAV_JWT_USER_CLAIM</code> (default <code>email</code>).</td></tr>
 </tbody></table>
-<p>Unknown values cause <code>app.config</code> to refuse to import — fail fast.</p>
-<h2>Bearer mode — honest placeholder</h2>
-<p>When <code>CHARTNAV_AUTH_MODE=bearer</code> is selected, <code>app.config._load()</code></p>
-<p>verifies these three values are all present before letting the app come</p>
-<p>up at all:</p>
+<p>Both produce the same <code>Caller(user_id, email, full_name, role, organization_id)</code>.</p>
+<h2>JWT validation specifics</h2>
+<p>Implemented in <code>apps/api/app/auth.py::resolve_caller_from_bearer</code>:</p>
+<p>1. Parse <code>Authorization: Bearer &lt;token&gt;</code>. Missing → 401 <code>missing_auth_header</code>. Malformed → 401 <code>invalid_authorization_header</code>.</p>
+<p>2. Look up the signing key via <code>PyJWKClient(settings.jwt_jwks_url)</code> (cached). Failure → 401 <code>invalid_token</code>.</p>
+<p>3. <code>jwt.decode(...)</code> with:</p>
 <ul>
-<li><code>CHARTNAV_JWT_ISSUER</code></li>
-<li><code>CHARTNAV_JWT_AUDIENCE</code></li>
-<li><code>CHARTNAV_JWT_JWKS_URL</code></li>
+<li>Algorithms: <code>RS256 / RS384 / RS512 / ES256 / ES384 / ES512</code></li>
+<li><code>issuer=settings.jwt_issuer</code></li>
+<li><code>audience=settings.jwt_audience</code></li>
+<li><code>options={&quot;require&quot;: [&quot;exp&quot;, &quot;iss&quot;, &quot;aud&quot;]}</code></li>
 </ul>
-<p>Missing any one → <code>RuntimeError</code> at import time with the list of</p>
-<p>missing vars. The app will not start with a half-configured bearer</p>
-<p>setup.</p>
-<p>When bearer mode is active and fully configured, <code>resolve_caller_from_bearer</code></p>
-<p>currently returns:</p>
-<pre class="code lang-"><code>
-HTTP 501
-{&quot;detail&quot;: {&quot;error_code&quot;: &quot;auth_bearer_not_implemented&quot;,
-            &quot;reason&quot;: &quot;bearer-token validation is not implemented in this phase; set CHARTNAV_AUTH_MODE=header for local dev&quot;}}
-</code></pre>
-<p>This is intentional. A future phase will wire real JWT signature</p>
-<p>verification (PyJWT + JWKS fetch against <code>CHARTNAV_JWT_JWKS_URL</code>,</p>
-<p>issuer/audience checks, claim → <code>users</code> lookup). When it ships, only</p>
-<p>the body of <code>resolve_caller_from_bearer</code> changes.</p>
-<h2>What production-ready vs not yet implemented</h2>
-<table><thead><tr><th>Component</th><th>State</th></tr></thead><tbody>
-<tr><td>Mode selection + config</td><td>✅ production-shaped; fails fast on gaps</td></tr>
-<tr><td>Standardized error envelope</td><td>✅ <code>{error_code, reason}</code> everywhere</td></tr>
-<tr><td>Header transport</td><td>✅ works; dev only, do not expose</td></tr>
-<tr><td>Bearer transport</td><td>⚠ placeholder — returns 501 honestly</td></tr>
-<tr><td>JWT signature validation</td><td>❌ not implemented</td></tr>
-<tr><td>JWKS rotation / cache</td><td>❌ not implemented</td></tr>
-<tr><td>Token → <code>users</code> mapping</td><td>❌ not implemented (design TBD)</td></tr>
-<tr><td>RBAC integration</td><td>✅ works for any transport via <code>Caller</code></td></tr>
-<tr><td>Org scoping integration</td><td>✅ works for any transport via <code>Caller</code></td></tr>
+<p>4. Specific error codes per failure:</p>
+<ul>
+<li><code>token_expired</code> — <code>exp</code> in the past</li>
+<li><code>invalid_issuer</code> — <code>iss</code> mismatch</li>
+<li><code>invalid_audience</code> — <code>aud</code> mismatch</li>
+<li><code>invalid_token</code> — any other JWT error</li>
+</ul>
+<p>5. Pull <code>settings.jwt_user_claim</code> (default <code>email</code>) out of the claims. Missing / non-string → 401 <code>missing_user_claim</code>.</p>
+<p>6. <code>fetch_one</code> against <code>users</code>. Missing → 401 <code>unknown_user</code>.</p>
+<p>No fallbacks. No &quot;if token looks roughly ok, let it through&quot;. Fail closed.</p>
+<h2>Claim mapping</h2>
+<p><code>CHARTNAV_JWT_USER_CLAIM</code> (default <code>email</code>) names the claim whose value</p>
+<p>is used to look up the <code>users.email</code> row. In most OIDC setups that&#x27;s</p>
+<p>exactly <code>email</code>; for deployments that use a different claim shape, this</p>
+<p>is the single knob to turn.</p>
+<p>The internal <code>users</code> table remains the authoritative source of</p>
+<p><code>organization_id</code> and <code>role</code>. Tokens carry identity, not authorization.</p>
+<h2>Test hook</h2>
+<p><code>apps/api/app/auth.py::set_jwk_client(client)</code> lets tests inject a fake</p>
+<p>JWKS client. The real <code>PyJWKClient</code> is used in production. This is the</p>
+<p>only crack in the wall that tests are allowed to poke.</p>
+<h2>Bearer-mode test coverage (<code>tests/test_auth_modes.py</code>)</h2>
+<table><thead><tr><th>Scenario</th><th>Result</th></tr></thead><tbody>
+<tr><td>Bearer mode without JWT env → <code>RuntimeError</code> at import</td><td>✅</td></tr>
+<tr><td>Header mode default contract unchanged</td><td>✅</td></tr>
+<tr><td>Valid RS256 token + known user → 200 with role/org</td><td>✅</td></tr>
+<tr><td>Missing Authorization → 401 <code>missing_auth_header</code></td><td>✅</td></tr>
+<tr><td>Non-Bearer scheme → 401 <code>invalid_authorization_header</code></td><td>✅</td></tr>
+<tr><td>Garbage token → 401 <code>invalid_token</code></td><td>✅</td></tr>
+<tr><td>Wrong issuer → 401 <code>invalid_issuer</code></td><td>✅</td></tr>
+<tr><td>Wrong audience → 401 <code>invalid_audience</code></td><td>✅</td></tr>
+<tr><td>Expired token → 401 <code>token_expired</code></td><td>✅</td></tr>
+<tr><td>Valid token, claim points at unknown user → 401 <code>unknown_user</code></td><td>✅</td></tr>
+<tr><td>Valid token missing the configured claim → 401 <code>missing_user_claim</code></td><td>✅</td></tr>
 </tbody></table>
-<h2>Tests</h2>
-<p><code>apps/api/tests/test_auth_modes.py</code>:</p>
+<p>Tests generate a local RSA keypair and sign tokens with it, then inject</p>
+<p>a lightweight JWKS stub via <code>set_jwk_client(...)</code> so no network calls</p>
+<p>happen.</p>
+<h2>What still isn&#x27;t covered in this phase</h2>
 <ul>
-<li><code>test_bearer_mode_requires_jwt_env</code> — setting <code>CHARTNAV_AUTH_MODE=bearer</code></li>
+<li>No JWKS rotation test (we cache aggressively via PyJWKClient).</li>
+<li>No HS256 / shared-secret flow — intentionally; production should be asymmetric.</li>
+<li>No refresh-token dance. ChartNav only validates access tokens.</li>
+<li>No revocation list. If a token needs to be killed before <code>exp</code>, the identity provider has to roll the signing key (or the user&#x27;s <code>users</code> row can be deleted, which takes the caller down one hop later).</li>
 </ul>
-<p>without issuer/audience/JWKS raises at <code>import app.config</code>.</p>
-<ul>
-<li><code>test_bearer_mode_refuses_to_serve_traffic</code> — with JWT config set, bearer</li>
-</ul>
-<p>requests still get a clear 501 <code>auth_bearer_not_implemented</code>; missing</p>
-<p>header returns 401 <code>missing_auth_header</code>.</p>
-<ul>
-<li><code>test_header_mode_unchanged_contract</code> — header mode (the default) still</li>
-</ul>
-<p>resolves seeded users to the expected role/org.</p>
 </section>
 <section id="sec-13"><h2>12 — Runtime config</h2>
 <h1>Runtime Configuration</h1>
@@ -919,13 +965,16 @@ HTTP 501
 <p>other module imports from there; nothing else reads <code>os.environ</code>.</p>
 <h2>The contract</h2>
 <table><thead><tr><th>Variable</th><th>Required?</th><th>Default</th><th>Purpose</th></tr></thead><tbody>
-<tr><td><code>CHARTNAV_ENV</code></td><td>no</td><td><code>dev</code></td><td>Informational label (<code>dev</code>/<code>test</code>/<code>ci</code>/<code>prod</code>).</td></tr>
-<tr><td><code>DATABASE_URL</code></td><td>no (dev default)</td><td><code>sqlite:///apps/api/chartnav.db</code></td><td>SQLAlchemy URL. Supports <code>sqlite:///...</code> and <code>postgresql+psycopg://...</code>.</td></tr>
-<tr><td><code>CHARTNAV_AUTH_MODE</code></td><td>no</td><td><code>header</code></td><td><code>header</code> (dev only) or <code>bearer</code> (prod placeholder).</td></tr>
+<tr><td><code>CHARTNAV_ENV</code></td><td>no</td><td><code>dev</code></td><td>Informational label.</td></tr>
+<tr><td><code>DATABASE_URL</code></td><td>no (dev default)</td><td><code>sqlite:///apps/api/chartnav.db</code></td><td>SQLAlchemy URL. SQLite + Postgres.</td></tr>
+<tr><td><code>CHARTNAV_AUTH_MODE</code></td><td>no</td><td><code>header</code></td><td><code>header</code> (dev) or <code>bearer</code> (prod, real JWT).</td></tr>
 <tr><td><code>CHARTNAV_JWT_ISSUER</code></td><td><strong>yes iff</strong> <code>AUTH_MODE=bearer</code></td><td>—</td><td>OIDC issuer URL.</td></tr>
 <tr><td><code>CHARTNAV_JWT_AUDIENCE</code></td><td><strong>yes iff</strong> <code>AUTH_MODE=bearer</code></td><td>—</td><td>Expected <code>aud</code> claim.</td></tr>
 <tr><td><code>CHARTNAV_JWT_JWKS_URL</code></td><td><strong>yes iff</strong> <code>AUTH_MODE=bearer</code></td><td>—</td><td>JWKS endpoint for signing-key lookup.</td></tr>
-<tr><td><code>CHARTNAV_RUN_SEED</code></td><td>no</td><td><code>0</code></td><td>Entrypoint: run <code>scripts_seed.py</code> after migrations. Keep <code>0</code> in prod.</td></tr>
+<tr><td><code>CHARTNAV_JWT_USER_CLAIM</code></td><td>no</td><td><code>email</code></td><td>Token claim used to map to <code>users.email</code>.</td></tr>
+<tr><td><code>CHARTNAV_CORS_ALLOW_ORIGINS</code></td><td>no</td><td><code>http://localhost:5173,127.0.0.1:5173,localhost:5174,127.0.0.1:5174</code></td><td>CSV. Empty string ⇒ same-origin only.</td></tr>
+<tr><td><code>CHARTNAV_RATE_LIMIT_PER_MINUTE</code></td><td>no</td><td><code>120</code></td><td>Per-process sliding window on authed paths. <code>0</code> disables.</td></tr>
+<tr><td><code>CHARTNAV_RUN_SEED</code></td><td>no</td><td><code>0</code></td><td>Entrypoint: run seed after migrations. Keep <code>0</code> in prod.</td></tr>
 <tr><td><code>API_HOST</code> / <code>API_PORT</code></td><td>no</td><td><code>0.0.0.0</code> / <code>8000</code></td><td>Uvicorn bind.</td></tr>
 </tbody></table>
 <h2>Validation on startup</h2>
@@ -1546,7 +1595,108 @@ docker compose -f infra/docker/docker-compose.prod.yml up -d
 <li>No signing / SBOM yet. Those are safe to add on top of this pipeline.</li>
 </ul>
 </section>
-<section id="sec-19"><h2>Diagram — System architecture</h2>
+<section id="sec-19"><h2>18 — Operational hardening</h2>
+<h1>Operational Hardening</h1>
+<p>Landing this phase gives ChartNav four production-baseline primitives</p>
+<p>that every long-running service needs: <strong>request correlation</strong>,</p>
+<p><strong>structured logs</strong>, <strong>audit trail for denied access</strong>, and **abuse</p>
+<p>protection**.</p>
+<h2>1. Request correlation</h2>
+<p>Middleware: <code>apps/api/app/middleware.py::RequestIdMiddleware</code>.</p>
+<ul>
+<li>Every request gets a <code>request_id</code> on <code>request.state</code>.</li>
+<li>Honors an inbound <code>X-Request-ID</code> if it&#x27;s a reasonable length (≤ 64 chars); else generates a fresh UUID4 hex.</li>
+<li>Always echoed back as <code>X-Request-ID</code> on the response — including error responses (the exception handler copies it through).</li>
+</ul>
+<h2>2. Structured logging</h2>
+<p>Module: <code>apps/api/app/logging_config.py</code>.</p>
+<ul>
+<li>JSON-per-line to stdout via <code>JsonFormatter</code>.</li>
+<li>Fields: <code>timestamp</code> (UTC ISO8601), <code>level</code>, <code>logger</code>, <code>message</code>, plus any <code>extra={}</code> the caller passes.</li>
+<li><code>AccessLogMiddleware</code> emits one line per request with <code>request_id</code>, <code>method</code>, <code>path</code>, <code>status</code>, <code>duration_ms</code>, <code>user_email</code> (from resolved caller), <code>organization_id</code>, <code>remote_addr</code>.</li>
+<li>The HTTP exception handler emits a <code>WARNING auth_denied</code> line for every denied auth/scoping response, attaching <code>error_code</code> and caller context.</li>
+<li>Uvicorn&#x27;s access logger is quieted to avoid duplicating our access log.</li>
+</ul>
+<p>Log sample (pretty-printed here for readability):</p>
+<pre class="code lang-json"><code>
+{&quot;timestamp&quot;:&quot;2026-04-18T05:35:45Z&quot;,&quot;level&quot;:&quot;INFO&quot;,&quot;logger&quot;:&quot;chartnav.http&quot;,
+ &quot;message&quot;:&quot;request&quot;,&quot;request_id&quot;:&quot;494e2888ab414831805bf79cdefa7fc2&quot;,
+ &quot;method&quot;:&quot;GET&quot;,&quot;path&quot;:&quot;/me&quot;,&quot;status&quot;:401,&quot;duration_ms&quot;:3.55,
+ &quot;user_email&quot;:null,&quot;organization_id&quot;:null,&quot;remote_addr&quot;:&quot;testclient&quot;}
+</code></pre>
+<h2>3. Security audit trail</h2>
+<p>Module: <code>apps/api/app/audit.py</code>.</p>
+<p>Migration: <code>b2c3d4e5f6a7 — add security_audit_events</code>.</p>
+<h3>Schema</h3>
+<p>Table <code>security_audit_events</code>:</p>
+<ul>
+<li><code>id</code>, <code>event_type</code>, <code>request_id</code>, <code>actor_email</code>, <code>actor_user_id</code>, <code>organization_id</code>, <code>path</code>, <code>method</code>, <code>error_code</code>, <code>detail</code>, <code>remote_addr</code>, <code>created_at</code>.</li>
+<li>Indexed on <code>event_type</code>, <code>actor_email</code>, <code>created_at</code>.</li>
+</ul>
+<h3>What gets audited</h3>
+<p>The HTTP exception handler (<code>apps/api/app/main.py::_http_exception_handler</code>) writes an audit row when:</p>
+<ul>
+<li>The response is <strong>401</strong> or <strong>403</strong>, or</li>
+<li>The response <code>error_code</code> is in the <code>AUDITED_ERROR_CODES</code> set:</li>
+</ul>
+<p><code>missing_auth_header</code>, <code>unknown_user</code>, <code>invalid_authorization_header</code>, <code>invalid_token</code>, <code>token_expired</code>, <code>invalid_issuer</code>, <code>invalid_audience</code>, <code>missing_user_claim</code>, <code>cross_org_access_forbidden</code>, <code>role_forbidden</code>, <code>role_cannot_create_encounter</code>, <code>role_cannot_create_event</code>, <code>role_cannot_transition</code>, <code>rate_limited</code>.</p>
+<h3>What is NOT audited</h3>
+<ul>
+<li>No raw JWT or <code>Authorization</code> header value.</li>
+<li>No password material (there isn&#x27;t any, but explicitly).</li>
+<li>No successful requests — those belong in the access log.</li>
+</ul>
+<h3>Never-throw guarantee</h3>
+<p><code>audit.record(...)</code> swallows its own exceptions. A broken audit insert cannot mask the underlying 4xx the user actually hit.</p>
+<h2>4. CORS</h2>
+<ul>
+<li><code>allow_origins=[&quot;*&quot;]</code> is gone.</li>
+<li>Driven by <code>CHARTNAV_CORS_ALLOW_ORIGINS</code> (comma-separated). Default covers Vite dev on <code>:5173</code> + E2E on <code>:5174</code>.</li>
+<li>In production, set it explicitly to the real frontend origin(s).</li>
+<li>Empty string → same-origin only.</li>
+<li><code>allow_credentials=true</code>; <code>allow_headers</code> is limited to <code>Authorization</code>, <code>Content-Type</code>, <code>X-User-Email</code>, <code>X-Request-ID</code>; <code>expose_headers</code> exposes <code>X-Request-ID</code> so browsers can surface it for debugging.</li>
+</ul>
+<h2>5. Rate limiting</h2>
+<p>Middleware: <code>apps/api/app/middleware.py::RateLimitMiddleware</code>.</p>
+<ul>
+<li>In-memory sliding window (60s), per-process.</li>
+<li>Keyed on <code>(client_ip, path)</code>.</li>
+<li><code>CHARTNAV_RATE_LIMIT_PER_MINUTE</code> (default 120). <code>0</code> disables.</li>
+<li>Protects <code>/me</code>, <code>/encounters</code>, <code>/organizations</code>, <code>/locations</code>, <code>/users</code> (and descendants). <code>/health</code> and <code>/</code> are never rate-limited.</li>
+<li>On limit exceed: <code>HTTP 429</code> with standardized envelope <code>{error_code: &quot;rate_limited&quot;, reason: ...}</code> AND an audit row.</li>
+<li>Honest limitation: <strong>per-process</strong>, not distributed. Multi-worker / multi-node deployments should sit behind an edge limiter that coordinates globally. Documented in <code>12-runtime-config.md</code>.</li>
+</ul>
+<h2>Config reference</h2>
+<table><thead><tr><th>Env var</th><th>Default</th></tr></thead><tbody>
+<tr><td><code>CHARTNAV_CORS_ALLOW_ORIGINS</code></td><td><code>http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174</code></td></tr>
+<tr><td><code>CHARTNAV_RATE_LIMIT_PER_MINUTE</code></td><td><code>120</code></td></tr>
+</tbody></table>
+<p>See <code>12-runtime-config.md</code> for the full contract.</p>
+<h2>Test coverage</h2>
+<p><code>apps/api/tests/test_operational.py</code> (12 tests):</p>
+<table><thead><tr><th>Scenario</th><th>Result</th></tr></thead><tbody>
+<tr><td>Inbound <code>X-Request-ID</code> round-trips</td><td>✅</td></tr>
+<tr><td>Missing <code>X-Request-ID</code> → server generates one</td><td>✅</td></tr>
+<tr><td>Error responses also carry <code>X-Request-ID</code></td><td>✅</td></tr>
+<tr><td>Audit row on <code>missing_auth_header</code></td><td>✅</td></tr>
+<tr><td>Audit row on <code>unknown_user</code></td><td>✅</td></tr>
+<tr><td>Audit row on <code>cross_org_access_forbidden</code> (query lens)</td><td>✅</td></tr>
+<tr><td>Audit row on <code>role_cannot_create_encounter</code></td><td>✅</td></tr>
+<tr><td>No audit row on successful requests</td><td>✅</td></tr>
+<tr><td>Rate limit returns <strong>429 <code>rate_limited</code></strong> with envelope</td><td>✅</td></tr>
+<tr><td>Rate limit disabled when <code>CHARTNAV_RATE_LIMIT_PER_MINUTE=0</code></td><td>✅</td></tr>
+<tr><td>CORS preflight allows a configured origin</td><td>✅</td></tr>
+<tr><td>CORS preflight rejects an unconfigured origin</td><td>✅</td></tr>
+</tbody></table>
+<h2>Remaining gaps</h2>
+<ul>
+<li>Rate limiter is in-memory per process — see above.</li>
+<li>Distributed tracing (OpenTelemetry) not wired yet.</li>
+<li>No log shipping / retention policy defined.</li>
+<li>Audit table has no retention/archival yet.</li>
+</ul>
+</section>
+<section id="sec-20"><h2>Diagram — System architecture</h2>
 <h1>System Architecture</h1>
 <div class="mermaid">
 flowchart LR
@@ -1557,9 +1707,13 @@ flowchart LR
   end
 
   subgraph Runtime["Backend (apps/api, FastAPI)"]
-    FastAPI["main.py"]
+    FastAPI["main.py<br/>+ exception handler → audit"]
+    RID["RequestIdMiddleware"]
+    Access["AccessLogMiddleware<br/>(JSON logs)"]
+    Rate["RateLimitMiddleware<br/>(60s window)"]
+    Audit[("security_audit_events")]
     Config["config.py<br/>env-driven settings"]
-    Authn["require_caller<br/>header · bearer"]
+    Authn["require_caller<br/>header · bearer (PyJWKClient)"]
     Authz["authz.py RBAC"]
     Router["routes.py"]
     SM["State Machine"]
@@ -1594,7 +1748,11 @@ flowchart LR
   end
 
   UI --> ApiClient
-  ApiClient -->|"HTTP + X-User-Email"| FastAPI
+  ApiClient -->|"HTTP + X-User-Email or Bearer"| RID
+  RID --> Access
+  Access --> Rate
+  Rate --> FastAPI
+  FastAPI -. audits denials .-> Audit
   Ident -. stored caller .-> ApiClient
 
   FastAPI --> Authn
@@ -1630,7 +1788,7 @@ flowchart LR
   Compose --> PG
 </div>
 </section>
-<section id="sec-20"><h2>Diagram — Encounter status machine</h2>
+<section id="sec-21"><h2>Diagram — Encounter status machine</h2>
 <h1>Encounter Status State Machine</h1>
 <div class="mermaid">
 stateDiagram-v2
@@ -1652,7 +1810,7 @@ stateDiagram-v2
 <p>Legend: any edge not shown is rejected at <code>POST /encounters/{id}/status</code></p>
 <p>with HTTP 400 <code>invalid_transition</code>.</p>
 </section>
-<section id="sec-21"><h2>Diagram — ER</h2>
+<section id="sec-22"><h2>Diagram — ER</h2>
 <h1>ER Diagram</h1>
 <div class="mermaid">
 erDiagram
@@ -1661,6 +1819,21 @@ erDiagram
   organizations ||--o{ encounters       : "owns"
   locations     ||--o{ encounters       : "hosts"
   encounters    ||--o{ workflow_events  : "emits"
+
+  security_audit_events {
+    int id PK
+    string event_type
+    string request_id
+    string actor_email
+    int actor_user_id
+    int organization_id
+    string path
+    string method
+    string error_code
+    text detail
+    string remote_addr
+    datetime created_at
+  }
 
   organizations {
     int id PK
@@ -1716,7 +1889,7 @@ erDiagram
 <p><code>users.organization_id</code> is the authoritative source of scope; never</p>
 <p>derived from client input.</p>
 </section>
-<section id="sec-22"><h2>Diagram — API / data flow</h2>
+<section id="sec-23"><h2>Diagram — API / data flow</h2>
 <h1>API / Data Flow &amp; CI</h1>
 <h2>UI → Backend request path</h2>
 <div class="mermaid">
@@ -1797,6 +1970,35 @@ flowchart TD
   subgraph "docs"
     X1[apt chromium] --> X2[build_docs.py]
     X2 --> X3[upload artifact]
+  end
+</div>
+<h2>Bearer mode + audit trail (phase 10)</h2>
+<div class="mermaid">
+sequenceDiagram
+  autonumber
+  participant C as Client
+  participant RID as RequestIdMiddleware
+  participant Rate as RateLimitMiddleware
+  participant Authn as require_caller (bearer)
+  participant JWKS as JWKS URL (PyJWKClient)
+  participant R as Route
+  participant EH as HTTPException handler
+  participant Audit as security_audit_events
+
+  C->>RID: GET /me<br/>Authorization: Bearer <jwt>
+  RID->>Rate: request + request.state.request_id
+  Rate->>Authn: request (within window)
+  Authn->>JWKS: get_signing_key_from_jwt(token)
+  JWKS-->>Authn: public key
+  Authn->>Authn: jwt.decode — sig + iss + aud + exp
+  alt invalid token / iss / aud / expired / missing claim / unknown user
+    Authn-->>EH: HTTPException(status=401, error_code=...)
+    EH->>Audit: record(event_type, request_id, path, method, remote_addr, ...)
+    EH-->>C: 401 + X-Request-ID
+  else valid
+    Authn->>Authn: SELECT users WHERE email = claim
+    Authn-->>R: Caller(user_id, role, organization_id)
+    R-->>C: 200 + X-Request-ID
   end
 </div>
 <h2>Release pipeline</h2>

@@ -5,16 +5,19 @@ other module imports from there; nothing else reads `os.environ`.
 
 ## The contract
 
-| Variable                  | Required?                        | Default                       | Purpose |
-|---------------------------|----------------------------------|-------------------------------|---------|
-| `CHARTNAV_ENV`            | no                               | `dev`                         | Informational label (`dev`/`test`/`ci`/`prod`). |
-| `DATABASE_URL`            | no (dev default)                 | `sqlite:///apps/api/chartnav.db` | SQLAlchemy URL. Supports `sqlite:///...` and `postgresql+psycopg://...`. |
-| `CHARTNAV_AUTH_MODE`      | no                               | `header`                      | `header` (dev only) or `bearer` (prod placeholder). |
-| `CHARTNAV_JWT_ISSUER`     | **yes iff** `AUTH_MODE=bearer`   | —                             | OIDC issuer URL. |
-| `CHARTNAV_JWT_AUDIENCE`   | **yes iff** `AUTH_MODE=bearer`   | —                             | Expected `aud` claim. |
-| `CHARTNAV_JWT_JWKS_URL`   | **yes iff** `AUTH_MODE=bearer`   | —                             | JWKS endpoint for signing-key lookup. |
-| `CHARTNAV_RUN_SEED`       | no                               | `0`                           | Entrypoint: run `scripts_seed.py` after migrations. Keep `0` in prod. |
-| `API_HOST` / `API_PORT`   | no                               | `0.0.0.0` / `8000`            | Uvicorn bind. |
+| Variable                            | Required?                        | Default                                | Purpose |
+|-------------------------------------|----------------------------------|----------------------------------------|---------|
+| `CHARTNAV_ENV`                      | no                               | `dev`                                  | Informational label. |
+| `DATABASE_URL`                      | no (dev default)                 | `sqlite:///apps/api/chartnav.db`       | SQLAlchemy URL. SQLite + Postgres. |
+| `CHARTNAV_AUTH_MODE`                | no                               | `header`                               | `header` (dev) or `bearer` (prod, real JWT). |
+| `CHARTNAV_JWT_ISSUER`               | **yes iff** `AUTH_MODE=bearer`   | —                                      | OIDC issuer URL. |
+| `CHARTNAV_JWT_AUDIENCE`             | **yes iff** `AUTH_MODE=bearer`   | —                                      | Expected `aud` claim. |
+| `CHARTNAV_JWT_JWKS_URL`             | **yes iff** `AUTH_MODE=bearer`   | —                                      | JWKS endpoint for signing-key lookup. |
+| `CHARTNAV_JWT_USER_CLAIM`           | no                               | `email`                                | Token claim used to map to `users.email`. |
+| `CHARTNAV_CORS_ALLOW_ORIGINS`       | no                               | `http://localhost:5173,127.0.0.1:5173,localhost:5174,127.0.0.1:5174` | CSV. Empty string ⇒ same-origin only. |
+| `CHARTNAV_RATE_LIMIT_PER_MINUTE`    | no                               | `120`                                  | Per-process sliding window on authed paths. `0` disables. |
+| `CHARTNAV_RUN_SEED`                 | no                               | `0`                                    | Entrypoint: run seed after migrations. Keep `0` in prod. |
+| `API_HOST` / `API_PORT`             | no                               | `0.0.0.0` / `8000`                     | Uvicorn bind. |
 
 ## Validation on startup
 

@@ -1,91 +1,79 @@
 # Production-Auth Seam
 
-## Goal
+## State (after phase 10)
 
-Make auth transport swappable without touching routes or RBAC.
+Bearer mode is no longer a placeholder — it performs real JWT validation
+against a JWKS endpoint. Header mode is preserved for local/dev.
 
-## Where the seam lives
+## Transports
 
-`apps/api/app/auth.py` exposes a single FastAPI dependency:
+| Mode      | State       | Behavior                                                       |
+|-----------|-------------|----------------------------------------------------------------|
+| `header`  | implemented | Reads `X-User-Email`, resolves from `users`. Dev only.         |
+| `bearer`  | implemented | Reads `Authorization: Bearer <jwt>`, validates signature/iss/aud/exp against `CHARTNAV_JWT_JWKS_URL`, maps to a `users` row by `CHARTNAV_JWT_USER_CLAIM` (default `email`). |
 
-```python
-def require_caller(x_user_email: ..., authorization: ...) -> Caller:
-    mode = settings.auth_mode
-    if mode == "header":  return resolve_caller_from_header(...)
-    if mode == "bearer":  return resolve_caller_from_bearer(...)
-    raise ...
-```
+Both produce the same `Caller(user_id, email, full_name, role, organization_id)`.
 
-Both resolvers return the **same** `Caller` contract:
+## JWT validation specifics
 
-```python
-Caller(user_id, email, full_name, role, organization_id)
-```
+Implemented in `apps/api/app/auth.py::resolve_caller_from_bearer`:
 
-Every route, every RBAC helper, every test depends on `Caller`, not on a
-specific header. Changing transports is a one-file edit inside `auth.py`.
+1. Parse `Authorization: Bearer <token>`. Missing → 401 `missing_auth_header`. Malformed → 401 `invalid_authorization_header`.
+2. Look up the signing key via `PyJWKClient(settings.jwt_jwks_url)` (cached). Failure → 401 `invalid_token`.
+3. `jwt.decode(...)` with:
+   - Algorithms: `RS256 / RS384 / RS512 / ES256 / ES384 / ES512`
+   - `issuer=settings.jwt_issuer`
+   - `audience=settings.jwt_audience`
+   - `options={"require": ["exp", "iss", "aud"]}`
+4. Specific error codes per failure:
+   - `token_expired` — `exp` in the past
+   - `invalid_issuer` — `iss` mismatch
+   - `invalid_audience` — `aud` mismatch
+   - `invalid_token` — any other JWT error
+5. Pull `settings.jwt_user_claim` (default `email`) out of the claims. Missing / non-string → 401 `missing_user_claim`.
+6. `fetch_one` against `users`. Missing → 401 `unknown_user`.
 
-## Mode selection
+No fallbacks. No "if token looks roughly ok, let it through". Fail closed.
 
-`CHARTNAV_AUTH_MODE` in the environment (see `12-runtime-config.md`):
+## Claim mapping
 
-| Value    | State       | Behavior                                               |
-|----------|-------------|--------------------------------------------------------|
-| `header` | implemented | Reads `X-User-Email`, looks up `users`. Dev only.      |
-| `bearer` | placeholder | Requires `Authorization: Bearer …`; returns 501 because JWT validation is not yet wired. |
+`CHARTNAV_JWT_USER_CLAIM` (default `email`) names the claim whose value
+is used to look up the `users.email` row. In most OIDC setups that's
+exactly `email`; for deployments that use a different claim shape, this
+is the single knob to turn.
 
-Unknown values cause `app.config` to refuse to import — fail fast.
+The internal `users` table remains the authoritative source of
+`organization_id` and `role`. Tokens carry identity, not authorization.
 
-## Bearer mode — honest placeholder
+## Test hook
 
-When `CHARTNAV_AUTH_MODE=bearer` is selected, `app.config._load()`
-verifies these three values are all present before letting the app come
-up at all:
+`apps/api/app/auth.py::set_jwk_client(client)` lets tests inject a fake
+JWKS client. The real `PyJWKClient` is used in production. This is the
+only crack in the wall that tests are allowed to poke.
 
-- `CHARTNAV_JWT_ISSUER`
-- `CHARTNAV_JWT_AUDIENCE`
-- `CHARTNAV_JWT_JWKS_URL`
+## Bearer-mode test coverage (`tests/test_auth_modes.py`)
 
-Missing any one → `RuntimeError` at import time with the list of
-missing vars. The app will not start with a half-configured bearer
-setup.
+| Scenario                                                   | Result |
+|------------------------------------------------------------|--------|
+| Bearer mode without JWT env → `RuntimeError` at import     | ✅ |
+| Header mode default contract unchanged                     | ✅ |
+| Valid RS256 token + known user → 200 with role/org         | ✅ |
+| Missing Authorization → 401 `missing_auth_header`          | ✅ |
+| Non-Bearer scheme → 401 `invalid_authorization_header`     | ✅ |
+| Garbage token → 401 `invalid_token`                        | ✅ |
+| Wrong issuer → 401 `invalid_issuer`                        | ✅ |
+| Wrong audience → 401 `invalid_audience`                    | ✅ |
+| Expired token → 401 `token_expired`                        | ✅ |
+| Valid token, claim points at unknown user → 401 `unknown_user` | ✅ |
+| Valid token missing the configured claim → 401 `missing_user_claim` | ✅ |
 
-When bearer mode is active and fully configured, `resolve_caller_from_bearer`
-currently returns:
+Tests generate a local RSA keypair and sign tokens with it, then inject
+a lightweight JWKS stub via `set_jwk_client(...)` so no network calls
+happen.
 
-```
-HTTP 501
-{"detail": {"error_code": "auth_bearer_not_implemented",
-            "reason": "bearer-token validation is not implemented in this phase; set CHARTNAV_AUTH_MODE=header for local dev"}}
-```
+## What still isn't covered in this phase
 
-This is intentional. A future phase will wire real JWT signature
-verification (PyJWT + JWKS fetch against `CHARTNAV_JWT_JWKS_URL`,
-issuer/audience checks, claim → `users` lookup). When it ships, only
-the body of `resolve_caller_from_bearer` changes.
-
-## What production-ready vs not yet implemented
-
-| Component                  | State                                      |
-|----------------------------|--------------------------------------------|
-| Mode selection + config    | ✅ production-shaped; fails fast on gaps   |
-| Standardized error envelope| ✅ `{error_code, reason}` everywhere       |
-| Header transport           | ✅ works; dev only, do not expose          |
-| Bearer transport           | ⚠ placeholder — returns 501 honestly       |
-| JWT signature validation   | ❌ not implemented                         |
-| JWKS rotation / cache      | ❌ not implemented                         |
-| Token → `users` mapping    | ❌ not implemented (design TBD)            |
-| RBAC integration           | ✅ works for any transport via `Caller`    |
-| Org scoping integration    | ✅ works for any transport via `Caller`    |
-
-## Tests
-
-`apps/api/tests/test_auth_modes.py`:
-
-- `test_bearer_mode_requires_jwt_env` — setting `CHARTNAV_AUTH_MODE=bearer`
-  without issuer/audience/JWKS raises at `import app.config`.
-- `test_bearer_mode_refuses_to_serve_traffic` — with JWT config set, bearer
-  requests still get a clear 501 `auth_bearer_not_implemented`; missing
-  header returns 401 `missing_auth_header`.
-- `test_header_mode_unchanged_contract` — header mode (the default) still
-  resolves seeded users to the expected role/org.
+- No JWKS rotation test (we cache aggressively via PyJWKClient).
+- No HS256 / shared-secret flow — intentionally; production should be asymmetric.
+- No refresh-token dance. ChartNav only validates access tokens.
+- No revocation list. If a token needs to be killed before `exp`, the identity provider has to roll the signing key (or the user's `users` row can be deleted, which takes the caller down one hop later).

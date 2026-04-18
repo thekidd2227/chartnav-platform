@@ -39,6 +39,27 @@ CHECK constraint, add it in a future migration.
 ### `encounters` and `workflow_events`
 Unchanged.
 
+### `security_audit_events` (added in phase 10)
+
+| column          | type         | constraints                           |
+|-----------------|--------------|---------------------------------------|
+| id              | INTEGER      | PK                                    |
+| event_type      | VARCHAR(100) | NOT NULL, indexed                     |
+| request_id      | VARCHAR(64)  | NULL                                  |
+| actor_email     | VARCHAR(255) | NULL, indexed                         |
+| actor_user_id   | INTEGER      | NULL                                  |
+| organization_id | INTEGER      | NULL                                  |
+| path            | VARCHAR(512) | NULL                                  |
+| method          | VARCHAR(16)  | NULL                                  |
+| error_code      | VARCHAR(100) | NULL                                  |
+| detail          | TEXT         | NULL                                  |
+| remote_addr     | VARCHAR(64)  | NULL                                  |
+| created_at      | DATETIME     | NOT NULL default now(), indexed       |
+
+No FKs — audit rows must survive user/org deletion. Populated only on
+denied or suspicious access (see `18-operational-hardening.md`).
+Migration: `b2c3d4e5f6a7`.
+
 ## Seeded tenants (two, with full role coverage)
 
 ### Org 1 — `demo-eye-clinic` (id=1)

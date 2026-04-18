@@ -41,6 +41,7 @@ SECTIONS = [
     ("15 — Frontend integration", BUILD / "15-frontend-integration.md"),
     ("16 — Frontend test strategy", BUILD / "16-frontend-test-strategy.md"),
     ("17 — E2E & release", BUILD / "17-e2e-and-release.md"),
+    ("18 — Operational hardening", BUILD / "18-operational-hardening.md"),
     ("Diagram — System architecture", DIAGR / "system-architecture.md"),
     ("Diagram — Encounter status machine", DIAGR / "encounter-status-machine.md"),
     ("Diagram — ER", DIAGR / "er-diagram.md"),
@@ -67,9 +68,11 @@ date.
 
 **Phase 8 — Create UI + frontend tests + frontend CI.** Admin/clinician can create encounters through a modal; Vitest + Testing Library harness (12 tests) locks the UI down; dedicated `frontend` CI job runs typecheck + tests + build on every push/PR.
 
-**Phase 9 — Playwright E2E + release pipeline (this phase).** Playwright boots backend and frontend together on ephemeral ports (SQLite-backed seed), drives 8 real Chromium scenarios covering identity resolution, scope switching, encounter create, event append, role-aware transitions, reviewer restrictions, unknown-email auth surface, and filters. A new `e2e` CI job runs the full browser suite on every PR. A new `release.yml` workflow triggers on `v*.*.*` tags, pushes `ghcr.io/<owner>/chartnav-api:<version>` via Buildx, runs `scripts/release_build.sh` to produce `chartnav-api-<version>.tar` + `chartnav-web-<version>.tar.gz` + a sha256 manifest, and attaches the artifacts to an auto-generated GitHub Release. No backend contract changes.
+**Phase 9 — Playwright E2E + release pipeline.** Playwright boots backend + frontend together, 8 Chromium scenarios, new `e2e` CI job. `release.yml` workflow on `v*.*.*` tags: GHCR push + release bundle + GitHub Release with tarballs and MANIFEST.
 
-Preserved untouched: `/health`, `/`, Alembic history, SQLite dev workflow, state machine + filtering surface, workflow_events model, existing endpoint contracts.
+**Phase 10 — Real JWT bearer auth + operational hardening (this phase).** `resolve_caller_from_bearer` now performs real PyJWT validation against a JWKS URL (signature + iss + aud + exp + claim mapping). Every request gets a correlated `X-Request-ID`. Structured JSON access + auth-denied logs. New `security_audit_events` table (migration `b2c3d4e5f6a7`) writes one row per denied/suspicious access attempt via a central HTTP exception handler. `allow_origins=["*"]` is gone — CORS is env-driven (`CHARTNAV_CORS_ALLOW_ORIGINS`). Per-process sliding-window rate limiter protects authed paths (`CHARTNAV_RATE_LIMIT_PER_MINUTE`, default 120). Backend suite grows to 48 tests including 11 bearer scenarios and 12 operational scenarios. No endpoint contract changes.
+
+Preserved untouched: `/health`, `/`, SQLite dev workflow, state machine + filtering surface, workflow_events model, existing endpoint contracts.
 """
 
 

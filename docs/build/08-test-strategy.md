@@ -65,6 +65,12 @@ make docker-build
 - `make verify` (SQLite): 28 pytest + 9 smoke — all green
 - `scripts/pg_verify.sh`: migrations + seed (x2) + smoke + status transition + event write — **PASS**
 
+## Backend coverage (phase 10)
+
+- 48 pytest tests across `test_auth`, `test_auth_modes`, `test_rbac`, `test_scoping`, `test_operational`.
+- Real JWT validation via a locally generated RSA keypair; no external IdP.
+- Audit + request-id + rate-limit + CORS all asserted at the integration level.
+
 ## Frontend verification (phase 8)
 
 - `make web-verify` = `npm run typecheck` + `npm test` + `npm run build`.

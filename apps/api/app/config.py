@@ -37,16 +37,32 @@ class Settings:
     #   postgresql+psycopg://user:pw@host:5432/db
     database_url: str
 
-    # Auth transport. Only "header" is fully implemented.
-    # "bearer" is an honest placeholder — requests are rejected with a
-    # clear 501 unless JWT settings are supplied AND validation code is
-    # wired (it is NOT in this phase).
+    # Auth transport.
+    #   "header"  → dev. Reads `X-User-Email` and resolves against `users`.
+    #   "bearer"  → production. Reads `Authorization: Bearer <jwt>` and
+    #              validates signature/iss/aud/exp against a JWKS endpoint.
     auth_mode: str
 
-    # JWT placeholders (production will need all three).
+    # JWT (production). Required when auth_mode == "bearer".
     jwt_issuer: str | None
     jwt_audience: str | None
     jwt_jwks_url: str | None
+    # Claim used to map the token to a row in `users`. Default "email".
+    jwt_user_claim: str
+
+    # CORS — comma-separated list of origins. Empty string → deny all
+    # cross-origin traffic (same-origin only).
+    cors_allow_origins: tuple[str, ...]
+
+    # Rate limiting (per-process, in-memory). Requests per minute per
+    # client (remote addr + path). 0 disables.
+    rate_limit_per_minute: int
+
+
+_DEFAULT_CORS = (
+    "http://localhost:5173,http://127.0.0.1:5173,"
+    "http://localhost:5174,http://127.0.0.1:5174"
+)
 
 
 def _load() -> Settings:
@@ -56,6 +72,19 @@ def _load() -> Settings:
     jwt_issuer = _env("CHARTNAV_JWT_ISSUER")
     jwt_audience = _env("CHARTNAV_JWT_AUDIENCE")
     jwt_jwks_url = _env("CHARTNAV_JWT_JWKS_URL")
+    jwt_user_claim = _env("CHARTNAV_JWT_USER_CLAIM", "email") or "email"
+
+    cors_raw = _env("CHARTNAV_CORS_ALLOW_ORIGINS", _DEFAULT_CORS) or ""
+    cors_allow_origins = tuple(
+        o.strip() for o in cors_raw.split(",") if o.strip()
+    )
+
+    try:
+        rate_limit_per_minute = int(
+            _env("CHARTNAV_RATE_LIMIT_PER_MINUTE", "120") or "120"
+        )
+    except ValueError:
+        raise RuntimeError("CHARTNAV_RATE_LIMIT_PER_MINUTE must be an integer")
 
     # Validate combinations. Fail loudly at import time rather than
     # silently accepting half-configured production auth.
@@ -77,9 +106,6 @@ def _load() -> Settings:
             raise RuntimeError(
                 "CHARTNAV_AUTH_MODE=bearer requires: " + ", ".join(missing)
             )
-        # NOTE: bearer token validation itself is not implemented in this
-        # phase. `app.auth.resolve_caller_from_bearer` returns 501 so
-        # deployments cannot accidentally serve unauthenticated traffic.
 
     return Settings(
         env=env,
@@ -88,6 +114,9 @@ def _load() -> Settings:
         jwt_issuer=jwt_issuer,
         jwt_audience=jwt_audience,
         jwt_jwks_url=jwt_jwks_url,
+        jwt_user_claim=jwt_user_claim,
+        cors_allow_origins=cors_allow_origins,
+        rate_limit_per_minute=rate_limit_per_minute,
     )
 
 
