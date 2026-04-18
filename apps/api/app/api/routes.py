@@ -6,8 +6,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
+
+from app.auth import Caller, ensure_same_org, require_caller
 
 router = APIRouter()
 
@@ -81,6 +83,21 @@ def _hydrate_event(row: dict) -> dict:
     return row
 
 
+def _load_encounter_for_caller(
+    encounter_id: int, caller: Caller
+) -> dict:
+    """Fetch an encounter, or 404 — same response whether the encounter
+    doesn't exist at all or belongs to another org. This prevents
+    cross-org existence probing."""
+    row = fetch_one(
+        f"SELECT {ENCOUNTER_COLUMNS} FROM encounters WHERE id = ?",
+        (encounter_id,),
+    )
+    if not row or row["organization_id"] != caller.organization_id:
+        raise HTTPException(status_code=404, detail="encounter_not_found")
+    return row
+
+
 # ---------- Pydantic models ----------
 
 class EncounterCreate(BaseModel):
@@ -114,6 +131,21 @@ def root() -> dict[str, str]:
     return {"service": "chartnav-api", "version": "0.1.0"}
 
 
+@router.get("/me")
+def me(caller: Caller = Depends(require_caller)) -> dict:
+    """Return the resolved caller. Proves the auth header works end-to-end."""
+    return {
+        "user_id": caller.user_id,
+        "email": caller.email,
+        "full_name": caller.full_name,
+        "role": caller.role,
+        "organization_id": caller.organization_id,
+    }
+
+
+# NOTE: the following three list endpoints are intentionally UNSCOPED in
+# this phase. They are documented as such in docs/build/03-api-endpoints.md
+# and will be scoped (or role-gated) in a follow-up phase.
 @router.get("/organizations")
 def list_organizations() -> list[dict]:
     return fetch_all(
@@ -136,7 +168,7 @@ def list_users() -> list[dict]:
     )
 
 
-# ---------- Encounter endpoints ----------
+# ---------- Encounter endpoints (org-scoped) ----------
 
 ENCOUNTER_COLUMNS = (
     "id, organization_id, location_id, patient_identifier, patient_name, "
@@ -146,17 +178,22 @@ ENCOUNTER_COLUMNS = (
 
 @router.get("/encounters")
 def list_encounters(
+    caller: Caller = Depends(require_caller),
     organization_id: Optional[int] = Query(default=None, ge=1),
     location_id: Optional[int] = Query(default=None, ge=1),
     status: Optional[str] = Query(default=None),
     provider_name: Optional[str] = Query(default=None),
 ) -> list[dict]:
-    clauses: list[str] = []
-    params: list = []
+    # organization_id query param is a LENS, not an override: if it's
+    # provided and doesn't match the caller's org, reject. This prevents
+    # cross-org filtering from silently returning the caller's own data
+    # under a misleading filter.
+    if organization_id is not None and organization_id != caller.organization_id:
+        raise HTTPException(status_code=403, detail="cross_org_access_forbidden")
 
-    if organization_id is not None:
-        clauses.append("organization_id = ?")
-        params.append(organization_id)
+    clauses: list[str] = ["organization_id = ?"]
+    params: list = [caller.organization_id]
+
     if location_id is not None:
         clauses.append("location_id = ?")
         params.append(location_id)
@@ -172,29 +209,23 @@ def list_encounters(
         clauses.append("provider_name = ?")
         params.append(provider_name)
 
-    where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+    where = f" WHERE {' AND '.join(clauses)}"
     query = f"SELECT {ENCOUNTER_COLUMNS} FROM encounters{where} ORDER BY id"
     return fetch_all(query, tuple(params))
 
 
 @router.get("/encounters/{encounter_id}")
-def get_encounter(encounter_id: int) -> dict:
-    row = fetch_one(
-        f"SELECT {ENCOUNTER_COLUMNS} FROM encounters WHERE id = ?",
-        (encounter_id,),
-    )
-    if not row:
-        raise HTTPException(status_code=404, detail="encounter_not_found")
-    return row
+def get_encounter(
+    encounter_id: int, caller: Caller = Depends(require_caller)
+) -> dict:
+    return _load_encounter_for_caller(encounter_id, caller)
 
 
 @router.get("/encounters/{encounter_id}/events")
-def list_encounter_events(encounter_id: int) -> list[dict]:
-    exists = fetch_one(
-        "SELECT id FROM encounters WHERE id = ?", (encounter_id,)
-    )
-    if not exists:
-        raise HTTPException(status_code=404, detail="encounter_not_found")
+def list_encounter_events(
+    encounter_id: int, caller: Caller = Depends(require_caller)
+) -> list[dict]:
+    _load_encounter_for_caller(encounter_id, caller)  # 404 if cross-org
     rows = fetch_all(
         "SELECT id, encounter_id, event_type, event_data, created_at "
         "FROM workflow_events WHERE encounter_id = ? ORDER BY id",
@@ -204,37 +235,35 @@ def list_encounter_events(encounter_id: int) -> list[dict]:
 
 
 @router.post("/encounters", status_code=status.HTTP_201_CREATED)
-def create_encounter(payload: EncounterCreate) -> dict:
+def create_encounter(
+    payload: EncounterCreate, caller: Caller = Depends(require_caller)
+) -> dict:
     if payload.status not in ALLOWED_STATUSES:
         raise HTTPException(
             status_code=400,
             detail=f"invalid_status: must be one of {sorted(ALLOWED_STATUSES)}",
         )
-    # New encounters must begin at 'scheduled' OR 'in_progress' (walk-in);
-    # deeper states cannot be forged at creation time.
     if payload.status not in {"scheduled", "in_progress"}:
         raise HTTPException(
             status_code=400,
             detail="invalid_initial_status: new encounters must start at scheduled or in_progress",
         )
 
+    # Caller org is authoritative. Body's organization_id must match.
+    ensure_same_org(caller, payload.organization_id)
+
     conn = _connect()
     try:
-        org = conn.execute(
-            "SELECT id FROM organizations WHERE id = ?",
-            (payload.organization_id,),
-        ).fetchone()
-        if not org:
-            raise HTTPException(status_code=400, detail="organization_not_found")
         loc = conn.execute(
             "SELECT id, organization_id FROM locations WHERE id = ?",
             (payload.location_id,),
         ).fetchone()
         if not loc:
             raise HTTPException(status_code=400, detail="location_not_found")
-        if loc["organization_id"] != payload.organization_id:
+        if loc["organization_id"] != caller.organization_id:
             raise HTTPException(
-                status_code=400, detail="location_does_not_belong_to_organization"
+                status_code=403,
+                detail="cross_org_access_forbidden",
             )
 
         started_at = _now_iso() if payload.status == "in_progress" else None
@@ -247,7 +276,7 @@ def create_encounter(payload: EncounterCreate) -> dict:
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                payload.organization_id,
+                caller.organization_id,
                 payload.location_id,
                 payload.patient_identifier,
                 payload.patient_name,
@@ -266,7 +295,10 @@ def create_encounter(payload: EncounterCreate) -> dict:
             (
                 new_id,
                 "encounter_created",
-                json.dumps({"status": payload.status}, sort_keys=True),
+                json.dumps(
+                    {"status": payload.status, "created_by": caller.email},
+                    sort_keys=True,
+                ),
             ),
         )
         conn.commit()
@@ -283,22 +315,22 @@ def create_encounter(payload: EncounterCreate) -> dict:
 @router.post(
     "/encounters/{encounter_id}/events", status_code=status.HTTP_201_CREATED
 )
-def create_encounter_event(encounter_id: int, payload: EventCreate) -> dict:
+def create_encounter_event(
+    encounter_id: int,
+    payload: EventCreate,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    _load_encounter_for_caller(encounter_id, caller)  # 404 if cross-org
+
+    if payload.event_data is None:
+        event_data_str: Optional[str] = None
+    elif isinstance(payload.event_data, str):
+        event_data_str = payload.event_data
+    else:
+        event_data_str = json.dumps(payload.event_data, sort_keys=True)
+
     conn = _connect()
     try:
-        exists = conn.execute(
-            "SELECT id FROM encounters WHERE id = ?", (encounter_id,)
-        ).fetchone()
-        if not exists:
-            raise HTTPException(status_code=404, detail="encounter_not_found")
-
-        if payload.event_data is None:
-            event_data_str: Optional[str] = None
-        elif isinstance(payload.event_data, str):
-            event_data_str = payload.event_data
-        else:
-            event_data_str = json.dumps(payload.event_data, sort_keys=True)
-
         cur = conn.execute(
             "INSERT INTO workflow_events (encounter_id, event_type, event_data) "
             "VALUES (?, ?, ?)",
@@ -318,7 +350,11 @@ def create_encounter_event(encounter_id: int, payload: EventCreate) -> dict:
 
 
 @router.post("/encounters/{encounter_id}/status")
-def update_encounter_status(encounter_id: int, payload: StatusUpdate) -> dict:
+def update_encounter_status(
+    encounter_id: int,
+    payload: StatusUpdate,
+    caller: Caller = Depends(require_caller),
+) -> dict:
     new_status = payload.status
     if new_status not in ALLOWED_STATUSES:
         raise HTTPException(
@@ -326,43 +362,37 @@ def update_encounter_status(encounter_id: int, payload: StatusUpdate) -> dict:
             detail=f"invalid_status: must be one of {sorted(ALLOWED_STATUSES)}",
         )
 
+    row = _load_encounter_for_caller(encounter_id, caller)  # 404 if cross-org
+    previous_status = row["status"]
+
+    # Idempotent no-op: same state in, same state out.
+    if new_status == previous_status:
+        return row
+
+    allowed_next = ALLOWED_TRANSITIONS.get(previous_status, set())
+    if new_status not in allowed_next:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"invalid_transition: {previous_status} -> {new_status} "
+                f"is not permitted; allowed next states from "
+                f"{previous_status}: {sorted(allowed_next) or 'none (terminal)'}"
+            ),
+        )
+
+    started_at = row["started_at"]
+    completed_at = row["completed_at"]
+    now = _now_iso()
+
+    if new_status == "in_progress" and not started_at:
+        started_at = now
+    if new_status == "completed":
+        completed_at = now
+        if not started_at:
+            started_at = now
+
     conn = _connect()
     try:
-        row = conn.execute(
-            f"SELECT {ENCOUNTER_COLUMNS} FROM encounters WHERE id = ?",
-            (encounter_id,),
-        ).fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="encounter_not_found")
-
-        previous_status = row["status"]
-
-        # Idempotent no-op: same state in, same state out, no event recorded.
-        if new_status == previous_status:
-            return dict(row)
-
-        allowed_next = ALLOWED_TRANSITIONS.get(previous_status, set())
-        if new_status not in allowed_next:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"invalid_transition: {previous_status} -> {new_status} "
-                    f"is not permitted; allowed next states from "
-                    f"{previous_status}: {sorted(allowed_next) or 'none (terminal)'}"
-                ),
-            )
-
-        started_at = row["started_at"]
-        completed_at = row["completed_at"]
-        now = _now_iso()
-
-        if new_status == "in_progress" and not started_at:
-            started_at = now
-        if new_status == "completed":
-            completed_at = now
-            if not started_at:
-                started_at = now
-
         conn.execute(
             "UPDATE encounters SET status = ?, started_at = ?, completed_at = ? "
             "WHERE id = ?",
@@ -378,6 +408,7 @@ def update_encounter_status(encounter_id: int, payload: StatusUpdate) -> dict:
                     {
                         "old_status": previous_status,
                         "new_status": new_status,
+                        "changed_by": caller.email,
                     },
                     sort_keys=True,
                 ),

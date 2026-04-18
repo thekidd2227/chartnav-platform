@@ -1,84 +1,79 @@
 # Data Model
 
 SQLite (local dev). Schema reproduced by Alembic migrations
-`43ccbf363a8f → a1b2c3d4e5f6`.
+`43ccbf363a8f → a1b2c3d4e5f6`. No schema changes in this auth phase.
 
 ## Tables
 
 ### `organizations`
-| column     | type         | constraints                          |
-|------------|--------------|--------------------------------------|
-| id         | INTEGER      | PK                                   |
-| name       | VARCHAR(255) | NOT NULL                             |
-| slug       | VARCHAR(255) | NOT NULL, UNIQUE                     |
-| created_at | DATETIME     | NOT NULL, default `now()`            |
+| column     | type         | constraints                   |
+|------------|--------------|-------------------------------|
+| id         | INTEGER      | PK                            |
+| name       | VARCHAR(255) | NOT NULL                      |
+| slug       | VARCHAR(255) | NOT NULL, UNIQUE              |
+| created_at | DATETIME     | NOT NULL, default `now()`     |
 
 ### `locations`
-| column          | type     | constraints                          |
-|-----------------|----------|--------------------------------------|
-| id              | INTEGER  | PK                                   |
-| organization_id | INTEGER  | NOT NULL, FK → organizations(id)     |
-| name            | VARCHAR  | NOT NULL                             |
-| created_at      | DATETIME | NOT NULL, default `now()`            |
+| column          | type     | constraints                           |
+|-----------------|----------|---------------------------------------|
+| id              | INTEGER  | PK                                    |
+| organization_id | INTEGER  | NOT NULL, FK → organizations(id)      |
+| name            | VARCHAR  | NOT NULL                              |
+| created_at      | DATETIME | NOT NULL, default `now()`             |
 
 ### `users`
-| column          | type     | constraints                          |
-|-----------------|----------|--------------------------------------|
-| id              | INTEGER  | PK                                   |
-| organization_id | INTEGER  | NOT NULL, FK → organizations(id)     |
-| email           | VARCHAR  | NOT NULL, UNIQUE                     |
-| full_name       | VARCHAR  | NULL                                 |
-| role            | VARCHAR  | NOT NULL, default `"admin"`          |
-| created_at      | DATETIME | NOT NULL, default `now()`            |
+| column          | type     | constraints                           |
+|-----------------|----------|---------------------------------------|
+| id              | INTEGER  | PK                                    |
+| organization_id | INTEGER  | NOT NULL, FK → organizations(id)      |
+| email           | VARCHAR  | NOT NULL, UNIQUE                      |
+| full_name       | VARCHAR  | NULL                                  |
+| role            | VARCHAR  | NOT NULL, default `"admin"`           |
+| created_at      | DATETIME | NOT NULL, default `now()`             |
+
+`users.email` is the authentication key for the dev auth layer.
+`users.organization_id` is the authoritative source of caller org context.
 
 ### `encounters`
-| column              | type     | constraints                                  |
-|---------------------|----------|----------------------------------------------|
-| id                  | INTEGER  | PK                                           |
-| organization_id     | INTEGER  | NOT NULL, FK → organizations(id), indexed    |
-| location_id         | INTEGER  | NOT NULL, FK → locations(id), indexed        |
-| patient_identifier  | VARCHAR  | NOT NULL, indexed                            |
-| patient_name        | VARCHAR  | NULL                                         |
-| provider_name       | VARCHAR  | NOT NULL                                     |
-| status              | VARCHAR  | NOT NULL, default `"scheduled"`, indexed     |
-| scheduled_at        | DATETIME | NULL                                         |
-| started_at          | DATETIME | NULL (stamped on entering `in_progress`)     |
-| completed_at        | DATETIME | NULL (stamped on entering `completed`)       |
-| created_at          | DATETIME | NOT NULL, default `now()`                    |
+Unchanged. Indexed on `organization_id`, `location_id`, `patient_identifier`, `status`.
 
 ### `workflow_events`
-| column        | type     | constraints                                  |
-|---------------|----------|----------------------------------------------|
-| id            | INTEGER  | PK                                           |
-| encounter_id  | INTEGER  | NOT NULL, FK → encounters(id), indexed       |
-| event_type    | VARCHAR  | NOT NULL, indexed                            |
-| event_data    | TEXT     | NULL (canonical JSON string)                 |
-| created_at    | DATETIME | NOT NULL, default `now()`                    |
+Unchanged. Indexed on `encounter_id`, `event_type`.
 
 ## Relationships
 
 ```
 organizations 1─┬─* locations
-                └─* users
+                ├─* users          (identity source for dev auth)
                 └─* encounters ─* workflow_events
 locations     1─* encounters
 ```
 
-See `docs/diagrams/er-diagram.md` for a Mermaid ER rendering.
+See `docs/diagrams/er-diagram.md`.
 
-## Event taxonomy (emitted automatically)
+## Seeded tenants (two, for scoping proof)
 
-| event_type           | When                                          | Shape                                              |
-|----------------------|-----------------------------------------------|----------------------------------------------------|
-| `encounter_created`  | On `POST /encounters`                         | `{"status": "<initial>"}`                          |
-| `status_changed`     | On every successful status transition         | `{"old_status": "...", "new_status": "..."}`       |
-| user-supplied        | `POST /encounters/{id}/events`                | Any JSON                                           |
+### Org 1 — `demo-eye-clinic` (id=1)
+- Location: `Main Clinic` (id=1)
+- Admin: `admin@chartnav.local` / id=1
 
-## Seeded demo data
+| encounter_id | patient  | provider    | status          | events |
+|--------------|----------|-------------|-----------------|--------|
+| 1            | PT-1001  | Dr. Carter  | `in_progress`   | 3      |
+| 2            | PT-1002  | Dr. Patel   | `review_needed` | 5      |
 
-Two encounters are seeded for `demo-eye-clinic` / `Main Clinic`:
+### Org 2 — `northside-retina` (id=2)
+- Location: `Northside HQ` (id=2)
+- Admin: `admin@northside.local` / id=2
 
-| id | patient    | provider    | status          | event count | lifecycle covered    |
-|----|------------|-------------|-----------------|-------------|----------------------|
-| 1  | PT-1001    | Dr. Carter  | `in_progress`   | 3           | scheduled → in_progress |
-| 2  | PT-1002    | Dr. Patel   | `review_needed` | 5           | scheduled → in_progress → draft_ready → review_needed |
+| encounter_id | patient  | provider   | status      | events |
+|--------------|----------|------------|-------------|--------|
+| 3            | PT-2001  | Dr. Ahmed  | `scheduled` | 1      |
+
+## Event taxonomy
+
+| event_type           | When                                   | Shape                                                       |
+|----------------------|----------------------------------------|-------------------------------------------------------------|
+| `encounter_created`  | On `POST /encounters` / seed           | `{"status":"...", "created_by":"<email>"}`                  |
+| `status_changed`     | Every successful transition            | `{"old_status":"...", "new_status":"...", "changed_by":"<email>"}` |
+| user-supplied        | `POST /encounters/{id}/events`         | Any JSON                                                    |

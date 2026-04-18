@@ -1,13 +1,19 @@
 """Idempotent seed for ChartNav local SQLite.
 
-Seeds:
-  - one demo organization (demo-eye-clinic)
-  - one demo location (Main Clinic)
-  - one demo admin user (admin@chartnav.local)
-  - two demo encounters covering the workflow state machine:
-      * PT-1001 Morgan Lee    / Dr. Carter / status = in_progress
-      * PT-1002 Jordan Rivera / Dr. Patel  / status = review_needed
-  - workflow events that model the lifecycle history of each encounter
+Seeds two tenants so org-scoping can be tested end-to-end:
+
+  org #1 — demo-eye-clinic
+    location:  Main Clinic
+    admin:     admin@chartnav.local
+    encounters:
+      PT-1001 Morgan Lee    / Dr. Carter / in_progress   (3 events)
+      PT-1002 Jordan Rivera / Dr. Patel  / review_needed (5 events)
+
+  org #2 — northside-retina
+    location:  Northside HQ
+    admin:     admin@northside.local
+    encounters:
+      PT-2001 Priya Shah    / Dr. Ahmed  / scheduled     (1 event)
 
 Running the script repeatedly is safe: each insert is guarded by a
 uniqueness check so no duplicate rows are created.
@@ -19,78 +25,100 @@ from pathlib import Path
 
 DB_PATH = Path(__file__).resolve().parent / "chartnav.db"
 
-DEMO_ORG_SLUG = "demo-eye-clinic"
-DEMO_ORG_NAME = "Demo Eye Clinic"
-DEMO_LOCATION_NAME = "Main Clinic"
-DEMO_ADMIN_EMAIL = "admin@chartnav.local"
-DEMO_ADMIN_NAME = "ChartNav Admin"
 
-# encounter fixtures: (patient_id, patient_name, provider, final_status, events)
-# events use status_changed rows to reconstruct a realistic lifecycle so the
-# demo UI / docs can show a filled-in history.
-DEMO_ENCOUNTERS = [
+ORGS = [
     {
-        "patient_identifier": "PT-1001",
-        "patient_name": "Morgan Lee",
-        "provider_name": "Dr. Carter",
-        "status": "in_progress",
-        "events": [
-            ("encounter_created", {"source": "seed", "status": "scheduled"}),
-            (
-                "status_changed",
-                {"old_status": "scheduled", "new_status": "in_progress"},
-            ),
-            (
-                "note_draft_requested",
-                {
-                    "requested_by": DEMO_ADMIN_EMAIL,
-                    "template": "cataract-followup",
-                },
-            ),
+        "slug": "demo-eye-clinic",
+        "name": "Demo Eye Clinic",
+        "location": "Main Clinic",
+        "admin_email": "admin@chartnav.local",
+        "admin_name": "ChartNav Admin",
+        "encounters": [
+            {
+                "patient_identifier": "PT-1001",
+                "patient_name": "Morgan Lee",
+                "provider_name": "Dr. Carter",
+                "status": "in_progress",
+                "events": [
+                    ("encounter_created", {"source": "seed", "status": "scheduled"}),
+                    (
+                        "status_changed",
+                        {"old_status": "scheduled", "new_status": "in_progress"},
+                    ),
+                    (
+                        "note_draft_requested",
+                        {
+                            "requested_by": "admin@chartnav.local",
+                            "template": "cataract-followup",
+                        },
+                    ),
+                ],
+            },
+            {
+                "patient_identifier": "PT-1002",
+                "patient_name": "Jordan Rivera",
+                "provider_name": "Dr. Patel",
+                "status": "review_needed",
+                "events": [
+                    ("encounter_created", {"source": "seed", "status": "scheduled"}),
+                    (
+                        "status_changed",
+                        {"old_status": "scheduled", "new_status": "in_progress"},
+                    ),
+                    (
+                        "status_changed",
+                        {"old_status": "in_progress", "new_status": "draft_ready"},
+                    ),
+                    (
+                        "status_changed",
+                        {"old_status": "draft_ready", "new_status": "review_needed"},
+                    ),
+                    (
+                        "note_draft_completed",
+                        {"template": "glaucoma-initial", "length_words": 184},
+                    ),
+                ],
+            },
         ],
     },
     {
-        "patient_identifier": "PT-1002",
-        "patient_name": "Jordan Rivera",
-        "provider_name": "Dr. Patel",
-        "status": "review_needed",
-        "events": [
-            ("encounter_created", {"source": "seed", "status": "scheduled"}),
-            (
-                "status_changed",
-                {"old_status": "scheduled", "new_status": "in_progress"},
-            ),
-            (
-                "status_changed",
-                {"old_status": "in_progress", "new_status": "draft_ready"},
-            ),
-            (
-                "status_changed",
-                {"old_status": "draft_ready", "new_status": "review_needed"},
-            ),
-            (
-                "note_draft_completed",
-                {"template": "glaucoma-initial", "length_words": 184},
-            ),
+        "slug": "northside-retina",
+        "name": "Northside Retina Center",
+        "location": "Northside HQ",
+        "admin_email": "admin@northside.local",
+        "admin_name": "Northside Admin",
+        "encounters": [
+            {
+                "patient_identifier": "PT-2001",
+                "patient_name": "Priya Shah",
+                "provider_name": "Dr. Ahmed",
+                "status": "scheduled",
+                "events": [
+                    (
+                        "encounter_created",
+                        {"source": "seed", "status": "scheduled"},
+                    ),
+                ],
+            },
         ],
     },
 ]
 
 
-def _get_or_create_org(cur: sqlite3.Cursor) -> int:
+def _get_or_create_org(cur: sqlite3.Cursor, slug: str, name: str) -> int:
     cur.execute(
         """
         INSERT INTO organizations (name, slug)
         SELECT ?, ?
         WHERE NOT EXISTS (SELECT 1 FROM organizations WHERE slug = ?)
         """,
-        (DEMO_ORG_NAME, DEMO_ORG_SLUG, DEMO_ORG_SLUG),
+        (name, slug, slug),
     )
-    cur.execute("SELECT id FROM organizations WHERE slug = ?", (DEMO_ORG_SLUG,))
+    cur.execute("SELECT id FROM organizations WHERE slug = ?", (slug,))
     return cur.fetchone()[0]
 
 
-def _get_or_create_location(cur: sqlite3.Cursor, org_id: int) -> int:
+def _get_or_create_location(cur: sqlite3.Cursor, org_id: int, name: str) -> int:
     cur.execute(
         """
         INSERT INTO locations (organization_id, name)
@@ -99,44 +127,42 @@ def _get_or_create_location(cur: sqlite3.Cursor, org_id: int) -> int:
             SELECT 1 FROM locations WHERE organization_id = ? AND name = ?
         )
         """,
-        (org_id, DEMO_LOCATION_NAME, org_id, DEMO_LOCATION_NAME),
+        (org_id, name, org_id, name),
     )
     cur.execute(
         "SELECT id FROM locations WHERE organization_id = ? AND name = ?",
-        (org_id, DEMO_LOCATION_NAME),
+        (org_id, name),
     )
     return cur.fetchone()[0]
 
 
-def _ensure_admin_user(cur: sqlite3.Cursor, org_id: int) -> None:
+def _ensure_user(
+    cur: sqlite3.Cursor, org_id: int, email: str, full_name: str
+) -> None:
     cur.execute(
         """
         INSERT INTO users (organization_id, email, full_name, role)
         SELECT ?, ?, ?, ?
         WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = ?)
         """,
-        (org_id, DEMO_ADMIN_EMAIL, DEMO_ADMIN_NAME, "admin", DEMO_ADMIN_EMAIL),
+        (org_id, email, full_name, "admin", email),
     )
 
 
 def _get_or_create_encounter(
-    cur: sqlite3.Cursor, org_id: int, location_id: int, fixture: dict
+    cur: sqlite3.Cursor, org_id: int, location_id: int, fx: dict
 ) -> int:
-    # started_at / completed_at are stamped based on fixture final status so
-    # the seeded row stays consistent with the state machine's invariants.
-    started_at = None
-    completed_at = None
-    if fixture["status"] in {
+    if fx["status"] in {
         "in_progress",
         "draft_ready",
         "review_needed",
         "completed",
     }:
-        started_at_expr = "CURRENT_TIMESTAMP"
+        started_expr = "CURRENT_TIMESTAMP"
     else:
-        started_at_expr = "NULL"
+        started_expr = "NULL"
     completed_expr = (
-        "CURRENT_TIMESTAMP" if fixture["status"] == "completed" else "NULL"
+        "CURRENT_TIMESTAMP" if fx["status"] == "completed" else "NULL"
     )
 
     cur.execute(
@@ -147,7 +173,7 @@ def _get_or_create_encounter(
             provider_name, status,
             started_at, completed_at
         )
-        SELECT ?, ?, ?, ?, ?, ?, {started_at_expr}, {completed_expr}
+        SELECT ?, ?, ?, ?, ?, ?, {started_expr}, {completed_expr}
         WHERE NOT EXISTS (
             SELECT 1 FROM encounters
             WHERE organization_id = ?
@@ -159,14 +185,14 @@ def _get_or_create_encounter(
         (
             org_id,
             location_id,
-            fixture["patient_identifier"],
-            fixture["patient_name"],
-            fixture["provider_name"],
-            fixture["status"],
+            fx["patient_identifier"],
+            fx["patient_name"],
+            fx["provider_name"],
+            fx["status"],
             org_id,
             location_id,
-            fixture["patient_identifier"],
-            fixture["provider_name"],
+            fx["patient_identifier"],
+            fx["provider_name"],
         ),
     )
     cur.execute(
@@ -177,12 +203,7 @@ def _get_or_create_encounter(
           AND patient_identifier = ?
           AND provider_name = ?
         """,
-        (
-            org_id,
-            location_id,
-            fixture["patient_identifier"],
-            fixture["provider_name"],
-        ),
+        (org_id, location_id, fx["patient_identifier"], fx["provider_name"]),
     )
     return cur.fetchone()[0]
 
@@ -211,28 +232,30 @@ def main() -> None:
         conn.execute("PRAGMA foreign_keys = ON")
         cur = conn.cursor()
 
-        org_id = _get_or_create_org(cur)
-        location_id = _get_or_create_location(cur, org_id)
-        _ensure_admin_user(cur, org_id)
-
-        for fixture in DEMO_ENCOUNTERS:
-            enc_id = _get_or_create_encounter(cur, org_id, location_id, fixture)
-            _ensure_events(cur, enc_id, fixture["events"])
+        summary = []
+        for org_fx in ORGS:
+            org_id = _get_or_create_org(cur, org_fx["slug"], org_fx["name"])
+            loc_id = _get_or_create_location(cur, org_id, org_fx["location"])
+            _ensure_user(cur, org_id, org_fx["admin_email"], org_fx["admin_name"])
+            for enc_fx in org_fx["encounters"]:
+                enc_id = _get_or_create_encounter(cur, org_id, loc_id, enc_fx)
+                _ensure_events(cur, enc_id, enc_fx["events"])
+            summary.append((org_fx["slug"], org_id, loc_id))
 
         conn.commit()
 
         print("Seed complete.")
-        print(f"organization_id={org_id} location_id={location_id}")
+        for slug, org_id, loc_id in summary:
+            print(f"  {slug}: organization_id={org_id} location_id={loc_id}")
 
         rows = cur.execute(
             """
-            SELECT e.id, e.patient_identifier, e.provider_name, e.status,
-                   (SELECT COUNT(*) FROM workflow_events w WHERE w.encounter_id = e.id) AS event_count
+            SELECT o.slug, e.id, e.patient_identifier, e.provider_name, e.status,
+                   (SELECT COUNT(*) FROM workflow_events w WHERE w.encounter_id = e.id) AS ev
             FROM encounters e
-            WHERE e.organization_id = ?
-            ORDER BY e.id
-            """,
-            (org_id,),
+            JOIN organizations o ON o.id = e.organization_id
+            ORDER BY o.id, e.id
+            """
         ).fetchall()
         print("encounters:", rows)
     finally:

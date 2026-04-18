@@ -39,67 +39,72 @@
   <div class="sub">Phase: strict encounter state machine + filtered listing<br>
   Repo: <code>thekidd2227/chartnav-platform</code> · Generated 2026-04-17</div>
 </header>
-<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps</a></li><li><a href="#sec-8">Diagram — System architecture</a></li><li><a href="#sec-9">Diagram — Encounter status machine</a></li><li><a href="#sec-10">Diagram — ER</a></li><li><a href="#sec-11">Diagram — API / data flow</a></li></ol></nav>
+<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth & org scoping</a></li><li><a href="#sec-9">Diagram — System architecture</a></li><li><a href="#sec-10">Diagram — Encounter status machine</a></li><li><a href="#sec-11">Diagram — ER</a></li><li><a href="#sec-12">Diagram — API / data flow</a></li></ol></nav>
 <section id="sec-1"><h2>Executive summary</h2>
-<p>This document consolidates the ChartNav *workflow state machine + filtering*</p>
-<p>phase. It covers everything delivered in this phase:</p>
-<ul>
-<li><strong>Strict state machine</strong> on <code>POST /encounters/{id}/status</code> — only the documented forward and rework edges succeed; everything else returns <code>400 invalid_transition</code> with an explicit message.</li>
-<li><strong>Filtered listing</strong> on <code>GET /encounters?organization_id=&amp;location_id=&amp;status=&amp;provider_name=</code> — all filters combinable, parameterized SQL, deterministic order.</li>
-<li><strong>Expanded seed</strong> — two idempotent encounters covering <code>in_progress</code> and <code>review_needed</code>, each with a realistic event history.</li>
-<li><strong>Living documentation</strong> — Mermaid diagrams for architecture, ER, status machine, and sequence flow; plus per-concern markdown docs.</li>
-<li><strong>Verification evidence</strong> — every filter and every state transition case was exercised locally against the running API; matrices appear in §06.</li>
-</ul>
-<p>Preserved untouched: <code>/health</code>, <code>/</code>, <code>/organizations</code>, <code>/locations</code>, <code>/users</code>,</p>
-<p>the GET/POST event endpoints, Alembic history, and the SQLite dev workflow.</p>
+<p>This document consolidates <strong>all</strong> ChartNav backend phases delivered to</p>
+<p>date. It covers the workflow spine, the strict encounter state machine,</p>
+<p>encounter filtering, and the dev auth + org scoping layer that just</p>
+<p>landed.</p>
+<p><strong>Phase 1 — Workflow spine.</strong> Alembic migration <code>a1b2c3d4e5f6</code> introduced <code>encounters</code> and <code>workflow_events</code> tables with FKs and indexes. Read and write endpoints for both. Idempotent seed.</p>
+<p><strong>Phase 2 — State machine + filtering.</strong> <code>POST /encounters/{id}/status</code> enforces explicit forward + rework edges; everything else returns <code>400 invalid_transition</code> with an allowed-next-states listing. <code>GET /encounters</code> accepts <code>organization_id</code>, <code>location_id</code>, <code>status</code>, <code>provider_name</code> filters.</p>
+<p><strong>Phase 3 — Dev auth + org scoping (this phase).</strong> New <code>apps/api/app/auth.py</code> resolves the caller from <code>X-User-Email</code>, looks up the user, and attaches a <code>Caller</code> dataclass with authoritative <code>organization_id</code>. Every encounter route is now org-scoped: cross-org reads return 404, cross-org body/query assertions return 403. Seed now provisions two tenants (<code>demo-eye-clinic</code>, <code>northside-retina</code>) so scoping is actually exercised.</p>
+<p>Preserved untouched: <code>/health</code>, <code>/</code>, Alembic history, SQLite dev workflow, the entire state-machine + filtering surface, and the existing workflow_events model.</p>
 </section>
 <section id="sec-2"><h2>01 — Current state</h2>
 <h1>ChartNav — Current State</h1>
-<p><strong>As of:</strong> 2026-04-17 (phase: workflow state machine + filtering)</p>
+<p><strong>As of:</strong> 2026-04-17 (phase: dev auth + org scoping)</p>
 <h2>Repo layout (relevant)</h2>
 <pre class="code lang-"><code>
 chartnav-platform/
 ├── apps/
-│   ├── api/                          # FastAPI service (SQLite local)
-│   │   ├── app/main.py               # app factory, CORS, router mount
-│   │   ├── app/api/routes.py         # all HTTP handlers
+│   ├── api/
+│   │   ├── app/main.py              # app factory, CORS, router mount
+│   │   ├── app/auth.py              # NEW — dev auth + org-scoping helpers
+│   │   ├── app/api/routes.py        # HTTP handlers, all encounter routes org-scoped
 │   │   ├── alembic.ini
 │   │   ├── alembic/env.py
-│   │   ├── alembic/versions/         # 2 migrations
-│   │   ├── scripts_seed.py           # idempotent demo seed
+│   │   ├── alembic/versions/        # 2 migrations (unchanged this phase)
+│   │   ├── scripts_seed.py          # now seeds 2 orgs for scoping proof
 │   │   └── pyproject.toml
-│   └── web/                          # Vite shell (untouched this phase)
+│   └── web/                         # untouched this phase
 ├── infra/docker/docker-compose.yml
 └── docs/
-    ├── build/                        # living docs (this set)
-    ├── diagrams/                     # Mermaid sources
-    ├── final/                        # consolidated HTML/PDF
+    ├── build/                       # living docs
+    ├── diagrams/                    # Mermaid sources
+    ├── final/                       # consolidated HTML/PDF (regenerated)
     └── releases/
 </code></pre>
 <h2>Runtime baseline</h2>
 <ul>
-<li>Python 3.11+, FastAPI, raw <code>sqlite3</code> driver (no ORM yet).</li>
-<li>SQLite file resolved at <code>apps/api/chartnav.db</code> (gitignored).</li>
-<li>Alembic history: <code>43ccbf363a8f → a1b2c3d4e5f6</code> (head).</li>
-<li>CORS wide-open (<code>*</code>) for local dev.</li>
+<li>Python 3.11+, FastAPI, raw <code>sqlite3</code> driver.</li>
+<li>SQLite at <code>apps/api/chartnav.db</code> (gitignored).</li>
+<li>Alembic head: <code>a1b2c3d4e5f6</code> (no new migrations this phase).</li>
+<li>CORS still wide-open (<code>*</code>) for local dev.</li>
+<li>Dev auth: every protected route reads <code>X-User-Email</code> and resolves the</li>
 </ul>
-<h2>Verified working endpoints (preserved)</h2>
+<p>caller from the <code>users</code> table. See <code>07-auth-and-scoping.md</code>.</p>
+<h2>Verified working endpoints</h2>
+<h3>Open (no auth)</h3>
 <ul>
 <li><code>GET /health</code>, <code>GET /</code></li>
 <li><code>GET /organizations</code>, <code>GET /locations</code>, <code>GET /users</code></li>
-<li><code>GET /encounters</code> (now with filters — see <code>03-api-endpoints.md</code>)</li>
-<li><code>GET /encounters/{id}</code></li>
-<li><code>GET /encounters/{id}/events</code></li>
-<li><code>POST /encounters</code></li>
-<li><code>POST /encounters/{id}/events</code></li>
-<li><code>POST /encounters/{id}/status</code> (now strict state machine — see <code>02-workflow-state-machine.md</code>)</li>
 </ul>
-<h2>Demo data shipped by seed</h2>
-<table><thead><tr><th>id</th><th>patient_id</th><th>provider</th><th>status</th><th>events</th></tr></thead><tbody>
-<tr><td>1</td><td>PT-1001</td><td>Dr. Carter</td><td>in_progress</td><td>3</td></tr>
-<tr><td>2</td><td>PT-1002</td><td>Dr. Patel</td><td>review_needed</td><td>5</td></tr>
+<p>— intentionally left open this phase; see known gaps.</p>
+<h3>Authenticated (require <code>X-User-Email</code>)</h3>
+<ul>
+<li><code>GET /me</code> — NEW. Returns the resolved caller context.</li>
+<li><code>GET /encounters</code> — caller&#x27;s org only; rejects cross-org filter.</li>
+<li><code>GET /encounters/{id}</code> — 404 if cross-org.</li>
+<li><code>GET /encounters/{id}/events</code> — 404 if cross-org.</li>
+<li><code>POST /encounters</code> — forces <code>organization_id</code> to caller&#x27;s org; location must also belong.</li>
+<li><code>POST /encounters/{id}/events</code> — 404 if cross-org.</li>
+<li><code>POST /encounters/{id}/status</code> — 404 if cross-org; strict state machine still applies.</li>
+</ul>
+<h2>Seeded tenants</h2>
+<table><thead><tr><th>org_id</th><th>slug</th><th>admin email</th><th>encounters</th></tr></thead><tbody>
+<tr><td>1</td><td><code>demo-eye-clinic</code></td><td><code>admin@chartnav.local</code></td><td>PT-1001, PT-1002</td></tr>
+<tr><td>2</td><td><code>northside-retina</code></td><td><code>admin@northside.local</code></td><td>PT-2001</td></tr>
 </tbody></table>
-<p>See <code>04-data-model.md</code> and <code>05-build-log.md</code> for details.</p>
 </section>
 <section id="sec-3"><h2>02 — Workflow state machine</h2>
 <h1>Encounter Workflow State Machine</h1>
@@ -163,34 +168,40 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 </section>
 <section id="sec-4"><h2>03 — API endpoints</h2>
 <h1>API Endpoints</h1>
-<p>Base URL (local dev): <code>http://127.0.0.1:8000</code> (or whatever port uvicorn binds).</p>
-<h2>System</h2>
+<p>Base URL (local dev): <code>http://127.0.0.1:8000</code>.</p>
+<p>Auth: every endpoint tagged <strong>🔒</strong> requires header <code>X-User-Email: &lt;seeded user email&gt;</code>.</p>
+<p>See <code>07-auth-and-scoping.md</code> for the full model.</p>
+<h2>System (open)</h2>
 <table><thead><tr><th>Method</th><th>Path</th><th>Response</th></tr></thead><tbody>
 <tr><td>GET</td><td><code>/health</code></td><td><code>{&quot;status&quot;:&quot;ok&quot;}</code></td></tr>
 <tr><td>GET</td><td><code>/</code></td><td><code>{&quot;service&quot;:&quot;chartnav-api&quot;,&quot;version&quot;:&quot;0.1.0&quot;}</code></td></tr>
 </tbody></table>
-<h2>Org / location / user (read-only)</h2>
-<table><thead><tr><th>Method</th><th>Path</th><th>Notes</th></tr></thead><tbody>
-<tr><td>GET</td><td><code>/organizations</code></td><td>Ordered by id.</td></tr>
-<tr><td>GET</td><td><code>/locations</code></td><td>Ordered by id.</td></tr>
-<tr><td>GET</td><td><code>/users</code></td><td>Ordered by id.</td></tr>
+<h2>Identity</h2>
+<table><thead><tr><th>Method</th><th>Path</th><th>Auth</th><th>Response</th></tr></thead><tbody>
+<tr><td>GET</td><td><code>/me</code></td><td>🔒</td><td><code>{user_id, email, full_name, role, organization_id}</code></td></tr>
 </tbody></table>
-<h2>Encounters</h2>
+<h2>Org / location / user (open, read-only)</h2>
+<p>These are <strong>not</strong> org-scoped this phase. Tracked in <code>06-known-gaps.md</code>.</p>
+<table><thead><tr><th>Method</th><th>Path</th></tr></thead><tbody>
+<tr><td>GET</td><td><code>/organizations</code></td></tr>
+<tr><td>GET</td><td><code>/locations</code></td></tr>
+<tr><td>GET</td><td><code>/users</code></td></tr>
+</tbody></table>
+<h2>Encounters (🔒 org-scoped)</h2>
 <h3>GET <code>/encounters</code></h3>
-<p>Query parameters (all optional, combinable, AND-ed):</p>
+<p>Always filtered to <code>caller.organization_id</code>.</p>
+<p>Additional optional query parameters (all AND-ed, parameterized):</p>
 <table><thead><tr><th>Param</th><th>Type</th><th>Notes</th></tr></thead><tbody>
-<tr><td><code>organization_id</code></td><td>int≥1</td><td>Exact match.</td></tr>
-<tr><td><code>location_id</code></td><td>int≥1</td><td>Exact match.</td></tr>
+<tr><td><code>organization_id</code></td><td>int≥1</td><td>Must equal <code>caller.organization_id</code> — else 403.</td></tr>
+<tr><td><code>location_id</code></td><td>int≥1</td><td>Narrows within caller org.</td></tr>
 <tr><td><code>status</code></td><td>string</td><td>Must be in <code>ALLOWED_STATUSES</code> or 400.</td></tr>
-<tr><td><code>provider_name</code></td><td>string</td><td>Exact match (case-sensitive).</td></tr>
+<tr><td><code>provider_name</code></td><td>string</td><td>Exact match.</td></tr>
 </tbody></table>
-<p>Ordering: <code>ORDER BY id</code>. All SQL uses parameterized <code>?</code> placeholders.</p>
 <h3>GET <code>/encounters/{encounter_id}</code></h3>
-<p><code>404 encounter_not_found</code> if missing.</p>
+<p>Returns encounter if it belongs to caller&#x27;s org. Otherwise <strong>404 <code>encounter_not_found</code></strong> — same response whether it doesn&#x27;t exist or belongs to another org (no cross-org existence oracle).</p>
 <h3>GET <code>/encounters/{encounter_id}/events</code></h3>
-<p><code>404 encounter_not_found</code> if the parent encounter does not exist.</p>
-<p>Returns events oldest-first (<code>ORDER BY id</code>). <code>event_data</code> is JSON-parsed</p>
-<p>before being returned to the client when it is valid JSON.</p>
+<p>404 if the parent encounter doesn&#x27;t exist or is cross-org.</p>
+<p>Returns events oldest-first; <code>event_data</code> is JSON-parsed when valid.</p>
 <h3>POST <code>/encounters</code></h3>
 <p>Body:</p>
 <pre class="code lang-json"><code>
@@ -206,41 +217,40 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 </code></pre>
 <p>Rules:</p>
 <ul>
-<li><code>status</code> defaults to <code>&quot;scheduled&quot;</code> and may only be <code>scheduled</code> or <code>in_progress</code> at creation (deeper states can&#x27;t be forged).</li>
-<li><code>organization_id</code> + <code>location_id</code> must exist and the location must belong to the organization → otherwise 400.</li>
-<li>A <code>workflow_events</code> row <code>encounter_created</code> is appended automatically.</li>
-<li>Returns the full encounter row (201).</li>
+<li><code>organization_id</code> <strong>must equal</strong> <code>caller.organization_id</code> → else 403 <code>cross_org_access_forbidden</code>.</li>
+<li><code>location_id</code> must exist and belong to caller&#x27;s org → else 400 <code>location_not_found</code> or 403.</li>
+<li><code>status</code> defaults to <code>&quot;scheduled&quot;</code>; only <code>scheduled</code> or <code>in_progress</code> permitted at creation (deeper states can&#x27;t be forged).</li>
+<li>Appends <code>workflow_events</code> row <code>encounter_created</code> with <code>{status, created_by}</code>.</li>
 </ul>
 <h3>POST <code>/encounters/{encounter_id}/events</code></h3>
-<p>Body:</p>
+<p>404 if cross-org. Body:</p>
 <pre class="code lang-json"><code>
 { &quot;event_type&quot;: &quot;note_draft_completed&quot;, &quot;event_data&quot;: { &quot;template&quot;: &quot;glaucoma-initial&quot; } }
 </code></pre>
-<p><code>event_data</code> may be any JSON value (object/array/string/number/null). Objects</p>
-<p>and arrays are stored as canonical JSON (sorted keys). Strings pass through</p>
-<p>as-is.</p>
+<p><code>event_data</code> may be any JSON value. Objects/arrays stored as canonical JSON.</p>
 <h3>POST <code>/encounters/{encounter_id}/status</code></h3>
-<p>Body: <code>{ &quot;status&quot;: &quot;draft_ready&quot; }</code>.</p>
+<p>404 if cross-org. Body: <code>{ &quot;status&quot;: &quot;draft_ready&quot; }</code>.</p>
 <ul>
-<li>Validated against <code>ALLOWED_STATUSES</code> and <code>ALLOWED_TRANSITIONS</code></li>
+<li>Validated against <code>ALLOWED_STATUSES</code> and <code>ALLOWED_TRANSITIONS</code> (<code>02-workflow-state-machine.md</code>).</li>
+<li>Same-status = no-op.</li>
+<li>On success: stamps <code>started_at</code>/<code>completed_at</code> per lifecycle rules, appends <code>status_changed</code> event with <code>{old_status, new_status, changed_by}</code>.</li>
 </ul>
-<p>(<code>02-workflow-state-machine.md</code>).</p>
-<ul>
-<li>Same-status post is a no-op (no event recorded).</li>
-<li>On success, stamps <code>started_at</code>/<code>completed_at</code> per lifecycle rules</li>
-</ul>
-<p>and appends a <code>status_changed</code> event.</p>
-<p>Error examples:</p>
-<ul>
-<li><code>400 invalid_status</code> — unknown string.</li>
-<li><code>400 invalid_transition</code> — disallowed edge in the state machine.</li>
-<li><code>404 encounter_not_found</code> — no such encounter.</li>
-</ul>
+<h3>Error summary</h3>
+<table><thead><tr><th>Code</th><th>Detail</th><th>When</th></tr></thead><tbody>
+<tr><td>401</td><td><code>missing_auth_header</code></td><td><code>X-User-Email</code> missing or empty.</td></tr>
+<tr><td>401</td><td><code>unknown_user</code></td><td>Email not in <code>users</code>.</td></tr>
+<tr><td>403</td><td><code>cross_org_access_forbidden</code></td><td>Body/query asserts a different org or location.</td></tr>
+<tr><td>400</td><td><code>invalid_status</code></td><td>Bad status string.</td></tr>
+<tr><td>400</td><td><code>invalid_transition: a -&gt; b…</code></td><td>Disallowed state-machine edge.</td></tr>
+<tr><td>400</td><td><code>invalid_initial_status: …</code></td><td>Creating with status other than scheduled/in_progress.</td></tr>
+<tr><td>400</td><td><code>location_not_found</code></td><td><code>location_id</code> does not exist.</td></tr>
+<tr><td>404</td><td><code>encounter_not_found</code></td><td>Missing or cross-org encounter.</td></tr>
+</tbody></table>
 </section>
 <section id="sec-5"><h2>04 — Data model</h2>
 <h1>Data Model</h1>
 <p>SQLite (local dev). Schema reproduced by Alembic migrations</p>
-<p><code>43ccbf363a8f → a1b2c3d4e5f6</code>.</p>
+<p><code>43ccbf363a8f → a1b2c3d4e5f6</code>. No schema changes in this auth phase.</p>
 <h2>Tables</h2>
 <h3><code>organizations</code></h3>
 <table><thead><tr><th>column</th><th>type</th><th>constraints</th></tr></thead><tbody>
@@ -265,162 +275,286 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <tr><td>role</td><td>VARCHAR</td><td>NOT NULL, default <code>&quot;admin&quot;</code></td></tr>
 <tr><td>created_at</td><td>DATETIME</td><td>NOT NULL, default <code>now()</code></td></tr>
 </tbody></table>
+<p><code>users.email</code> is the authentication key for the dev auth layer.</p>
+<p><code>users.organization_id</code> is the authoritative source of caller org context.</p>
 <h3><code>encounters</code></h3>
-<table><thead><tr><th>column</th><th>type</th><th>constraints</th></tr></thead><tbody>
-<tr><td>id</td><td>INTEGER</td><td>PK</td></tr>
-<tr><td>organization_id</td><td>INTEGER</td><td>NOT NULL, FK → organizations(id), indexed</td></tr>
-<tr><td>location_id</td><td>INTEGER</td><td>NOT NULL, FK → locations(id), indexed</td></tr>
-<tr><td>patient_identifier</td><td>VARCHAR</td><td>NOT NULL, indexed</td></tr>
-<tr><td>patient_name</td><td>VARCHAR</td><td>NULL</td></tr>
-<tr><td>provider_name</td><td>VARCHAR</td><td>NOT NULL</td></tr>
-<tr><td>status</td><td>VARCHAR</td><td>NOT NULL, default <code>&quot;scheduled&quot;</code>, indexed</td></tr>
-<tr><td>scheduled_at</td><td>DATETIME</td><td>NULL</td></tr>
-<tr><td>started_at</td><td>DATETIME</td><td>NULL (stamped on entering <code>in_progress</code>)</td></tr>
-<tr><td>completed_at</td><td>DATETIME</td><td>NULL (stamped on entering <code>completed</code>)</td></tr>
-<tr><td>created_at</td><td>DATETIME</td><td>NOT NULL, default <code>now()</code></td></tr>
-</tbody></table>
+<p>Unchanged. Indexed on <code>organization_id</code>, <code>location_id</code>, <code>patient_identifier</code>, <code>status</code>.</p>
 <h3><code>workflow_events</code></h3>
-<table><thead><tr><th>column</th><th>type</th><th>constraints</th></tr></thead><tbody>
-<tr><td>id</td><td>INTEGER</td><td>PK</td></tr>
-<tr><td>encounter_id</td><td>INTEGER</td><td>NOT NULL, FK → encounters(id), indexed</td></tr>
-<tr><td>event_type</td><td>VARCHAR</td><td>NOT NULL, indexed</td></tr>
-<tr><td>event_data</td><td>TEXT</td><td>NULL (canonical JSON string)</td></tr>
-<tr><td>created_at</td><td>DATETIME</td><td>NOT NULL, default <code>now()</code></td></tr>
-</tbody></table>
+<p>Unchanged. Indexed on <code>encounter_id</code>, <code>event_type</code>.</p>
 <h2>Relationships</h2>
 <pre class="code lang-"><code>
 organizations 1─┬─* locations
-                └─* users
+                ├─* users          (identity source for dev auth)
                 └─* encounters ─* workflow_events
 locations     1─* encounters
 </code></pre>
-<p>See <code>docs/diagrams/er-diagram.md</code> for a Mermaid ER rendering.</p>
-<h2>Event taxonomy (emitted automatically)</h2>
-<table><thead><tr><th>event_type</th><th>When</th><th>Shape</th></tr></thead><tbody>
-<tr><td><code>encounter_created</code></td><td>On <code>POST /encounters</code></td><td><code>{&quot;status&quot;: &quot;&lt;initial&gt;&quot;}</code></td></tr>
-<tr><td><code>status_changed</code></td><td>On every successful status transition</td><td><code>{&quot;old_status&quot;: &quot;...&quot;, &quot;new_status&quot;: &quot;...&quot;}</code></td></tr>
-<tr><td>user-supplied</td><td><code>POST /encounters/{id}/events</code></td><td>Any JSON</td></tr>
+<p>See <code>docs/diagrams/er-diagram.md</code>.</p>
+<h2>Seeded tenants (two, for scoping proof)</h2>
+<h3>Org 1 — <code>demo-eye-clinic</code> (id=1)</h3>
+<ul>
+<li>Location: <code>Main Clinic</code> (id=1)</li>
+<li>Admin: <code>admin@chartnav.local</code> / id=1</li>
+</ul>
+<table><thead><tr><th>encounter_id</th><th>patient</th><th>provider</th><th>status</th><th>events</th></tr></thead><tbody>
+<tr><td>1</td><td>PT-1001</td><td>Dr. Carter</td><td><code>in_progress</code></td><td>3</td></tr>
+<tr><td>2</td><td>PT-1002</td><td>Dr. Patel</td><td><code>review_needed</code></td><td>5</td></tr>
 </tbody></table>
-<h2>Seeded demo data</h2>
-<p>Two encounters are seeded for <code>demo-eye-clinic</code> / <code>Main Clinic</code>:</p>
-<table><thead><tr><th>id</th><th>patient</th><th>provider</th><th>status</th><th>event count</th><th>lifecycle covered</th></tr></thead><tbody>
-<tr><td>1</td><td>PT-1001</td><td>Dr. Carter</td><td><code>in_progress</code></td><td>3</td><td>scheduled → in_progress</td></tr>
-<tr><td>2</td><td>PT-1002</td><td>Dr. Patel</td><td><code>review_needed</code></td><td>5</td><td>scheduled → in_progress → draft_ready → review_needed</td></tr>
+<h3>Org 2 — <code>northside-retina</code> (id=2)</h3>
+<ul>
+<li>Location: <code>Northside HQ</code> (id=2)</li>
+<li>Admin: <code>admin@northside.local</code> / id=2</li>
+</ul>
+<table><thead><tr><th>encounter_id</th><th>patient</th><th>provider</th><th>status</th><th>events</th></tr></thead><tbody>
+<tr><td>3</td><td>PT-2001</td><td>Dr. Ahmed</td><td><code>scheduled</code></td><td>1</td></tr>
+</tbody></table>
+<h2>Event taxonomy</h2>
+<table><thead><tr><th>event_type</th><th>When</th><th>Shape</th></tr></thead><tbody>
+<tr><td><code>encounter_created</code></td><td>On <code>POST /encounters</code> / seed</td><td><code>{&quot;status&quot;:&quot;...&quot;, &quot;created_by&quot;:&quot;&lt;email&gt;&quot;}</code></td></tr>
+<tr><td><code>status_changed</code></td><td>Every successful transition</td><td><code>{&quot;old_status&quot;:&quot;...&quot;, &quot;new_status&quot;:&quot;...&quot;, &quot;changed_by&quot;:&quot;&lt;email&gt;&quot;}</code></td></tr>
+<tr><td>user-supplied</td><td><code>POST /encounters/{id}/events</code></td><td>Any JSON</td></tr>
 </tbody></table>
 </section>
 <section id="sec-6"><h2>05 — Build log</h2>
 <h1>Build Log</h1>
 <p>Reverse-chronological. Each entry is a concrete, verifiable step.</p>
 <p>---</p>
-<h2>2026-04-17 — Phase: workflow state machine + filtering</h2>
-<h3>Step 1 — Baseline inspection</h3>
+<h2>2026-04-17 — Phase: dev auth + org scoping</h2>
+<h3>Step 1 — Baseline</h3>
 <ul>
-<li>Confirmed current migrations, seed, and routes compile and run as documented in <code>01-current-state.md</code>.</li>
-<li>Confirmed Alembic head: <code>a1b2c3d4e5f6</code>.</li>
-<li>No ORM in use — raw <code>sqlite3</code> calls via helpers in <code>routes.py</code>.</li>
+<li>Starting head commit: <code>505f025</code> (strict state machine + filtering phase).</li>
+<li>Alembic head still <code>a1b2c3d4e5f6</code> — no schema changes needed this phase.</li>
 </ul>
-<h3>Step 2 — Strict status state machine</h3>
+<h3>Step 2 — Auth foundation</h3>
 <ul>
-<li>Added <code>ALLOWED_TRANSITIONS</code> map in <code>apps/api/app/api/routes.py</code>.</li>
-<li><code>update_encounter_status()</code> now:</li>
-<li>Validates <code>status</code> is in <code>ALLOWED_STATUSES</code> → else 400.</li>
-<li>Treats same-status post as a no-op (no event written).</li>
-<li>Validates the source→target edge is in <code>ALLOWED_TRANSITIONS</code> → else 400 with explicit message.</li>
-<li>Only stamps <code>started_at</code> on entry to <code>in_progress</code> if currently NULL.</li>
-<li>Stamps <code>completed_at</code> on entry to <code>completed</code> (and backfills <code>started_at</code> if null).</li>
-<li>Appends <code>status_changed</code> event with <code>old_status</code> / <code>new_status</code> (replacing the prior <code>from</code> / <code>to</code> keys).</li>
-<li><code>POST /encounters</code> now restricts initial status to <code>scheduled</code> or <code>in_progress</code> so deeper states can&#x27;t be forged at creation.</li>
+<li>New <code>apps/api/app/auth.py</code>: <code>Caller</code> dataclass, <code>require_caller</code> FastAPI dependency, <code>ensure_same_org</code> guard.</li>
+<li><code>require_caller</code> reads <code>X-User-Email</code>, looks up the user by email, and returns structured context. 401 on missing/empty header; 401 on unknown email.</li>
+<li>Added <code>GET /me</code> route that echoes the resolved caller — proves the auth wiring end-to-end.</li>
 </ul>
-<h3>Step 3 — Encounter filtering</h3>
+<h3>Step 3 — Org scoping on encounter routes</h3>
 <ul>
-<li><code>GET /encounters</code> accepts <code>organization_id</code>, <code>location_id</code>, <code>status</code>, <code>provider_name</code>.</li>
-<li>All filters use parameterized SQL; clauses AND-ed; ordering preserved.</li>
-<li>Invalid <code>status</code> filter → 400 with enumerated allowed values.</li>
+<li><code>apps/api/app/api/routes.py</code>:</li>
+<li><code>GET /encounters</code> now always filters <code>organization_id = caller.organization_id</code>. <code>?organization_id=</code> query becomes a lens: mismatch → 403.</li>
+<li><code>GET /encounters/{id}</code>, <code>GET /encounters/{id}/events</code>, <code>POST /encounters/{id}/events</code>, <code>POST /encounters/{id}/status</code> use a shared <code>_load_encounter_for_caller</code> helper that returns 404 on cross-org (no existence oracle).</li>
+<li><code>POST /encounters</code> forces <code>organization_id</code> to the caller&#x27;s org via <code>ensure_same_org</code>; location must also belong to caller org or 403.</li>
+<li><code>encounter_created</code> and <code>status_changed</code> events now record the acting user email (<code>created_by</code> / <code>changed_by</code>).</li>
 </ul>
-<h3>Step 4 — Expanded seed</h3>
+<h3>Step 4 — Seed expansion</h3>
 <ul>
-<li><code>scripts_seed.py</code> now seeds <strong>two</strong> encounters:</li>
-<li>PT-1001 at <code>in_progress</code> with 3 events (create, status_changed, note_draft_requested).</li>
-<li>PT-1002 at <code>review_needed</code> with 5 events walking the full forward flow.</li>
-<li>Seed remains idempotent; both encounters and their events use composite uniqueness checks before insert.</li>
-<li>Timestamp handling at seed time: <code>started_at = CURRENT_TIMESTAMP</code> for any status that implies the visit began; <code>completed_at</code> only for <code>completed</code>.</li>
+<li><code>scripts_seed.py</code> now seeds two organizations (demo-eye-clinic + northside-retina) with their own admins, locations, and encounters — enough to actually exercise scoping.</li>
+<li>Still idempotent across N runs; verified with back-to-back executions.</li>
 </ul>
 <h3>Step 5 — Local verification</h3>
 <ul>
-<li><code>rm -f chartnav.db &amp;&amp; alembic upgrade head</code> → both migrations ran cleanly.</li>
-<li><code>python scripts_seed.py</code> ran twice; event counts stable at 3 / 5.</li>
-<li><code>uvicorn</code> boot clean; all baseline endpoints returned 200.</li>
-<li>Filter matrix verified — see <code>06-known-gaps.md</code> for matrix.</li>
-<li>State-machine matrix verified — 4 valid transitions 200, 4 invalid transitions 400 with explicit detail.</li>
-<li>OpenAPI now exposes the four new query parameters on <code>GET /encounters</code>.</li>
+<li>Fixed a bug introduced during auth scaffolding: <code>auth.py</code> initially resolved <code>chartnav.db</code> from the wrong parent (<code>apps/api/app/chartnav.db</code>); corrected to <code>Path(__file__).resolve().parents[1] / &quot;chartnav.db&quot;</code> (= <code>apps/api/chartnav.db</code>). Before fix all scoped routes returned 500.</li>
+<li>Post-fix: full matrix green — see <code>06-known-gaps.md</code> for the proof table.</li>
 </ul>
 <h3>Step 6 — Documentation</h3>
 <ul>
-<li>Created <code>docs/build/*</code> living docs.</li>
-<li>Created <code>docs/diagrams/*</code> Mermaid sources (architecture, ER, status machine, sequence).</li>
-<li>Generated <code>docs/final/chartnav-workflow-state-machine-build.html</code> and <code>.pdf</code>.</li>
+<li>Updated <code>01-current-state.md</code>, <code>03-api-endpoints.md</code>, <code>04-data-model.md</code>, <code>05-build-log.md</code>, <code>06-known-gaps.md</code>.</li>
+<li>Added <code>07-auth-and-scoping.md</code>.</li>
+<li>Updated diagrams: <code>system-architecture.md</code>, <code>api-data-flow.md</code>, <code>er-diagram.md</code>.</li>
+<li>Regenerated <code>docs/final/chartnav-workflow-state-machine-build.{html,pdf}</code> so the consolidated artifact now covers Phase 1 (workflow spine) + Phase 2 (state machine + filtering) + Phase 3 (auth + scoping).</li>
 </ul>
 <h3>Step 7 — Git hygiene</h3>
 <ul>
-<li><code>chartnav.db</code> is gitignored; not committed.</li>
-<li><code>.venv/</code> is gitignored.</li>
-<li>Committed source + docs in a single atomic commit.</li>
+<li>DB reset to pristine seeded state before commit.</li>
+<li>SQLite <code>.db</code> file stays gitignored.</li>
+<li>One atomic commit with code + docs + regenerated final artifacts.</li>
+</ul>
+<p>---</p>
+<h2>2026-04-17 — Phase: workflow state machine + filtering (prior)</h2>
+<p>See original entry preserved below for history.</p>
+<h3>Step 2 — Strict status state machine</h3>
+<ul>
+<li>Added <code>ALLOWED_TRANSITIONS</code> map.</li>
+<li>Edges: forward <code>scheduled→in_progress→draft_ready→review_needed→completed</code>; rework <code>draft_ready→in_progress</code>, <code>review_needed→draft_ready</code>.</li>
+<li>All other edges → 400 <code>invalid_transition</code> with explicit allowed-next-states listing.</li>
+<li>Same-status = no-op.</li>
+<li><code>in_progress</code> stamps <code>started_at</code> if null; <code>completed</code> stamps <code>completed_at</code> (and backfills <code>started_at</code> if null).</li>
+</ul>
+<h3>Step 3 — Filters</h3>
+<ul>
+<li><code>GET /encounters</code> accepts <code>organization_id</code>, <code>location_id</code>, <code>status</code>, <code>provider_name</code>. AND-ed, parameterized.</li>
+</ul>
+<h3>Step 4 — Seed coverage</h3>
+<ul>
+<li>Two encounters covering <code>in_progress</code> and <code>review_needed</code> with realistic event history.</li>
+</ul>
+<h3>Step 5 — Verification</h3>
+<ul>
+<li>Filter matrix + state-machine matrix all green.</li>
+</ul>
+<p>---</p>
+<h2>2026-04-17 — Phase: workflow spine (earlier)</h2>
+<h3>Migration <code>a1b2c3d4e5f6</code></h3>
+<ul>
+<li>Added <code>encounters</code> and <code>workflow_events</code> tables with FKs and indexes.</li>
+</ul>
+<h3>Seed</h3>
+<ul>
+<li>Idempotent demo org / location / admin / encounter / events.</li>
+</ul>
+<h3>Initial routes</h3>
+<ul>
+<li>6 encounter endpoints (3 read, 3 write).</li>
 </ul>
 </section>
-<section id="sec-7"><h2>06 — Known gaps</h2>
-<h1>Known Gaps</h1>
-<h2>Verification matrix (proof this phase shipped)</h2>
-<h3>Filter matrix — <code>GET /encounters?...</code></h3>
-<table><thead><tr><th>Query</th><th>Expected ids</th><th>Actual</th></tr></thead><tbody>
-<tr><td><code>status=in_progress</code></td><td><code>[1]</code></td><td><code>[1]</code></td></tr>
-<tr><td><code>status=review_needed</code></td><td><code>[2]</code></td><td><code>[2]</code></td></tr>
-<tr><td><code>provider_name=Dr. Patel</code></td><td><code>[2]</code></td><td><code>[2]</code></td></tr>
-<tr><td><code>organization_id=1&amp;location_id=1&amp;status=in_progress</code></td><td><code>[1]</code></td><td><code>[1]</code></td></tr>
-<tr><td><code>organization_id=999</code></td><td><code>[]</code></td><td><code>[]</code></td></tr>
-<tr><td><code>status=bogus</code></td><td>400</td><td>400</td></tr>
+<section id="sec-7"><h2>06 — Known gaps + verification matrix</h2>
+<h1>Known Gaps &amp; Verification Matrix</h1>
+<h2>Verification matrix — dev auth + org scoping phase</h2>
+<p>All checks executed against local <code>uvicorn</code> with a fresh seeded DB.</p>
+<h3>Auth</h3>
+<table><thead><tr><th>Case</th><th>Expected</th><th>Actual</th></tr></thead><tbody>
+<tr><td><code>GET /me</code> no header</td><td>401</td><td>401</td></tr>
+<tr><td><code>GET /me</code> unknown email</td><td>401</td><td>401</td></tr>
+<tr><td><code>GET /me</code> empty header</td><td>401</td><td>401</td></tr>
+<tr><td><code>GET /me</code> org1 admin</td><td>200 + <code>organization_id=1</code></td><td>200 + <code>organization_id=1</code></td></tr>
+<tr><td><code>GET /me</code> org2 admin</td><td>200 + <code>organization_id=2</code></td><td>200 + <code>organization_id=2</code></td></tr>
 </tbody></table>
-<h3>State machine matrix — <code>POST /encounters/{id}/status</code></h3>
-<table><thead><tr><th>Encounter</th><th>From</th><th>To</th><th>Expected</th><th>Actual</th></tr></thead><tbody>
-<tr><td>1</td><td>in_progress</td><td>draft_ready</td><td>200</td><td>200</td></tr>
-<tr><td>1</td><td>draft_ready</td><td>in_progress</td><td>200</td><td>200</td></tr>
-<tr><td>1</td><td>in_progress</td><td>completed</td><td>400</td><td>400</td></tr>
-<tr><td>1</td><td>in_progress</td><td>scheduled</td><td>400</td><td>400</td></tr>
-<tr><td>2</td><td>review_needed</td><td>completed</td><td>200</td><td>200</td></tr>
-<tr><td>2</td><td>completed</td><td>in_progress</td><td>400</td><td>400</td></tr>
-<tr><td>1</td><td>in_progress</td><td><code>&quot;whatever&quot;</code></td><td>400</td><td>400</td></tr>
+<h3>Encounter listing</h3>
+<table><thead><tr><th>Case</th><th>Expected</th><th>Actual</th></tr></thead><tbody>
+<tr><td><code>GET /encounters</code> no auth</td><td>401</td><td>401</td></tr>
+<tr><td>Org1 <code>GET /encounters</code></td><td><code>[1, 2]</code></td><td><code>[1, 2]</code></td></tr>
+<tr><td>Org2 <code>GET /encounters</code></td><td><code>[3]</code></td><td><code>[3]</code></td></tr>
+<tr><td>Org1 <code>GET /encounters?organization_id=2</code> (cross-org lens)</td><td>403</td><td>403</td></tr>
+<tr><td>Org1 <code>GET /encounters?organization_id=1</code> (own lens)</td><td><code>[1, 2]</code></td><td><code>[1, 2]</code></td></tr>
 </tbody></table>
-<h2>Real gaps (prioritized)</h2>
-<p>1. <strong>No ORM / no sessions</strong> — routes still use raw <code>sqlite3</code> with per-request connections. Works for single-file SQLite; will not scale cleanly to Postgres or multi-writer.</p>
-<p>2. <strong>No auth / no tenant scoping</strong> — any caller sees any org&#x27;s data. Needs <code>organization_id</code> derived from authenticated identity, not client input.</p>
-<p>3. <strong>No pagination</strong> — <code>GET /encounters</code> returns all matching rows. Needs <code>limit</code>, <code>cursor</code>, and a stable order.</p>
-<p>4. <strong>No update / delete paths</strong> — encounters cannot be edited (patient name typo) or cancelled. Need <code>PATCH /encounters/{id}</code> and a <code>cancelled</code> status (or soft-delete).</p>
-<p>5. <strong>No automated tests</strong> — verification is manual curl matrices. Need pytest + httpx <code>TestClient</code> covering state machine + filters.</p>
-<p>6. <strong>Free-form <code>event_data</code></strong> — no per-event_type schema validation.</p>
-<p>7. <strong>SQLite-only</strong> — Alembic constructs are SQLite-compatible but Postgres parity hasn&#x27;t been exercised (docker compose has a Postgres intent but api still points at SQLite).</p>
-<p>8. <strong>Frontend not wired</strong> — <code>apps/web</code> does not yet consume <code>/encounters</code>.</p>
-<p>9. <strong>CORS wide-open</strong> (<code>allow_origins=[&quot;*&quot;]</code>) — fine for dev, must be tightened before any hosted deploy.</p>
-<p>10. <strong>No request IDs / structured logging</strong> — hard to trace a specific 400 in a busy log.</p>
+<h3>Encounter read</h3>
+<table><thead><tr><th>Case</th><th>Expected</th><th>Actual</th></tr></thead><tbody>
+<tr><td>Org1 <code>GET /encounters/1</code></td><td>200</td><td>200</td></tr>
+<tr><td>Org1 <code>GET /encounters/3</code> (other org)</td><td>404</td><td>404</td></tr>
+<tr><td>Org2 <code>GET /encounters/3</code></td><td>200</td><td>200</td></tr>
+<tr><td>Org2 <code>GET /encounters/1</code> (other org)</td><td>404</td><td>404</td></tr>
+<tr><td>Org1 <code>GET /encounters/1/events</code></td><td>200</td><td>200</td></tr>
+<tr><td>Org1 <code>GET /encounters/3/events</code> (cross)</td><td>404</td><td>404</td></tr>
+</tbody></table>
+<h3>Encounter create</h3>
+<table><thead><tr><th>Case</th><th>Expected</th><th>Actual</th></tr></thead><tbody>
+<tr><td>Org1 POST own-org body</td><td>201</td><td>201</td></tr>
+<tr><td>Org1 POST body <code>organization_id=2</code> (cross)</td><td>403</td><td>403</td></tr>
+<tr><td>Org1 POST own org but <code>location_id</code> belongs to other org</td><td>403</td><td>403</td></tr>
+</tbody></table>
+<h3>Encounter mutate</h3>
+<table><thead><tr><th>Case</th><th>Expected</th><th>Actual</th></tr></thead><tbody>
+<tr><td>Org1 POST <code>/encounters/1/events</code> (own)</td><td>201</td><td>201</td></tr>
+<tr><td>Org1 POST <code>/encounters/3/events</code> (cross)</td><td>404</td><td>404</td></tr>
+<tr><td>Org1 POST <code>/encounters/1/status</code> <code>draft_ready</code> (valid)</td><td>200</td><td>200</td></tr>
+<tr><td>Org2 POST <code>/encounters/1/status</code> (cross)</td><td>404</td><td>404</td></tr>
+<tr><td>Org1 POST <code>/encounters/1/status</code> <code>completed</code> (invalid transition)</td><td>400</td><td>400</td></tr>
+</tbody></table>
+<h2>Real gaps (prioritized for next phase)</h2>
+<p>1. <strong>Dev-only auth</strong> — <code>X-User-Email</code> is trivially spoofable. Must graduate to JWT or an identity provider before any hosted deployment. The abstraction point (<code>require_caller</code>) is already in place.</p>
+<p>2. <strong>No role-based authorization</strong> — every seeded user is <code>admin</code>. Need <code>role</code>-gated actions (clinician vs. admin vs. reviewer) for the state machine edges.</p>
+<p>3. <strong><code>/organizations</code>, <code>/locations</code>, <code>/users</code> still unscoped</strong> — left open intentionally this phase. Next auth phase should either scope them to caller org or gate by role.</p>
+<p>4. <strong>No pagination / cursor</strong> on <code>GET /encounters</code>.</p>
+<p>5. <strong>No encounter update / delete / cancel</strong> path; no <code>cancelled</code> status.</p>
+<p>6. <strong>No automated tests</strong> — verification is still manual curl; need pytest + httpx <code>TestClient</code> covering auth, scoping, state machine, filters.</p>
+<p>7. <strong>No ORM / sessions</strong> — raw <code>sqlite3</code> with per-request connections. Works for SQLite; Postgres parity untested.</p>
+<p>8. **CORS <code>allow_origins=[&quot;*&quot;]</code>** — must tighten before any hosted deploy.</p>
+<p>9. <strong>No audit log distinct from workflow_events</strong> — auth failures, scoping violations are not persisted.</p>
+<p>10. <strong>No rate limiting</strong>.</p>
 </section>
-<section id="sec-8"><h2>Diagram — System architecture</h2>
+<section id="sec-8"><h2>07 — Auth & org scoping</h2>
+<h1>Auth &amp; Org Scoping</h1>
+<h2>Auth model (dev)</h2>
+<p>This is a <strong>local/dev</strong> auth layer, not production identity. There are no</p>
+<p>passwords, tokens, signatures, or sessions. The contract:</p>
+<p>1. Every protected request must include header <code>X-User-Email: &lt;email&gt;</code>.</p>
+<p>2. The server looks up that user in the <code>users</code> table.</p>
+<p>3. The caller&#x27;s <code>organization_id</code> is derived from that row.</p>
+<p>4. The caller context (<code>Caller</code> dataclass) is attached to the request via</p>
+<p>FastAPI&#x27;s <code>Depends(require_caller)</code>.</p>
+<p>**No body or query parameter can override the caller&#x27;s resolved</p>
+<p><code>organization_id</code>.** Attempts to do so are rejected with 403.</p>
+<h3>Source</h3>
+<ul>
+<li>Dependency: <code>apps/api/app/auth.py</code> — <code>require_caller</code>, <code>ensure_same_org</code>, <code>Caller</code>.</li>
+<li>Applied in: <code>apps/api/app/api/routes.py</code> on every encounter route and <code>/me</code>.</li>
+</ul>
+<h3>Responses</h3>
+<table><thead><tr><th>Situation</th><th>HTTP</th><th>Detail</th></tr></thead><tbody>
+<tr><td>Missing / empty <code>X-User-Email</code></td><td>401</td><td><code>missing_auth_header</code></td></tr>
+<tr><td>Unknown email</td><td>401</td><td><code>unknown_user</code></td></tr>
+<tr><td>Caller&#x27;s org ≠ target org (body/query/loc)</td><td>403</td><td><code>cross_org_access_forbidden</code></td></tr>
+<tr><td>Caller tries to read another org&#x27;s encounter</td><td>404</td><td><code>encounter_not_found</code></td></tr>
+</tbody></table>
+<h2>Scoping model</h2>
+<table><thead><tr><th>Route</th><th>Scoping</th></tr></thead><tbody>
+<tr><td><code>GET /encounters</code></td><td>WHERE <code>organization_id = caller.organization_id</code>. <code>?organization_id=</code> param is a lens: if it mismatches the caller → 403. <code>?location_id=</code>, <code>?status=</code>, <code>?provider_name=</code> narrow further within the caller&#x27;s org.</td></tr>
+<tr><td><code>GET /encounters/{id}</code></td><td>Same row + cross-org check; mismatched → 404.</td></tr>
+<tr><td><code>GET /encounters/{id}/events</code></td><td>Parent-encounter scoped; cross-org → 404.</td></tr>
+<tr><td><code>POST /encounters</code></td><td><code>organization_id</code> in body must equal caller org → 403 otherwise. Location must also belong to caller org → 403 otherwise.</td></tr>
+<tr><td><code>POST /encounters/{id}/events</code></td><td>404 if cross-org.</td></tr>
+<tr><td><code>POST /encounters/{id}/status</code></td><td>404 if cross-org. Strict state machine applies after scope check.</td></tr>
+<tr><td><code>GET /me</code></td><td>Auth-only; echoes resolved caller.</td></tr>
+<tr><td><code>GET /organizations</code>, <code>/locations</code>, <code>/users</code></td><td><strong>NOT scoped</strong> this phase — intentional, documented.</td></tr>
+</tbody></table>
+<h3>404-vs-403 rule</h3>
+<p>For encounter reads/mutates, cross-org access returns <strong>404</strong> (same shape</p>
+<p>as &quot;really doesn&#x27;t exist&quot;) so attackers cannot distinguish &quot;exists in</p>
+<p>another org&quot; from &quot;doesn&#x27;t exist at all.&quot; For explicit body/query</p>
+<p>assertions that contradict the caller (e.g. <code>POST /encounters</code> body</p>
+<p><code>organization_id=2</code> while caller is org 1), the server returns <strong>403</strong></p>
+<p>because the intent is unambiguous and should fail loudly.</p>
+<h2>Illustrated flow</h2>
+<div class="mermaid">
+sequenceDiagram
+  autonumber
+  participant C as Client
+  participant Auth as require_caller
+  participant DB as SQLite
+  participant R as Route handler
+
+  C->>Auth: request + X-User-Email
+  Auth->>DB: SELECT ... FROM users WHERE email=?
+  alt user exists
+    DB-->>Auth: row
+    Auth-->>R: Caller(user_id, email, organization_id, ...)
+    R->>DB: SELECT ... WHERE organization_id = caller.organization_id
+    DB-->>R: rows
+    R-->>C: 200 scoped data
+  else unknown / missing
+    Auth-->>C: 401 missing_auth_header / unknown_user
+  end
+</div>
+<h2>What this phase explicitly does NOT do</h2>
+<ul>
+<li>No password auth, no JWT, no session cookies.</li>
+<li>No role-based access control (admin vs. clinician etc.) — every seeded</li>
+</ul>
+<p>user currently has <code>role = &quot;admin&quot;</code>.</p>
+<ul>
+<li>No rate limiting or audit log beyond the <code>workflow_events</code> breadcrumb.</li>
+<li><code>/organizations</code>, <code>/locations</code>, <code>/users</code> remain unauthenticated.</li>
+</ul>
+<p>These are the right handoff points for the *next* auth phase.</p>
+</section>
+<section id="sec-9"><h2>Diagram — System architecture</h2>
 <h1>System Architecture</h1>
 <div class="mermaid">
 flowchart LR
   Client["Client<br/>(curl / apps/web)"]
   FastAPI["FastAPI<br/>apps/api/app/main.py"]
+  Auth["require_caller<br/>apps/api/app/auth.py"]
   Router["APIRouter<br/>apps/api/app/api/routes.py"]
   SM["State Machine<br/>ALLOWED_TRANSITIONS"]
+  Scope["Org Scoping<br/>ensure_same_org"]
   DB[("SQLite<br/>apps/api/chartnav.db")]
   Alembic["Alembic<br/>apps/api/alembic/"]
-  Seed["scripts_seed.py"]
+  Seed["scripts_seed.py<br/>(2 orgs)"]
 
-  Client -->|HTTP| FastAPI --> Router
+  Client -->|"HTTP + X-User-Email"| FastAPI
+  FastAPI --> Auth
+  Auth -->|"lookup by email"| DB
+  Auth -->|"Caller ctx"| Router
+  Router --> Scope
   Router --> SM
-  Router -->|parameterized SQL| DB
-  Alembic -.->|upgrade head| DB
-  Seed -.->|idempotent seed| DB
+  Router -->|"scoped SQL: WHERE organization_id = caller.org"| DB
+  Alembic -.->|"upgrade head"| DB
+  Seed -.->|"idempotent seed"| DB
 </div>
 </section>
-<section id="sec-9"><h2>Diagram — Encounter status machine</h2>
+<section id="sec-10"><h2>Diagram — Encounter status machine</h2>
 <h1>Encounter Status State Machine</h1>
 <div class="mermaid">
 stateDiagram-v2
@@ -442,15 +576,15 @@ stateDiagram-v2
 <p>Legend: any edge not shown is rejected at <code>POST /encounters/{id}/status</code></p>
 <p>with HTTP 400 <code>invalid_transition</code>.</p>
 </section>
-<section id="sec-10"><h2>Diagram — ER</h2>
+<section id="sec-11"><h2>Diagram — ER</h2>
 <h1>ER Diagram</h1>
 <div class="mermaid">
 erDiagram
-  organizations ||--o{ locations     : "has"
-  organizations ||--o{ users         : "employs"
-  organizations ||--o{ encounters    : "owns"
-  locations     ||--o{ encounters    : "hosts"
-  encounters    ||--o{ workflow_events : "emits"
+  organizations ||--o{ locations        : "has"
+  organizations ||--o{ users            : "employs (identity + org lens)"
+  organizations ||--o{ encounters       : "owns"
+  locations     ||--o{ encounters       : "hosts"
+  encounters    ||--o{ workflow_events  : "emits"
 
   organizations {
     int id PK
@@ -493,40 +627,61 @@ erDiagram
     datetime created_at
   }
 </div>
+<h2>Dev auth note</h2>
+<p><code>users.email</code> is the authentication key consumed from the <code>X-User-Email</code></p>
+<p>header. <code>users.organization_id</code> is the authoritative source of the</p>
+<p>caller&#x27;s organization scope — never derived from body or query params.</p>
+<h2>Seeded tenants</h2>
+<table><thead><tr><th>org_id</th><th>slug</th><th>admin email</th><th>location_id</th><th>encounter_ids</th></tr></thead><tbody>
+<tr><td>1</td><td><code>demo-eye-clinic</code></td><td>admin@chartnav.local</td><td>1</td><td>1, 2</td></tr>
+<tr><td>2</td><td><code>northside-retina</code></td><td>admin@northside.local</td><td>2</td><td>3</td></tr>
+</tbody></table>
 </section>
-<section id="sec-11"><h2>Diagram — API / data flow</h2>
+<section id="sec-12"><h2>Diagram — API / data flow</h2>
 <h1>API / Data Flow</h1>
 <div class="mermaid">
 sequenceDiagram
   autonumber
   participant C as Client
-  participant A as FastAPI / routes.py
+  participant Auth as require_caller
+  participant R as Route handler
   participant SM as State Machine
   participant DB as SQLite
 
-  Note over C,DB: Happy-path: advance an encounter
-  C->>A: POST /encounters/{id}/status {"status":"draft_ready"}
-  A->>DB: SELECT status, started_at, completed_at FROM encounters WHERE id=?
-  DB-->>A: current row
-  A->>SM: is (in_progress → draft_ready) allowed?
-  SM-->>A: yes
-  A->>DB: UPDATE encounters SET status=?, started_at=?, completed_at=? WHERE id=?
-  A->>DB: INSERT INTO workflow_events (status_changed, {old,new})
-  DB-->>A: committed
-  A-->>C: 200 updated encounter row
+  Note over C,DB: Happy path — org1 advances own encounter
+  C->>Auth: POST /encounters/1/status {"status":"draft_ready"}<br/>X-User-Email: admin@chartnav.local
+  Auth->>DB: SELECT user WHERE email=?
+  DB-->>Auth: {user_id, organization_id=1, ...}
+  Auth-->>R: Caller(org=1)
+  R->>DB: SELECT encounter 1 ... WHERE id=?
+  DB-->>R: row(org=1)
+  R->>R: encounter.organization_id == caller.org ✓
+  R->>SM: is (in_progress → draft_ready) allowed?
+  SM-->>R: yes
+  R->>DB: UPDATE + INSERT status_changed{changed_by=caller.email}
+  R-->>C: 200 updated
 
-  Note over C,DB: Rejected transition
-  C->>A: POST /encounters/{id}/status {"status":"completed"}
-  A->>DB: SELECT status...
-  A->>SM: is (in_progress → completed) allowed?
-  SM-->>A: no
-  A-->>C: 400 invalid_transition (with allowed next states)
+  Note over C,DB: Cross-org read — returns 404, not 403
+  C->>Auth: GET /encounters/3<br/>X-User-Email: admin@chartnav.local
+  Auth-->>R: Caller(org=1)
+  R->>DB: SELECT encounter 3
+  DB-->>R: row(org=2)
+  R->>R: encounter.organization_id != caller.org
+  R-->>C: 404 encounter_not_found
 
-  Note over C,DB: Filtered list
-  C->>A: GET /encounters?status=in_progress&provider_name=Dr.%20Carter
-  A->>DB: SELECT ... WHERE status=? AND provider_name=? ORDER BY id
-  DB-->>A: rows
-  A-->>C: 200 [rows]
+  Note over C,DB: Cross-org write assertion — returns 403
+  C->>Auth: POST /encounters {"organization_id":2,...}<br/>X-User-Email: admin@chartnav.local
+  Auth-->>R: Caller(org=1)
+  R->>R: body.organization_id != caller.org
+  R-->>C: 403 cross_org_access_forbidden
+
+  Note over C,DB: Missing / unknown identity
+  C->>Auth: GET /encounters
+  Auth-->>C: 401 missing_auth_header
+  C->>Auth: GET /encounters<br/>X-User-Email: ghost@nowhere
+  Auth->>DB: SELECT user
+  DB-->>Auth: ∅
+  Auth-->>C: 401 unknown_user
 </div>
 </section>
 </body></html>
