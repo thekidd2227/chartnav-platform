@@ -132,6 +132,19 @@ two suites never cross-contaminate.
   otherwise hit the 120/min limit. Safe because the E2E DB is
   always ephemeral.
 
+## Platform mode tests (phase 16)
+
+- `AdminPanel.test.tsx` extends to **17 tests** (+2).
+- New mocks: `getPlatform`. The default `beforeEach` seeds a
+  standalone-native platform response; individual tests override
+  to integrated-readthrough.
+- Assertions:
+  - `admin-platform-banner` renders on every admin view.
+  - `admin-platform-mode` content changes with
+    `platform_mode` — standalone vs integrated_readthrough.
+  - `admin-platform-adapter` content matches the adapter's
+    `display_name`.
+
 ## Gaps not yet covered
 - Visual regression not in CI (documented; OS-specific baselines).
 - No keyboard-only / screen-reader manual QA pass beyond axe's

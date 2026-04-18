@@ -190,6 +190,54 @@ export function getMe(email: string): Promise<Me> {
   return request("/me", { email });
 }
 
+// ---------- Platform mode (phase 16) ----------
+
+export type PlatformMode =
+  | "standalone"
+  | "integrated_readthrough"
+  | "integrated_writethrough";
+
+export type SourceOfTruth =
+  | "chartnav"
+  | "external"
+  | "mirrored"
+  | "not_supported";
+
+export interface PlatformInfo {
+  platform_mode: PlatformMode;
+  integration_adapter: string;
+  adapter: {
+    key: string;
+    display_name: string;
+    description: string;
+    supports: {
+      patient_read: boolean;
+      patient_write: boolean;
+      encounter_read: boolean;
+      encounter_write: boolean;
+      document_write: boolean;
+    };
+    source_of_truth: Record<string, SourceOfTruth>;
+  };
+}
+
+export function getPlatform(email: string): Promise<PlatformInfo> {
+  return request("/platform", { email });
+}
+
+export function platformModeLabel(mode: PlatformMode): string {
+  switch (mode) {
+    case "standalone":
+      return "Standalone (ChartNav-native)";
+    case "integrated_readthrough":
+      return "Integrated — read-through";
+    case "integrated_writethrough":
+      return "Integrated — write-through";
+    default:
+      return mode;
+  }
+}
+
 export function listEncounters(
   email: string,
   filters: EncounterFilters = {}

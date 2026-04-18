@@ -18,6 +18,9 @@ other module imports from there; nothing else reads `os.environ`.
 | `CHARTNAV_RATE_LIMIT_PER_MINUTE`    | no                               | `120`                                  | Per-process sliding window on authed paths. `0` disables. |
 | `CHARTNAV_RUN_SEED`                 | no                               | `0`                                    | Entrypoint: run seed after migrations. Keep `0` in prod. |
 | `API_HOST` / `API_PORT`             | no                               | `0.0.0.0` / `8000`                     | Uvicorn bind. |
+| `CHARTNAV_AUDIT_RETENTION_DAYS`     | no                               | `0` (never prune)                      | Operator-invoked retention helper (`scripts/audit_retention.py`). Never invoked from a request path. |
+| `CHARTNAV_PLATFORM_MODE`            | no                               | `standalone`                           | Operating mode (phase 16). `standalone` · `integrated_readthrough` · `integrated_writethrough`. |
+| `CHARTNAV_INTEGRATION_ADAPTER`      | no                               | `native` (standalone) / `stub` (integrated) | Selects the external-system adapter in integrated modes. `standalone` rejects any value other than `native`. Vendor adapters plug in via `register_vendor_adapter(key, factory)` in `app/integrations/__init__.py`. |
 
 ## Validation on startup
 
@@ -27,6 +30,13 @@ other module imports from there; nothing else reads `os.environ`.
 - If `AUTH_MODE=bearer`, **all three** JWT vars must be set — otherwise
   a `RuntimeError` is raised listing the missing names. The app will
   not boot half-configured.
+- `CHARTNAV_PLATFORM_MODE ∈ {standalone, integrated_readthrough,
+  integrated_writethrough}` — any other value raises at import time.
+- `CHARTNAV_PLATFORM_MODE=standalone` + `CHARTNAV_INTEGRATION_ADAPTER`
+  anything other than `native` raises at import time (operator error;
+  native is the only valid adapter in standalone mode).
+- `CHARTNAV_RATE_LIMIT_PER_MINUTE` / `CHARTNAV_AUDIT_RETENTION_DAYS`
+  must be non-negative integers.
 
 ## Dev / CI / Prod profiles
 

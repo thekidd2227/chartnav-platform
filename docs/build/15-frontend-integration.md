@@ -203,6 +203,23 @@ surface, filters. Details in `17-e2e-and-release.md`. Command:
 - `flash` in `AdminPanel` is now a stable `useCallback` — child panes that put it in a `refresh` dep array no longer hit an infinite refresh loop. (Regression landed while wiring feature-flag reloads; fix validated by Vitest + E2E.)
 - Accessibility: event-type `<select>` in the encounter detail composer now carries `aria-label="Event type"`; inline role `<select>`s in the admin Users table carry `aria-label="Role for <email>"`. These were the only `serious`/`critical` axe findings — the suite is now clean.
 
+## Platform mode awareness (phase 16)
+
+- `api.ts` gains `getPlatform(email)` + `PlatformInfo` /
+  `PlatformMode` / `SourceOfTruth` types + `platformModeLabel`
+  helper.
+- `AdminPanel` calls `/platform` on mount (alongside
+  `/organization`) and renders a **platform banner** above the
+  tabs: `Platform mode: <label> · <adapter display name>`. Visible
+  on every admin view so the deployment's semantics are never
+  implicit.
+- Two Vitest scenarios (`src/test/AdminPanel.test.tsx`):
+  - Standalone default renders "ChartNav native" adapter label.
+  - Integrated read-through renders the stub adapter label +
+    "Integrated — read-through" mode text.
+- No UI changes for clinicians — the banner is admin-only, inside
+  the admin modal.
+
 ## What this phase explicitly does NOT do
 
 - No real login flow — `X-User-Email` is still dev transport.

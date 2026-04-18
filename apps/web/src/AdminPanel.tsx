@@ -7,6 +7,7 @@ import {
   Me,
   Organization,
   OrganizationSettings,
+  PlatformInfo,
   Role,
   SecurityAuditEvent,
   User,
@@ -18,10 +19,12 @@ import {
   downloadAuditExport,
   featureEnabled,
   getOrganization,
+  getPlatform,
   inviteUser,
   listAuditEvents,
   listLocationsPage,
   listUsersPage,
+  platformModeLabel,
   updateLocation,
   updateOrganization,
   updateUser,
@@ -37,9 +40,11 @@ export function AdminPanel({ identity, me, onClose }: {
   const [tab, setTab] = useState<Tab>("users");
   const [banner, setBanner] = useState<{ kind: "ok" | "error"; msg: string } | null>(null);
   const [org, setOrg] = useState<Organization | null>(null);
+  const [platform, setPlatform] = useState<PlatformInfo | null>(null);
 
   useEffect(() => {
     getOrganization(identity).then(setOrg).catch(() => setOrg(null));
+    getPlatform(identity).then(setPlatform).catch(() => setPlatform(null));
   }, [identity]);
 
   const flash = useCallback(
@@ -67,6 +72,22 @@ export function AdminPanel({ identity, me, onClose }: {
             ✕
           </button>
         </div>
+        {platform && (
+          <div
+            className="platform-banner"
+            data-testid="admin-platform-banner"
+            role="note"
+          >
+            <strong>Platform mode:</strong>{" "}
+            <span data-testid="admin-platform-mode">
+              {platformModeLabel(platform.platform_mode)}
+            </span>
+            {" · "}
+            <span data-testid="admin-platform-adapter">
+              {platform.adapter.display_name}
+            </span>
+          </div>
+        )}
         <div className="admin-tabs">
           <button
             className={"btn " + (tab === "users" ? "btn--primary" : "")}

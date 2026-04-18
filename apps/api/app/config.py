@@ -64,6 +64,29 @@ class Settings:
     # silently prunes — retention runs on an operator cadence.
     audit_retention_days: int
 
+    # Platform operating mode (phase 16). Governs whether ChartNav is
+    # the system of record or a layer on top of an external EHR/EMR.
+    #   "standalone"              → ChartNav owns all clinical data.
+    #                               Native adapter persists to ChartNav's
+    #                               own DB.
+    #   "integrated_readthrough"  → ChartNav reads from an external
+    #                               EHR/EMR via a vendor adapter and
+    #                               mirrors what it needs; external
+    #                               system remains SoR for clinical data.
+    #   "integrated_writethrough" → Same as read-through plus ChartNav
+    #                               is allowed to push updates
+    #                               (notes, status, coding) back to the
+    #                               external EHR/EMR through the adapter.
+    # See docs/build/26-platform-mode-and-interoperability.md.
+    platform_mode: str
+
+    # Which external EHR/EMR adapter to select in integrated modes.
+    # In `standalone`, this is ignored and the native adapter is used.
+    # Ships "stub" (honest placeholder) out of the box. Real vendor
+    # adapters ("fhir", "epic", "cerner", ...) plug in via the
+    # adapter registry in app/integrations/__init__.py.
+    integration_adapter: str
+
 
 _DEFAULT_CORS = (
     "http://localhost:5173,http://127.0.0.1:5173,"
@@ -122,6 +145,37 @@ def _load() -> Settings:
                 "CHARTNAV_AUTH_MODE=bearer requires: " + ", ".join(missing)
             )
 
+    platform_mode = (
+        _env("CHARTNAV_PLATFORM_MODE", "standalone") or "standalone"
+    ).lower()
+    allowed_modes = {
+        "standalone",
+        "integrated_readthrough",
+        "integrated_writethrough",
+    }
+    if platform_mode not in allowed_modes:
+        raise RuntimeError(
+            "CHARTNAV_PLATFORM_MODE must be one of "
+            + ", ".join(sorted(allowed_modes))
+            + f" (got {platform_mode!r})"
+        )
+
+    # Default adapter: "native" in standalone, "stub" in integrated modes
+    # (so the app boots honestly without a configured vendor connector).
+    default_adapter = "native" if platform_mode == "standalone" else "stub"
+    integration_adapter = (
+        _env("CHARTNAV_INTEGRATION_ADAPTER", default_adapter) or default_adapter
+    ).lower()
+
+    # In standalone mode we silently force the native adapter — any other
+    # value is operator confusion, fail loudly.
+    if platform_mode == "standalone" and integration_adapter != "native":
+        raise RuntimeError(
+            "CHARTNAV_PLATFORM_MODE=standalone requires "
+            "CHARTNAV_INTEGRATION_ADAPTER=native (or unset). "
+            f"Got {integration_adapter!r}."
+        )
+
     return Settings(
         env=env,
         database_url=database_url,
@@ -133,6 +187,8 @@ def _load() -> Settings:
         cors_allow_origins=cors_allow_origins,
         rate_limit_per_minute=rate_limit_per_minute,
         audit_retention_days=audit_retention_days,
+        platform_mode=platform_mode,
+        integration_adapter=integration_adapter,
     )
 
 

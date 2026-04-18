@@ -39,6 +39,14 @@
 Adds "admin can issue an invitation and download audit CSV" on top of
 the 11 scenarios shipped through phase 13.
 
+## Phase-16 additions
+
+- **Platform modes**: `CHARTNAV_PLATFORM_MODE` wired — `standalone` / `integrated_readthrough` / `integrated_writethrough`. Config validates and refuses impossible combinations at import time.
+- **Adapter boundary**: `app/integrations/` with `ClinicalSystemAdapter` protocol + `NativeChartNavAdapter` + `StubClinicalSystemAdapter`. Vendor adapters plug in via `register_vendor_adapter`.
+- **`GET /platform`**: surfaces mode + adapter + source-of-truth. Admin panel renders a mode banner.
+- **131 pytest** (+13 platform). **30 Vitest** (+2 platform banner). Playwright unchanged.
+- **CI hardening rolled in with this phase**: migration boolean default portability (SQLite → Postgres) + vitest lockfile regen (Linux/Node 20). Both reproduced locally against docker postgres and `node:20` container; both now green.
+
 ## Phase-15 additions
 
 - **a11y**: 5 axe-core scenarios in CI (`serious`/`critical` blocking). Fixed: event-type `<select>` and inline admin role `<select>` now have aria-labels.
@@ -49,6 +57,10 @@ the 11 scenarios shipped through phase 13.
 - **Release compliance**: `chartnav-sbom-<v>.json` + `chartnav-api-<v>.digest.txt` are produced by `release_build.sh` and attached to the GitHub Release.
 
 ## Real gaps (prioritized for next phase)
+
+0. **No native `patients` table** — standalone mode's adapter refuses patient operations today. Next standalone-mode build should add the minimum native patient + provider schema.
+0. **No real vendor adapter** (Epic / Cerner / Athena / FHIR). The contract + registry exist; vendor work plugs in. Recommended first target: FHIR read-through.
+0. **Adapter path isn't fully exercised by HTTP routes yet** — `GET /platform` returns adapter metadata, but encounter/status routes still go through direct DB calls, not the adapter. Standalone that's a nop (native adapter wraps the same DB); for integrated modes this is where the real vendor translation work happens next.
 
 1. **No email delivery** for invitations — admin manually shares the token.
 2. **No SSO → users mapping change** (still by `CHARTNAV_JWT_USER_CLAIM`).

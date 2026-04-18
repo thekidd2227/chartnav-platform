@@ -4,6 +4,114 @@ Reverse-chronological.
 
 ---
 
+## 2026-04-18 — Phase 16: platform mode + interoperability
+
+### Step 0 — CI fallout from phase 15 repaired first
+- **Postgres parity failure** reproduced locally against a live
+  Postgres 16. Root cause: migration `c3d4e5f6a7b8` used
+  `sa.text("1")` as the default for `users.is_active` /
+  `locations.is_active` (BOOLEAN). SQLite stores booleans as ints
+  so it accepted the default; Postgres rejects with
+  `DatatypeMismatch`. Fixed by switching to `sa.text("true")` —
+  portable across both engines, no new revision required.
+- **Frontend CI failure** reproduced in a clean `node:20` Linux
+  container. Root cause: Vitest 4.1.4 transitively pulled rolldown
+  + Vite 8 + esbuild 0.28; the resulting `package-lock.json` was
+  missing the platform-specific `@esbuild/*` entries npm 10 on
+  Linux requires (`EBADPLATFORM` / `Missing: … from lock file`).
+  macOS npm 11 silently tolerated it. Fixed by pinning
+  `vitest`/`@vitest/ui` to `^3.2.4` (Vitest 3 uses Vite 5 directly,
+  no rolldown) and regenerating the lockfile. Linux CI replay now
+  green.
+- E2E was only skipped because upstream jobs failed; both fixes
+  unblock it. Lead-intake / Airtable toast on
+  `arcgsystems.com/chartnav/ophthalmology` is outside this repo
+  (zero matches for airtable/webhook/arcgsystems across the repo)
+  — external Make/Airtable automation owned by the marketing site.
+- Head: `aab94c3` after CI fix.
+
+### Step 1 — Define platform operating modes
+- `app/config.py` gains `platform_mode` and `integration_adapter`
+  on `Settings`. `CHARTNAV_PLATFORM_MODE` ∈ {`standalone`,
+  `integrated_readthrough`, `integrated_writethrough`}. Default
+  `standalone`. `integrated_*` defaults adapter to `stub`;
+  `standalone` pins it to `native` and rejects any other value at
+  import time.
+
+### Step 2 — Adapter boundary
+- New package `apps/api/app/integrations/`:
+  - `base.py` — `ClinicalSystemAdapter` protocol
+    (fetch_patient, search_patients, fetch_encounter,
+    update_encounter_status, write_note, sync_reference_data,
+    `info`), `AdapterInfo`, `SourceOfTruth` enum,
+    `AdapterError` + `AdapterNotSupported`.
+  - `native.py` — `NativeChartNavAdapter` (persists to ChartNav
+    DB via the same SA Core surface the HTTP routes use; refuses
+    patient ops honestly until a native `patients` table lands).
+  - `stub.py` — `StubClinicalSystemAdapter(writes_allowed)`.
+    Canned reads; write-through records writes to an in-process
+    list, read-through raises `AdapterNotSupported`.
+  - `__init__.py` — `resolve_adapter()` + mutable
+    `_VENDOR_ADAPTERS` registry + `register_vendor_adapter(key,
+    factory)`.
+
+### Step 3 — HTTP surface
+- New `GET /platform` (any authenticated caller). Returns mode +
+  adapter key + display name + description + supports-* flags +
+  source-of-truth map. Zero secret leakage (asserted in tests).
+
+### Step 4 — Frontend mode awareness
+- `api.ts` gains `PlatformInfo`, `PlatformMode`, `SourceOfTruth`
+  types + `getPlatform(email)` + `platformModeLabel(mode)`.
+- `AdminPanel.tsx` fetches `/platform` on mount (alongside
+  `/organization`) and renders a **platform banner** above the
+  tabs: "Platform mode: <mode> · <adapter display name>". Visible
+  on every admin view.
+- `styles.css` — new `.platform-banner` rule matching the
+  existing admin look.
+
+### Step 5 — Backend tests
+- New `tests/test_platform_mode.py` (13 tests): default mode,
+  integrated defaults, invalid mode, standalone-forbids-stub,
+  adapter resolution per mode (native / stub read-through / stub
+  write-through), unknown vendor key, vendor registration path,
+  native refuses unsupported, `/platform` endpoint surface +
+  auth guard. All 131 pytest pass.
+
+### Step 6 — Frontend tests
+- `AdminPanel.test.tsx` adds 2 tests — banner renders standalone
+  default, banner reflects integrated-readthrough. All mocks
+  updated (`getPlatform` added). Vitest: **30/30 passed**.
+
+### Step 7 — Docs
+- New `docs/build/26-platform-mode-and-interoperability.md`
+  (engineering contract).
+- New `docs/build/27-adoption-and-implementation-model.md`
+  (operator/clinic adoption model).
+- Updated `01-current-state`, `04-data-model`, `05-build-log`
+  (this entry), `06-known-gaps`, `08-test-strategy`,
+  `12-runtime-config`, `15-frontend-integration`,
+  `16-frontend-test-strategy`.
+- `docs/diagrams/system-architecture.md` — added adapter boundary.
+- `docs/diagrams/api-data-flow.md` — added adapter resolution
+  flow.
+- `scripts/build_docs.py` picks up sections 26 + 27; executive
+  summary extended; HTML + PDF regenerated.
+
+### Step 8 — Verification
+- Backend: **131/131 pytest**, 9/9 smoke via `make verify`.
+- Frontend: **30/30 Vitest**, typecheck clean, build emits
+  ~187 KB JS / 8.3 KB CSS.
+- Postgres parity: `scripts/pg_verify.sh` — migrate / seed /
+  smoke / status transition all green against Postgres 16.
+- Standalone boot: `CHARTNAV_PLATFORM_MODE=standalone` → native
+  adapter.
+- Integrated boot: `CHARTNAV_PLATFORM_MODE=integrated_readthrough
+  CHARTNAV_INTEGRATION_ADAPTER=stub` → stub adapter refuses
+  writes.
+
+---
+
 ## 2026-04-18 — Phase 15: enterprise quality + compliance signals
 
 ### Step 1 — Baseline

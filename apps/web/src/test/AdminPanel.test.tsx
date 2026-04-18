@@ -18,6 +18,7 @@ vi.mock("../api", async () => {
     updateLocation: vi.fn(),
     deactivateLocation: vi.fn(),
     getOrganization: vi.fn(),
+    getPlatform: vi.fn(),
     updateOrganization: vi.fn(),
     listAuditEvents: vi.fn(),
     inviteUser: vi.fn(),
@@ -86,6 +87,26 @@ beforeEach(() => {
     slug: "demo-eye-clinic",
     settings: { timezone: "America/New_York" },
     created_at: "2026-04-18 01:00:00",
+  });
+  (api.getPlatform as any).mockResolvedValue({
+    platform_mode: "standalone",
+    integration_adapter: "native",
+    adapter: {
+      key: "native",
+      display_name: "ChartNav native",
+      description: "ChartNav owns all clinical data.",
+      supports: {
+        patient_read: false,
+        patient_write: false,
+        encounter_read: true,
+        encounter_write: true,
+        document_write: true,
+      },
+      source_of_truth: {
+        encounter: "chartnav",
+        patient: "not_supported",
+      },
+    },
   });
   (api.listAuditEvents as any).mockResolvedValue({
     items: [
@@ -393,6 +414,42 @@ describe("AdminPanel", () => {
       const calls = (api.listUsersPage as any).mock.calls;
       expect(calls.at(-1)?.[1]?.q).toBe("clin");
     });
+  });
+
+  it("platform banner surfaces mode and adapter on mount", async () => {
+    render(<AdminPanel identity={ADMIN1.email} me={ADMIN1} onClose={() => {}} />);
+    const banner = await screen.findByTestId("admin-platform-banner");
+    expect(banner).toHaveTextContent("Standalone");
+    expect(screen.getByTestId("admin-platform-adapter")).toHaveTextContent(
+      "ChartNav native"
+    );
+  });
+
+  it("platform banner reflects integrated read-through mode", async () => {
+    (api.getPlatform as any).mockResolvedValue({
+      platform_mode: "integrated_readthrough",
+      integration_adapter: "stub",
+      adapter: {
+        key: "stub",
+        display_name: "Stub (integrated)",
+        description: "read-only stub",
+        supports: {
+          patient_read: true,
+          patient_write: false,
+          encounter_read: true,
+          encounter_write: false,
+          document_write: false,
+        },
+        source_of_truth: { encounter: "external" },
+      },
+    });
+    render(<AdminPanel identity={ADMIN1.email} me={ADMIN1} onClose={() => {}} />);
+    expect(await screen.findByTestId("admin-platform-mode")).toHaveTextContent(
+      "Integrated — read-through"
+    );
+    expect(screen.getByTestId("admin-platform-adapter")).toHaveTextContent(
+      "Stub (integrated)"
+    );
   });
 
   it("audit tab surfaces backend 403 as error banner", async () => {

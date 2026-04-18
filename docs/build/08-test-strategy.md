@@ -65,6 +65,22 @@ make docker-build
 - `make verify` (SQLite): 28 pytest + 9 smoke — all green
 - `scripts/pg_verify.sh`: migrations + seed (x2) + smoke + status transition + event write — **PASS**
 
+## Backend coverage (phase 16)
+
+- **131 pytest.** `test_platform_mode.py` (13) covers:
+  - Config parsing: default mode, integrated defaults, invalid
+    mode raises, standalone-forbids-non-native-adapter.
+  - Adapter resolution: standalone → native, integrated_readthrough
+    + stub (writes refused), integrated_writethrough + stub (writes
+    recorded in-process), unknown vendor key raises, vendor
+    registration path works.
+  - Native adapter: honestly refuses patient operations today.
+  - `GET /platform` endpoint: returns mode + adapter + source-of-truth;
+    no secret leakage (no `jwt` / `database_url` substrings); requires
+    auth (401 without identity).
+- Frontend: **30 Vitest.** `AdminPanel.test.tsx` adds 2 tests —
+  platform banner standalone + integrated-readthrough variants.
+
 ## Backend coverage (phase 15)
 
 - 118 pytest. `test_enterprise.py` (8) covers admin list pagination

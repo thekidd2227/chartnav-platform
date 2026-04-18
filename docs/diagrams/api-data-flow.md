@@ -139,6 +139,34 @@ flowchart LR
   UPapi --> Ready
 ```
 
+## Adapter resolution (phase 16)
+
+```mermaid
+flowchart LR
+  Env[[env]] --> Cfg[app/config.py]
+  Cfg -->|validates| Mode{CHARTNAV_PLATFORM_MODE}
+  Mode -->|standalone| N[NativeChartNavAdapter]
+  Mode -->|integrated_readthrough| Ad1{adapter key}
+  Mode -->|integrated_writethrough| Ad2{adapter key}
+  Ad1 -->|stub| S1[StubClinicalSystemAdapter<br/>writes_allowed=False]
+  Ad1 -->|native| N
+  Ad1 -->|vendor| VR[_VENDOR_ADAPTERS registry]
+  Ad2 -->|stub| S2[StubClinicalSystemAdapter<br/>writes_allowed=True]
+  Ad2 -->|native| N
+  Ad2 -->|vendor| VR
+  VR -->|key found| V[VendorAdapter]
+  VR -->|key missing| ERR[RuntimeError:<br/>no registered adapter factory]
+  N --> DB[(ChartNav DB)]
+  V --> EXT[(External EHR/EMR)]
+  S1 --> SM[(in-memory stub)]
+  S2 --> SM
+```
+
+Core services consume the adapter through the
+`ClinicalSystemAdapter` protocol — they never reach the DB or a
+vendor SDK directly. `GET /platform` surfaces the resolved mode +
+adapter to the frontend so the admin UI can render a mode banner.
+
 ## Release pipeline
 
 ```mermaid

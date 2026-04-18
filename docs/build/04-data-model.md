@@ -116,6 +116,23 @@ Encounters:
 
 Unchanged — see `docs/diagrams/er-diagram.md`.
 
+## Source of truth per platform mode (phase 16)
+
+| Object         | `standalone`     | `integrated_readthrough` (stub) | `integrated_writethrough` (stub) |
+|----------------|------------------|-----------------------------------|------------------------------------|
+| organization   | ChartNav         | mirrored                          | mirrored                           |
+| location       | ChartNav         | mirrored                          | mirrored                           |
+| user           | ChartNav         | ChartNav                          | ChartNav                           |
+| encounter      | ChartNav         | external                          | external                           |
+| workflow_event | ChartNav         | ChartNav                          | ChartNav                           |
+| patient        | not supported    | external                          | external                           |
+| document       | ChartNav (as `workflow_events`) | external (read)    | external (write via adapter)       |
+
+Adapter implementations declare their own source-of-truth map in
+`AdapterInfo.source_of_truth` — the HTTP surface at `GET /platform`
+returns whatever the live adapter says. Frontend surfaces this in the
+admin banner. See `26-platform-mode-and-interoperability.md`.
+
 ## Event taxonomy
 
 | event_type           | Writer                                 | Shape                                                              |

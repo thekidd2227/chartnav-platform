@@ -304,6 +304,42 @@ def metrics_endpoint():
     )
 
 
+# ---------- Platform (phase 16) ----------
+
+@router.get("/platform")
+def platform_info(caller: Caller = Depends(require_caller)) -> dict:
+    """Runtime platform mode + active adapter.
+
+    Any authenticated caller can read this — the frontend needs it to
+    render mode-aware UI (banner, admin panel, source-of-truth badges).
+    No secrets leak: only the adapter's self-description, not config.
+    """
+    from app.config import settings as _settings
+    from app.integrations import resolve_adapter
+
+    adapter = resolve_adapter()
+    info = adapter.info
+    return {
+        "platform_mode": _settings.platform_mode,
+        "integration_adapter": _settings.integration_adapter,
+        "adapter": {
+            "key": info.key,
+            "display_name": info.display_name,
+            "description": info.description,
+            "supports": {
+                "patient_read": info.supports_patient_read,
+                "patient_write": info.supports_patient_write,
+                "encounter_read": info.supports_encounter_read,
+                "encounter_write": info.supports_encounter_write,
+                "document_write": info.supports_document_write,
+            },
+            "source_of_truth": {
+                k: v.value for k, v in info.source_of_truth.items()
+            },
+        },
+    }
+
+
 # ---------- Identity ----------
 
 @router.get("/me")

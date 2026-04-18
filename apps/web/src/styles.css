@@ -263,6 +263,15 @@ body {
 
 .admin-modal { width: 760px; max-width: 96vw; }
 .admin-tabs { display: flex; gap: 8px; padding: 0 18px 12px; }
+.platform-banner {
+  margin: 0 18px 10px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--fg);
+  background: var(--bg-alt);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
 .admin-list-head { display: flex; justify-content: space-between; align-items: flex-end; margin: 14px 0 8px; }
 .admin-list-head h3 { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
 .admin-table { width: 100%; border-collapse: collapse; font-size: 13px; }

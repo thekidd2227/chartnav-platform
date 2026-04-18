@@ -23,6 +23,10 @@ flowchart LR
     SM["State Machine"]
     DB["db.py · SA Core"]
     Engine[(SA Engine)]
+    Adapters["app/integrations<br/>ClinicalSystemAdapter"]
+    Native["NativeChartNavAdapter"]
+    Stub["StubClinicalSystemAdapter"]
+    Vendor[("VendorAdapter<br/>(registry; empty today)")]
   end
 
   subgraph Storage
@@ -71,11 +75,17 @@ flowchart LR
   Authz --> Router
   Router --> SM
   Router --> DB
+  Router --> Adapters
+  Adapters --> Native
+  Adapters --> Stub
+  Adapters --> Vendor
+  Native --> DB
   DB --> Engine
   Engine --> SQLite
   Engine --> PG
   Config -.-> Authn
   Config -.-> DB
+  Config -.-> Adapters
 
   Alembic -.-> Engine
   Seed -.-> DB
