@@ -65,6 +65,11 @@ make docker-build
 - `make verify` (SQLite): 28 pytest + 9 smoke — all green
 - `scripts/pg_verify.sh`: migrations + seed (x2) + smoke + status transition + event write — **PASS**
 
+## Backend coverage (phase 14)
+
+- 110 pytest. `test_invitations.py` (20) covers invite issue / accept happy path / invalid / expired / reused / reissued tokens, cross-org denial, inactive / already-accepted denial, CSV export (admin-only, filters honored, shape), event-hardening rejection cases, and bulk import summary + org scoping + admin-only.
+- `test_control_plane.py` (19) updated for the typed settings schema (extra-forbid, extensions bucket, size cap via extensions).
+
 ## Backend coverage (phase 13)
 
 - 88 pytest tests. `test_control_plane.py` (17) covers org settings read/patch (all roles + unauth), JSON validation (non-object → 422, oversized → 400 `settings_too_large`), admin PATCH cross-org isolation, audit read admin-only, filters for `event_type` / `actor_email` / `q`, pagination headers, org scoping (never surfaces cross-org rows with identity), and `invited_at` stamping on admin create.

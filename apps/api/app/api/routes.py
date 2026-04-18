@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import csv
+import hashlib
+import io
 import json
-from datetime import datetime, timezone
+import secrets
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -63,12 +67,28 @@ EVENT_SCHEMAS: dict[str, tuple[str, ...]] = {
 }
 
 
+def _nonempty_str(v: Any, label: str, max_len: int = 2000) -> str:
+    if not isinstance(v, str) or not v.strip():
+        raise _err(
+            "invalid_event_data",
+            f"{label} must be a non-empty string",
+            400,
+        )
+    if len(v) > max_len:
+        raise _err(
+            "invalid_event_data",
+            f"{label} must be <= {max_len} characters",
+            400,
+        )
+    return v
+
+
 def _validate_event(event_type: str, event_data: Any) -> Optional[dict]:
     """Return a normalized dict payload, or raise 400 on violation.
 
     - `event_type` must be in EVENT_SCHEMAS.
     - `event_data` must be a JSON object (dict) with all required keys.
-      `None` is accepted only for types with no required keys.
+    - Per-type value types / enum membership are enforced below.
     """
     if event_type not in EVENT_SCHEMAS:
         raise _err(
@@ -98,6 +118,43 @@ def _validate_event(event_type: str, event_data: Any) -> Optional[dict]:
             f"{event_type} missing required keys: {missing}",
             400,
         )
+
+    # Per-type value discipline (phase 14 hardening).
+    if event_type == "status_changed":
+        for k in ("old_status", "new_status"):
+            if event_data[k] not in ALLOWED_STATUSES:
+                raise _err(
+                    "invalid_event_data",
+                    f"status_changed.{k} must be one of {sorted(ALLOWED_STATUSES)}",
+                    400,
+                )
+    elif event_type == "encounter_created":
+        if event_data["status"] not in ALLOWED_STATUSES:
+            raise _err(
+                "invalid_event_data",
+                f"encounter_created.status must be one of {sorted(ALLOWED_STATUSES)}",
+                400,
+            )
+    elif event_type == "manual_note":
+        _nonempty_str(event_data["note"], "manual_note.note", max_len=4000)
+    elif event_type == "note_draft_requested":
+        _nonempty_str(event_data["requested_by"], "note_draft_requested.requested_by", max_len=255)
+        # template is optional but, if present, must be a non-empty string
+        if "template" in event_data:
+            _nonempty_str(event_data["template"], "note_draft_requested.template", max_len=255)
+    elif event_type == "note_draft_completed":
+        _nonempty_str(event_data["template"], "note_draft_completed.template", max_len=255)
+        if "length_words" in event_data:
+            lw = event_data["length_words"]
+            if not isinstance(lw, int) or lw < 0:
+                raise _err(
+                    "invalid_event_data",
+                    "note_draft_completed.length_words must be a non-negative int",
+                    400,
+                )
+    elif event_type == "note_reviewed":
+        _nonempty_str(event_data["reviewer"], "note_reviewed.reviewer", max_len=255)
+
     return event_data
 
 
@@ -188,11 +245,25 @@ class LocationUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 
+class OrganizationSettings(BaseModel):
+    """Typed subset of organization-level preferences.
+
+    Any field is optional; unset keys simply mean "no override". An
+    `extensions` bucket lets operators stash forward-compat values
+    without a schema bump — everything else is rejected.
+    """
+    default_provider_name: Optional[str] = Field(default=None, max_length=255)
+    encounter_page_size: Optional[int] = Field(default=None, ge=10, le=200)
+    audit_page_size: Optional[int] = Field(default=None, ge=10, le=200)
+    feature_flags: Optional[dict[str, bool]] = None
+    extensions: Optional[dict[str, Any]] = None
+
+    model_config = {"extra": "forbid"}
+
+
 class OrganizationUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=255)
-    # Free-form whitelist-edited JSON object. The server coerces null to
-    # "cleared settings" and rejects non-object payloads.
-    settings: Optional[dict] = None
+    settings: Optional[OrganizationSettings] = None
 
 
 # ---------- Open endpoints ----------
@@ -583,7 +654,8 @@ def update_encounter_status(
 # =========================================================================
 
 USER_COLUMNS = (
-    "id, organization_id, email, full_name, role, is_active, invited_at, created_at"
+    "id, organization_id, email, full_name, role, is_active, invited_at, "
+    "invitation_expires_at, invitation_accepted_at, created_at"
 )
 LOCATION_COLUMNS = "id, organization_id, name, is_active, created_at"
 
@@ -833,8 +905,10 @@ def patch_organization(
     if payload.name is not None:
         updates["name"] = payload.name
     if payload.settings is not None:
-        # Size guard — cap settings blob at 16 KB of JSON.
-        blob = json.dumps(payload.settings, sort_keys=True)
+        # Normalize to only the set fields — avoids polluting the JSON
+        # blob with a bunch of nulls from the pydantic model.
+        normalized = payload.settings.model_dump(exclude_none=True)
+        blob = json.dumps(normalized, sort_keys=True)
         if len(blob) > 16_384:
             raise _err(
                 "settings_too_large",
@@ -924,3 +998,278 @@ def list_security_audit_events(
     response.headers["X-Limit"] = str(limit)
     response.headers["X-Offset"] = str(offset)
     return rows
+
+
+# =========================================================================
+# Invitation workflow (scaffolded — no email delivery)
+# =========================================================================
+#
+# The raw token is returned exactly once on POST /users/{id}/invite.
+# Only its sha256 hash is stored. Accept is unauthenticated (the token
+# IS the credential) but strictly checks:
+#   - token exists and matches a user
+#   - the user is active
+#   - invitation_accepted_at is null
+#   - invitation_expires_at is in the future
+# On success the hash is cleared so the same token can't be replayed.
+#
+# Email delivery is out of scope. The admin receives the invite URL
+# back and is expected to share it out-of-band.
+# =========================================================================
+
+INVITE_TTL_DAYS = 7
+
+
+class InviteAcceptBody(BaseModel):
+    token: str = Field(..., min_length=8, max_length=256)
+
+
+def _hash_token(raw: str) -> str:
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+@router.post("/users/{user_id}/invite", status_code=status.HTTP_201_CREATED)
+def admin_invite_user(
+    user_id: int, caller: Caller = Depends(require_admin)
+) -> dict:
+    """Create or re-issue an invitation for a user in caller's org.
+
+    Returns the raw token ONCE. Previous invitations for the same user
+    are effectively revoked (they compared against the old hash, which
+    we're about to overwrite).
+    """
+    with transaction() as conn:
+        row = conn.execute(
+            text(f"SELECT {USER_COLUMNS} FROM users WHERE id = :id"),
+            {"id": user_id},
+        ).mappings().first()
+        if not row or row["organization_id"] != caller.organization_id:
+            raise _err("user_not_found", "no such user in your organization", 404)
+        if not row["is_active"]:
+            raise _err(
+                "user_inactive",
+                "cannot invite an inactive user; reactivate first",
+                400,
+            )
+        if row["invitation_accepted_at"] is not None:
+            raise _err(
+                "user_already_accepted",
+                "user has already accepted a prior invitation",
+                400,
+            )
+
+        raw_token = secrets.token_urlsafe(32)
+        hashed = _hash_token(raw_token)
+        expires = (
+            datetime.now(timezone.utc) + timedelta(days=INVITE_TTL_DAYS)
+        ).replace(microsecond=0).isoformat()
+
+        conn.execute(
+            text(
+                "UPDATE users SET invitation_token_hash = :h, "
+                "invitation_expires_at = :exp WHERE id = :id"
+            ),
+            {"h": hashed, "exp": expires, "id": user_id},
+        )
+
+    return {
+        "user_id": user_id,
+        "invitation_token": raw_token,  # returned once, never stored raw
+        "invitation_expires_at": expires,
+        "ttl_days": INVITE_TTL_DAYS,
+    }
+
+
+@router.post("/invites/accept")
+def accept_invite(payload: InviteAcceptBody) -> dict:
+    """Unauthenticated — the token IS the credential.
+
+    Rate-limited by the path-level middleware below (/invites/accept is
+    added to the rate-limit protected prefixes via app.middleware).
+    """
+    h = _hash_token(payload.token)
+    row = fetch_one(
+        "SELECT id, organization_id, email, full_name, role, is_active, "
+        "invited_at, invitation_expires_at, invitation_accepted_at "
+        "FROM users WHERE invitation_token_hash = :h",
+        {"h": h},
+    )
+    if not row:
+        raise _err("invalid_invite", "invitation token is invalid", 400)
+    if not row["is_active"]:
+        raise _err("invalid_invite", "invitation target is inactive", 400)
+    if row["invitation_accepted_at"] is not None:
+        raise _err("invalid_invite", "invitation has already been accepted", 400)
+
+    expires = row["invitation_expires_at"]
+    try:
+        exp_dt = (
+            datetime.fromisoformat(expires.replace(" ", "T"))
+            if isinstance(expires, str) else expires
+        )
+        if exp_dt.tzinfo is None:
+            exp_dt = exp_dt.replace(tzinfo=timezone.utc)
+    except Exception:  # pragma: no cover
+        raise _err("invalid_invite", "invitation expiry is malformed", 400)
+    if exp_dt < datetime.now(timezone.utc):
+        raise _err("invite_expired", "invitation has expired", 400)
+
+    with transaction() as conn:
+        conn.execute(
+            text(
+                "UPDATE users SET invitation_accepted_at = CURRENT_TIMESTAMP, "
+                "invitation_token_hash = NULL WHERE id = :id"
+            ),
+            {"id": row["id"]},
+        )
+    return {
+        "user_id": row["id"],
+        "email": row["email"],
+        "organization_id": row["organization_id"],
+        "role": row["role"],
+        "accepted": True,
+    }
+
+
+# =========================================================================
+# Audit export — CSV, admin-only, honors filters + org scoping
+# =========================================================================
+
+@router.get("/security-audit-events/export", include_in_schema=True)
+def export_security_audit_events(
+    caller: Caller = Depends(require_admin),
+    event_type: Optional[str] = Query(default=None),
+    error_code: Optional[str] = Query(default=None),
+    actor_email: Optional[str] = Query(default=None),
+    q: Optional[str] = Query(default=None, max_length=200),
+):
+    from fastapi.responses import Response as _PlainResponse
+
+    clauses: list[str] = [
+        "(organization_id = :org OR organization_id IS NULL)"
+    ]
+    params: dict[str, Any] = {"org": caller.organization_id}
+    if event_type:
+        clauses.append("event_type = :event_type")
+        params["event_type"] = event_type
+    if error_code:
+        clauses.append("error_code = :error_code")
+        params["error_code"] = error_code
+    if actor_email:
+        clauses.append("actor_email = :actor_email")
+        params["actor_email"] = actor_email
+    if q:
+        clauses.append("(path LIKE :q OR detail LIKE :q)")
+        params["q"] = f"%{q}%"
+    where = " WHERE " + " AND ".join(clauses)
+
+    rows = fetch_all(
+        f"SELECT {_AUDIT_COLS} FROM security_audit_events{where} "
+        "ORDER BY id DESC",
+        params,
+    )
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([
+        "id", "created_at", "event_type", "error_code", "actor_email",
+        "actor_user_id", "organization_id", "method", "path",
+        "request_id", "remote_addr", "detail",
+    ])
+    for r in rows:
+        writer.writerow([
+            r.get("id"), r.get("created_at"), r.get("event_type"),
+            r.get("error_code"), r.get("actor_email"),
+            r.get("actor_user_id"), r.get("organization_id"),
+            r.get("method"), r.get("path"),
+            r.get("request_id"), r.get("remote_addr"),
+            r.get("detail") or "",
+        ])
+
+    filename = f"chartnav-audit-{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}.csv"
+    return _PlainResponse(
+        content=buf.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# =========================================================================
+# Bulk user import — admin, strictly org-scoped, fail-safe per row
+# =========================================================================
+
+class BulkUserInput(BaseModel):
+    email: str = Field(..., min_length=3, max_length=255, pattern=_EMAIL_RE)
+    full_name: Optional[str] = Field(default=None, max_length=255)
+    role: str
+
+
+class BulkUsersBody(BaseModel):
+    users: list[BulkUserInput] = Field(..., min_length=1, max_length=500)
+
+
+@router.post("/users/bulk", status_code=status.HTTP_200_OK)
+def admin_bulk_create_users(
+    payload: BulkUsersBody, caller: Caller = Depends(require_admin)
+) -> dict:
+    """Create many users at once. Each row is validated independently:
+
+    - Created rows are returned in `created`.
+    - Duplicate emails are returned in `skipped` with reason.
+    - Invalid roles / other errors land in `errors`.
+
+    Partial failure does NOT abort the batch — operators get a clear
+    summary they can act on.
+    """
+    created: list[dict] = []
+    skipped: list[dict] = []
+    errors: list[dict] = []
+
+    with transaction() as conn:
+        for i, u in enumerate(payload.users):
+            if u.role not in KNOWN_ROLES:
+                errors.append(
+                    {"row": i, "email": u.email, "error_code": "invalid_role"}
+                )
+                continue
+            existing = conn.execute(
+                text("SELECT id FROM users WHERE email = :e"), {"e": u.email}
+            ).mappings().first()
+            if existing:
+                skipped.append(
+                    {"row": i, "email": u.email, "error_code": "user_email_taken"}
+                )
+                continue
+            try:
+                new_id = insert_returning_id(
+                    conn,
+                    "users",
+                    {
+                        "organization_id": caller.organization_id,
+                        "email": u.email,
+                        "full_name": u.full_name,
+                        "role": u.role,
+                        "invited_at": _now_iso(),
+                    },
+                )
+                row = conn.execute(
+                    text(f"SELECT {USER_COLUMNS} FROM users WHERE id = :id"),
+                    {"id": new_id},
+                ).mappings().first()
+                created.append(dict(row))
+            except Exception as e:  # pragma: no cover — defensive
+                errors.append(
+                    {"row": i, "email": u.email, "error_code": "insert_failed", "detail": str(e)}
+                )
+
+    return {
+        "created": created,
+        "skipped": skipped,
+        "errors": errors,
+        "summary": {
+            "requested": len(payload.users),
+            "created": len(created),
+            "skipped": len(skipped),
+            "errors": len(errors),
+        },
+    }

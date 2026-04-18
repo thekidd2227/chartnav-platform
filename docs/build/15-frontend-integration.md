@@ -188,6 +188,14 @@ surface, filters. Details in `17-e2e-and-release.md`. Command:
 - Audit log tab: filter row (`event_type`, `actor_email`, free-text `q`), paginated table (25/page) ordered newest-first with timestamp / event / actor / method+path / error code / request id columns. Backend 4xx surfaces as banner.
 - Users tab renders an "Invited" badge for active users with `invited_at` set.
 
+## Invitations + bulk + audit export (phase 14)
+
+- Users tab now has an **Invite** button per active non-self row; clicking it surfaces the raw token in a one-shot banner (never shown again, dismissible).
+- Users tab also has a **Bulk import…** button that opens a CSV-style textarea dialog; the submit result renders an inline created/skipped/errors summary before closing.
+- Organization tab replaced the raw JSON textarea with typed inputs for `name`, `default_provider_name`, `encounter_page_size`, `audit_page_size`, plus an **Extensions** JSON textarea for forward-compat drift.
+- Audit log tab has an **Export CSV** button that fetches with the auth header and triggers a local download (must use fetch + blob — a raw `<a href>` can't send `X-User-Email`).
+- New minimal **Invite accept** screen (`apps/web/src/InviteAccept.tsx`) mounted at `/invite?invite=<token>` and `/accept`. On success stores the email into `localStorage.chartnav.devIdentity` so the main app picks it up for header-mode dev use.
+
 ## What this phase explicitly does NOT do
 
 - No real login flow — `X-User-Email` is still dev transport.

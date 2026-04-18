@@ -43,12 +43,41 @@ export interface User {
   created_at: string;
 }
 
+export interface OrganizationSettings {
+  default_provider_name?: string | null;
+  encounter_page_size?: number | null;
+  audit_page_size?: number | null;
+  feature_flags?: Record<string, boolean> | null;
+  extensions?: Record<string, unknown> | null;
+}
+
 export interface Organization {
   id: number;
   name: string;
   slug: string;
-  settings: Record<string, unknown> | null;
+  settings: OrganizationSettings | null;
   created_at: string;
+}
+
+export interface UserInvite {
+  user_id: number;
+  invitation_token: string;
+  invitation_expires_at: string;
+  ttl_days: number;
+}
+
+export interface BulkImportSummary {
+  requested: number;
+  created: number;
+  skipped: number;
+  errors: number;
+}
+
+export interface BulkUserResult {
+  created: User[];
+  skipped: { row: number; email: string; error_code: string }[];
+  errors: { row: number; email: string; error_code: string; detail?: string }[];
+  summary: BulkImportSummary;
 }
 
 export interface SecurityAuditEvent {
@@ -310,13 +339,82 @@ export function getOrganization(email: string): Promise<Organization> {
 
 export function updateOrganization(
   email: string,
-  patch: { name?: string; settings?: Record<string, unknown> | null }
+  patch: { name?: string; settings?: OrganizationSettings | null }
 ): Promise<Organization> {
   return request("/organization", {
     email,
     method: "PATCH",
     body: JSON.stringify(patch),
   });
+}
+
+export function inviteUser(email: string, userId: number): Promise<UserInvite> {
+  return request(`/users/${userId}/invite`, { email, method: "POST" });
+}
+
+export function acceptInvite(token: string): Promise<{
+  user_id: number;
+  email: string;
+  organization_id: number;
+  role: Role;
+  accepted: true;
+}> {
+  return request(`/invites/accept`, {
+    method: "POST",
+    body: JSON.stringify({ token }),
+  });
+}
+
+export function bulkCreateUsers(
+  email: string,
+  users: { email: string; full_name?: string | null; role: Role }[]
+): Promise<BulkUserResult> {
+  return request("/users/bulk", {
+    email,
+    method: "POST",
+    body: JSON.stringify({ users }),
+  });
+}
+
+export function auditExportUrl(
+  filters: AuditFilters = {}
+): string {
+  const qs = new URLSearchParams();
+  if (filters.event_type) qs.set("event_type", filters.event_type);
+  if (filters.error_code) qs.set("error_code", filters.error_code);
+  if (filters.actor_email) qs.set("actor_email", filters.actor_email);
+  if (filters.q) qs.set("q", filters.q);
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return `${API_URL}/security-audit-events/export${suffix}`;
+}
+
+/**
+ * CSV export helper. Browsers can't add headers to a plain anchor, so
+ * we fetch with the auth header and then trigger a local download.
+ */
+export async function downloadAuditExport(
+  email: string,
+  filters: AuditFilters = {}
+): Promise<void> {
+  const url = auditExportUrl(filters);
+  const res = await fetch(url, { headers: { "X-User-Email": email } });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new ApiError(res.status, "export_failed", text || res.statusText);
+  }
+  const blob = await res.blob();
+  const href = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = href;
+  // Content-Disposition carries the filename server-side; fall back
+  // to a timestamped default if the browser strips it.
+  const disposition = res.headers.get("Content-Disposition") || "";
+  const match = /filename="([^"]+)"/.exec(disposition);
+  a.download = match ? match[1] : `chartnav-audit-${Date.now()}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(href);
 }
 
 // ---- Security audit log -------------------------------------------------

@@ -151,6 +151,7 @@ Plus an App-level test asserting admin role sees the Admin button; clinician / r
 - No bulk-import.
 - No invitation / email workflow.
 - **Phase 13 update — audit log UI shipped.** The `security_audit_events` table is now exposed at `GET /security-audit-events` and surfaced in the Admin panel → Audit log tab with filters + pagination. See `23-operator-control-plane.md`.
+- **Phase 14 update — real invitation workflow shipped.** `POST /users/{id}/invite` (admin) + `POST /invites/accept` (unauth, token IS the credential), 7-day expiry, sha256-only storage, per-user one-shot raw token banner, minimal `/invite?invite=<token>` accept screen. Bulk user import, audit CSV export, and typed org settings also landed this phase. Full contract: `24-invitations-and-governance.md`.
 
 ## User lifecycle signal — `invited_at` (phase 13)
 

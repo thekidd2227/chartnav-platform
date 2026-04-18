@@ -32,6 +32,9 @@ SQLite (local dev). Schema produced by Alembic migrations
 | role | VARCHAR | NOT NULL default `"admin"`, **CHECK (`admin`/`clinician`/`reviewer`)** |
 | is_active | BOOLEAN | NOT NULL default `true` |
 | invited_at | DATETIME | NULL — stamped on admin create (phase 13, `d4e5f6a7b8c9`) |
+| invitation_token_hash | VARCHAR(128) | NULL — sha256 hex (phase 14, `e5f6a7b8c9d0`) |
+| invitation_expires_at | DATETIME | NULL (phase 14) |
+| invitation_accepted_at | DATETIME | NULL (phase 14) |
 | created_at | DATETIME | NOT NULL default now() |
 
 **Role vocabulary** is enforced at BOTH layers since phase 12:

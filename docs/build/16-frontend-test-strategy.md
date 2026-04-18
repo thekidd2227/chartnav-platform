@@ -81,6 +81,15 @@ Vitest and Playwright are fully isolated: Vitest's `test.include` is
 narrowed to `src/**/*.test.{ts,tsx}` and excludes `tests/**`, so the
 two suites never cross-contaminate.
 
+## Invitations + bulk + export tests (phase 14)
+
+- `AdminPanel.test.tsx`:
+  - Invite button on a user row issues a token and surfaces it in `admin-invite-token`.
+  - Bulk import summary renders created/skipped/errors counts.
+  - Audit Export CSV button wires `downloadAuditExport` with current filters.
+- Playwright: 1 new end-to-end scenario — admin creates a user, clicks **Invite**, token banner visible; Audit tab → **Export CSV** triggers a real browser download with the expected filename pattern.
+- Backend's 20 `test_invitations.py` tests are the source of truth for server behavior; the UI tests verify wiring and user-visible states.
+
 ## Operator control-plane tests (phase 13)
 
 - `AdminPanel.test.tsx` — 4 new tests: Organization tab loads + PATCH dispatch, local JSON parse error path, Audit tab row render + filter dispatch, Audit 403 surfaces as error banner.

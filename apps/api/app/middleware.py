@@ -104,8 +104,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             "/me",
             "/encounters",
             "/organizations",
+            "/organization",
             "/locations",
             "/users",
+            "/invites",
+            "/security-audit-events",
         ),
     ):
         super().__init__(app)

@@ -2,17 +2,22 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ApiError,
   AuditFilters,
+  BulkUserResult,
   Location,
   Me,
   Organization,
+  OrganizationSettings,
   Role,
   SecurityAuditEvent,
   User,
+  bulkCreateUsers,
   createLocation,
   createUser,
   deactivateLocation,
   deactivateUser,
+  downloadAuditExport,
   getOrganization,
+  inviteUser,
   listAuditEvents,
   listLocations,
   listUsers,
@@ -119,6 +124,8 @@ function UsersPane({
   const [loading, setLoading] = useState(false);
   const [includeInactive, setIncludeInactive] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [showBulk, setShowBulk] = useState(false);
+  const [invite, setInvite] = useState<{ userId: number; token: string; expiresAt: string } | null>(null);
 
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
@@ -240,14 +247,23 @@ function UsersPane({
 
       <div className="admin-list-head">
         <h3>Users ({users.length})</h3>
-        <label className="subtle-note">
-          <input
-            type="checkbox"
-            checked={includeInactive}
-            onChange={(e) => setIncludeInactive(e.target.checked)}
-          />{" "}
-          include inactive
-        </label>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button
+            className="btn"
+            data-testid="admin-user-bulk-open"
+            onClick={() => setShowBulk(true)}
+          >
+            Bulk import…
+          </button>
+          <label className="subtle-note">
+            <input
+              type="checkbox"
+              checked={includeInactive}
+              onChange={(e) => setIncludeInactive(e.target.checked)}
+            />{" "}
+            include inactive
+          </label>
+        </div>
       </div>
       {loading ? (
         <div className="subtle-note">Loading…</div>
@@ -279,7 +295,29 @@ function UsersPane({
                     ? <span title={`Invited ${u.invited_at}`} style={{ color: "var(--warn)" }}>Invited</span>
                     : (u.is_active ? "Active" : "Deactivated")}
                 </td>
-                <td>
+                <td style={{ display: "flex", gap: 6 }}>
+                  {u.is_active && u.id !== me.user_id && (
+                    <button
+                      className="btn"
+                      data-testid={`admin-user-invite-${u.id}`}
+                      onClick={async () => {
+                        try {
+                          const iv = await inviteUser(identity, u.id);
+                          setInvite({
+                            userId: iv.user_id,
+                            token: iv.invitation_token,
+                            expiresAt: iv.invitation_expires_at,
+                          });
+                          flash("ok", `Invitation issued for ${u.email}`);
+                          await refresh();
+                        } catch (e) {
+                          flash("error", friendly(e));
+                        }
+                      }}
+                    >
+                      Invite
+                    </button>
+                  )}
                   {u.is_active ? (
                     <button
                       className="btn btn--muted"
@@ -300,6 +338,173 @@ function UsersPane({
           </tbody>
         </table>
       )}
+      {invite && (
+        <div
+          className="banner banner--ok"
+          data-testid="admin-invite-banner"
+          role="status"
+          style={{ marginTop: 10 }}
+        >
+          <strong>Invitation token for user #{invite.userId}</strong> (expires {fmtTs(invite.expiresAt)}). Copy now — it will not be shown again.
+          <pre
+            data-testid="admin-invite-token"
+            style={{
+              marginTop: 6,
+              background: "#fff",
+              border: "1px solid var(--line-strong)",
+              borderRadius: 6,
+              padding: "6px 8px",
+              fontSize: 11,
+              wordBreak: "break-all",
+              whiteSpace: "pre-wrap",
+            }}
+          >
+            {invite.token}
+          </pre>
+          <div style={{ marginTop: 6 }}>
+            <button className="btn" onClick={() => setInvite(null)} data-testid="admin-invite-close">
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+      {showBulk && (
+        <BulkUserDialog
+          identity={identity}
+          onClose={() => setShowBulk(false)}
+          onDone={async (result) => {
+            setShowBulk(false);
+            flash(
+              result.summary.errors === 0 && result.summary.skipped === 0 ? "ok" : "ok",
+              `Bulk import: ${result.summary.created} created, ${result.summary.skipped} skipped, ${result.summary.errors} errors`
+            );
+            await refresh();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function BulkUserDialog({
+  identity,
+  onClose,
+  onDone,
+}: {
+  identity: string;
+  onClose: () => void;
+  onDone: (r: BulkUserResult) => void;
+}) {
+  // Accepts a CSV-ish textarea with one "email,full_name,role" per line.
+  const [raw, setRaw] = useState(
+    "email,full_name,role\nclin2@chartnav.local,Second Clinician,clinician\n"
+  );
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<BulkUserResult | null>(null);
+
+  const parse = (): { email: string; full_name?: string; role: Role }[] => {
+    const lines = raw
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith("#"));
+    if (!lines.length) return [];
+    // Drop an optional header row.
+    const first = lines[0].toLowerCase();
+    const data = first.startsWith("email,") ? lines.slice(1) : lines;
+    return data.map((line) => {
+      const [email = "", full_name = "", role = ""] = line.split(",").map((s) => s.trim());
+      return {
+        email,
+        full_name: full_name || undefined,
+        role: (role || "clinician") as Role,
+      };
+    });
+  };
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPending(true);
+    setError(null);
+    setResult(null);
+    try {
+      const rows = parse();
+      if (rows.length === 0) {
+        setError("Paste at least one email,full_name,role row.");
+        return;
+      }
+      const r = await bulkCreateUsers(identity, rows);
+      setResult(r);
+      if (r.summary.errors === 0 && r.summary.skipped === 0) {
+        onDone(r);
+      }
+    } catch (e) {
+      setError(friendly(e));
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true" data-testid="admin-user-bulk-modal">
+      <div className="modal admin-modal">
+        <div className="modal__head">
+          <h2>Bulk import users</h2>
+          <button className="btn btn--muted" onClick={onClose}>✕</button>
+        </div>
+        <form className="modal__body event-form" onSubmit={submit}>
+          <p className="subtle-note" style={{ margin: 0 }}>
+            Paste one <code>email,full_name,role</code> line per user. Role must be <code>admin</code>, <code>clinician</code>, or <code>reviewer</code>. The header row is optional.
+          </p>
+          <textarea
+            data-testid="admin-user-bulk-text"
+            value={raw}
+            onChange={(e) => setRaw(e.target.value)}
+            style={{ minHeight: 180 }}
+          />
+          {error && (
+            <div className="banner banner--error" role="alert" data-testid="admin-user-bulk-error">
+              {error}
+            </div>
+          )}
+          {result && (
+            <div className="banner banner--info" data-testid="admin-user-bulk-summary">
+              <strong>
+                Requested {result.summary.requested} · Created {result.summary.created} · Skipped {result.summary.skipped} · Errors {result.summary.errors}
+              </strong>
+              {result.skipped.length > 0 && (
+                <ul>
+                  {result.skipped.map((s, i) => (
+                    <li key={i}>
+                      Row {s.row}: {s.email} — {s.error_code}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {result.errors.length > 0 && (
+                <ul>
+                  {result.errors.map((s, i) => (
+                    <li key={i}>
+                      Row {s.row}: {s.email} — {s.error_code}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+          <div className="row" style={{ justifyContent: "flex-end" }}>
+            <button type="button" className="btn btn--muted" onClick={onClose}>Close</button>
+            <button
+              type="submit"
+              className="btn btn--primary"
+              data-testid="admin-user-bulk-submit"
+              disabled={pending}
+            >
+              {pending ? "Importing…" : "Import"}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
@@ -317,7 +522,11 @@ function OrganizationPane({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState("");
-  const [settingsText, setSettingsText] = useState("");
+  // Schema-driven fields.
+  const [defaultProvider, setDefaultProvider] = useState("");
+  const [encounterPageSize, setEncounterPageSize] = useState<string>("");
+  const [auditPageSize, setAuditPageSize] = useState<string>("");
+  const [extensionsText, setExtensionsText] = useState("");
   const [saving, setSaving] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -327,7 +536,19 @@ function OrganizationPane({
       const o = await getOrganization(identity);
       setOrg(o);
       setName(o.name);
-      setSettingsText(o.settings ? JSON.stringify(o.settings, null, 2) : "{}");
+      const s = o.settings ?? {};
+      setDefaultProvider(s.default_provider_name ?? "");
+      setEncounterPageSize(
+        typeof s.encounter_page_size === "number" ? String(s.encounter_page_size) : ""
+      );
+      setAuditPageSize(
+        typeof s.audit_page_size === "number" ? String(s.audit_page_size) : ""
+      );
+      setExtensionsText(
+        s.extensions && Object.keys(s.extensions).length > 0
+          ? JSON.stringify(s.extensions, null, 2)
+          : ""
+      );
     } catch (e) {
       setError(friendly(e));
     } finally {
@@ -339,39 +560,56 @@ function OrganizationPane({
     refresh();
   }, [refresh]);
 
+  const parsePageSize = (raw: string, label: string): number | null | string => {
+    if (!raw.trim()) return null;
+    const n = parseInt(raw.trim(), 10);
+    if (!Number.isFinite(n) || n < 10 || n > 200)
+      return `${label} must be an integer between 10 and 200`;
+    return n;
+  };
+
   const onSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!org) return;
     setSaving(true);
     try {
-      let settings: Record<string, unknown> | null = null;
-      const trimmed = settingsText.trim();
-      if (trimmed) {
-        try {
-          const parsed = JSON.parse(trimmed);
-          if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-            throw new Error("settings must be a JSON object");
-          }
-          settings = parsed as Record<string, unknown>;
-        } catch (parseErr) {
-          flash("error", `settings JSON: ${(parseErr as Error).message}`);
-          setSaving(false);
-          return;
-        }
-      } else {
-        settings = null;
-      }
-
-      const patch: { name?: string; settings?: Record<string, unknown> | null } = {};
-      if (name.trim() && name !== org.name) patch.name = name.trim();
-      if (JSON.stringify(settings) !== JSON.stringify(org.settings || null)) {
-        patch.settings = settings ?? {};
-      }
-      if (Object.keys(patch).length === 0) {
-        flash("ok", "No changes");
+      const encSize = parsePageSize(encounterPageSize, "encounter_page_size");
+      if (typeof encSize === "string") {
+        flash("error", encSize);
         setSaving(false);
         return;
       }
+      const audSize = parsePageSize(auditPageSize, "audit_page_size");
+      if (typeof audSize === "string") {
+        flash("error", audSize);
+        setSaving(false);
+        return;
+      }
+      let extensions: Record<string, unknown> | null = null;
+      if (extensionsText.trim()) {
+        try {
+          const parsed = JSON.parse(extensionsText);
+          if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+            throw new Error("extensions must be a JSON object");
+          }
+          extensions = parsed as Record<string, unknown>;
+        } catch (err) {
+          flash("error", `extensions JSON: ${(err as Error).message}`);
+          setSaving(false);
+          return;
+        }
+      }
+
+      const settings: OrganizationSettings = {};
+      if (defaultProvider.trim()) settings.default_provider_name = defaultProvider.trim();
+      if (typeof encSize === "number") settings.encounter_page_size = encSize;
+      if (typeof audSize === "number") settings.audit_page_size = audSize;
+      if (extensions) settings.extensions = extensions;
+
+      const patch: { name?: string; settings?: OrganizationSettings } = {};
+      if (name.trim() && name !== org.name) patch.name = name.trim();
+      patch.settings = settings;
+
       const updated = await updateOrganization(identity, patch);
       setOrg(updated);
       flash("ok", `Organization saved`);
@@ -387,11 +625,7 @@ function OrganizationPane({
   if (!org) return null;
 
   return (
-    <form
-      className="event-form"
-      data-testid="admin-org-form"
-      onSubmit={onSave}
-    >
+    <form className="event-form" data-testid="admin-org-form" onSubmit={onSave}>
       <label>
         Slug (immutable)
         <input value={org.slug} readOnly disabled data-testid="admin-org-slug" />
@@ -406,12 +640,45 @@ function OrganizationPane({
         />
       </label>
       <label>
-        Settings (JSON object, ≤16 KB)
+        Default provider name
+        <input
+          data-testid="admin-org-default-provider"
+          value={defaultProvider}
+          onChange={(e) => setDefaultProvider(e.target.value)}
+          placeholder="Dr. Carter"
+        />
+      </label>
+      <label>
+        Encounter page size (10–200)
+        <input
+          type="number"
+          min={10}
+          max={200}
+          data-testid="admin-org-encounter-page-size"
+          value={encounterPageSize}
+          onChange={(e) => setEncounterPageSize(e.target.value)}
+          placeholder="50"
+        />
+      </label>
+      <label>
+        Audit page size (10–200)
+        <input
+          type="number"
+          min={10}
+          max={200}
+          data-testid="admin-org-audit-page-size"
+          value={auditPageSize}
+          onChange={(e) => setAuditPageSize(e.target.value)}
+          placeholder="50"
+        />
+      </label>
+      <label>
+        Extensions (optional forward-compat JSON object)
         <textarea
           data-testid="admin-org-settings"
-          value={settingsText}
-          onChange={(e) => setSettingsText(e.target.value)}
-          style={{ minHeight: 160 }}
+          value={extensionsText}
+          onChange={(e) => setExtensionsText(e.target.value)}
+          style={{ minHeight: 100 }}
         />
       </label>
       <div className="row" style={{ justifyContent: "flex-end" }}>
@@ -510,9 +777,25 @@ function AuditPane({
           Audit events ({total}
           {total > PAGE_SIZE ? `, showing ${offset + 1}-${Math.min(offset + PAGE_SIZE, total)}` : ""})
         </h3>
-        <button className="btn" onClick={refresh} data-testid="admin-audit-refresh">
-          Refresh
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            className="btn"
+            data-testid="admin-audit-export"
+            onClick={async () => {
+              try {
+                await downloadAuditExport(identity, filters);
+                flash("ok", "Audit export downloaded");
+              } catch (e) {
+                flash("error", friendly(e));
+              }
+            }}
+          >
+            Export CSV
+          </button>
+          <button className="btn" onClick={refresh} data-testid="admin-audit-refresh">
+            Refresh
+          </button>
+        </div>
       </div>
       {loading ? (
         <div className="subtle-note">Loading…</div>

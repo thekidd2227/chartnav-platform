@@ -107,6 +107,39 @@ Rules:
 - `settings` is a JSON object; non-object → 422; serialized > 16 KB → 400 `settings_too_large`.
 - PATCH always scopes to caller's org — no cross-org parameter exists.
 
+### Invitations (phase 14)
+
+| Method | Path                     | Auth   |
+|--------|--------------------------|--------|
+| POST   | `/users/{id}/invite`     | admin  |
+| POST   | `/invites/accept`        | unauth |
+
+Admin response returns raw `invitation_token` **once**; only the
+sha256 hash is stored. 7-day expiry. Accept body `{ token }`. Errors:
+`user_not_found` (404 cross-org), `user_inactive` (400),
+`user_already_accepted` (400), `invalid_invite` (400),
+`invite_expired` (400).
+
+### Bulk user import
+
+| Method | Path           | Auth   |
+|--------|----------------|--------|
+| POST   | `/users/bulk`  | admin  |
+
+Body: `{ users: [{ email, full_name?, role }, ...] }` (1..500 rows).
+Response: `{ created, skipped, errors, summary }`. Per-row validation;
+one bad row never aborts the batch. Strictly org-scoped.
+
+### Audit export
+
+| Method | Path                                 | Auth  |
+|--------|--------------------------------------|-------|
+| GET    | `/security-audit-events/export`      | admin |
+
+Same filters and org-scoping as the audit read endpoint. Returns
+`text/csv` with a stable column order and a timestamped attachment
+filename.
+
 ### Security audit read (🔒 admin only)
 
 | Method | Path                           |

@@ -39,7 +39,7 @@
   <div class="sub">Backend phases 1–5: spine → state machine → auth → RBAC → CI/hardening<br>
   Repo: <code>thekidd2227/chartnav-platform</code></div>
 </header>
-<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth, org scoping, RBAC</a></li><li><a href="#sec-9">08 — Test strategy</a></li><li><a href="#sec-10">09 — CI & deploy hardening</a></li><li><a href="#sec-11">10 — Doc artifact pipeline</a></li><li><a href="#sec-12">11 — Production-auth seam</a></li><li><a href="#sec-13">12 — Runtime config</a></li><li><a href="#sec-14">13 — Deploy target</a></li><li><a href="#sec-15">14 — Postgres parity</a></li><li><a href="#sec-16">15 — Frontend integration</a></li><li><a href="#sec-17">16 — Frontend test strategy</a></li><li><a href="#sec-18">17 — E2E & release</a></li><li><a href="#sec-19">18 — Operational hardening</a></li><li><a href="#sec-20">19 — Staging deployment</a></li><li><a href="#sec-21">20 — Observability</a></li><li><a href="#sec-22">21 — Staging runbook</a></li><li><a href="#sec-23">22 — Admin governance</a></li><li><a href="#sec-24">23 — Operator control plane</a></li><li><a href="#sec-25">Diagram — System architecture</a></li><li><a href="#sec-26">Diagram — Encounter status machine</a></li><li><a href="#sec-27">Diagram — ER</a></li><li><a href="#sec-28">Diagram — API / data flow</a></li></ol></nav>
+<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth, org scoping, RBAC</a></li><li><a href="#sec-9">08 — Test strategy</a></li><li><a href="#sec-10">09 — CI & deploy hardening</a></li><li><a href="#sec-11">10 — Doc artifact pipeline</a></li><li><a href="#sec-12">11 — Production-auth seam</a></li><li><a href="#sec-13">12 — Runtime config</a></li><li><a href="#sec-14">13 — Deploy target</a></li><li><a href="#sec-15">14 — Postgres parity</a></li><li><a href="#sec-16">15 — Frontend integration</a></li><li><a href="#sec-17">16 — Frontend test strategy</a></li><li><a href="#sec-18">17 — E2E & release</a></li><li><a href="#sec-19">18 — Operational hardening</a></li><li><a href="#sec-20">19 — Staging deployment</a></li><li><a href="#sec-21">20 — Observability</a></li><li><a href="#sec-22">21 — Staging runbook</a></li><li><a href="#sec-23">22 — Admin governance</a></li><li><a href="#sec-24">23 — Operator control plane</a></li><li><a href="#sec-25">24 — Invitations & governance</a></li><li><a href="#sec-26">Diagram — System architecture</a></li><li><a href="#sec-27">Diagram — Encounter status machine</a></li><li><a href="#sec-28">Diagram — ER</a></li><li><a href="#sec-29">Diagram — API / data flow</a></li></ol></nav>
 <section id="sec-1"><h2>Executive summary</h2>
 <p>This document consolidates <strong>all</strong> ChartNav backend phases delivered to</p>
 <p>date.</p>
@@ -55,37 +55,34 @@
 <p><strong>Phase 10 — Real JWT bearer auth + operational hardening.</strong> Real PyJWT validation against a JWKS URL (signature + iss + aud + exp + claim mapping). Request correlation (<code>X-Request-ID</code>), structured JSON logs, <code>security_audit_events</code> table (<code>b2c3d4e5f6a7</code>), CORS driven by config, per-process rate limiter.</p>
 <p><strong>Phase 11 — Staging deployment + observability.</strong> New <code>/ready</code> + <code>/metrics</code> surfaces. Pinned-image staging compose + runbook scripts + release-bundled staging tarball. <code>deploy-config</code> CI job validates compose + shellcheck.</p>
 <p><strong>Phase 12 — Admin governance + event discipline + pagination.</strong> DB CHECK on <code>users.role</code>, <code>is_active</code> soft-delete flags, admin CRUD for users + locations, <code>EVENT_SCHEMAS</code> allowlist, encounter pagination via <code>limit</code>/<code>offset</code> + <code>X-Total-Count</code>. <code>AdminPanel</code> modal with Users + Locations tabs.</p>
-<p><strong>Phase 13 — Operator control plane (this phase).</strong> Migration <code>d4e5f6a7b8c9</code> adds <code>organizations.settings TEXT</code> and <code>users.invited_at DATETIME</code>. New endpoints: <code>GET /organization</code> (any authed role) + <code>PATCH /organization</code> (admin, 16 KB settings cap, slug immutable), and <code>GET /security-audit-events</code> (admin, org-scoped <code>OR organization_id IS NULL</code>, filterable by <code>event_type</code> / <code>actor_email</code> / free-text <code>q</code>, paginated with <code>X-Total-Count</code>). Admin panel expands to four tabs (Users, Locations, Organization, Audit log); admin-create stamps <code>invited_at</code> and the Users tab shows an &quot;Invited&quot; badge. Suites grow to <strong>88 pytest / 22 Vitest / 11 Playwright</strong>.</p>
+<p><strong>Phase 13 — Operator control plane.</strong> <code>GET/PATCH /organization</code> + <code>GET /security-audit-events</code> + admin panel Organization &amp; Audit tabs. <code>invited_at</code> stamping on admin create.</p>
+<p><strong>Phase 14 — Invitations, settings schema, audit export, event hardening, bulk users (this phase).</strong> Migration <code>e5f6a7b8c9d0</code> adds <code>invitation_token_hash</code> (sha256-only), <code>invitation_expires_at</code>, <code>invitation_accepted_at</code>. New endpoints: <code>POST /users/{id}/invite</code>, <code>POST /invites/accept</code>, <code>POST /users/bulk</code>, <code>GET /security-audit-events/export</code>. Organization settings becomes a typed <code>OrganizationSettings</code> pydantic model (extra=forbid) with dedicated fields + an <code>extensions</code> forward-compat bucket. Event payloads enforce per-type value discipline (status enums, non-empty strings, non-negative ints). Admin UI adds per-user <strong>Invite</strong> with a one-shot raw-token banner, a <strong>Bulk import…</strong> dialog, an <strong>Export CSV</strong> button on the audit tab, typed inputs on the Organization tab, and a minimal <code>/invite?invite=&lt;token&gt;</code> accept screen. Suites grow to <strong>110 pytest / 25 Vitest / 12 Playwright</strong>.</p>
 <p>Preserved untouched: <code>/health</code>, <code>/</code>, SQLite dev workflow, state machine + filtering surface, workflow_events model, existing endpoint contracts.</p>
 </section>
 <section id="sec-2"><h2>01 — Current state</h2>
 <h1>ChartNav — Current State</h1>
-<p><strong>As of:</strong> 2026-04-18 (phase: operator control plane — org settings, audit read, user-lifecycle signal)</p>
+<p><strong>As of:</strong> 2026-04-18 (phase: invitations + settings schema + audit export + bulk)</p>
 <h2>Repo layout (relevant)</h2>
 <pre class="code lang-"><code>
 chartnav-platform/
 ├── .github/workflows/{ci.yml,release.yml}
 ├── Makefile
-├── scripts/                # build_docs.py · verify.sh · pg_verify.sh · release_build.sh · staging_*.sh
+├── scripts/                 # build_docs · verify · pg_verify · release_build · staging_*
 ├── apps/
 │   ├── api/
-│   │   ├── app/
-│   │   │   ├── main.py · config.py · db.py · auth.py · authz.py
-│   │   │   ├── audit.py · logging_config.py · middleware.py · metrics.py
-│   │   │   └── api/routes.py      # + /organization + /security-audit-events
-│   │   ├── alembic/versions/      # 5 migrations through d4e5f6a7b8c9
-│   │   ├── tests/                 # 88 pytest (+17 control-plane)
+│   │   ├── app/             # main · config · db · auth · authz · audit · logging_config · middleware · metrics
+│   │   │   └── api/routes.py  # + /users/{id}/invite · /invites/accept · audit export · /users/bulk · typed settings
+│   │   ├── alembic/versions/  # 6 migrations through e5f6a7b8c9d0
+│   │   ├── tests/             # 110 pytest (+20 invitations/bulk/export)
 │   │   └── Dockerfile · entrypoint.sh · .env.example
 │   └── web/
 │       ├── src/
-│       │   ├── App.tsx
-│       │   ├── AdminPanel.tsx     # 4 tabs — Users · Locations · Organization · Audit log
-│       │   ├── api.ts             # + org + audit helpers
+│       │   ├── App.tsx · AdminPanel.tsx · InviteAccept.tsx · api.ts
 │       │   ├── identity.ts · styles.css · main.tsx
-│       │   └── test/              # 22 Vitest (+4 control-plane)
-│       └── tests/e2e/             # 11 Playwright (+1 org/audit)
-├── infra/docker/
-└── docs/build/ 01 … 23
+│       │   └── test/          # 25 Vitest
+│       └── tests/e2e/         # 12 Playwright
+├── infra/docker/{dev,prod,staging}.yml
+└── docs/build/ 01 … 24
 </code></pre>
 <h2>Runtime baseline</h2>
 <ul>
@@ -94,43 +91,40 @@ chartnav-platform/
 <li>Auth: <code>header</code> (dev) or <code>bearer</code> (prod JWT via JWKS).</li>
 <li>RBAC: <code>admin</code> / <code>clinician</code> / <code>reviewer</code> (CHECK-constrained at DB level).</li>
 <li>Error envelope: <code>{&quot;detail&quot;: {&quot;error_code&quot;: &quot;...&quot;, &quot;reason&quot;: &quot;...&quot;}}</code>.</li>
-<li><strong>Org settings</strong>: <code>GET /organization</code> (any authed role), <code>PATCH /organization</code> (admin). 16 KB cap on <code>settings</code> JSON; slug immutable.</li>
-<li><strong>Audit read</strong>: <code>GET /security-audit-events</code> (admin, org-scoped <code>OR organization_id IS NULL</code>, filterable, paginated).</li>
-<li><strong>User lifecycle</strong>: <code>invited_at</code> stamped on admin create; UI renders &quot;Invited&quot; badge.</li>
-<li>Event discipline: <code>EVENT_SCHEMAS</code> allowlist with per-type required keys.</li>
-<li>Encounter pagination: <code>limit</code>/<code>offset</code> + <code>X-Total-Count</code>/<code>X-Limit</code>/<code>X-Offset</code> headers.</li>
-<li>Observability: <code>/health</code> · <code>/ready</code> · <code>/metrics</code> (Prometheus text).</li>
-<li>CORS + rate-limit + request-id + structured logs: unchanged.</li>
-<li>Alembic head: <code>d4e5f6a7b8c9</code>.</li>
+<li><strong>Invitations</strong> (phase 14): admin issues 7-day tokens via <code>POST /users/{id}/invite</code>; only sha256 hash stored; accept via <code>POST /invites/accept</code>; re-issue revokes prior token; frontend has a minimal <code>/invite?invite=&lt;token&gt;</code> accept screen.</li>
+<li><strong>Org settings</strong>: typed <code>OrganizationSettings</code> pydantic model (extra=forbid) with <code>default_provider_name</code>, <code>encounter_page_size</code>, <code>audit_page_size</code>, <code>feature_flags</code>, <code>extensions</code>. 16 KB cap. UI edits each field with dedicated inputs.</li>
+<li><strong>Audit export</strong>: <code>GET /security-audit-events/export</code> → CSV, honors existing filters + org scoping.</li>
+<li><strong>Event payload hardening</strong> (phase 14): per-type value discipline (status enum, non-empty strings, non-negative ints).</li>
+<li><strong>Bulk user import</strong>: <code>POST /users/bulk</code> with per-row pass/fail summary; UI exposes a CSV-like textarea dialog.</li>
+<li>Alembic head: <code>e5f6a7b8c9d0</code>.</li>
 </ul>
 <h2>Testing layers</h2>
 <table><thead><tr><th>Layer</th><th>Tool</th><th>Count</th><th>Notes</th></tr></thead><tbody>
-<tr><td>pytest</td><td>pytest</td><td>88</td><td>+17 <code>test_control_plane.py</code> (org settings, audit read, invited_at)</td></tr>
+<tr><td>pytest</td><td>pytest</td><td>110</td><td>+20 invitations/bulk/export/event-hardening</td></tr>
 <tr><td>shell smoke</td><td>smoke.sh</td><td>9</td><td>unchanged</td></tr>
-<tr><td>vitest</td><td>vitest</td><td>22</td><td>+4 admin-panel tests for Organization + Audit tabs</td></tr>
-<tr><td>Playwright</td><td>@playwright</td><td>11</td><td>+1 org settings + audit tab E2E</td></tr>
+<tr><td>vitest</td><td>vitest</td><td>25</td><td>+3 admin-panel (invite/bulk/export)</td></tr>
+<tr><td>Playwright</td><td>@playwright</td><td>12</td><td>+1 admin invite + audit CSV download E2E</td></tr>
 <tr><td>staging</td><td>staging_verify.sh</td><td>9</td><td>unchanged</td></tr>
 </tbody></table>
 <h2>Verified working endpoints</h2>
 <p>Additions this phase:</p>
 <ul>
-<li><code>GET /organization</code>, <code>PATCH /organization</code></li>
-<li><code>GET /security-audit-events</code></li>
+<li><code>POST /users/{id}/invite</code></li>
+<li><code>POST /invites/accept</code></li>
+<li><code>POST /users/bulk</code></li>
+<li><code>GET /security-audit-events/export</code></li>
 </ul>
-<p>Unchanged from phase 12: <code>/health</code>, <code>/</code>, <code>/ready</code>, <code>/metrics</code>, <code>/me</code>,</p>
-<p><code>/organizations</code>, <code>/locations</code>, <code>/users</code>, <code>/encounters</code> (+ pagination +</p>
-<p>filters), admin CRUD for users + locations, event-validated</p>
-<p><code>POST /encounters/{id}/events</code>, per-edge RBAC on status transitions.</p>
+<p>Unchanged surfaces from phases 1–13 are all still green.</p>
 <h2>Automation</h2>
 <ul>
-<li><code>make verify</code> → 88 pytest + 9 smoke</li>
-<li><code>make web-verify</code> → 22 vitest + typecheck + build</li>
-<li><code>make e2e</code> → 11 Playwright</li>
+<li><code>make verify</code> → 110 pytest + 9 smoke</li>
+<li><code>make web-verify</code> → 25 vitest + typecheck + build</li>
+<li><code>make e2e</code> → 12 Playwright</li>
 <li><code>make pg-verify</code> — Postgres parity</li>
-<li><code>make staging-up / staging-verify / staging-rollback TAG=... / staging-down</code></li>
+<li><code>make staging-up / staging-verify / staging-rollback / staging-down</code></li>
 <li><code>make release-build VERSION=v0.1.0</code></li>
 <li><code>make dev</code> — backend + frontend</li>
-<li>CI: backend-sqlite + frontend + deploy-config in parallel; e2e needs backend+frontend; backend-postgres + docker-build + docs chain on backend-sqlite.</li>
+<li>CI gates unchanged (backend / frontend / e2e / backend-postgres / docker-build / docs / deploy-config).</li>
 </ul>
 </section>
 <section id="sec-3"><h2>02 — Workflow state machine</h2>
@@ -185,6 +179,18 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 </code></pre>
 <h2>Diagram</h2>
 <p>See <code>docs/diagrams/encounter-status-machine.md</code> (Mermaid).</p>
+<h2>Event payload hardening (phase 14)</h2>
+<p>On top of the phase-12 &quot;required keys present&quot; check,</p>
+<p><code>_validate_event</code> now enforces per-type value discipline:</p>
+<ul>
+<li><code>status_changed</code>: <code>old_status</code> and <code>new_status</code> must both be in <code>ALLOWED_STATUSES</code>.</li>
+<li><code>encounter_created</code>: <code>status</code> must be in <code>ALLOWED_STATUSES</code>.</li>
+<li><code>manual_note</code>: <code>note</code> must be a non-empty string ≤ 4000 chars.</li>
+<li><code>note_draft_requested</code>: <code>requested_by</code> non-empty string; optional <code>template</code> non-empty string.</li>
+<li><code>note_draft_completed</code>: <code>template</code> non-empty string; optional <code>length_words</code> non-negative int.</li>
+<li><code>note_reviewed</code>: <code>reviewer</code> non-empty string ≤ 255.</li>
+</ul>
+<p>Violations return 400 <code>invalid_event_data</code> with a specific reason.</p>
 <h2>Source of truth</h2>
 <p><code>apps/api/app/api/routes.py</code>:</p>
 <ul>
@@ -281,6 +287,30 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <li><code>settings</code> is a JSON object; non-object → 422; serialized &gt; 16 KB → 400 <code>settings_too_large</code>.</li>
 <li>PATCH always scopes to caller&#x27;s org — no cross-org parameter exists.</li>
 </ul>
+<h3>Invitations (phase 14)</h3>
+<table><thead><tr><th>Method</th><th>Path</th><th>Auth</th></tr></thead><tbody>
+<tr><td>POST</td><td><code>/users/{id}/invite</code></td><td>admin</td></tr>
+<tr><td>POST</td><td><code>/invites/accept</code></td><td>unauth</td></tr>
+</tbody></table>
+<p>Admin response returns raw <code>invitation_token</code> <strong>once</strong>; only the</p>
+<p>sha256 hash is stored. 7-day expiry. Accept body <code>{ token }</code>. Errors:</p>
+<p><code>user_not_found</code> (404 cross-org), <code>user_inactive</code> (400),</p>
+<p><code>user_already_accepted</code> (400), <code>invalid_invite</code> (400),</p>
+<p><code>invite_expired</code> (400).</p>
+<h3>Bulk user import</h3>
+<table><thead><tr><th>Method</th><th>Path</th><th>Auth</th></tr></thead><tbody>
+<tr><td>POST</td><td><code>/users/bulk</code></td><td>admin</td></tr>
+</tbody></table>
+<p>Body: <code>{ users: [{ email, full_name?, role }, ...] }</code> (1..500 rows).</p>
+<p>Response: <code>{ created, skipped, errors, summary }</code>. Per-row validation;</p>
+<p>one bad row never aborts the batch. Strictly org-scoped.</p>
+<h3>Audit export</h3>
+<table><thead><tr><th>Method</th><th>Path</th><th>Auth</th></tr></thead><tbody>
+<tr><td>GET</td><td><code>/security-audit-events/export</code></td><td>admin</td></tr>
+</tbody></table>
+<p>Same filters and org-scoping as the audit read endpoint. Returns</p>
+<p><code>text/csv</code> with a stable column order and a timestamped attachment</p>
+<p>filename.</p>
 <h3>Security audit read (🔒 admin only)</h3>
 <table><thead><tr><th>Method</th><th>Path</th></tr></thead><tbody>
 <tr><td>GET</td><td><code>/security-audit-events</code></td></tr>
@@ -363,6 +393,9 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <tr><td>role</td><td>VARCHAR</td><td>NOT NULL default <code>&quot;admin&quot;</code>, <strong>CHECK (<code>admin</code>/<code>clinician</code>/<code>reviewer</code>)</strong></td></tr>
 <tr><td>is_active</td><td>BOOLEAN</td><td>NOT NULL default <code>true</code></td></tr>
 <tr><td>invited_at</td><td>DATETIME</td><td>NULL — stamped on admin create (phase 13, <code>d4e5f6a7b8c9</code>)</td></tr>
+<tr><td>invitation_token_hash</td><td>VARCHAR(128)</td><td>NULL — sha256 hex (phase 14, <code>e5f6a7b8c9d0</code>)</td></tr>
+<tr><td>invitation_expires_at</td><td>DATETIME</td><td>NULL (phase 14)</td></tr>
+<tr><td>invitation_accepted_at</td><td>DATETIME</td><td>NULL (phase 14)</td></tr>
 <tr><td>created_at</td><td>DATETIME</td><td>NOT NULL default now()</td></tr>
 </tbody></table>
 <p><strong>Role vocabulary</strong> is enforced at BOTH layers since phase 12:</p>
@@ -434,73 +467,87 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <h1>Build Log</h1>
 <p>Reverse-chronological.</p>
 <p>---</p>
-<h2>2026-04-18 — Phase 13: operator control plane (org settings + audit read + user lifecycle)</h2>
+<h2>2026-04-18 — Phase 14: invitations, settings schema, audit export, event hardening, bulk users</h2>
 <h3>Step 1 — Baseline</h3>
 <ul>
-<li>Head: <code>4ff4e28</code> (admin governance + event discipline + pagination).</li>
-<li>71 pytest + 18 vitest + 10 Playwright green.</li>
+<li>Head: <code>5a5d846</code> (operator control plane).</li>
+<li>88 pytest + 22 vitest + 11 Playwright green.</li>
 </ul>
-<h3>Step 2 — Migration <code>d4e5f6a7b8c9</code></h3>
+<h3>Step 2 — Migration <code>e5f6a7b8c9d0</code></h3>
 <ul>
-<li><code>organizations.settings TEXT NULL</code> for tenant preference JSON.</li>
-<li><code>users.invited_at DATETIME NULL</code>; server stamps it on admin-create.</li>
-<li>Applied cleanly; seed still idempotent; seeded users keep <code>invited_at = NULL</code>.</li>
+<li><code>users.invitation_token_hash TEXT NULL</code> (indexed).</li>
+<li><code>users.invitation_expires_at DATETIME NULL</code>.</li>
+<li><code>users.invitation_accepted_at DATETIME NULL</code>.</li>
 </ul>
 <h3>Step 3 — Backend endpoints</h3>
 <ul>
-<li><code>GET /organization</code> (any authed role), <code>PATCH /organization</code> (admin only).</li>
-<li>Slug immutable by construction — no PATCH accepts it.</li>
-<li><code>settings</code> must be a JSON object; ≤ 16 KB after serialization or 400 <code>settings_too_large</code>.</li>
-<li><code>GET /security-audit-events</code> (admin only):</li>
-<li>Filters: <code>event_type</code>, <code>error_code</code>, <code>actor_email</code>, <code>q</code> (substring over <code>path</code> / <code>detail</code>).</li>
-<li>Pagination: <code>limit</code> (1..500, default 50), <code>offset</code> (≥0); returns <code>X-Total-Count</code>, <code>X-Limit</code>, <code>X-Offset</code>.</li>
-<li>Org scoping: <code>organization_id = caller.org OR organization_id IS NULL</code>. Pre-auth failures (no caller) are visible to every admin; cross-org denials with an identity stay private to that identity&#x27;s org.</li>
-<li><code>POST /users</code> now sets <code>invited_at = now()</code>.</li>
-<li><code>list_users</code> / <code>list_users?include_inactive=1</code> include the <code>invited_at</code> column.</li>
+<li><code>POST /users/{id}/invite</code> — admin-only. Generates <code>secrets.token_urlsafe(32)</code>, stores only <code>sha256(token)</code>, returns the raw token once. 7-day expiry. Cross-org → 404 <code>user_not_found</code>; inactive → 400 <code>user_inactive</code>; already accepted → 400 <code>user_already_accepted</code>. Re-issue overwrites the hash.</li>
+<li><code>POST /invites/accept</code> — unauth. Hashes the provided token, validates presence + active target + not-yet-accepted + not-expired. Clears the hash on success (idempotent in the wrong direction). Added <code>/invites</code> to the rate-limit protected prefixes.</li>
+<li><code>GET /security-audit-events/export</code> — admin-only CSV; same filters as the read endpoint; same org-scoping (<code>caller.org OR organization_id IS NULL</code>); Content-Disposition attachment with timestamped filename.</li>
+<li><code>POST /users/bulk</code> — admin-only. Per-row validation with <code>summary: {requested, created, skipped, errors}</code>. 500-row cap at pydantic layer. One bad row never aborts the batch. Stamps <code>invited_at</code> on every created row.</li>
+<li>Typed <code>OrganizationSettings</code> (pydantic <code>extra=forbid</code>) with fields <code>default_provider_name</code>, <code>encounter_page_size (10..200)</code>, <code>audit_page_size (10..200)</code>, <code>feature_flags</code>, <code>extensions</code>. <code>PATCH /organization</code> now validates against the model; persists <code>model_dump(exclude_none=True)</code> JSON.</li>
+<li>Per-type event-data hardening in <code>_validate_event</code>:</li>
+<li><code>status_changed</code> — both statuses must be in <code>ALLOWED_STATUSES</code>.</li>
+<li><code>encounter_created</code> — status must be in <code>ALLOWED_STATUSES</code>.</li>
+<li><code>manual_note.note</code> — non-empty string ≤ 4000 chars.</li>
+<li><code>note_draft_requested.requested_by</code> — non-empty string; optional <code>template</code> non-empty string.</li>
+<li><code>note_draft_completed.template</code> — non-empty string; optional <code>length_words</code> non-negative int.</li>
+<li><code>note_reviewed.reviewer</code> — non-empty string ≤ 255.</li>
+<li><code>USER_COLUMNS</code> now includes <code>invitation_expires_at</code> + <code>invitation_accepted_at</code> (raw token hash is not returned by any endpoint).</li>
 </ul>
-<h3>Step 4 — Backend tests (<code>test_control_plane.py</code>, 17 new)</h3>
+<h3>Step 4 — Backend tests (<code>test_invitations.py</code>, 20 new)</h3>
 <ul>
-<li><code>/organization</code> reads (all 3 roles + 401), admin PATCH name + settings, non-object settings → 422, oversized settings → 400, non-admin PATCH → 403, cross-org isolation on PATCH.</li>
-<li>Audit read admin-only; filters for <code>event_type</code>, <code>actor_email</code>, <code>q</code>; pagination with disjoint pages and correct headers; org-scoping never leaks cross-org rows.</li>
-<li><code>invited_at</code> stamped on create; seeded rows are null.</li>
-<li><strong>Full backend suite: 88/88 passed</strong> (~45s).</li>
+<li>Invite: issue returns raw token, non-admin 403, cross-org 404, inactive-user 400, already-accepted 400, re-issue revokes prior token.</li>
+<li>Accept: happy path, invalid token, replay, expired (via direct DB time rewind).</li>
+<li>Audit export: CSV content-type + filename + respects filters + admin-only.</li>
+<li>Event hardening: bogus status values, empty/non-string <code>note</code>, empty <code>requested_by</code>.</li>
+<li>Bulk import: mixed happy/dup/bad-role returns correct summary; admin-only; empty body 422; org-scoped.</li>
+<li>Also updated <code>test_control_plane.py</code> settings tests to match the new typed schema (extra-forbid, extensions bucket for forward compat, size limit via <code>extensions</code>).</li>
+<li>Full backend suite: <strong>110/110 passed</strong>.</li>
 </ul>
-<h3>Step 5 — Frontend API + UI</h3>
+<h3>Step 5 — Frontend</h3>
 <ul>
 <li><code>api.ts</code>:</li>
-<li>Types: <code>Organization</code>, <code>SecurityAuditEvent</code>, <code>AuditFilters</code>; <code>invited_at</code> added to <code>User</code>.</li>
-<li>Functions: <code>getOrganization</code>, <code>updateOrganization</code>, <code>listAuditEvents</code> (returns <code>{items, total, limit, offset}</code> from the header-based paginator).</li>
-<li><code>AdminPanel.tsx</code> becomes 4 tabs:</li>
-<li><strong>Users</strong> — adds an &quot;Invited&quot; badge for active users with <code>invited_at</code> set.</li>
-<li><strong>Locations</strong> — unchanged.</li>
-<li><strong>Organization</strong> — loads current org, readonly slug, editable name + settings textarea (local JSON parse, server 16 KB cap).</li>
-<li><strong>Audit log</strong> — filter row (event_type / actor_email / free-text q), paginated table (25/page), newest-first.</li>
-<li><code>styles.css</code> — textarea styling added to <code>.modal__body</code>.</li>
-<li>Typecheck clean; <code>vite build</code> emits 175 KB JS / 8.2 KB CSS.</li>
+<li><code>OrganizationSettings</code> typed interface; <code>Organization.settings</code> is now typed.</li>
+<li><code>UserInvite</code>, <code>BulkImportSummary</code>, <code>BulkUserResult</code> interfaces.</li>
+<li><code>inviteUser</code>, <code>acceptInvite</code>, <code>bulkCreateUsers</code> functions.</li>
+<li><code>auditExportUrl(filters)</code> + <code>downloadAuditExport(email, filters)</code> — the download helper fetches with the auth header and triggers a local blob download (a plain <code>&lt;a href&gt;</code> can&#x27;t send <code>X-User-Email</code>).</li>
+<li><code>AdminPanel.tsx</code>:</li>
+<li>Users tab — <strong>Invite</strong> button per active user row (hidden on self); one-shot banner with the raw token + timestamp + &quot;Dismiss&quot;. <strong>Bulk import…</strong> button opens a dialog with a CSV-like textarea; inline summary on submit.</li>
+<li>Organization tab — typed inputs for <code>name</code>, <code>default_provider_name</code>, <code>encounter_page_size</code>, <code>audit_page_size</code> + an <strong>Extensions</strong> JSON textarea for forward-compat.</li>
+<li>Audit tab — <strong>Export CSV</strong> button next to <strong>Refresh</strong>; honors current filters.</li>
+<li>New <code>InviteAccept.tsx</code> + branch in <code>main.tsx</code> — minimal hash-split routing so <code>/invite?invite=&lt;token&gt;</code> and <code>/accept</code> render the accept screen. On success it stores the email into <code>localStorage.chartnav.devIdentity</code> so the main app picks it up for header-mode dev use.</li>
+<li>Typecheck clean; <code>vite build</code> emits 184 KB JS / 8.2 KB CSS.</li>
 </ul>
 <h3>Step 6 — Frontend tests</h3>
 <ul>
-<li><code>AdminPanel.test.tsx</code> — added 4 tests: org-tab loads current, org PATCH fires with correct body, local JSON parse error (bracket-array) surfaces without hitting backend, audit tab loads + filter dispatches + 403 surfaces.</li>
+<li><code>AdminPanel.test.tsx</code>:</li>
+<li><code>admin-user-invite-&lt;id&gt;</code> produces the one-shot token banner.</li>
+<li>Bulk import renders the created/skipped/errors summary.</li>
+<li>Audit Export CSV button wires <code>downloadAuditExport</code> with current filters.</li>
+<li>Updated the phase-13 &quot;local JSON parse error&quot; assertion from &quot;settings JSON&quot; → &quot;extensions JSON&quot; to match the new typed form.</li>
 <li><code>App.test.tsx</code> unchanged.</li>
-<li>Vitest: <strong>22/22 passed</strong>.</li>
+<li>Vitest: <strong>25/25 passed</strong>.</li>
 </ul>
 <h3>Step 7 — E2E</h3>
 <ul>
-<li>New scenario: &quot;admin can edit organization settings and inspect audit log&quot; — drives the Organization + Audit tabs against the live stack.</li>
-<li>Playwright: <strong>11/11 passed</strong> in ~17s.</li>
+<li>New scenario &quot;admin can issue an invitation and download audit CSV&quot;:</li>
+<li>Creates a user, clicks <strong>Invite</strong>, asserts the token box is visible and non-empty.</li>
+<li>Clicks <strong>Export CSV</strong> on the Audit tab and waits for the browser download event; asserts the filename matches <code>chartnav-audit-*.csv</code>.</li>
+<li>Existing event-composer E2E still uses the dropdown + <code>manual_note</code> + <code>{note: ...}</code> payload, which the hardened validator accepts.</li>
+<li>Playwright: <strong>12/12 passed</strong> in ~15s.</li>
 </ul>
 <h3>Step 8 — Docs</h3>
 <ul>
-<li>New <code>docs/build/23-operator-control-plane.md</code>.</li>
-<li>Updated <code>01-current-state</code>, <code>05-build-log</code>, <code>06-known-gaps</code>, <code>03-api-endpoints</code> (new endpoints + error codes), <code>04-data-model</code> (new columns + migration), <code>08-test-strategy</code> / <code>16-frontend-test-strategy</code>, <code>15-frontend-integration</code> (control-plane UI), <code>18-operational-hardening</code> (audit read surface), <code>22-admin-governance</code> (user lifecycle signal note).</li>
-<li>Diagrams: <code>er-diagram</code> includes <code>settings</code> / <code>invited_at</code>; <code>api-data-flow</code> keeps phase-10/12 flows, still accurate for new admin endpoints (same dispatch model).</li>
-<li><code>scripts/build_docs.py</code> picks up section 23.</li>
+<li>New <code>docs/build/24-invitations-and-governance.md</code>.</li>
+<li>Updated <code>01-current-state</code>, <code>05-build-log</code>, <code>06-known-gaps</code>, <code>02-workflow-state-machine</code> (event hardening), <code>03-api-endpoints</code> (4 new endpoints + error codes), <code>04-data-model</code> (invitation columns), <code>08-test-strategy</code>, <code>15-frontend-integration</code> (invite/accept/bulk/export UI), <code>16-frontend-test-strategy</code>, <code>18-operational-hardening</code> (audit export surface), <code>22-admin-governance</code> (invitations done).</li>
+<li><code>scripts/build_docs.py</code> picks up section 24.</li>
 <li>Final HTML + PDF regenerated.</li>
 </ul>
 <h3>Step 9 — CI</h3>
 <ul>
-<li><strong>No workflow YAML changes required.</strong> New tests live in paths that <code>backend-sqlite</code> / <code>frontend</code> / <code>e2e</code> already collect. Alembic migration runs via the same <code>alembic upgrade head</code> step every backend job executes.</li>
-<li><code>deploy-config</code> (compose + shellcheck) untouched.</li>
+<li><strong>No workflow YAML changes.</strong> New tests live in paths <code>backend-sqlite</code> / <code>frontend</code> / <code>e2e</code> already collect. New migration runs via each backend job&#x27;s existing <code>alembic upgrade head</code>.</li>
+<li>Same <code>deploy-config</code> (compose + shellcheck) lane still covers all scripts.</li>
 </ul>
 <h3>Step 10 — Hygiene</h3>
 <ul>
@@ -510,6 +557,7 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <p>---</p>
 <h2>Prior phases</h2>
 <ul>
+<li><strong>Phase 13 — Operator control plane</strong> (<code>5a5d846</code>)</li>
 <li><strong>Phase 12 — Admin governance</strong> (<code>4ff4e28</code>)</li>
 <li><strong>Phase 11 — Staging deployment + observability</strong> (<code>ee7cf43</code>)</li>
 <li><strong>Phase 10 — Real JWT bearer + operational hardening</strong> (<code>cbc5184</code>)</li>
@@ -526,63 +574,53 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 </section>
 <section id="sec-7"><h2>06 — Known gaps + verification matrix</h2>
 <h1>Known Gaps &amp; Verification Matrix</h1>
-<h2>Verification evidence — phase 13</h2>
+<h2>Verification evidence — phase 14</h2>
 <h3>Local gates</h3>
 <table><thead><tr><th>Gate</th><th>Result</th></tr></thead><tbody>
-<tr><td><code>make verify</code> (backend)</td><td>✅ <strong>88/88 pytest + 9/9 smoke</strong></td></tr>
+<tr><td><code>make verify</code> (backend)</td><td>✅ <strong>110/110 pytest + 9/9 smoke</strong></td></tr>
 <tr><td><code>cd apps/web &amp;&amp; npx tsc --noEmit</code></td><td>✅ clean</td></tr>
-<tr><td><code>cd apps/web &amp;&amp; npx vitest run</code></td><td>✅ <strong>22/22</strong></td></tr>
-<tr><td><code>cd apps/web &amp;&amp; npm run build</code></td><td>✅ 175 KB JS / 8.2 KB CSS</td></tr>
-<tr><td><code>cd apps/web &amp;&amp; npx playwright test</code></td><td>✅ <strong>11/11</strong> in ~17s</td></tr>
+<tr><td><code>cd apps/web &amp;&amp; npx vitest run</code></td><td>✅ <strong>25/25</strong></td></tr>
+<tr><td><code>cd apps/web &amp;&amp; npm run build</code></td><td>✅ 184 KB JS / 8.2 KB CSS</td></tr>
+<tr><td><code>cd apps/web &amp;&amp; npx playwright test</code></td><td>✅ <strong>12/12</strong> in ~15s</td></tr>
 <tr><td><code>apps/api/.venv/bin/python scripts/build_docs.py</code></td><td>✅ HTML + PDF</td></tr>
 </tbody></table>
-<h3>pytest summary (88)</h3>
+<h3>pytest summary (110)</h3>
 <table><thead><tr><th>Suite</th><th>Count</th><th>Notes</th></tr></thead><tbody>
 <tr><td><code>test_admin.py</code></td><td>20</td><td>admin governance (phase 12)</td></tr>
 <tr><td><code>test_auth.py</code></td><td>5</td><td>header mode</td></tr>
 <tr><td><code>test_auth_modes.py</code></td><td>11</td><td>real JWT bearer</td></tr>
-<tr><td><code>test_control_plane.py</code> ✦</td><td><strong>17</strong></td><td><strong>org settings + audit read + invited_at (phase 13)</strong></td></tr>
+<tr><td><code>test_control_plane.py</code></td><td>19</td><td>org settings + audit read + invited_at (phase 13 updated for typed settings)</td></tr>
+<tr><td><code>test_invitations.py</code> ✦</td><td><strong>20</strong></td><td><strong>invitations + audit export + event hardening + bulk users (phase 14)</strong></td></tr>
 <tr><td><code>test_observability.py</code></td><td>3</td><td><code>/ready</code>, <code>/metrics</code></td></tr>
 <tr><td><code>test_operational.py</code></td><td>12</td><td>request id, audit, rate limit, CORS</td></tr>
 <tr><td><code>test_rbac.py</code></td><td>12</td><td>role-gated writes + per-edge transitions</td></tr>
 <tr><td><code>test_scoping.py</code></td><td>8</td><td>org scoping</td></tr>
 </tbody></table>
-<h3>Vitest summary (22)</h3>
+<h3>Vitest summary (25)</h3>
 <table><thead><tr><th>File</th><th>Count</th><th>Notes</th></tr></thead><tbody>
 <tr><td><code>App.test.tsx</code></td><td>13</td><td>unchanged</td></tr>
-<tr><td><code>AdminPanel.test.tsx</code></td><td>9</td><td>+4 Organization + Audit tests</td></tr>
+<tr><td><code>AdminPanel.test.tsx</code></td><td>12</td><td>+3 (invite / bulk summary / audit export) on top of phase 13</td></tr>
 </tbody></table>
-<h3>Playwright summary (11)</h3>
-<table><thead><tr><th>#</th><th>Scenario</th></tr></thead><tbody>
-<tr><td>1</td><td>Default identity resolves</td></tr>
-<tr><td>2</td><td>Identity switch org1 → org2</td></tr>
-<tr><td>3</td><td>Admin opens detail, creates encounter</td></tr>
-<tr><td>4</td><td>Admin appends <code>manual_note</code> workflow event</td></tr>
-<tr><td>5</td><td>Clinician operational transitions; reviewer edge not offered</td></tr>
-<tr><td>6</td><td>Reviewer sees review-stage controls, no create, no composer</td></tr>
-<tr><td>7</td><td>Unknown email → <code>identity-error</code></td></tr>
-<tr><td>8</td><td>Admin creates user + location via admin panel</td></tr>
-<tr><td>9</td><td><strong>Admin edits organization settings and inspects audit log</strong> (new)</td></tr>
-<tr><td>10</td><td>Clinician cannot see Admin button</td></tr>
-<tr><td>11</td><td>Status filter narrows the list</td></tr>
-</tbody></table>
+<h3>Playwright summary (12)</h3>
+<p>Adds &quot;admin can issue an invitation and download audit CSV&quot; on top of</p>
+<p>the 11 scenarios shipped through phase 13.</p>
 <h2>Real gaps (prioritized for next phase)</h2>
-<p>1. <strong>No OpenTelemetry / distributed tracing.</strong></p>
-<p>2. <strong>Metrics + rate limiter are per-process</strong> — multi-worker needs coordination.</p>
-<p>3. <strong>No log shipping / retention policy defined.</strong></p>
-<p>4. <strong>No audit-table archival / retention.</strong> Rows accumulate indefinitely.</p>
-<p>5. <strong>No audit export</strong> (CSV/JSON download).</p>
-<p>6. <strong>Forward-only migrations.</strong></p>
-<p>7. <strong>No automated staging deploy from CI.</strong></p>
-<p>8. <strong>No signing / SBOM / provenance</strong> on release artifacts.</p>
-<p>9. <strong>No JWKS-rotation test, no refresh-token / revocation flow.</strong></p>
-<p>10. <strong>No token-based invitation workflow or email delivery.</strong> <code>invited_at</code> is a badge only.</p>
-<p>11. <strong>No org-level slug change</strong> — intentionally immutable.</p>
-<p>12. <strong>No bulk-import for users or locations.</strong></p>
-<p>13. <strong>No organization settings schema</strong> — the column is free-form JSON; no specific keys are consumed by the app yet.</p>
-<p>14. <strong>No pagination/search on users and locations lists</strong> (fine at current scale).</p>
-<p>15. <strong>No visual-regression / a11y audits</strong> on the frontend.</p>
-<p>16. <strong>pytest matrix on Postgres</strong> not wired (fixture env-driven, ready to flip).</p>
+<p>1. <strong>No email delivery</strong> for invitations — admin manually shares the token.</p>
+<p>2. <strong>No SSO → users mapping change</strong> (still by <code>CHARTNAV_JWT_USER_CLAIM</code>).</p>
+<p>3. <strong>Metrics + rate limiter per-process</strong> — multi-worker still needs coordination.</p>
+<p>4. <strong>No OpenTelemetry / distributed tracing.</strong></p>
+<p>5. <strong>No log shipping / retention</strong> defined; no audit-table archival.</p>
+<p>6. <strong>No CSV export for users or locations</strong> (audit export only).</p>
+<p>7. <strong>Forward-only migrations</strong> (acknowledged policy).</p>
+<p>8. <strong>No automated staging deploy from CI</strong>.</p>
+<p>9. <strong>No signing / SBOM / provenance</strong> on release artifacts.</p>
+<p>10. <strong>No JWKS-rotation test, no refresh-token / revocation flow.</strong></p>
+<p>11. <strong>No org-level slug change</strong> (intentional).</p>
+<p>12. <strong>No feature-flag consumer yet</strong> — the settings field exists but the app doesn&#x27;t read it.</p>
+<p>13. <strong>No pagination/search on users and locations lists</strong> (fine at current scale).</p>
+<p>14. <strong>No visual-regression / a11y audits</strong>.</p>
+<p>15. <strong>pytest matrix on Postgres</strong> not wired (fixture env-driven, ready to flip).</p>
+<p>16. <strong>No invite-accept screen polish</strong> (redirect to main app on success, proper routing, a11y review) — only the minimal success banner exists.</p>
 </section>
 <section id="sec-8"><h2>07 — Auth, org scoping, RBAC</h2>
 <h1>Auth, Org Scoping, RBAC</h1>
@@ -779,6 +817,11 @@ make docker-build
 <li><code>pytest</code>: <strong>28 passed in ~19s</strong></li>
 <li><code>make verify</code> (SQLite): 28 pytest + 9 smoke — all green</li>
 <li><code>scripts/pg_verify.sh</code>: migrations + seed (x2) + smoke + status transition + event write — <strong>PASS</strong></li>
+</ul>
+<h2>Backend coverage (phase 14)</h2>
+<ul>
+<li>110 pytest. <code>test_invitations.py</code> (20) covers invite issue / accept happy path / invalid / expired / reused / reissued tokens, cross-org denial, inactive / already-accepted denial, CSV export (admin-only, filters honored, shape), event-hardening rejection cases, and bulk import summary + org scoping + admin-only.</li>
+<li><code>test_control_plane.py</code> (19) updated for the typed settings schema (extra-forbid, extensions bucket, size cap via extensions).</li>
 </ul>
 <h2>Backend coverage (phase 13)</h2>
 <ul>
@@ -1508,6 +1551,14 @@ make web-build        # vite build -&gt; apps/web/dist
 <li>Audit log tab: filter row (<code>event_type</code>, <code>actor_email</code>, free-text <code>q</code>), paginated table (25/page) ordered newest-first with timestamp / event / actor / method+path / error code / request id columns. Backend 4xx surfaces as banner.</li>
 <li>Users tab renders an &quot;Invited&quot; badge for active users with <code>invited_at</code> set.</li>
 </ul>
+<h2>Invitations + bulk + audit export (phase 14)</h2>
+<ul>
+<li>Users tab now has an <strong>Invite</strong> button per active non-self row; clicking it surfaces the raw token in a one-shot banner (never shown again, dismissible).</li>
+<li>Users tab also has a <strong>Bulk import…</strong> button that opens a CSV-style textarea dialog; the submit result renders an inline created/skipped/errors summary before closing.</li>
+<li>Organization tab replaced the raw JSON textarea with typed inputs for <code>name</code>, <code>default_provider_name</code>, <code>encounter_page_size</code>, <code>audit_page_size</code>, plus an <strong>Extensions</strong> JSON textarea for forward-compat drift.</li>
+<li>Audit log tab has an <strong>Export CSV</strong> button that fetches with the auth header and triggers a local download (must use fetch + blob — a raw <code>&lt;a href&gt;</code> can&#x27;t send <code>X-User-Email</code>).</li>
+<li>New minimal <strong>Invite accept</strong> screen (<code>apps/web/src/InviteAccept.tsx</code>) mounted at <code>/invite?invite=&lt;token&gt;</code> and <code>/accept</code>. On success stores the email into <code>localStorage.chartnav.devIdentity</code> so the main app picks it up for header-mode dev use.</li>
+</ul>
 <h2>What this phase explicitly does NOT do</h2>
 <ul>
 <li>No real login flow — <code>X-User-Email</code> is still dev transport.</li>
@@ -1593,6 +1644,15 @@ make web-verify      # typecheck + test + build
 <p>Vitest and Playwright are fully isolated: Vitest&#x27;s <code>test.include</code> is</p>
 <p>narrowed to <code>src/**/*.test.{ts,tsx}</code> and excludes <code>tests/**</code>, so the</p>
 <p>two suites never cross-contaminate.</p>
+<h2>Invitations + bulk + export tests (phase 14)</h2>
+<ul>
+<li><code>AdminPanel.test.tsx</code>:</li>
+<li>Invite button on a user row issues a token and surfaces it in <code>admin-invite-token</code>.</li>
+<li>Bulk import summary renders created/skipped/errors counts.</li>
+<li>Audit Export CSV button wires <code>downloadAuditExport</code> with current filters.</li>
+<li>Playwright: 1 new end-to-end scenario — admin creates a user, clicks <strong>Invite</strong>, token banner visible; Audit tab → <strong>Export CSV</strong> triggers a real browser download with the expected filename pattern.</li>
+<li>Backend&#x27;s 20 <code>test_invitations.py</code> tests are the source of truth for server behavior; the UI tests verify wiring and user-visible states.</li>
+</ul>
 <h2>Operator control-plane tests (phase 13)</h2>
 <ul>
 <li><code>AdminPanel.test.tsx</code> — 4 new tests: Organization tab loads + PATCH dispatch, local JSON parse error path, Audit tab row render + filter dispatch, Audit 403 surfaces as error banner.</li>
@@ -1849,6 +1909,11 @@ docker compose -f infra/docker/docker-compose.prod.yml up -d
 <p>by <code>event_type</code>, <code>error_code</code>, <code>actor_email</code>, <code>q</code> (substring),</p>
 <p>paginated via <code>limit</code>/<code>offset</code> + <code>X-Total-Count</code> headers, ordered</p>
 <p>newest-first. Never exposes raw tokens or secrets.</p>
+<h2>Audit export (phase 14)</h2>
+<p><code>GET /security-audit-events/export</code> — admin only, CSV, honors the</p>
+<p>same filters as the read endpoint. Operator use case: spot-check or</p>
+<p>ship into a longer-lived SIEM. No column contains secrets or raw</p>
+<p>tokens by construction.</p>
 <h2>Remaining gaps</h2>
 <ul>
 <li>Rate limiter is in-memory per process — same caveat applies to the new metrics.</li>
@@ -2344,6 +2409,7 @@ CHECK (role IN (&#x27;admin&#x27;, &#x27;clinician&#x27;, &#x27;reviewer&#x27;))
 <li>No bulk-import.</li>
 <li>No invitation / email workflow.</li>
 <li><strong>Phase 13 update — audit log UI shipped.</strong> The <code>security_audit_events</code> table is now exposed at <code>GET /security-audit-events</code> and surfaced in the Admin panel → Audit log tab with filters + pagination. See <code>23-operator-control-plane.md</code>.</li>
+<li><strong>Phase 14 update — real invitation workflow shipped.</strong> <code>POST /users/{id}/invite</code> (admin) + <code>POST /invites/accept</code> (unauth, token IS the credential), 7-day expiry, sha256-only storage, per-user one-shot raw token banner, minimal <code>/invite?invite=&lt;token&gt;</code> accept screen. Bulk user import, audit CSV export, and typed org settings also landed this phase. Full contract: <code>24-invitations-and-governance.md</code>.</li>
 </ul>
 <h2>User lifecycle signal — <code>invited_at</code> (phase 13)</h2>
 <p><code>users.invited_at</code> is stamped whenever an admin creates a user. The</p>
@@ -2490,7 +2556,207 @@ WHERE organization_id = :caller.org OR organization_id IS NULL
 <li>No rich settings schema — the app doesn&#x27;t consume any specific key in <code>settings</code> yet. The field exists so operators can stash tenant preferences before we build the consumer.</li>
 </ul>
 </section>
-<section id="sec-25"><h2>Diagram — System architecture</h2>
+<section id="sec-25"><h2>24 — Invitations & governance</h2>
+<h1>Invitations, Governance &amp; Bulk Operations</h1>
+<p>Phase 14 closes the &quot;scaffolding only&quot; loops from the operator</p>
+<p>control plane:</p>
+<ul>
+<li>invitations are a real token flow (admin issues, user accepts) —</li>
+</ul>
+<p>no email delivery, but everything else operates like production;</p>
+<ul>
+<li>organization <code>settings</code> is typed and extra-forbidden (plus an</li>
+</ul>
+<p><code>extensions</code> bucket for forward-compat drift);</p>
+<ul>
+<li>audit events export to CSV;</li>
+<li><code>event_data</code> payloads now enforce value types / enum membership;</li>
+<li>bulk user import lands (JSON body, per-row pass/fail).</li>
+</ul>
+<h2>1. Invitation workflow</h2>
+<h3>Data shape (migration <code>e5f6a7b8c9d0</code>)</h3>
+<p>Three new columns on <code>users</code>:</p>
+<ul>
+<li><code>invitation_token_hash TEXT NULL</code> — <strong>sha256 hex only</strong>; the raw</li>
+</ul>
+<p>token is never stored. Indexed for O(1) accept lookups.</p>
+<ul>
+<li><code>invitation_expires_at DATETIME NULL</code> — 7 days from issue.</li>
+<li><code>invitation_accepted_at DATETIME NULL</code> — set on successful accept;</li>
+</ul>
+<p>presence blocks re-issue.</p>
+<h3>API</h3>
+<table><thead><tr><th>Method</th><th>Path</th><th>Auth</th><th>Notes</th></tr></thead><tbody>
+<tr><td>POST</td><td><code>/users/{id}/invite</code></td><td>admin</td><td>Issues (or re-issues) a token. Returns raw token ONCE. Inactive user → 400 <code>user_inactive</code>. Already-accepted → 400 <code>user_already_accepted</code>. Cross-org → 404 <code>user_not_found</code>.</td></tr>
+<tr><td>POST</td><td><code>/invites/accept</code></td><td>unauth</td><td>Body: <code>{ token }</code>. Invalid / expired / replayed → 400 <code>invalid_invite</code> / <code>invite_expired</code>. On success the hash is cleared so the same token can&#x27;t be reused.</td></tr>
+</tbody></table>
+<h3>Security notes</h3>
+<ul>
+<li>Only a sha256 hash is persisted. The raw token is echoed back in</li>
+</ul>
+<p>the admin response and is expected to be shared out-of-band.</p>
+<ul>
+<li>Tokens are generated via <code>secrets.token_urlsafe(32)</code> (≥ 256 bits</li>
+</ul>
+<p>of entropy).</p>
+<ul>
+<li><code>/invites/accept</code> is rate-limited via the middleware&#x27;s protected</li>
+</ul>
+<p>prefix list (<code>/invites</code>).</p>
+<ul>
+<li>Re-issuing an invite overwrites the hash: the old token is</li>
+</ul>
+<p>immediately invalid.</p>
+<ul>
+<li>Accept is idempotent in the wrong direction — a second accept</li>
+</ul>
+<p>with the same token fails with <code>invalid_invite</code> because the hash</p>
+<p>was cleared on the first success.</p>
+<h3>UI</h3>
+<ul>
+<li>Admin panel → Users tab: every active, non-self user row gets an</li>
+</ul>
+<p><strong>Invite</strong> button. Clicking it surfaces the raw token in a</p>
+<p>one-shot banner with a &quot;Dismiss&quot; button; the user is told to</p>
+<p>copy immediately.</p>
+<ul>
+<li>Minimal <code>/invite?invite=&lt;token&gt;</code> accept screen in the frontend</li>
+</ul>
+<p>(no router dependency; see <code>apps/web/src/InviteAccept.tsx</code> +</p>
+<p><code>main.tsx</code> branch). On success it stores the accepted email as</p>
+<p><code>localStorage.chartnav.devIdentity</code> so the main app picks it up</p>
+<p>for header-mode dev use.</p>
+<h3>Intentionally out of scope</h3>
+<ul>
+<li>Email delivery / templating.</li>
+<li>Self-serve signup.</li>
+<li>IdP pre-provisioning (the app will always map back through the</li>
+</ul>
+<p><code>users</code> table; that&#x27;s the production-auth claim seam).</p>
+<h2>2. Organization settings — typed schema</h2>
+<p><code>app.api.routes.OrganizationSettings</code> (pydantic <code>extra=forbid</code>):</p>
+<table><thead><tr><th>field</th><th>type</th><th>notes</th></tr></thead><tbody>
+<tr><td><code>default_provider_name</code></td><td><code>str</code> ≤ 255</td><td>suggestion used by UI for create flows</td></tr>
+<tr><td><code>encounter_page_size</code></td><td><code>int 10..200</code></td><td>caller-facing default page size</td></tr>
+<tr><td><code>audit_page_size</code></td><td><code>int 10..200</code></td><td>audit-log default page size</td></tr>
+<tr><td><code>feature_flags</code></td><td><code>dict[str, bool]</code></td><td>on/off toggles</td></tr>
+<tr><td><code>extensions</code></td><td><code>dict[str, Any]</code></td><td>explicit forward-compat bucket</td></tr>
+</tbody></table>
+<p>PATCH <code>/organization</code> body:</p>
+<pre class="code lang-json"><code>
+{
+  &quot;name&quot;: &quot;Demo Eye Clinic&quot;,
+  &quot;settings&quot;: {
+    &quot;default_provider_name&quot;: &quot;Dr. Carter&quot;,
+    &quot;encounter_page_size&quot;: 50,
+    &quot;feature_flags&quot;: {&quot;beta_ui&quot;: true},
+    &quot;extensions&quot;: {&quot;brand_color&quot;: &quot;#0B6E79&quot;}
+  }
+}
+</code></pre>
+<p>Validation:</p>
+<ul>
+<li>Top-level unknown keys → 422 (pydantic <code>extra=forbid</code>).</li>
+<li>Oversized blob (≥ 16 KB after JSON serialization) → 400 <code>settings_too_large</code>.</li>
+<li>Stored as JSON text in <code>organizations.settings</code>; normalized via</li>
+</ul>
+<p><code>model_dump(exclude_none=True)</code> so the blob only contains keys the</p>
+<p>operator actually set.</p>
+<p>UI (<code>AdminPanel.tsx</code> → Organization tab): dedicated inputs for each</p>
+<p>typed field, plus an <strong>Extensions</strong> textarea for the forward-compat</p>
+<p>bucket. The frontend no longer exposes a raw settings textarea.</p>
+<h2>3. Audit export</h2>
+<p><code>GET /security-audit-events/export</code> — admin only. Honors the same</p>
+<p>filters as the audit read endpoint (<code>event_type</code>, <code>error_code</code>,</p>
+<p><code>actor_email</code>, <code>q</code>) and the same org-scoping rule (caller&#x27;s org OR</p>
+<p><code>NULL</code>). Returns CSV with a stable column order:</p>
+<pre class="code lang-"><code>
+id, created_at, event_type, error_code, actor_email, actor_user_id,
+organization_id, method, path, request_id, remote_addr, detail
+</code></pre>
+<p>Browser download: Content-Disposition attachment with a timestamped</p>
+<p>filename (<code>chartnav-audit-YYYYMMDDTHHMMSSZ.csv</code>).</p>
+<p>Frontend: admin panel → Audit log tab has an <strong>Export CSV</strong> button</p>
+<p>that fetches with the auth header and triggers a local download</p>
+<p>(required because <code>&lt;a href&gt;</code> alone can&#x27;t send <code>X-User-Email</code>).</p>
+<h2>4. Event payload hardening</h2>
+<p>Beyond &quot;required keys exist&quot; (phase 12), each event type now enforces</p>
+<p>value types / enum membership:</p>
+<table><thead><tr><th>event_type</th><th>hardening</th></tr></thead><tbody>
+<tr><td><code>status_changed</code></td><td><code>old_status</code> &amp; <code>new_status</code> must be in <code>ALLOWED_STATUSES</code></td></tr>
+<tr><td><code>encounter_created</code></td><td><code>status</code> must be in <code>ALLOWED_STATUSES</code></td></tr>
+<tr><td><code>manual_note</code></td><td><code>note</code> must be a non-empty string ≤ 4000 chars</td></tr>
+<tr><td><code>note_draft_requested</code></td><td><code>requested_by</code> non-empty string; optional <code>template</code> non-empty string</td></tr>
+<tr><td><code>note_draft_completed</code></td><td><code>template</code> non-empty string; optional <code>length_words</code> non-negative int</td></tr>
+<tr><td><code>note_reviewed</code></td><td><code>reviewer</code> non-empty string ≤ 255</td></tr>
+</tbody></table>
+<p>Any violation → 400 <code>invalid_event_data</code> with a specific reason.</p>
+<h2>5. Bulk user import</h2>
+<p><code>POST /users/bulk</code> (admin only) accepts up to 500 rows at a time.</p>
+<p>Request body:</p>
+<pre class="code lang-json"><code>
+{
+  &quot;users&quot;: [
+    { &quot;email&quot;: &quot;a@x.test&quot;, &quot;full_name&quot;: &quot;A&quot;, &quot;role&quot;: &quot;clinician&quot; },
+    { &quot;email&quot;: &quot;b@x.test&quot;, &quot;role&quot;: &quot;reviewer&quot; }
+  ]
+}
+</code></pre>
+<p>Response:</p>
+<pre class="code lang-json"><code>
+{
+  &quot;created&quot;: [/* full user rows */],
+  &quot;skipped&quot;: [{ &quot;row&quot;: 0, &quot;email&quot;: &quot;admin@chartnav.local&quot;, &quot;error_code&quot;: &quot;user_email_taken&quot; }],
+  &quot;errors&quot;:  [{ &quot;row&quot;: 1, &quot;email&quot;: &quot;x@y.test&quot;, &quot;error_code&quot;: &quot;invalid_role&quot; }],
+  &quot;summary&quot;: { &quot;requested&quot;: 4, &quot;created&quot;: 2, &quot;skipped&quot;: 1, &quot;errors&quot;: 1 }
+}
+</code></pre>
+<p>Rules:</p>
+<ul>
+<li>Per-row validation — one bad row does not abort the batch.</li>
+<li>Strictly org-scoped: every created row belongs to <code>caller.organization_id</code>.</li>
+<li><code>invited_at</code> stamped on every newly created row (bulk import is by</li>
+</ul>
+<p>definition an &quot;invitation needed&quot; event).</p>
+<ul>
+<li>Admin-only (<code>role_admin_required</code> 403 otherwise).</li>
+<li>Empty batch → 422 (pydantic <code>min_length=1</code>).</li>
+</ul>
+<p>UI: Users tab → <strong>Bulk import…</strong> opens a dialog with a CSV-like</p>
+<p>textarea (<code>email,full_name,role</code> per line; header row optional). On</p>
+<p>submit the dialog surfaces created / skipped / errors inline and then</p>
+<p>refreshes the list.</p>
+<h2>6. Tests</h2>
+<h3>Backend (<code>apps/api/tests/test_invitations.py</code>, 20 new)</h3>
+<p>Invite issue + accept happy path, invalid/expired/replayed/reissued</p>
+<p>tokens, cross-org denial, inactive-user denial, already-accepted</p>
+<p>denial. Audit CSV: admin-only, honors filters, has expected shape.</p>
+<p>Event hardening: bogus status values, empty/non-string <code>note</code>,</p>
+<p>empty <code>requested_by</code>. Bulk import: created/skipped/errors summary,</p>
+<p>org-scoped, admin-only, empty-body 422.</p>
+<h3>Frontend (<code>apps/web/src/test/AdminPanel.test.tsx</code>, 3 new on top of phase 13)</h3>
+<ul>
+<li><code>admin-user-invite-&lt;id&gt;</code> surfaces the one-time raw token banner.</li>
+<li>Bulk import summary renders created/skipped/errors counts.</li>
+<li>Audit export button wires <code>downloadAuditExport</code> with current filters.</li>
+</ul>
+<h3>E2E (<code>apps/web/tests/e2e/workflow.spec.ts</code>, 1 new)</h3>
+<ul>
+<li>Admin creates a new user, clicks <strong>Invite</strong>, raw token appears.</li>
+</ul>
+<p>Audit log → <strong>Export CSV</strong> triggers a real browser download with</p>
+<p>the expected filename pattern.</p>
+<p>Totals: <strong>pytest 110/110, Vitest 25/25, Playwright 12/12</strong>.</p>
+<h2>7. What this phase explicitly does NOT do</h2>
+<ul>
+<li>No email delivery for invitations.</li>
+<li>No SSO claim → user mapping changes (the auth seam from phase 10 still applies).</li>
+<li>No organization or audit data export beyond users (CSV export is audit-only).</li>
+<li>No role-based access for the invite accept URL (anyone with the token can accept; that&#x27;s how invitations work by design).</li>
+<li>No CRUD for the <code>security_audit_events</code> table from the API — read + export only.</li>
+</ul>
+</section>
+<section id="sec-26"><h2>Diagram — System architecture</h2>
 <h1>System Architecture</h1>
 <div class="mermaid">
 flowchart LR
@@ -2591,7 +2857,7 @@ flowchart LR
   Compose --> PG
 </div>
 </section>
-<section id="sec-26"><h2>Diagram — Encounter status machine</h2>
+<section id="sec-27"><h2>Diagram — Encounter status machine</h2>
 <h1>Encounter Status State Machine</h1>
 <div class="mermaid">
 stateDiagram-v2
@@ -2613,7 +2879,7 @@ stateDiagram-v2
 <p>Legend: any edge not shown is rejected at <code>POST /encounters/{id}/status</code></p>
 <p>with HTTP 400 <code>invalid_transition</code>.</p>
 </section>
-<section id="sec-27"><h2>Diagram — ER</h2>
+<section id="sec-28"><h2>Diagram — ER</h2>
 <h1>ER Diagram</h1>
 <div class="mermaid">
 erDiagram
@@ -2656,8 +2922,12 @@ erDiagram
     int organization_id FK
     string email UK
     string full_name
-    string role "admin | clinician | reviewer (CHECK constraint)"
+    string role "admin | clinician | reviewer (CHECK)"
     boolean is_active
+    datetime invited_at
+    string invitation_token_hash "sha256 hex, indexed"
+    datetime invitation_expires_at
+    datetime invitation_accepted_at
     datetime created_at
   }
   encounters {
@@ -2694,7 +2964,7 @@ erDiagram
 <p><code>users.organization_id</code> is the authoritative source of scope; never</p>
 <p>derived from client input.</p>
 </section>
-<section id="sec-28"><h2>Diagram — API / data flow</h2>
+<section id="sec-29"><h2>Diagram — API / data flow</h2>
 <h1>API / Data Flow &amp; CI</h1>
 <h2>UI → Backend request path</h2>
 <div class="mermaid">

@@ -1,6 +1,6 @@
 # ChartNav — Current State
 
-**As of:** 2026-04-18 (phase: operator control plane — org settings, audit read, user-lifecycle signal)
+**As of:** 2026-04-18 (phase: invitations + settings schema + audit export + bulk)
 
 ## Repo layout (relevant)
 
@@ -8,26 +8,22 @@
 chartnav-platform/
 ├── .github/workflows/{ci.yml,release.yml}
 ├── Makefile
-├── scripts/                # build_docs.py · verify.sh · pg_verify.sh · release_build.sh · staging_*.sh
+├── scripts/                 # build_docs · verify · pg_verify · release_build · staging_*
 ├── apps/
 │   ├── api/
-│   │   ├── app/
-│   │   │   ├── main.py · config.py · db.py · auth.py · authz.py
-│   │   │   ├── audit.py · logging_config.py · middleware.py · metrics.py
-│   │   │   └── api/routes.py      # + /organization + /security-audit-events
-│   │   ├── alembic/versions/      # 5 migrations through d4e5f6a7b8c9
-│   │   ├── tests/                 # 88 pytest (+17 control-plane)
+│   │   ├── app/             # main · config · db · auth · authz · audit · logging_config · middleware · metrics
+│   │   │   └── api/routes.py  # + /users/{id}/invite · /invites/accept · audit export · /users/bulk · typed settings
+│   │   ├── alembic/versions/  # 6 migrations through e5f6a7b8c9d0
+│   │   ├── tests/             # 110 pytest (+20 invitations/bulk/export)
 │   │   └── Dockerfile · entrypoint.sh · .env.example
 │   └── web/
 │       ├── src/
-│       │   ├── App.tsx
-│       │   ├── AdminPanel.tsx     # 4 tabs — Users · Locations · Organization · Audit log
-│       │   ├── api.ts             # + org + audit helpers
+│       │   ├── App.tsx · AdminPanel.tsx · InviteAccept.tsx · api.ts
 │       │   ├── identity.ts · styles.css · main.tsx
-│       │   └── test/              # 22 Vitest (+4 control-plane)
-│       └── tests/e2e/             # 11 Playwright (+1 org/audit)
-├── infra/docker/
-└── docs/build/ 01 … 23
+│       │   └── test/          # 25 Vitest
+│       └── tests/e2e/         # 12 Playwright
+├── infra/docker/{dev,prod,staging}.yml
+└── docs/build/ 01 … 24
 ```
 
 ## Runtime baseline
@@ -37,43 +33,40 @@ chartnav-platform/
 - Auth: `header` (dev) or `bearer` (prod JWT via JWKS).
 - RBAC: `admin` / `clinician` / `reviewer` (CHECK-constrained at DB level).
 - Error envelope: `{"detail": {"error_code": "...", "reason": "..."}}`.
-- **Org settings**: `GET /organization` (any authed role), `PATCH /organization` (admin). 16 KB cap on `settings` JSON; slug immutable.
-- **Audit read**: `GET /security-audit-events` (admin, org-scoped `OR organization_id IS NULL`, filterable, paginated).
-- **User lifecycle**: `invited_at` stamped on admin create; UI renders "Invited" badge.
-- Event discipline: `EVENT_SCHEMAS` allowlist with per-type required keys.
-- Encounter pagination: `limit`/`offset` + `X-Total-Count`/`X-Limit`/`X-Offset` headers.
-- Observability: `/health` · `/ready` · `/metrics` (Prometheus text).
-- CORS + rate-limit + request-id + structured logs: unchanged.
-- Alembic head: `d4e5f6a7b8c9`.
+- **Invitations** (phase 14): admin issues 7-day tokens via `POST /users/{id}/invite`; only sha256 hash stored; accept via `POST /invites/accept`; re-issue revokes prior token; frontend has a minimal `/invite?invite=<token>` accept screen.
+- **Org settings**: typed `OrganizationSettings` pydantic model (extra=forbid) with `default_provider_name`, `encounter_page_size`, `audit_page_size`, `feature_flags`, `extensions`. 16 KB cap. UI edits each field with dedicated inputs.
+- **Audit export**: `GET /security-audit-events/export` → CSV, honors existing filters + org scoping.
+- **Event payload hardening** (phase 14): per-type value discipline (status enum, non-empty strings, non-negative ints).
+- **Bulk user import**: `POST /users/bulk` with per-row pass/fail summary; UI exposes a CSV-like textarea dialog.
+- Alembic head: `e5f6a7b8c9d0`.
 
 ## Testing layers
 
 | Layer        | Tool         | Count | Notes |
 |--------------|--------------|:-----:|-------|
-| pytest       | pytest       |  88   | +17 `test_control_plane.py` (org settings, audit read, invited_at) |
+| pytest       | pytest       |  110  | +20 invitations/bulk/export/event-hardening |
 | shell smoke  | smoke.sh     |   9   | unchanged |
-| vitest       | vitest       |  22   | +4 admin-panel tests for Organization + Audit tabs |
-| Playwright   | @playwright  |  11   | +1 org settings + audit tab E2E |
+| vitest       | vitest       |  25   | +3 admin-panel (invite/bulk/export) |
+| Playwright   | @playwright  |  12   | +1 admin invite + audit CSV download E2E |
 | staging      | staging_verify.sh | 9 | unchanged |
 
 ## Verified working endpoints
 
 Additions this phase:
-- `GET /organization`, `PATCH /organization`
-- `GET /security-audit-events`
+- `POST /users/{id}/invite`
+- `POST /invites/accept`
+- `POST /users/bulk`
+- `GET /security-audit-events/export`
 
-Unchanged from phase 12: `/health`, `/`, `/ready`, `/metrics`, `/me`,
-`/organizations`, `/locations`, `/users`, `/encounters` (+ pagination +
-filters), admin CRUD for users + locations, event-validated
-`POST /encounters/{id}/events`, per-edge RBAC on status transitions.
+Unchanged surfaces from phases 1–13 are all still green.
 
 ## Automation
 
-- `make verify` → 88 pytest + 9 smoke
-- `make web-verify` → 22 vitest + typecheck + build
-- `make e2e` → 11 Playwright
+- `make verify` → 110 pytest + 9 smoke
+- `make web-verify` → 25 vitest + typecheck + build
+- `make e2e` → 12 Playwright
 - `make pg-verify` — Postgres parity
-- `make staging-up / staging-verify / staging-rollback TAG=... / staging-down`
+- `make staging-up / staging-verify / staging-rollback / staging-down`
 - `make release-build VERSION=v0.1.0`
 - `make dev` — backend + frontend
-- CI: backend-sqlite + frontend + deploy-config in parallel; e2e needs backend+frontend; backend-postgres + docker-build + docs chain on backend-sqlite.
+- CI gates unchanged (backend / frontend / e2e / backend-postgres / docker-build / docs / deploy-config).

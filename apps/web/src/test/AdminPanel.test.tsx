@@ -18,6 +18,9 @@ vi.mock("../api", async () => {
     getOrganization: vi.fn(),
     updateOrganization: vi.fn(),
     listAuditEvents: vi.fn(),
+    inviteUser: vi.fn(),
+    bulkCreateUsers: vi.fn(),
+    downloadAuditExport: vi.fn(),
   };
 });
 
@@ -239,7 +242,7 @@ describe("AdminPanel", () => {
     await user.paste("[1,2,3]");
     await user.click(screen.getByTestId("admin-org-submit"));
     const banner = await screen.findByTestId("admin-banner-error");
-    expect(banner).toHaveTextContent(/settings JSON/);
+    expect(banner).toHaveTextContent(/extensions JSON/);
     // We must NOT have called the backend.
     expect(api.updateOrganization).not.toHaveBeenCalled();
   });
@@ -265,6 +268,70 @@ describe("AdminPanel", () => {
       const calls = (api.listAuditEvents as any).mock.calls;
       const last = calls.at(-1);
       expect(last?.[1]).toEqual({ event_type: "invalid_token" });
+    });
+  });
+
+  it("admin can issue an invitation from a user row", async () => {
+    (api.inviteUser as any).mockResolvedValueOnce({
+      user_id: 2,
+      invitation_token: "fake-token-xxx",
+      invitation_expires_at: "2026-04-25T10:00:00Z",
+      ttl_days: 7,
+    });
+    const user = userEvent.setup();
+    render(<AdminPanel identity={ADMIN1.email} me={ADMIN1} onClose={() => {}} />);
+    await screen.findByTestId("admin-users-table");
+
+    await user.click(screen.getByTestId("admin-user-invite-2"));
+
+    await waitFor(() => {
+      expect(api.inviteUser).toHaveBeenCalledWith("admin@chartnav.local", 2);
+    });
+    const tokenBox = await screen.findByTestId("admin-invite-token");
+    expect(tokenBox).toHaveTextContent("fake-token-xxx");
+  });
+
+  it("admin bulk-import surfaces created/skipped/errors summary", async () => {
+    (api.bulkCreateUsers as any).mockResolvedValueOnce({
+      created: [{ id: 101, email: "new@chartnav.local", role: "clinician" }],
+      skipped: [{ row: 1, email: "admin@chartnav.local", error_code: "user_email_taken" }],
+      errors: [{ row: 2, email: "bad@chartnav.local", error_code: "invalid_role" }],
+      summary: { requested: 3, created: 1, skipped: 1, errors: 1 },
+    });
+
+    const user = userEvent.setup();
+    render(<AdminPanel identity={ADMIN1.email} me={ADMIN1} onClose={() => {}} />);
+    await screen.findByTestId("admin-users-table");
+
+    await user.click(screen.getByTestId("admin-user-bulk-open"));
+    await screen.findByTestId("admin-user-bulk-modal");
+    await user.click(screen.getByTestId("admin-user-bulk-submit"));
+
+    const summary = await screen.findByTestId("admin-user-bulk-summary");
+    expect(summary).toHaveTextContent("Created 1");
+    expect(summary).toHaveTextContent("Skipped 1");
+    expect(summary).toHaveTextContent("Errors 1");
+  });
+
+  it("audit tab triggers CSV export with current filters", async () => {
+    const user = userEvent.setup();
+    render(<AdminPanel identity={ADMIN1.email} me={ADMIN1} onClose={() => {}} />);
+    await user.click(await screen.findByTestId("admin-tab-audit"));
+    await screen.findByTestId("admin-audit-table");
+
+    await user.type(screen.getByTestId("admin-audit-event-type"), "unknown_user");
+    // wait for the refresh that comes from the filter change
+    await waitFor(() => {
+      const calls = (api.listAuditEvents as any).mock.calls;
+      expect(calls.at(-1)?.[1]).toEqual({ event_type: "unknown_user" });
+    });
+
+    await user.click(screen.getByTestId("admin-audit-export"));
+    await waitFor(() => {
+      expect(api.downloadAuditExport).toHaveBeenCalledWith(
+        "admin@chartnav.local",
+        { event_type: "unknown_user" }
+      );
     });
   });
 

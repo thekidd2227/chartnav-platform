@@ -47,6 +47,7 @@ SECTIONS = [
     ("21 — Staging runbook", BUILD / "21-staging-runbook.md"),
     ("22 — Admin governance", BUILD / "22-admin-governance.md"),
     ("23 — Operator control plane", BUILD / "23-operator-control-plane.md"),
+    ("24 — Invitations & governance", BUILD / "24-invitations-and-governance.md"),
     ("Diagram — System architecture", DIAGR / "system-architecture.md"),
     ("Diagram — Encounter status machine", DIAGR / "encounter-status-machine.md"),
     ("Diagram — ER", DIAGR / "er-diagram.md"),
@@ -81,7 +82,9 @@ date.
 
 **Phase 12 — Admin governance + event discipline + pagination.** DB CHECK on `users.role`, `is_active` soft-delete flags, admin CRUD for users + locations, `EVENT_SCHEMAS` allowlist, encounter pagination via `limit`/`offset` + `X-Total-Count`. `AdminPanel` modal with Users + Locations tabs.
 
-**Phase 13 — Operator control plane (this phase).** Migration `d4e5f6a7b8c9` adds `organizations.settings TEXT` and `users.invited_at DATETIME`. New endpoints: `GET /organization` (any authed role) + `PATCH /organization` (admin, 16 KB settings cap, slug immutable), and `GET /security-audit-events` (admin, org-scoped `OR organization_id IS NULL`, filterable by `event_type` / `actor_email` / free-text `q`, paginated with `X-Total-Count`). Admin panel expands to four tabs (Users, Locations, Organization, Audit log); admin-create stamps `invited_at` and the Users tab shows an "Invited" badge. Suites grow to **88 pytest / 22 Vitest / 11 Playwright**.
+**Phase 13 — Operator control plane.** `GET/PATCH /organization` + `GET /security-audit-events` + admin panel Organization & Audit tabs. `invited_at` stamping on admin create.
+
+**Phase 14 — Invitations, settings schema, audit export, event hardening, bulk users (this phase).** Migration `e5f6a7b8c9d0` adds `invitation_token_hash` (sha256-only), `invitation_expires_at`, `invitation_accepted_at`. New endpoints: `POST /users/{id}/invite`, `POST /invites/accept`, `POST /users/bulk`, `GET /security-audit-events/export`. Organization settings becomes a typed `OrganizationSettings` pydantic model (extra=forbid) with dedicated fields + an `extensions` forward-compat bucket. Event payloads enforce per-type value discipline (status enums, non-empty strings, non-negative ints). Admin UI adds per-user **Invite** with a one-shot raw-token banner, a **Bulk import…** dialog, an **Export CSV** button on the audit tab, typed inputs on the Organization tab, and a minimal `/invite?invite=<token>` accept screen. Suites grow to **110 pytest / 25 Vitest / 12 Playwright**.
 
 Preserved untouched: `/health`, `/`, SQLite dev workflow, state machine + filtering surface, workflow_events model, existing endpoint contracts.
 """

@@ -201,6 +201,41 @@ test.describe("ChartNav end-to-end", () => {
     await expect(page.getByTestId("admin-audit-refresh")).toBeVisible();
   });
 
+  test("admin can issue an invitation and download audit CSV", async ({ page }) => {
+    await waitForIdentity(page, "admin");
+    await page.getByTestId("open-admin-panel").click();
+
+    // Create a new user to invite (deterministic — unique email).
+    const email = `invited-${Date.now()}@chartnav.local`;
+    await page.getByTestId("admin-user-email").fill(email);
+    await page.getByTestId("admin-user-name").fill("Invite Target");
+    await page.getByTestId("admin-user-role").selectOption("clinician");
+    await page.getByTestId("admin-user-submit").click();
+    await expect(page.getByTestId("admin-banner-ok")).toContainText(email);
+
+    // Find the row for that user and click its Invite button.
+    const row = page.locator(".admin-table tr", { hasText: email });
+    await expect(row).toBeVisible();
+    await row.getByRole("button", { name: /^Invite$/ }).click();
+
+    const tokenBox = page.getByTestId("admin-invite-token");
+    await expect(tokenBox).toBeVisible();
+    await expect(tokenBox).not.toBeEmpty();
+    await expect(page.getByTestId("admin-banner-ok")).toContainText(/Invitation issued/);
+
+    // Audit tab: export CSV (covered here as a DOM-level wiring check —
+    // clicking the button drives the downloadAuditExport helper, which
+    // does a fetch + anchor click. In chromium headless this produces
+    // a download event we can wait for.)
+    await page.getByTestId("admin-tab-audit").click();
+    const [download] = await Promise.all([
+      page.waitForEvent("download", { timeout: 8000 }),
+      page.getByTestId("admin-audit-export").click(),
+    ]);
+    const filename = download.suggestedFilename();
+    expect(filename).toMatch(/chartnav-audit-.*\.csv/);
+  });
+
   test("non-admin cannot see the admin button", async ({ page }) => {
     await waitForIdentity(page, "admin");
     await switchIdentity(page, CLIN1);

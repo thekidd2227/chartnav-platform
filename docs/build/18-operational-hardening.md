@@ -119,6 +119,13 @@ by `event_type`, `error_code`, `actor_email`, `q` (substring),
 paginated via `limit`/`offset` + `X-Total-Count` headers, ordered
 newest-first. Never exposes raw tokens or secrets.
 
+## Audit export (phase 14)
+
+`GET /security-audit-events/export` — admin only, CSV, honors the
+same filters as the read endpoint. Operator use case: spot-check or
+ship into a longer-lived SIEM. No column contains secrets or raw
+tokens by construction.
+
 ## Remaining gaps
 
 - Rate limiter is in-memory per process — same caveat applies to the new metrics.

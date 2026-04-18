@@ -41,8 +41,12 @@ erDiagram
     int organization_id FK
     string email UK
     string full_name
-    string role "admin | clinician | reviewer (CHECK constraint)"
+    string role "admin | clinician | reviewer (CHECK)"
     boolean is_active
+    datetime invited_at
+    string invitation_token_hash "sha256 hex, indexed"
+    datetime invitation_expires_at
+    datetime invitation_accepted_at
     datetime created_at
   }
   encounters {

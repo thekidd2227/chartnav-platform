@@ -35,7 +35,14 @@ def test_admin_can_patch_org_name(client):
 
 
 def test_admin_can_patch_settings_json(client):
-    payload = {"settings": {"timezone": "America/New_York", "brand_color": "#0B6E79"}}
+    # Uses the typed schema shipped in phase 14.
+    payload = {
+        "settings": {
+            "default_provider_name": "Dr. House",
+            "encounter_page_size": 25,
+            "feature_flags": {"beta_ui": True},
+        }
+    }
     r = client.patch("/organization", headers=ADMIN1, json=payload)
     assert r.status_code == 200
     assert r.json()["settings"] == payload["settings"]
@@ -48,8 +55,26 @@ def test_settings_must_be_object(client):
     assert r.status_code == 422  # pydantic rejects non-dict
 
 
+def test_settings_rejects_unknown_fields(client):
+    r = client.patch(
+        "/organization",
+        headers=ADMIN1,
+        json={"settings": {"surprise_field": "nope"}},
+    )
+    assert r.status_code == 422  # extra=forbid
+
+
+def test_settings_extensions_bucket_allows_forward_compat(client):
+    payload = {"settings": {"extensions": {"brand_color": "#0B6E79"}}}
+    r = client.patch("/organization", headers=ADMIN1, json=payload)
+    assert r.status_code == 200
+    assert r.json()["settings"]["extensions"] == {"brand_color": "#0B6E79"}
+
+
 def test_settings_size_limit(client):
-    big = {"k": "x" * 20_000}
+    # The only field big enough to blow 16 KB without triggering pydantic
+    # field limits is the free-form extensions bucket.
+    big = {"extensions": {"k": "x" * 20_000}}
     r = client.patch("/organization", headers=ADMIN1, json={"settings": big})
     assert r.status_code == 400
     assert r.json()["detail"]["error_code"] == "settings_too_large"

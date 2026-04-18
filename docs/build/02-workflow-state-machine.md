@@ -66,6 +66,20 @@ Every successful transition appends a `workflow_events` row:
 
 See `docs/diagrams/encounter-status-machine.md` (Mermaid).
 
+## Event payload hardening (phase 14)
+
+On top of the phase-12 "required keys present" check,
+`_validate_event` now enforces per-type value discipline:
+
+- `status_changed`: `old_status` and `new_status` must both be in `ALLOWED_STATUSES`.
+- `encounter_created`: `status` must be in `ALLOWED_STATUSES`.
+- `manual_note`: `note` must be a non-empty string ≤ 4000 chars.
+- `note_draft_requested`: `requested_by` non-empty string; optional `template` non-empty string.
+- `note_draft_completed`: `template` non-empty string; optional `length_words` non-negative int.
+- `note_reviewed`: `reviewer` non-empty string ≤ 255.
+
+Violations return 400 `invalid_event_data` with a specific reason.
+
 ## Source of truth
 
 `apps/api/app/api/routes.py`:
