@@ -25,3 +25,11 @@
 # Local databases
 *.db
 .pytest_cache/
+
+# Playwright
+apps/web/playwright-report/
+apps/web/test-results/
+apps/web/e2e-results/
+
+# Release output
+dist/release/

@@ -1,63 +1,72 @@
 # ChartNav — Current State
 
-**As of:** 2026-04-18 (phase: create UI + frontend tests + frontend CI)
+**As of:** 2026-04-18 (phase: Playwright E2E + release pipeline)
 
 ## Repo layout (relevant)
 
 ```
 chartnav-platform/
-├── .github/workflows/ci.yml   # backend-sqlite · backend-postgres · frontend · docker-build · docs
-├── Makefile                   # verify · pg-verify · docker-* · web-* (incl. web-test / web-verify) · dev
-├── scripts/                   # build_docs.py · verify.sh · pg_verify.sh
+├── .github/workflows/
+│   ├── ci.yml            # backend-sqlite · backend-postgres · frontend · e2e · docker-build · docs
+│   └── release.yml       # NEW — tag-driven GHCR push + GitHub Release
+├── Makefile              # verify · pg-verify · docker-* · web-* · e2e · release-build · dev
+├── scripts/
+│   ├── build_docs.py
+│   ├── verify.sh
+│   ├── pg_verify.sh
+│   └── release_build.sh  # NEW — reproducible release bundle
 ├── apps/
-│   ├── api/                   # (unchanged this phase)
-│   │   ├── app/{main,config,db,auth,authz}.py + app/api/routes.py
-│   │   ├── alembic/ · scripts_seed.py · scripts/smoke.sh
-│   │   ├── tests/ (28 pytest)
-│   │   └── Dockerfile · entrypoint.sh
+│   ├── api/              # unchanged
 │   └── web/
-│       ├── .env.example
-│       ├── package.json          # scripts: dev · build · preview · typecheck · test · test:watch
-│       ├── vite.config.ts        # also hosts vitest config (jsdom)
-│       ├── tsconfig.json         # includes vitest/globals + testing-library types
-│       └── src/
-│           ├── api.ts            # typed client, createEncounter, canCreateEncounter
-│           ├── identity.ts
-│           ├── App.tsx           # + CreateEncounterModal, pending-state buttons
-│           ├── styles.css        # + modal styles
-│           ├── main.tsx · vite-env.d.ts
-│           └── test/
-│               ├── setup.ts
-│               └── App.test.tsx  # 12 integration tests
+│       ├── package.json           # + test:e2e / :headed / :ui
+│       ├── playwright.config.ts   # NEW — backend + frontend webServer
+│       ├── tests/e2e/
+│       │   └── workflow.spec.ts   # NEW — 8 browser tests
+│       ├── src/test/              # 12 vitest tests (phase 8)
+│       └── ...
 ├── infra/docker/{docker-compose,docker-compose.prod}.yml
-└── docs/build/ 01 … 16          # incl. 15-frontend-integration, 16-frontend-test-strategy
+└── docs/build/ 01 … 17
 ```
 
 ## Runtime baseline
 
-- Backend: FastAPI + SQLAlchemy Core, SQLite or Postgres (via `DATABASE_URL`).
-- Frontend: Vite 5 + React 18 + TypeScript + Vitest + Testing Library.
+- Backend: FastAPI + SQLAlchemy Core, SQLite or Postgres.
+- Frontend: Vite 5 + React 18 + TypeScript + Vitest + **Playwright**.
 - Auth: `CHARTNAV_AUTH_MODE=header` (dev) or `bearer` (prod placeholder 501).
 - RBAC: `admin` / `clinician` / `reviewer`.
 - Alembic head: `a1b2c3d4e5f6`. No schema changes this phase.
-- Error envelope: `{"detail": {"error_code": "...", "reason": "..."}}` — surfaced verbatim in the UI.
+- Error envelope: `{"detail": {"error_code": "...", "reason": "..."}}`.
 
-## Frontend capabilities (delta this phase)
+## Testing layers
 
-- `+ New encounter` button in the header for admin/clinician; hidden for reviewer.
-- `CreateEncounterModal`:
-  - Fetches `/locations` (already org-scoped server-side).
-  - Fields: patient_identifier*, patient_name, provider_name*, location_id*, initial status (`scheduled` / `in_progress`).
-  - Disables submit while in-flight, validates required fields.
-  - Success → refresh list, auto-select new encounter, show success banner.
-  - Failure → inline error with exact `error_code` + `reason`; modal stays open for retry.
-- Transition / append-event buttons now show a pending label and disable while the request is in flight.
-- Banners annotated with ARIA roles; `data-testid` hooks added to enable a11y + tests.
+| Layer        | Tool        | Count | Scope                              |
+|--------------|-------------|:-----:|------------------------------------|
+| pytest       | `pytest`    | 28    | backend units + integration        |
+| shell smoke  | `scripts/smoke.sh` | 9  | live HTTP contract (SQLite + Postgres) |
+| vitest       | `vitest`    | 12    | frontend integration (mocked API)  |
+| **Playwright E2E** | `@playwright/test` | 8 | full-stack browser (live backend + frontend) |
+
+## Release / deploy
+
+- **Artifacts** (via `scripts/release_build.sh`):
+  - `chartnav-api-<version>.tar` (docker save, loadable anywhere).
+  - `chartnav-web-<version>.tar.gz` (static bundle from `apps/web/dist`).
+  - `MANIFEST.txt` with git sha, ref, build time, sha256 sums.
+- **Registry**: `ghcr.io/<owner>/chartnav-api:<version>` (and `:latest`) on tagged builds.
+- **GitHub Release**: auto-created on `v*.*.*` tag pushes with notes + artifacts attached.
+- Runtime stack: `infra/docker/docker-compose.prod.yml` (API + Postgres).
+
+## Verified working endpoints
+
+No endpoint behavior changed this phase.
 
 ## Automation
 
-- `make verify` — SQLite backend gate (reset-db + pytest + boot + smoke).
-- `make pg-verify` — Postgres parity proof.
-- `make web-verify` — frontend gate (typecheck + test + build).
-- `make dev` — backend + frontend together with trap teardown.
-- CI: `backend-sqlite` + `frontend` run in parallel; `backend-postgres` + `docker-build` + `docs` are chained after `backend-sqlite`.
+- `make verify` — SQLite backend gate.
+- `make pg-verify` — Postgres parity.
+- `make web-verify` — frontend unit gate.
+- `make e2e` — full-stack browser tests.
+- `make release-build VERSION=v0.1.0` — produce the release bundle locally.
+- `make dev` — boot backend + frontend together.
+- CI: `backend-sqlite` + `frontend` run in parallel; `e2e` gates on both;
+  `backend-postgres`, `docker-build`, `docs` chain on `backend-sqlite`.

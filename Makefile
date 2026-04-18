@@ -13,7 +13,7 @@ PIP     := $(VENV)/bin/pip
 DEV_DB  := $(API_DIR)/chartnav.db
 PORT    := 8765
 
-.PHONY: help install migrate seed test boot smoke docs verify clean reset-db pg-verify docker-build docker-up docker-down web-install web-dev web-build web-typecheck web-test web-verify dev
+.PHONY: help install migrate seed test boot smoke docs verify clean reset-db pg-verify docker-build docker-up docker-down web-install web-dev web-build web-typecheck web-test web-verify e2e e2e-headed e2e-ui release-build dev
 
 help:
 	@awk 'BEGIN{FS=":.*?## "} /^[a-zA-Z_-]+:.*?## /{printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -72,6 +72,18 @@ web-test: ## Run frontend unit/integration tests (vitest)
 
 web-verify: ## Frontend gate: typecheck + test + build
 	cd apps/web && npm run typecheck && npm test && npm run build
+
+e2e: ## Playwright E2E — boots full stack on 8001/5174, tears down cleanly
+	cd apps/web && npx playwright test --reporter=list
+
+e2e-headed: ## Playwright E2E in a visible browser
+	cd apps/web && npx playwright test --headed --reporter=list
+
+e2e-ui: ## Playwright interactive UI mode
+	cd apps/web && npx playwright test --ui
+
+release-build: ## Build release artifacts into dist/release/<version>/ (usage: make release-build VERSION=v0.1.0)
+	bash scripts/release_build.sh $(VERSION)
 
 dev: ## Boot backend (port 8000) + frontend (port 5173) together
 	@bash -c 'set -e; \

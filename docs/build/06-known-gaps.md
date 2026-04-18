@@ -1,61 +1,48 @@
 # Known Gaps & Verification Matrix
 
-## Verification evidence — phase 8
+## Verification evidence — phase 9
 
-### Frontend gate (`make web-verify`)
+### Local gates
+| Gate                  | Result |
+|-----------------------|--------|
+| `make verify` (SQLite backend + pytest 28 + smoke 9) | ✅ |
+| `make pg-verify` (Postgres parity)                  | ✅ (from preceding phase, no backend changes here) |
+| `make web-verify` (tsc + vitest 12 + build)         | ✅ |
+| `make e2e` (Playwright 8 tests in chromium)         | ✅ **8/8 in ~14s** |
 
-| Step                                  | Result |
-|---------------------------------------|--------|
-| `tsc --noEmit`                        | ✅ clean |
-| `vitest run`                          | ✅ **12/12** in ~2.5s |
-| `vite build`                          | ✅ 159 KB JS / 7.3 KB CSS |
+### Playwright E2E matrix (8)
 
-### Frontend test matrix (12)
-
-| Scenario                                                            | Result |
-|---------------------------------------------------------------------|--------|
-| `/me` resolves → identity badge                                     | ✅ |
-| List renders mocked encounters                                      | ✅ |
-| Status filter hits API + updates list                               | ✅ |
-| Select encounter loads detail + timeline                            | ✅ |
-| Clinician sees operational transitions only                         | ✅ |
-| Reviewer sees review-stage transitions only + event composer hidden | ✅ |
-| Reviewer cannot see `+ New encounter`                               | ✅ |
-| Admin creates encounter → success banner, modal closed              | ✅ |
-| Create 403 `cross_org_access_forbidden` surfaces inline             | ✅ |
-| Identity switch refetches `/me` + list                              | ✅ |
-| Unknown email → `identity-error` chip with `unknown_user`           | ✅ |
-| Status transition refreshes detail + events                         | ✅ |
-
-### Backend gate (`make verify`)
-
-| Step                                   | Result |
-|----------------------------------------|--------|
-| reset-db + alembic + seed              | ✅ |
-| pytest                                 | ✅ **28/28** |
-| uvicorn boot + smoke.sh                | ✅ 9/9 |
-| teardown                               | ✅ |
-
-### Postgres parity (`make pg-verify`)
-
-Still green from the prior phase; no code touched this phase changes it.
+| # | Scenario                                                                 | Result |
+|---|--------------------------------------------------------------------------|--------|
+| 1 | App boots, default seeded identity resolves                              | ✅ |
+| 2 | Identity switch admin1 → admin2 changes visible scope                    | ✅ |
+| 3 | Admin opens detail, creates encounter, sees it in the list               | ✅ |
+| 4 | Admin appends a workflow event; timeline reflects it                     | ✅ |
+| 5 | Clinician drives operational transitions; review edge not offered        | ✅ |
+| 6 | Reviewer sees completion/kick-back, no create button, no event composer  | ✅ |
+| 7 | Unknown email surfaces `identity-error` with `unknown_user`              | ✅ |
+| 8 | Status filter narrows the list                                           | ✅ |
 
 ### CI YAML
-- `yaml.safe_load(open(".github/workflows/ci.yml"))` — parses. Jobs now: `backend-sqlite`, `backend-postgres`, `frontend`, `docker-build`, `docs`.
-- No `act` runner in shell — static parse + structural review only (same limitation as prior phases).
+- `ci.yml` jobs: `backend-sqlite`, `backend-postgres`, `frontend`, `e2e`, `docker-build`, `docs`.
+- `release.yml` triggers: `push` on `v*.*.*` tags + `workflow_dispatch`.
+- Both parse cleanly via PyYAML. No `act` available locally for live workflow execution.
+
+### Release script dry-sanity
+- `bash scripts/release_build.sh` resolves version, builds the API image + web bundle, writes a MANIFEST with sha256s under `dist/release/<version>/`. Output directory is gitignored.
 
 ## Real gaps (prioritized for next phase)
 
-1. **No end-to-end browser tests** against a live backend. Current verification is build + unit-level integration + curl parity. Playwright is the obvious next step.
-2. **JWT validation still stubbed** — bearer mode returns 501 honestly. Needs PyJWT + JWKS cache.
-3. **No image push / release pipeline** — CI builds, doesn't ship.
-4. **No secret store integration.** Env-var only.
-5. **`/organizations`, `/locations`, `/users`** remain read-only — no admin write UI for metadata.
-6. **`users.role`** still free VARCHAR at DB layer (CHECK or lookup table).
-7. **No pagination** on `GET /encounters` (backend or frontend).
-8. **Free-form `event_data`** — no per-event_type schema.
+1. **JWT validation still stubbed** — bearer mode returns 501 honestly. Wire PyJWT + JWKS cache.
+2. **Release flow doesn't deploy anywhere** — GHCR push + GitHub Release is the limit. No staging / prod deploy automation, no rollback driver.
+3. **No signing / SBOM / provenance** on release artifacts.
+4. **No automated Postgres E2E** — Playwright uses SQLite for speed. `backend-postgres` still proves parity at the HTTP level.
+5. **`/organizations`, `/locations`, `/users`** remain read-only.
+6. **`users.role`** free VARCHAR at DB layer.
+7. **No pagination** on `GET /encounters`.
+8. **Free-form `event_data`**; no per-event_type schema.
 9. **CORS `allow_origins=["*"]`.**
 10. **No distinct audit log** for auth/scoping failures.
 11. **No rate limiting / lockout / structured logging.**
-12. **pytest matrix on Postgres** — fixture is env-driven but not yet multi-DB.
-13. **No visual-regression / accessibility audits** on the frontend.
+12. **No visual-regression / a11y audits** on the frontend.
+13. **pytest matrix on Postgres** — fixture env-driven but not yet multi-DB.

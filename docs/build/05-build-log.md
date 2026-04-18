@@ -4,70 +4,76 @@ Reverse-chronological.
 
 ---
 
-## 2026-04-18 — Phase 8: create UI + frontend tests + frontend CI
+## 2026-04-18 — Phase 9: Playwright E2E + release pipeline
 
 ### Step 1 — Baseline
-- Head: `c4f6e4f` (frontend workflow UI).
-- Backend unchanged; 28/28 pytest still passing.
+- Head: `f83d748` (create UI + frontend tests + frontend CI).
+- Backend untouched; 28/28 pytest, 12/12 vitest, all smoke green.
 
-### Step 2 — Encounter-create flow
-- `api.ts`: new `createEncounter(email, input)` + `canCreateEncounter(role)` helper (admin, clinician).
-- `App.tsx`: `+ New encounter` button in header (only visible for roles that can create); new `CreateEncounterModal` component. Modal fetches `/locations` (already scoped server-side), auto-selects when there's one, validates required fields, disables submit while in-flight, and surfaces backend `{error_code, reason}` inline. On success the list is refreshed and the new encounter is auto-selected.
-- `styles.css`: small modal styles (backdrop, card, body form).
+### Step 2 — Playwright harness
+- Installed `@playwright/test`; ran `npx playwright install chromium --with-deps`.
+- New `apps/web/playwright.config.ts`:
+  - Backend launched on `127.0.0.1:8001` against an ephemeral SQLite file `apps/api/.e2e.chartnav.db` so the operator's dev DB is never touched.
+  - Frontend launched on `127.0.0.1:5174` with `VITE_API_URL` pointed at the E2E backend.
+  - `webServer: [backend, frontend]` — Playwright waits for health + tears both down on exit.
+  - `reuseExistingServer: !CI`, chromium-only project, traces/videos/screenshots on failure.
+- `package.json` now carries `test:e2e`, `test:e2e:headed`, `test:e2e:ui`.
+- `tsconfig.json` includes `playwright.config.ts` and `tests/`.
+- Narrowed Vitest `test.include` to `src/**/*.test.{ts,tsx}` and excluded `tests/**` so Playwright specs aren't pulled into vitest runs.
 
-### Step 3 — UX hardening
-- All mutating buttons (transition / event append) now disable while their request is in flight and show a pending label.
-- Detail pane returns `null` cleanly during loading to avoid flashing stale content after identity switches.
-- Create and status banners annotated with `role="alert"` / `role="status"` and `data-testid` for accessibility + tests.
-- Identity badge distinguishes loading (`identity-loading`), error (`identity-error`), and resolved (`identity-badge`) states.
+### Step 3 — E2E test suite
+- New `apps/web/tests/e2e/workflow.spec.ts` (8 tests):
+  - App boots + default identity resolves
+  - Identity switch (admin1 → admin2) changes visible encounter list
+  - Admin opens detail, creates a new encounter, sees it appear
+  - Admin appends a workflow event; timeline reflects it
+  - Clinician drives `scheduled→in_progress→draft_ready`; review edge not offered
+  - Reviewer sees completion + kick-back controls, no create button, no event composer
+  - Unknown email surfaces the `identity-error` chip with `unknown_user`
+  - Status filter narrows the list
+- Uses `role` / `placeholder` / `data-testid` selectors. No ad-hoc classnames.
+- Bug fixed during first run: a strict-mode selector conflict — the new encounter's PID appeared in both the list row AND the banner. Scoped assertion to `getByTestId("enc-list")`.
 
-### Step 4 — Frontend test harness
-- Installed `vitest`, `@vitest/ui`, `@testing-library/react`, `@testing-library/user-event`, `@testing-library/jest-dom`, `jsdom`, `@types/node`.
-- `vite.config.js` → `vite.config.ts` with a `test` block (environment `jsdom`, globals, setup file, CSS off).
-- `src/test/setup.ts`: wires jest-dom matchers + per-test cleanup (DOM + localStorage).
-- `tsconfig.json`: added `types: ["vite/client", "vitest/globals", "@testing-library/jest-dom"]` and included `vite.config.ts`.
+### Step 4 — CI wiring
+- New `e2e` job in `.github/workflows/ci.yml`: `needs: [backend-sqlite, frontend]`.
+  - Install backend + frontend deps.
+  - `npx playwright install --with-deps chromium`.
+  - `npx playwright test --reporter=list` (Playwright manages servers).
+  - Upload `playwright-report/` + `test-results/` on failure for debugging.
 
-### Step 5 — Frontend tests
-- `src/test/App.test.tsx`: **12 integration tests** mocking `./api`:
-  - Identity badge resolves from `/me`.
-  - Mocked list renders both seeded encounters.
-  - Status filter calls `listEncounters({status})` and updates the visible list.
-  - Selecting an encounter loads detail + timeline.
-  - Clinician / reviewer each see only their permitted transition buttons.
-  - Reviewer sees `event-denied` note; event composer absent.
-  - Reviewer cannot see the `+ New encounter` button; admin can.
-  - Create happy path: form submit → backend call → success banner → modal closes.
-  - Create sad path: backend 403 `cross_org_access_forbidden` surfaces inline; modal stays open.
-  - Switching identity via the picker refetches `/me` + list.
-  - Unknown email (custom input) shows `identity-error` with `unknown_user`.
-  - Status transition call refreshes detail + events and shows success banner.
-- Known harness quirk: vitest 4 runs the tests on Node 24 where `localStorage` is a native-but-unconfigured feature, so we drive identity switches through the UI rather than writing to `localStorage` directly. The `./identity` module's localStorage calls are already wrapped in `try/catch` — the app keeps working either way.
+### Step 5 — Release artifacts
+- New `scripts/release_build.sh`:
+  - Resolves version from arg / tag / `dev-<short-sha>` fallback.
+  - `docker build` → `docker save` → `chartnav-api-<version>.tar`.
+  - `npm ci` + `npm run build` → `chartnav-web-<version>.tar.gz`.
+  - `MANIFEST.txt` with git sha / ref / build time / sizes / sha256 sums.
+  - Output under `dist/release/<version>/` (gitignored).
+- New `.github/workflows/release.yml`:
+  - Triggers on `v*.*.*` tag push and `workflow_dispatch` with a version input.
+  - Pushes `ghcr.io/<owner>/chartnav-api:<version>` + `:latest` via Buildx.
+  - Runs `scripts/release_build.sh` and uploads the full `dist/release/<version>/` as a workflow artifact.
+  - On tag pushes only, creates a GitHub Release with auto-generated notes and attaches the tarballs + manifest.
 
-### Step 6 — Frontend CI
-- New `frontend` job in `.github/workflows/ci.yml`: Node 20 + npm cache keyed on `apps/web/package-lock.json` → `npm ci` → `npm run typecheck` → `npm test` → `npm run build`.
-- Runs on `push` to `main` and every PR, in parallel with `backend-sqlite`.
+### Step 6 — Makefile
+- New targets: `e2e`, `e2e-headed`, `e2e-ui`, `release-build`.
+- `make release-build VERSION=v0.1.0` shells to `scripts/release_build.sh`.
 
-### Step 7 — Dev UX
-- Makefile gains `web-test`, `web-verify` (typecheck + test + build) alongside existing `web-install / web-dev / web-build / web-typecheck`.
-- `make dev` (boot both) unchanged.
-- `apps/web/.env.example` unchanged — still `VITE_API_URL=http://localhost:8000`.
+### Step 7 — Verification
+- Local Playwright run: **8/8 passed in ~14s**.
+- Vitest still **12/12**. Backend `make verify` still **28/28 pytest + 9/9 smoke**.
+- `apps/api/.venv/bin/python scripts/build_docs.py` regenerates HTML + PDF.
+- CI YAML (both `ci.yml` and `release.yml`) parses cleanly via PyYAML.
+- Honest limitation: no `act` in shell to execute the workflows locally; parse + structural review.
 
-### Step 8 — Docs
-- New: `16-frontend-test-strategy.md`.
-- Updated: `01-current-state`, `05-build-log`, `06-known-gaps`, `08-test-strategy`, `09-ci-and-deploy-hardening`, `12-runtime-config`, `15-frontend-integration`.
-- Diagrams refreshed: `system-architecture` (add Vitest), `api-data-flow` (include create flow + frontend CI gate).
-- `scripts/build_docs.py` picks up section 16.
-- Final HTML + PDF regenerated.
-
-### Step 9 — Hygiene
-- Removed `apps/web/vite.config.js` (superseded by `.ts`).
-- Dev DB reset to pristine seeded state.
-- `.gitignore` already excludes `node_modules`, `dist`, `coverage` (default), caches.
+### Step 8 — Hygiene
+- `.gitignore` now excludes `apps/web/playwright-report/`, `apps/web/test-results/`, `apps/web/e2e-results/`, and `dist/release/`.
+- Dev DB reset to seeded state before commit.
 
 ---
 
 ## Prior phases
 
+- **Phase 8 — Create UI + vitest + frontend CI** (`f83d748`)
 - **Phase 7 — Frontend workflow UI** (`c4f6e4f`)
 - **Phase 6 — Prod auth seam + Docker + Postgres parity** (`700bb0b`)
 - **Phase 5 — CI + runtime hardening + doc pipeline** (`cfa8ca9`)

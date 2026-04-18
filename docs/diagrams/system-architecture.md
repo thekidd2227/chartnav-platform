@@ -34,12 +34,15 @@ flowchart LR
     Alembic["Alembic<br/>DATABASE_URL-aware"]
     Seed["scripts_seed.py"]
     PyTest["pytest (28)"]
+    VitestSuite["vitest (12)"]
+    Playwright["Playwright E2E (8)"]
     Smoke["scripts/smoke.sh"]
     Verify["scripts/verify.sh"]
     PgVerify["scripts/pg_verify.sh"]
     DocBuild["scripts/build_docs.py"]
-    Make["Makefile<br/>install · verify · pg-verify · dev · web-*"]
-    CI[".github/workflows/ci.yml"]
+    ReleaseScript["scripts/release_build.sh"]
+    Make["Makefile<br/>install · verify · pg-verify · dev · web-* · e2e · release-build"]
+    CI[".github/workflows/<br/>ci.yml · release.yml"]
   end
 
   UI --> ApiClient
@@ -60,6 +63,9 @@ flowchart LR
   Alembic -.-> Engine
   Seed -.-> DB
   PyTest -.-> FastAPI
+  VitestSuite -.-> UI
+  Playwright -.->|"live browser"| UI
+  Playwright -.->|"live HTTP"| FastAPI
   Smoke -.-> FastAPI
   Verify --> Make
   PgVerify --> Make

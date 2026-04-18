@@ -1,0 +1,136 @@
+# E2E & Release
+
+## E2E harness
+
+### Stack
+- **Playwright** (`@playwright/test`) with the `chromium` browser.
+- Playwright's `webServer` boots **both** backend and frontend, waits for
+  their `/health` / `/` URLs, and tears both down on exit. No bash
+  orchestration, no orphan processes.
+
+### Config
+
+`apps/web/playwright.config.ts`:
+
+- **Backend** boots on `127.0.0.1:8001` using an ephemeral SQLite file
+  at `apps/api/.e2e.chartnav.db` (the operator's dev DB is never
+  touched). The config runs:
+  ```
+  rm -f .e2e.chartnav.db
+  alembic upgrade head
+  python scripts_seed.py
+  uvicorn app.main:app --port 8001
+  ```
+- **Frontend** boots on `127.0.0.1:5174` via `npm run dev -- --host 127.0.0.1 --port 5174`, with `VITE_API_URL` pointed at the E2E backend.
+- `reuseExistingServer: !CI` — locally, running `make e2e` twice in a
+  row reuses the stack; in CI each run is fresh.
+- Traces, screenshots, videos retained on failure only.
+
+### Vitest / Playwright isolation
+`vite.config.ts` now narrows Vitest `test.include` to `src/**/*.test.{ts,tsx}` and excludes `tests/**`, so Playwright specs and Vitest specs never cross-contaminate.
+
+## E2E coverage
+
+`apps/web/tests/e2e/workflow.spec.ts` (8 tests):
+
+| Scenario                                                           |
+|--------------------------------------------------------------------|
+| App boots, resolves default seeded identity                        |
+| Switching identity (admin1 → admin2) swaps visible encounter scope  |
+| Admin opens detail, creates encounter, sees it in the list         |
+| Admin appends an event; it appears in the timeline                 |
+| Clinician performs operational transitions; reviewer edge not offered |
+| Reviewer sees completion/kick-back controls, no create button, no event composer |
+| Unknown email surfaces `identity-error` chip with `unknown_user`   |
+| Status filter narrows the list                                     |
+
+Tests use resilient selectors: `role`, placeholder text, and `data-testid` for elements without another stable hook.
+
+Local run:
+```bash
+make e2e          # headless
+make e2e-headed   # visible browser
+make e2e-ui       # Playwright UI mode
+```
+
+Result at time of writing: **8/8 passed in ~14s**.
+
+## CI
+
+New `e2e` job in `.github/workflows/ci.yml`:
+
+1. `backend-sqlite` + `frontend` must pass first.
+2. Set up Python 3.11 + Node 20 (both with caches).
+3. `pip install -e "apps/api[dev,postgres]"` (system install — verify.sh already tolerates missing `.venv`).
+4. `npm ci` in `apps/web`.
+5. `npx playwright install --with-deps chromium`.
+6. `npx playwright test --reporter=list` (Playwright boots + tears down the stack).
+7. On failure, upload `playwright-report/` + `test-results/` as an artifact for debugging.
+
+## Release pipeline
+
+### `scripts/release_build.sh`
+
+One command to produce a releasable bundle under `dist/release/<version>/`:
+
+- `chartnav-api-<version>.tar` — `docker save` of `chartnav-api:<version>` (importable with `docker load`).
+- `chartnav-web-<version>.tar.gz` — static bundle from `apps/web/dist` (drop behind any CDN/reverse proxy).
+- `MANIFEST.txt` — version, git sha, ref, build time, artifact sizes + sha256s.
+
+Version resolution:
+1. Explicit arg (e.g. `bash scripts/release_build.sh v0.1.0`).
+2. Exact git tag on `HEAD`.
+3. Fallback `dev-<short-sha>`.
+
+Local:
+```bash
+make release-build VERSION=v0.1.0
+```
+
+`dist/release/` is gitignored.
+
+### `.github/workflows/release.yml`
+
+Triggers:
+- `push` on tags matching `v*.*.*` (e.g. `v0.1.0`, `v1.2.3-rc1`).
+- `workflow_dispatch` with a `version` input (manual).
+
+Steps:
+1. Resolve version from the tag or input.
+2. Install `apps/web` deps (Node 20).
+3. Login to `ghcr.io`.
+4. `docker buildx build + push` of `ghcr.io/<owner>/chartnav-api:<version>` **and** `:latest`.
+5. Run `scripts/release_build.sh <version>` to produce the local artifact set.
+6. Upload the whole `dist/release/<version>/` as a workflow artifact (always).
+7. On tag pushes only, create a **GitHub Release** with:
+   - auto-generated notes from the commit log
+   - `chartnav-api-<version>.tar`, `chartnav-web-<version>.tar.gz`, `MANIFEST.txt` attached.
+
+Permissions: `contents: write` for the release, `packages: write` for `ghcr.io`.
+
+Release is never auto-triggered from CI commits — only an explicit tag push or manual dispatch cuts one.
+
+## Release flow (operator view)
+
+```bash
+# 1. work lands on main, CI green
+git checkout main && git pull --ff-only
+
+# 2. tag
+git tag -a v0.1.0 -m "ChartNav v0.1.0"
+git push origin v0.1.0
+
+# 3. GitHub Actions runs the release workflow, pushes the GHCR image,
+#    creates the Release, attaches the tarballs.
+
+# 4. deploy
+docker pull ghcr.io/<owner>/chartnav-api:v0.1.0
+docker compose -f infra/docker/docker-compose.prod.yml up -d
+```
+
+## What this phase does NOT do
+
+- No staging / production deploy target is connected — the release workflow builds and publishes, operators still run `docker compose` wherever they host it.
+- No automated Postgres E2E — Playwright's webServer uses SQLite for speed + isolation. Postgres parity is still proven by `backend-postgres`.
+- No rollback automation — rollbacks are `docker pull` of the previous tag.
+- No signing / SBOM yet. Those are safe to add on top of this pipeline.

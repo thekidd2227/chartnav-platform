@@ -162,6 +162,15 @@ Verified manually on 2026-04-18:
 - Banners use ARIA `role="alert" | "status"` and `data-testid` so assistive tech + tests can target them.
 - When no transition is legal for the current `(role, status)` pair, we show a plain note — no fake-disabled buttons.
 
+## Full-stack E2E (phase 9)
+
+Playwright boots both backend (SQLite + seeded) and frontend together,
+and runs 8 Chromium scenarios that exercise the real UI end-to-end —
+identity resolution, scope switching, encounter create, event append,
+role-aware transitions, reviewer restrictions, unknown-email auth
+surface, filters. Details in `17-e2e-and-release.md`. Command:
+`make e2e`.
+
 ## What this phase explicitly does NOT do
 
 - No real login flow — `X-User-Email` is still dev transport.

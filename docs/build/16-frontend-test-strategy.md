@@ -71,9 +71,17 @@ Result at time of writing: **12 passed in ~2.5s**.
 - Role-aware affordances are tested by identity switching in the
   picker, not by poking at internal state.
 
-## Gaps not yet covered
+## End-to-end tests (Playwright)
 
-- No end-to-end browser tests (Playwright) against the live API.
+Full browser coverage ships in phase 9 — see `17-e2e-and-release.md`.
+Playwright boots real backend + frontend, runs 8 scenarios in Chromium,
+and tears both servers down cleanly. Command: `make e2e`.
+
+Vitest and Playwright are fully isolated: Vitest's `test.include` is
+narrowed to `src/**/*.test.{ts,tsx}` and excludes `tests/**`, so the
+two suites never cross-contaminate.
+
+## Gaps not yet covered
 - No visual regression / accessibility audits.
 - The create modal doesn't exercise location-list errors yet.
 - Loading skeletons / spinner content not asserted.

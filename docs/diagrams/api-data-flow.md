@@ -86,3 +86,21 @@ flowchart TD
     X2 --> X3[upload artifact]
   end
 ```
+
+## Release pipeline
+
+```mermaid
+flowchart LR
+  TAG[["git push tag v*.*.*"]] --> RB[release.yml]
+  RB --> V[resolve version]
+  V --> DK[docker buildx push<br/>ghcr.io/.../chartnav-api:version + :latest]
+  V --> RBS[scripts/release_build.sh]
+  RBS --> API[chartnav-api-&lt;v&gt;.tar]
+  RBS --> WEB[chartnav-web-&lt;v&gt;.tar.gz]
+  RBS --> M[MANIFEST.txt]
+  API --> GR[GitHub Release]
+  WEB --> GR
+  M --> GR
+  DK --> OPS[operator: docker pull + compose up]
+  GR --> OPS
+```

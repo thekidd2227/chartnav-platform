@@ -39,7 +39,7 @@
   <div class="sub">Backend phases 1–5: spine → state machine → auth → RBAC → CI/hardening<br>
   Repo: <code>thekidd2227/chartnav-platform</code></div>
 </header>
-<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth, org scoping, RBAC</a></li><li><a href="#sec-9">08 — Test strategy</a></li><li><a href="#sec-10">09 — CI & deploy hardening</a></li><li><a href="#sec-11">10 — Doc artifact pipeline</a></li><li><a href="#sec-12">11 — Production-auth seam</a></li><li><a href="#sec-13">12 — Runtime config</a></li><li><a href="#sec-14">13 — Deploy target</a></li><li><a href="#sec-15">14 — Postgres parity</a></li><li><a href="#sec-16">15 — Frontend integration</a></li><li><a href="#sec-17">16 — Frontend test strategy</a></li><li><a href="#sec-18">Diagram — System architecture</a></li><li><a href="#sec-19">Diagram — Encounter status machine</a></li><li><a href="#sec-20">Diagram — ER</a></li><li><a href="#sec-21">Diagram — API / data flow</a></li></ol></nav>
+<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth, org scoping, RBAC</a></li><li><a href="#sec-9">08 — Test strategy</a></li><li><a href="#sec-10">09 — CI & deploy hardening</a></li><li><a href="#sec-11">10 — Doc artifact pipeline</a></li><li><a href="#sec-12">11 — Production-auth seam</a></li><li><a href="#sec-13">12 — Runtime config</a></li><li><a href="#sec-14">13 — Deploy target</a></li><li><a href="#sec-15">14 — Postgres parity</a></li><li><a href="#sec-16">15 — Frontend integration</a></li><li><a href="#sec-17">16 — Frontend test strategy</a></li><li><a href="#sec-18">17 — E2E & release</a></li><li><a href="#sec-19">Diagram — System architecture</a></li><li><a href="#sec-20">Diagram — Encounter status machine</a></li><li><a href="#sec-21">Diagram — ER</a></li><li><a href="#sec-22">Diagram — API / data flow</a></li></ol></nav>
 <section id="sec-1"><h2>Executive summary</h2>
 <p>This document consolidates <strong>all</strong> ChartNav backend phases delivered to</p>
 <p>date.</p>
@@ -50,70 +50,76 @@
 <p><strong>Phase 5 — CI + runtime hardening.</strong> GitHub Actions workflow runs install + Alembic upgrade on an isolated CI DB + idempotent seed + pytest + live smoke. A separate <code>docs</code> job regenerates the final HTML/PDF. Root <code>Makefile</code>, <code>apps/api/scripts/smoke.sh</code>, and <code>scripts/build_docs.py</code> codify the local verification + doc-build paths.</p>
 <p><strong>Phase 6 — Production seam + deploy target + Postgres parity.</strong> DB layer moved to SQLAlchemy Core. <code>apps/api/app/config.py</code> centralizes env. <code>auth.py</code> gained a bearer stub that returns 501 honestly. Dockerfile hardened, <code>docker-compose.prod.yml</code> + <code>scripts/pg_verify.sh</code> + <code>backend-postgres</code> CI job land.</p>
 <p><strong>Phase 7 — Frontend workflow UI.</strong> Typed API client + identity seam + full two-pane workflow console (list + filters + detail + timeline + role-aware actions). Error banners surface the backend envelope verbatim.</p>
-<p><strong>Phase 8 — Create UI + frontend tests + frontend CI (this phase).</strong> Admin/clinician can now create encounters through a modal wired to <code>/locations</code> and <code>POST /encounters</code>; success auto-selects the new row, failure surfaces <code>{error_code, reason}</code> inline. Every mutating control (transition, append event, create) now disables while in flight. Added a real Vitest + Testing Library harness (12 integration tests mocking <code>./api</code>) that locks down identity resolution, list rendering, filtering, detail/timeline, per-role affordances, create happy + sad paths, identity switching, and status transitions. A dedicated <code>frontend</code> CI job runs <code>npm ci → typecheck → test → build</code> in parallel with the backend gate. <code>make web-verify</code> is the one-shot local gate for the frontend.</p>
+<p><strong>Phase 8 — Create UI + frontend tests + frontend CI.</strong> Admin/clinician can create encounters through a modal; Vitest + Testing Library harness (12 tests) locks the UI down; dedicated <code>frontend</code> CI job runs typecheck + tests + build on every push/PR.</p>
+<p><strong>Phase 9 — Playwright E2E + release pipeline (this phase).</strong> Playwright boots backend and frontend together on ephemeral ports (SQLite-backed seed), drives 8 real Chromium scenarios covering identity resolution, scope switching, encounter create, event append, role-aware transitions, reviewer restrictions, unknown-email auth surface, and filters. A new <code>e2e</code> CI job runs the full browser suite on every PR. A new <code>release.yml</code> workflow triggers on <code>v*.*.*</code> tags, pushes <code>ghcr.io/&lt;owner&gt;/chartnav-api:&lt;version&gt;</code> via Buildx, runs <code>scripts/release_build.sh</code> to produce <code>chartnav-api-&lt;version&gt;.tar</code> + <code>chartnav-web-&lt;version&gt;.tar.gz</code> + a sha256 manifest, and attaches the artifacts to an auto-generated GitHub Release. No backend contract changes.</p>
 <p>Preserved untouched: <code>/health</code>, <code>/</code>, Alembic history, SQLite dev workflow, state machine + filtering surface, workflow_events model, existing endpoint contracts.</p>
 </section>
 <section id="sec-2"><h2>01 — Current state</h2>
 <h1>ChartNav — Current State</h1>
-<p><strong>As of:</strong> 2026-04-18 (phase: create UI + frontend tests + frontend CI)</p>
+<p><strong>As of:</strong> 2026-04-18 (phase: Playwright E2E + release pipeline)</p>
 <h2>Repo layout (relevant)</h2>
 <pre class="code lang-"><code>
 chartnav-platform/
-├── .github/workflows/ci.yml   # backend-sqlite · backend-postgres · frontend · docker-build · docs
-├── Makefile                   # verify · pg-verify · docker-* · web-* (incl. web-test / web-verify) · dev
-├── scripts/                   # build_docs.py · verify.sh · pg_verify.sh
+├── .github/workflows/
+│   ├── ci.yml            # backend-sqlite · backend-postgres · frontend · e2e · docker-build · docs
+│   └── release.yml       # NEW — tag-driven GHCR push + GitHub Release
+├── Makefile              # verify · pg-verify · docker-* · web-* · e2e · release-build · dev
+├── scripts/
+│   ├── build_docs.py
+│   ├── verify.sh
+│   ├── pg_verify.sh
+│   └── release_build.sh  # NEW — reproducible release bundle
 ├── apps/
-│   ├── api/                   # (unchanged this phase)
-│   │   ├── app/{main,config,db,auth,authz}.py + app/api/routes.py
-│   │   ├── alembic/ · scripts_seed.py · scripts/smoke.sh
-│   │   ├── tests/ (28 pytest)
-│   │   └── Dockerfile · entrypoint.sh
+│   ├── api/              # unchanged
 │   └── web/
-│       ├── .env.example
-│       ├── package.json          # scripts: dev · build · preview · typecheck · test · test:watch
-│       ├── vite.config.ts        # also hosts vitest config (jsdom)
-│       ├── tsconfig.json         # includes vitest/globals + testing-library types
-│       └── src/
-│           ├── api.ts            # typed client, createEncounter, canCreateEncounter
-│           ├── identity.ts
-│           ├── App.tsx           # + CreateEncounterModal, pending-state buttons
-│           ├── styles.css        # + modal styles
-│           ├── main.tsx · vite-env.d.ts
-│           └── test/
-│               ├── setup.ts
-│               └── App.test.tsx  # 12 integration tests
+│       ├── package.json           # + test:e2e / :headed / :ui
+│       ├── playwright.config.ts   # NEW — backend + frontend webServer
+│       ├── tests/e2e/
+│       │   └── workflow.spec.ts   # NEW — 8 browser tests
+│       ├── src/test/              # 12 vitest tests (phase 8)
+│       └── ...
 ├── infra/docker/{docker-compose,docker-compose.prod}.yml
-└── docs/build/ 01 … 16          # incl. 15-frontend-integration, 16-frontend-test-strategy
+└── docs/build/ 01 … 17
 </code></pre>
 <h2>Runtime baseline</h2>
 <ul>
-<li>Backend: FastAPI + SQLAlchemy Core, SQLite or Postgres (via <code>DATABASE_URL</code>).</li>
-<li>Frontend: Vite 5 + React 18 + TypeScript + Vitest + Testing Library.</li>
+<li>Backend: FastAPI + SQLAlchemy Core, SQLite or Postgres.</li>
+<li>Frontend: Vite 5 + React 18 + TypeScript + Vitest + <strong>Playwright</strong>.</li>
 <li>Auth: <code>CHARTNAV_AUTH_MODE=header</code> (dev) or <code>bearer</code> (prod placeholder 501).</li>
 <li>RBAC: <code>admin</code> / <code>clinician</code> / <code>reviewer</code>.</li>
 <li>Alembic head: <code>a1b2c3d4e5f6</code>. No schema changes this phase.</li>
-<li>Error envelope: <code>{&quot;detail&quot;: {&quot;error_code&quot;: &quot;...&quot;, &quot;reason&quot;: &quot;...&quot;}}</code> — surfaced verbatim in the UI.</li>
+<li>Error envelope: <code>{&quot;detail&quot;: {&quot;error_code&quot;: &quot;...&quot;, &quot;reason&quot;: &quot;...&quot;}}</code>.</li>
 </ul>
-<h2>Frontend capabilities (delta this phase)</h2>
+<h2>Testing layers</h2>
+<table><thead><tr><th>Layer</th><th>Tool</th><th>Count</th><th>Scope</th></tr></thead><tbody>
+<tr><td>pytest</td><td><code>pytest</code></td><td>28</td><td>backend units + integration</td></tr>
+<tr><td>shell smoke</td><td><code>scripts/smoke.sh</code></td><td>9</td><td>live HTTP contract (SQLite + Postgres)</td></tr>
+<tr><td>vitest</td><td><code>vitest</code></td><td>12</td><td>frontend integration (mocked API)</td></tr>
+<tr><td><strong>Playwright E2E</strong></td><td><code>@playwright/test</code></td><td>8</td><td>full-stack browser (live backend + frontend)</td></tr>
+</tbody></table>
+<h2>Release / deploy</h2>
 <ul>
-<li><code>+ New encounter</code> button in the header for admin/clinician; hidden for reviewer.</li>
-<li><code>CreateEncounterModal</code>:</li>
-<li>Fetches <code>/locations</code> (already org-scoped server-side).</li>
-<li>Fields: patient_identifier*, patient_name, provider_name*, location_id*, initial status (<code>scheduled</code> / <code>in_progress</code>).</li>
-<li>Disables submit while in-flight, validates required fields.</li>
-<li>Success → refresh list, auto-select new encounter, show success banner.</li>
-<li>Failure → inline error with exact <code>error_code</code> + <code>reason</code>; modal stays open for retry.</li>
-<li>Transition / append-event buttons now show a pending label and disable while the request is in flight.</li>
-<li>Banners annotated with ARIA roles; <code>data-testid</code> hooks added to enable a11y + tests.</li>
+<li><strong>Artifacts</strong> (via <code>scripts/release_build.sh</code>):</li>
+<li><code>chartnav-api-&lt;version&gt;.tar</code> (docker save, loadable anywhere).</li>
+<li><code>chartnav-web-&lt;version&gt;.tar.gz</code> (static bundle from <code>apps/web/dist</code>).</li>
+<li><code>MANIFEST.txt</code> with git sha, ref, build time, sha256 sums.</li>
+<li><strong>Registry</strong>: <code>ghcr.io/&lt;owner&gt;/chartnav-api:&lt;version&gt;</code> (and <code>:latest</code>) on tagged builds.</li>
+<li><strong>GitHub Release</strong>: auto-created on <code>v*.*.*</code> tag pushes with notes + artifacts attached.</li>
+<li>Runtime stack: <code>infra/docker/docker-compose.prod.yml</code> (API + Postgres).</li>
 </ul>
+<h2>Verified working endpoints</h2>
+<p>No endpoint behavior changed this phase.</p>
 <h2>Automation</h2>
 <ul>
-<li><code>make verify</code> — SQLite backend gate (reset-db + pytest + boot + smoke).</li>
-<li><code>make pg-verify</code> — Postgres parity proof.</li>
-<li><code>make web-verify</code> — frontend gate (typecheck + test + build).</li>
-<li><code>make dev</code> — backend + frontend together with trap teardown.</li>
-<li>CI: <code>backend-sqlite</code> + <code>frontend</code> run in parallel; <code>backend-postgres</code> + <code>docker-build</code> + <code>docs</code> are chained after <code>backend-sqlite</code>.</li>
+<li><code>make verify</code> — SQLite backend gate.</li>
+<li><code>make pg-verify</code> — Postgres parity.</li>
+<li><code>make web-verify</code> — frontend unit gate.</li>
+<li><code>make e2e</code> — full-stack browser tests.</li>
+<li><code>make release-build VERSION=v0.1.0</code> — produce the release bundle locally.</li>
+<li><code>make dev</code> — boot backend + frontend together.</li>
+<li>CI: <code>backend-sqlite</code> + <code>frontend</code> run in parallel; <code>e2e</code> gates on both;</li>
 </ul>
+<p><code>backend-postgres</code>, <code>docker-build</code>, <code>docs</code> chain on <code>backend-sqlite</code>.</p>
 </section>
 <section id="sec-3"><h2>02 — Workflow state machine</h2>
 <h1>Encounter Workflow State Machine</h1>
@@ -328,77 +334,82 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <h1>Build Log</h1>
 <p>Reverse-chronological.</p>
 <p>---</p>
-<h2>2026-04-18 — Phase 8: create UI + frontend tests + frontend CI</h2>
+<h2>2026-04-18 — Phase 9: Playwright E2E + release pipeline</h2>
 <h3>Step 1 — Baseline</h3>
 <ul>
-<li>Head: <code>c4f6e4f</code> (frontend workflow UI).</li>
-<li>Backend unchanged; 28/28 pytest still passing.</li>
+<li>Head: <code>f83d748</code> (create UI + frontend tests + frontend CI).</li>
+<li>Backend untouched; 28/28 pytest, 12/12 vitest, all smoke green.</li>
 </ul>
-<h3>Step 2 — Encounter-create flow</h3>
+<h3>Step 2 — Playwright harness</h3>
 <ul>
-<li><code>api.ts</code>: new <code>createEncounter(email, input)</code> + <code>canCreateEncounter(role)</code> helper (admin, clinician).</li>
-<li><code>App.tsx</code>: <code>+ New encounter</code> button in header (only visible for roles that can create); new <code>CreateEncounterModal</code> component. Modal fetches <code>/locations</code> (already scoped server-side), auto-selects when there&#x27;s one, validates required fields, disables submit while in-flight, and surfaces backend <code>{error_code, reason}</code> inline. On success the list is refreshed and the new encounter is auto-selected.</li>
-<li><code>styles.css</code>: small modal styles (backdrop, card, body form).</li>
+<li>Installed <code>@playwright/test</code>; ran <code>npx playwright install chromium --with-deps</code>.</li>
+<li>New <code>apps/web/playwright.config.ts</code>:</li>
+<li>Backend launched on <code>127.0.0.1:8001</code> against an ephemeral SQLite file <code>apps/api/.e2e.chartnav.db</code> so the operator&#x27;s dev DB is never touched.</li>
+<li>Frontend launched on <code>127.0.0.1:5174</code> with <code>VITE_API_URL</code> pointed at the E2E backend.</li>
+<li><code>webServer: [backend, frontend]</code> — Playwright waits for health + tears both down on exit.</li>
+<li><code>reuseExistingServer: !CI</code>, chromium-only project, traces/videos/screenshots on failure.</li>
+<li><code>package.json</code> now carries <code>test:e2e</code>, <code>test:e2e:headed</code>, <code>test:e2e:ui</code>.</li>
+<li><code>tsconfig.json</code> includes <code>playwright.config.ts</code> and <code>tests/</code>.</li>
+<li>Narrowed Vitest <code>test.include</code> to <code>src/**/*.test.{ts,tsx}</code> and excluded <code>tests/**</code> so Playwright specs aren&#x27;t pulled into vitest runs.</li>
 </ul>
-<h3>Step 3 — UX hardening</h3>
+<h3>Step 3 — E2E test suite</h3>
 <ul>
-<li>All mutating buttons (transition / event append) now disable while their request is in flight and show a pending label.</li>
-<li>Detail pane returns <code>null</code> cleanly during loading to avoid flashing stale content after identity switches.</li>
-<li>Create and status banners annotated with <code>role=&quot;alert&quot;</code> / <code>role=&quot;status&quot;</code> and <code>data-testid</code> for accessibility + tests.</li>
-<li>Identity badge distinguishes loading (<code>identity-loading</code>), error (<code>identity-error</code>), and resolved (<code>identity-badge</code>) states.</li>
+<li>New <code>apps/web/tests/e2e/workflow.spec.ts</code> (8 tests):</li>
+<li>App boots + default identity resolves</li>
+<li>Identity switch (admin1 → admin2) changes visible encounter list</li>
+<li>Admin opens detail, creates a new encounter, sees it appear</li>
+<li>Admin appends a workflow event; timeline reflects it</li>
+<li>Clinician drives <code>scheduled→in_progress→draft_ready</code>; review edge not offered</li>
+<li>Reviewer sees completion + kick-back controls, no create button, no event composer</li>
+<li>Unknown email surfaces the <code>identity-error</code> chip with <code>unknown_user</code></li>
+<li>Status filter narrows the list</li>
+<li>Uses <code>role</code> / <code>placeholder</code> / <code>data-testid</code> selectors. No ad-hoc classnames.</li>
+<li>Bug fixed during first run: a strict-mode selector conflict — the new encounter&#x27;s PID appeared in both the list row AND the banner. Scoped assertion to <code>getByTestId(&quot;enc-list&quot;)</code>.</li>
 </ul>
-<h3>Step 4 — Frontend test harness</h3>
+<h3>Step 4 — CI wiring</h3>
 <ul>
-<li>Installed <code>vitest</code>, <code>@vitest/ui</code>, <code>@testing-library/react</code>, <code>@testing-library/user-event</code>, <code>@testing-library/jest-dom</code>, <code>jsdom</code>, <code>@types/node</code>.</li>
-<li><code>vite.config.js</code> → <code>vite.config.ts</code> with a <code>test</code> block (environment <code>jsdom</code>, globals, setup file, CSS off).</li>
-<li><code>src/test/setup.ts</code>: wires jest-dom matchers + per-test cleanup (DOM + localStorage).</li>
-<li><code>tsconfig.json</code>: added <code>types: [&quot;vite/client&quot;, &quot;vitest/globals&quot;, &quot;@testing-library/jest-dom&quot;]</code> and included <code>vite.config.ts</code>.</li>
+<li>New <code>e2e</code> job in <code>.github/workflows/ci.yml</code>: <code>needs: [backend-sqlite, frontend]</code>.</li>
+<li>Install backend + frontend deps.</li>
+<li><code>npx playwright install --with-deps chromium</code>.</li>
+<li><code>npx playwright test --reporter=list</code> (Playwright manages servers).</li>
+<li>Upload <code>playwright-report/</code> + <code>test-results/</code> on failure for debugging.</li>
 </ul>
-<h3>Step 5 — Frontend tests</h3>
+<h3>Step 5 — Release artifacts</h3>
 <ul>
-<li><code>src/test/App.test.tsx</code>: <strong>12 integration tests</strong> mocking <code>./api</code>:</li>
-<li>Identity badge resolves from <code>/me</code>.</li>
-<li>Mocked list renders both seeded encounters.</li>
-<li>Status filter calls <code>listEncounters({status})</code> and updates the visible list.</li>
-<li>Selecting an encounter loads detail + timeline.</li>
-<li>Clinician / reviewer each see only their permitted transition buttons.</li>
-<li>Reviewer sees <code>event-denied</code> note; event composer absent.</li>
-<li>Reviewer cannot see the <code>+ New encounter</code> button; admin can.</li>
-<li>Create happy path: form submit → backend call → success banner → modal closes.</li>
-<li>Create sad path: backend 403 <code>cross_org_access_forbidden</code> surfaces inline; modal stays open.</li>
-<li>Switching identity via the picker refetches <code>/me</code> + list.</li>
-<li>Unknown email (custom input) shows <code>identity-error</code> with <code>unknown_user</code>.</li>
-<li>Status transition call refreshes detail + events and shows success banner.</li>
-<li>Known harness quirk: vitest 4 runs the tests on Node 24 where <code>localStorage</code> is a native-but-unconfigured feature, so we drive identity switches through the UI rather than writing to <code>localStorage</code> directly. The <code>./identity</code> module&#x27;s localStorage calls are already wrapped in <code>try/catch</code> — the app keeps working either way.</li>
+<li>New <code>scripts/release_build.sh</code>:</li>
+<li>Resolves version from arg / tag / <code>dev-&lt;short-sha&gt;</code> fallback.</li>
+<li><code>docker build</code> → <code>docker save</code> → <code>chartnav-api-&lt;version&gt;.tar</code>.</li>
+<li><code>npm ci</code> + <code>npm run build</code> → <code>chartnav-web-&lt;version&gt;.tar.gz</code>.</li>
+<li><code>MANIFEST.txt</code> with git sha / ref / build time / sizes / sha256 sums.</li>
+<li>Output under <code>dist/release/&lt;version&gt;/</code> (gitignored).</li>
+<li>New <code>.github/workflows/release.yml</code>:</li>
+<li>Triggers on <code>v*.*.*</code> tag push and <code>workflow_dispatch</code> with a version input.</li>
+<li>Pushes <code>ghcr.io/&lt;owner&gt;/chartnav-api:&lt;version&gt;</code> + <code>:latest</code> via Buildx.</li>
+<li>Runs <code>scripts/release_build.sh</code> and uploads the full <code>dist/release/&lt;version&gt;/</code> as a workflow artifact.</li>
+<li>On tag pushes only, creates a GitHub Release with auto-generated notes and attaches the tarballs + manifest.</li>
 </ul>
-<h3>Step 6 — Frontend CI</h3>
+<h3>Step 6 — Makefile</h3>
 <ul>
-<li>New <code>frontend</code> job in <code>.github/workflows/ci.yml</code>: Node 20 + npm cache keyed on <code>apps/web/package-lock.json</code> → <code>npm ci</code> → <code>npm run typecheck</code> → <code>npm test</code> → <code>npm run build</code>.</li>
-<li>Runs on <code>push</code> to <code>main</code> and every PR, in parallel with <code>backend-sqlite</code>.</li>
+<li>New targets: <code>e2e</code>, <code>e2e-headed</code>, <code>e2e-ui</code>, <code>release-build</code>.</li>
+<li><code>make release-build VERSION=v0.1.0</code> shells to <code>scripts/release_build.sh</code>.</li>
 </ul>
-<h3>Step 7 — Dev UX</h3>
+<h3>Step 7 — Verification</h3>
 <ul>
-<li>Makefile gains <code>web-test</code>, <code>web-verify</code> (typecheck + test + build) alongside existing <code>web-install / web-dev / web-build / web-typecheck</code>.</li>
-<li><code>make dev</code> (boot both) unchanged.</li>
-<li><code>apps/web/.env.example</code> unchanged — still <code>VITE_API_URL=http://localhost:8000</code>.</li>
+<li>Local Playwright run: <strong>8/8 passed in ~14s</strong>.</li>
+<li>Vitest still <strong>12/12</strong>. Backend <code>make verify</code> still <strong>28/28 pytest + 9/9 smoke</strong>.</li>
+<li><code>apps/api/.venv/bin/python scripts/build_docs.py</code> regenerates HTML + PDF.</li>
+<li>CI YAML (both <code>ci.yml</code> and <code>release.yml</code>) parses cleanly via PyYAML.</li>
+<li>Honest limitation: no <code>act</code> in shell to execute the workflows locally; parse + structural review.</li>
 </ul>
-<h3>Step 8 — Docs</h3>
+<h3>Step 8 — Hygiene</h3>
 <ul>
-<li>New: <code>16-frontend-test-strategy.md</code>.</li>
-<li>Updated: <code>01-current-state</code>, <code>05-build-log</code>, <code>06-known-gaps</code>, <code>08-test-strategy</code>, <code>09-ci-and-deploy-hardening</code>, <code>12-runtime-config</code>, <code>15-frontend-integration</code>.</li>
-<li>Diagrams refreshed: <code>system-architecture</code> (add Vitest), <code>api-data-flow</code> (include create flow + frontend CI gate).</li>
-<li><code>scripts/build_docs.py</code> picks up section 16.</li>
-<li>Final HTML + PDF regenerated.</li>
-</ul>
-<h3>Step 9 — Hygiene</h3>
-<ul>
-<li>Removed <code>apps/web/vite.config.js</code> (superseded by <code>.ts</code>).</li>
-<li>Dev DB reset to pristine seeded state.</li>
-<li><code>.gitignore</code> already excludes <code>node_modules</code>, <code>dist</code>, <code>coverage</code> (default), caches.</li>
+<li><code>.gitignore</code> now excludes <code>apps/web/playwright-report/</code>, <code>apps/web/test-results/</code>, <code>apps/web/e2e-results/</code>, and <code>dist/release/</code>.</li>
+<li>Dev DB reset to seeded state before commit.</li>
 </ul>
 <p>---</p>
 <h2>Prior phases</h2>
 <ul>
+<li><strong>Phase 8 — Create UI + vitest + frontend CI</strong> (<code>f83d748</code>)</li>
 <li><strong>Phase 7 — Frontend workflow UI</strong> (<code>c4f6e4f</code>)</li>
 <li><strong>Phase 6 — Prod auth seam + Docker + Postgres parity</strong> (<code>700bb0b</code>)</li>
 <li><strong>Phase 5 — CI + runtime hardening + doc pipeline</strong> (<code>cfa8ca9</code>)</li>
@@ -410,56 +421,49 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 </section>
 <section id="sec-7"><h2>06 — Known gaps + verification matrix</h2>
 <h1>Known Gaps &amp; Verification Matrix</h1>
-<h2>Verification evidence — phase 8</h2>
-<h3>Frontend gate (<code>make web-verify</code>)</h3>
-<table><thead><tr><th>Step</th><th>Result</th></tr></thead><tbody>
-<tr><td><code>tsc --noEmit</code></td><td>✅ clean</td></tr>
-<tr><td><code>vitest run</code></td><td>✅ <strong>12/12</strong> in ~2.5s</td></tr>
-<tr><td><code>vite build</code></td><td>✅ 159 KB JS / 7.3 KB CSS</td></tr>
+<h2>Verification evidence — phase 9</h2>
+<h3>Local gates</h3>
+<table><thead><tr><th>Gate</th><th>Result</th></tr></thead><tbody>
+<tr><td><code>make verify</code> (SQLite backend + pytest 28 + smoke 9)</td><td>✅</td></tr>
+<tr><td><code>make pg-verify</code> (Postgres parity)</td><td>✅ (from preceding phase, no backend changes here)</td></tr>
+<tr><td><code>make web-verify</code> (tsc + vitest 12 + build)</td><td>✅</td></tr>
+<tr><td><code>make e2e</code> (Playwright 8 tests in chromium)</td><td>✅ <strong>8/8 in ~14s</strong></td></tr>
 </tbody></table>
-<h3>Frontend test matrix (12)</h3>
-<table><thead><tr><th>Scenario</th><th>Result</th></tr></thead><tbody>
-<tr><td><code>/me</code> resolves → identity badge</td><td>✅</td></tr>
-<tr><td>List renders mocked encounters</td><td>✅</td></tr>
-<tr><td>Status filter hits API + updates list</td><td>✅</td></tr>
-<tr><td>Select encounter loads detail + timeline</td><td>✅</td></tr>
-<tr><td>Clinician sees operational transitions only</td><td>✅</td></tr>
-<tr><td>Reviewer sees review-stage transitions only + event composer hidden</td><td>✅</td></tr>
-<tr><td>Reviewer cannot see <code>+ New encounter</code></td><td>✅</td></tr>
-<tr><td>Admin creates encounter → success banner, modal closed</td><td>✅</td></tr>
-<tr><td>Create 403 <code>cross_org_access_forbidden</code> surfaces inline</td><td>✅</td></tr>
-<tr><td>Identity switch refetches <code>/me</code> + list</td><td>✅</td></tr>
-<tr><td>Unknown email → <code>identity-error</code> chip with <code>unknown_user</code></td><td>✅</td></tr>
-<tr><td>Status transition refreshes detail + events</td><td>✅</td></tr>
+<h3>Playwright E2E matrix (8)</h3>
+<table><thead><tr><th>#</th><th>Scenario</th><th>Result</th></tr></thead><tbody>
+<tr><td>1</td><td>App boots, default seeded identity resolves</td><td>✅</td></tr>
+<tr><td>2</td><td>Identity switch admin1 → admin2 changes visible scope</td><td>✅</td></tr>
+<tr><td>3</td><td>Admin opens detail, creates encounter, sees it in the list</td><td>✅</td></tr>
+<tr><td>4</td><td>Admin appends a workflow event; timeline reflects it</td><td>✅</td></tr>
+<tr><td>5</td><td>Clinician drives operational transitions; review edge not offered</td><td>✅</td></tr>
+<tr><td>6</td><td>Reviewer sees completion/kick-back, no create button, no event composer</td><td>✅</td></tr>
+<tr><td>7</td><td>Unknown email surfaces <code>identity-error</code> with <code>unknown_user</code></td><td>✅</td></tr>
+<tr><td>8</td><td>Status filter narrows the list</td><td>✅</td></tr>
 </tbody></table>
-<h3>Backend gate (<code>make verify</code>)</h3>
-<table><thead><tr><th>Step</th><th>Result</th></tr></thead><tbody>
-<tr><td>reset-db + alembic + seed</td><td>✅</td></tr>
-<tr><td>pytest</td><td>✅ <strong>28/28</strong></td></tr>
-<tr><td>uvicorn boot + smoke.sh</td><td>✅ 9/9</td></tr>
-<tr><td>teardown</td><td>✅</td></tr>
-</tbody></table>
-<h3>Postgres parity (<code>make pg-verify</code>)</h3>
-<p>Still green from the prior phase; no code touched this phase changes it.</p>
 <h3>CI YAML</h3>
 <ul>
-<li><code>yaml.safe_load(open(&quot;.github/workflows/ci.yml&quot;))</code> — parses. Jobs now: <code>backend-sqlite</code>, <code>backend-postgres</code>, <code>frontend</code>, <code>docker-build</code>, <code>docs</code>.</li>
-<li>No <code>act</code> runner in shell — static parse + structural review only (same limitation as prior phases).</li>
+<li><code>ci.yml</code> jobs: <code>backend-sqlite</code>, <code>backend-postgres</code>, <code>frontend</code>, <code>e2e</code>, <code>docker-build</code>, <code>docs</code>.</li>
+<li><code>release.yml</code> triggers: <code>push</code> on <code>v*.*.*</code> tags + <code>workflow_dispatch</code>.</li>
+<li>Both parse cleanly via PyYAML. No <code>act</code> available locally for live workflow execution.</li>
+</ul>
+<h3>Release script dry-sanity</h3>
+<ul>
+<li><code>bash scripts/release_build.sh</code> resolves version, builds the API image + web bundle, writes a MANIFEST with sha256s under <code>dist/release/&lt;version&gt;/</code>. Output directory is gitignored.</li>
 </ul>
 <h2>Real gaps (prioritized for next phase)</h2>
-<p>1. <strong>No end-to-end browser tests</strong> against a live backend. Current verification is build + unit-level integration + curl parity. Playwright is the obvious next step.</p>
-<p>2. <strong>JWT validation still stubbed</strong> — bearer mode returns 501 honestly. Needs PyJWT + JWKS cache.</p>
-<p>3. <strong>No image push / release pipeline</strong> — CI builds, doesn&#x27;t ship.</p>
-<p>4. <strong>No secret store integration.</strong> Env-var only.</p>
-<p>5. <strong><code>/organizations</code>, <code>/locations</code>, <code>/users</code></strong> remain read-only — no admin write UI for metadata.</p>
-<p>6. <strong><code>users.role</code></strong> still free VARCHAR at DB layer (CHECK or lookup table).</p>
-<p>7. <strong>No pagination</strong> on <code>GET /encounters</code> (backend or frontend).</p>
-<p>8. <strong>Free-form <code>event_data</code></strong> — no per-event_type schema.</p>
+<p>1. <strong>JWT validation still stubbed</strong> — bearer mode returns 501 honestly. Wire PyJWT + JWKS cache.</p>
+<p>2. <strong>Release flow doesn&#x27;t deploy anywhere</strong> — GHCR push + GitHub Release is the limit. No staging / prod deploy automation, no rollback driver.</p>
+<p>3. <strong>No signing / SBOM / provenance</strong> on release artifacts.</p>
+<p>4. <strong>No automated Postgres E2E</strong> — Playwright uses SQLite for speed. <code>backend-postgres</code> still proves parity at the HTTP level.</p>
+<p>5. <strong><code>/organizations</code>, <code>/locations</code>, <code>/users</code></strong> remain read-only.</p>
+<p>6. <strong><code>users.role</code></strong> free VARCHAR at DB layer.</p>
+<p>7. <strong>No pagination</strong> on <code>GET /encounters</code>.</p>
+<p>8. <strong>Free-form <code>event_data</code></strong>; no per-event_type schema.</p>
 <p>9. **CORS <code>allow_origins=[&quot;*&quot;]</code>.**</p>
 <p>10. <strong>No distinct audit log</strong> for auth/scoping failures.</p>
 <p>11. <strong>No rate limiting / lockout / structured logging.</strong></p>
-<p>12. <strong>pytest matrix on Postgres</strong> — fixture is env-driven but not yet multi-DB.</p>
-<p>13. <strong>No visual-regression / accessibility audits</strong> on the frontend.</p>
+<p>12. <strong>No visual-regression / a11y audits</strong> on the frontend.</p>
+<p>13. <strong>pytest matrix on Postgres</strong> — fixture env-driven but not yet multi-DB.</p>
 </section>
 <section id="sec-8"><h2>07 — Auth, org scoping, RBAC</h2>
 <h1>Auth, Org Scoping, RBAC</h1>
@@ -684,6 +688,10 @@ make docker-build
 <p>Service container <code>postgres:16-alpine</code> on localhost:5432. Install deps (incl. <code>[postgres]</code> extra) → <code>alembic upgrade head</code> on Postgres → seed twice → boot uvicorn → <code>scripts/smoke.sh</code> → live status transition asserts the returned row. Fails the workflow if Postgres parity breaks.</p>
 <h3><code>frontend</code></h3>
 <p>Node 20 + npm cache keyed on <code>apps/web/package-lock.json</code> → <code>npm ci</code> → <code>npm run typecheck</code> → <code>npm test</code> (vitest, 12 integration tests) → <code>npm run build</code>. Runs in parallel with <code>backend-sqlite</code> — the frontend is a peer quality gate, not blocked by backend CI.</p>
+<h3><code>e2e</code> (needs: <code>backend-sqlite</code>, <code>frontend</code>)</h3>
+<p>Python 3.11 + Node 20 installed. <code>pip install -e &quot;apps/api[dev,postgres]&quot;</code> + <code>npm ci</code> in <code>apps/web</code>. <code>npx playwright install --with-deps chromium</code>. Then <code>npx playwright test --reporter=list</code> — Playwright boots backend on 8001 (SQLite) and frontend on 5174, runs the 8 browser scenarios, tears both down. On failure, <code>playwright-report/</code> and <code>test-results/</code> are uploaded as a workflow artifact for triage.</p>
+<h3><code>release.yml</code> (separate workflow)</h3>
+<p>Triggers on <code>v*.*.*</code> tag push and manual dispatch. Builds + pushes <code>ghcr.io/&lt;owner&gt;/chartnav-api:&lt;version&gt;</code> (+ <code>:latest</code>), runs <code>scripts/release_build.sh</code> to produce <code>dist/release/&lt;version&gt;/</code> (docker-saved image tar, web bundle tar.gz, MANIFEST with sha256s), uploads the directory as an artifact, and on tag pushes attaches the files to a GitHub Release with auto-generated notes. Full reference in <code>17-e2e-and-release.md</code>.</p>
 <h3><code>docker-build</code> (needs: <code>backend-sqlite</code>)</h3>
 <p>Buildx → build <code>chartnav-api:ci</code> from <code>apps/api/</code> → run the container with <code>DATABASE_URL=sqlite:///./chartnav.db</code> and <code>CHARTNAV_RUN_SEED=1</code> → poll <code>/health</code> → run <code>scripts/smoke.sh</code> against the live container. Proves the production image boots end-to-end.</p>
 <h3><code>docs</code> (needs: <code>backend-sqlite</code>)</h3>
@@ -1316,6 +1324,13 @@ make web-build        # vite build -&gt; apps/web/dist
 <li>Banners use ARIA <code>role=&quot;alert&quot; | &quot;status&quot;</code> and <code>data-testid</code> so assistive tech + tests can target them.</li>
 <li>When no transition is legal for the current <code>(role, status)</code> pair, we show a plain note — no fake-disabled buttons.</li>
 </ul>
+<h2>Full-stack E2E (phase 9)</h2>
+<p>Playwright boots both backend (SQLite + seeded) and frontend together,</p>
+<p>and runs 8 Chromium scenarios that exercise the real UI end-to-end —</p>
+<p>identity resolution, scope switching, encounter create, event append,</p>
+<p>role-aware transitions, reviewer restrictions, unknown-email auth</p>
+<p>surface, filters. Details in <code>17-e2e-and-release.md</code>. Command:</p>
+<p><code>make e2e</code>.</p>
 <h2>What this phase explicitly does NOT do</h2>
 <ul>
 <li>No real login flow — <code>X-User-Email</code> is still dev transport.</li>
@@ -1394,15 +1409,144 @@ make web-verify      # typecheck + test + build
 <li>Role-aware affordances are tested by identity switching in the</li>
 </ul>
 <p>picker, not by poking at internal state.</p>
+<h2>End-to-end tests (Playwright)</h2>
+<p>Full browser coverage ships in phase 9 — see <code>17-e2e-and-release.md</code>.</p>
+<p>Playwright boots real backend + frontend, runs 8 scenarios in Chromium,</p>
+<p>and tears both servers down cleanly. Command: <code>make e2e</code>.</p>
+<p>Vitest and Playwright are fully isolated: Vitest&#x27;s <code>test.include</code> is</p>
+<p>narrowed to <code>src/**/*.test.{ts,tsx}</code> and excludes <code>tests/**</code>, so the</p>
+<p>two suites never cross-contaminate.</p>
 <h2>Gaps not yet covered</h2>
 <ul>
-<li>No end-to-end browser tests (Playwright) against the live API.</li>
 <li>No visual regression / accessibility audits.</li>
 <li>The create modal doesn&#x27;t exercise location-list errors yet.</li>
 <li>Loading skeletons / spinner content not asserted.</li>
 </ul>
 </section>
-<section id="sec-18"><h2>Diagram — System architecture</h2>
+<section id="sec-18"><h2>17 — E2E & release</h2>
+<h1>E2E &amp; Release</h1>
+<h2>E2E harness</h2>
+<h3>Stack</h3>
+<ul>
+<li><strong>Playwright</strong> (<code>@playwright/test</code>) with the <code>chromium</code> browser.</li>
+<li>Playwright&#x27;s <code>webServer</code> boots <strong>both</strong> backend and frontend, waits for</li>
+</ul>
+<p>their <code>/health</code> / <code>/</code> URLs, and tears both down on exit. No bash</p>
+<p>orchestration, no orphan processes.</p>
+<h3>Config</h3>
+<p><code>apps/web/playwright.config.ts</code>:</p>
+<ul>
+<li><strong>Backend</strong> boots on <code>127.0.0.1:8001</code> using an ephemeral SQLite file</li>
+</ul>
+<p>at <code>apps/api/.e2e.chartnav.db</code> (the operator&#x27;s dev DB is never</p>
+<p>touched). The config runs:</p>
+<p>```</p>
+<p>rm -f .e2e.chartnav.db</p>
+<p>alembic upgrade head</p>
+<p>python scripts_seed.py</p>
+<p>uvicorn app.main:app --port 8001</p>
+<p>```</p>
+<ul>
+<li><strong>Frontend</strong> boots on <code>127.0.0.1:5174</code> via <code>npm run dev -- --host 127.0.0.1 --port 5174</code>, with <code>VITE_API_URL</code> pointed at the E2E backend.</li>
+<li><code>reuseExistingServer: !CI</code> — locally, running <code>make e2e</code> twice in a</li>
+</ul>
+<p>row reuses the stack; in CI each run is fresh.</p>
+<ul>
+<li>Traces, screenshots, videos retained on failure only.</li>
+</ul>
+<h3>Vitest / Playwright isolation</h3>
+<p><code>vite.config.ts</code> now narrows Vitest <code>test.include</code> to <code>src/**/*.test.{ts,tsx}</code> and excludes <code>tests/**</code>, so Playwright specs and Vitest specs never cross-contaminate.</p>
+<h2>E2E coverage</h2>
+<p><code>apps/web/tests/e2e/workflow.spec.ts</code> (8 tests):</p>
+<table><thead><tr><th>Scenario</th></tr></thead><tbody>
+<tr><td>App boots, resolves default seeded identity</td></tr>
+<tr><td>Switching identity (admin1 → admin2) swaps visible encounter scope</td></tr>
+<tr><td>Admin opens detail, creates encounter, sees it in the list</td></tr>
+<tr><td>Admin appends an event; it appears in the timeline</td></tr>
+<tr><td>Clinician performs operational transitions; reviewer edge not offered</td></tr>
+<tr><td>Reviewer sees completion/kick-back controls, no create button, no event composer</td></tr>
+<tr><td>Unknown email surfaces <code>identity-error</code> chip with <code>unknown_user</code></td></tr>
+<tr><td>Status filter narrows the list</td></tr>
+</tbody></table>
+<p>Tests use resilient selectors: <code>role</code>, placeholder text, and <code>data-testid</code> for elements without another stable hook.</p>
+<p>Local run:</p>
+<pre class="code lang-bash"><code>
+make e2e          # headless
+make e2e-headed   # visible browser
+make e2e-ui       # Playwright UI mode
+</code></pre>
+<p>Result at time of writing: <strong>8/8 passed in ~14s</strong>.</p>
+<h2>CI</h2>
+<p>New <code>e2e</code> job in <code>.github/workflows/ci.yml</code>:</p>
+<p>1. <code>backend-sqlite</code> + <code>frontend</code> must pass first.</p>
+<p>2. Set up Python 3.11 + Node 20 (both with caches).</p>
+<p>3. <code>pip install -e &quot;apps/api[dev,postgres]&quot;</code> (system install — verify.sh already tolerates missing <code>.venv</code>).</p>
+<p>4. <code>npm ci</code> in <code>apps/web</code>.</p>
+<p>5. <code>npx playwright install --with-deps chromium</code>.</p>
+<p>6. <code>npx playwright test --reporter=list</code> (Playwright boots + tears down the stack).</p>
+<p>7. On failure, upload <code>playwright-report/</code> + <code>test-results/</code> as an artifact for debugging.</p>
+<h2>Release pipeline</h2>
+<h3><code>scripts/release_build.sh</code></h3>
+<p>One command to produce a releasable bundle under <code>dist/release/&lt;version&gt;/</code>:</p>
+<ul>
+<li><code>chartnav-api-&lt;version&gt;.tar</code> — <code>docker save</code> of <code>chartnav-api:&lt;version&gt;</code> (importable with <code>docker load</code>).</li>
+<li><code>chartnav-web-&lt;version&gt;.tar.gz</code> — static bundle from <code>apps/web/dist</code> (drop behind any CDN/reverse proxy).</li>
+<li><code>MANIFEST.txt</code> — version, git sha, ref, build time, artifact sizes + sha256s.</li>
+</ul>
+<p>Version resolution:</p>
+<p>1. Explicit arg (e.g. <code>bash scripts/release_build.sh v0.1.0</code>).</p>
+<p>2. Exact git tag on <code>HEAD</code>.</p>
+<p>3. Fallback <code>dev-&lt;short-sha&gt;</code>.</p>
+<p>Local:</p>
+<pre class="code lang-bash"><code>
+make release-build VERSION=v0.1.0
+</code></pre>
+<p><code>dist/release/</code> is gitignored.</p>
+<h3><code>.github/workflows/release.yml</code></h3>
+<p>Triggers:</p>
+<ul>
+<li><code>push</code> on tags matching <code>v*.*.*</code> (e.g. <code>v0.1.0</code>, <code>v1.2.3-rc1</code>).</li>
+<li><code>workflow_dispatch</code> with a <code>version</code> input (manual).</li>
+</ul>
+<p>Steps:</p>
+<p>1. Resolve version from the tag or input.</p>
+<p>2. Install <code>apps/web</code> deps (Node 20).</p>
+<p>3. Login to <code>ghcr.io</code>.</p>
+<p>4. <code>docker buildx build + push</code> of <code>ghcr.io/&lt;owner&gt;/chartnav-api:&lt;version&gt;</code> <strong>and</strong> <code>:latest</code>.</p>
+<p>5. Run <code>scripts/release_build.sh &lt;version&gt;</code> to produce the local artifact set.</p>
+<p>6. Upload the whole <code>dist/release/&lt;version&gt;/</code> as a workflow artifact (always).</p>
+<p>7. On tag pushes only, create a <strong>GitHub Release</strong> with:</p>
+<ul>
+<li>auto-generated notes from the commit log</li>
+<li><code>chartnav-api-&lt;version&gt;.tar</code>, <code>chartnav-web-&lt;version&gt;.tar.gz</code>, <code>MANIFEST.txt</code> attached.</li>
+</ul>
+<p>Permissions: <code>contents: write</code> for the release, <code>packages: write</code> for <code>ghcr.io</code>.</p>
+<p>Release is never auto-triggered from CI commits — only an explicit tag push or manual dispatch cuts one.</p>
+<h2>Release flow (operator view)</h2>
+<pre class="code lang-bash"><code>
+# 1. work lands on main, CI green
+git checkout main &amp;&amp; git pull --ff-only
+
+# 2. tag
+git tag -a v0.1.0 -m &quot;ChartNav v0.1.0&quot;
+git push origin v0.1.0
+
+# 3. GitHub Actions runs the release workflow, pushes the GHCR image,
+#    creates the Release, attaches the tarballs.
+
+# 4. deploy
+docker pull ghcr.io/&lt;owner&gt;/chartnav-api:v0.1.0
+docker compose -f infra/docker/docker-compose.prod.yml up -d
+</code></pre>
+<h2>What this phase does NOT do</h2>
+<ul>
+<li>No staging / production deploy target is connected — the release workflow builds and publishes, operators still run <code>docker compose</code> wherever they host it.</li>
+<li>No automated Postgres E2E — Playwright&#x27;s webServer uses SQLite for speed + isolation. Postgres parity is still proven by <code>backend-postgres</code>.</li>
+<li>No rollback automation — rollbacks are <code>docker pull</code> of the previous tag.</li>
+<li>No signing / SBOM yet. Those are safe to add on top of this pipeline.</li>
+</ul>
+</section>
+<section id="sec-19"><h2>Diagram — System architecture</h2>
 <h1>System Architecture</h1>
 <div class="mermaid">
 flowchart LR
@@ -1438,12 +1582,15 @@ flowchart LR
     Alembic["Alembic<br/>DATABASE_URL-aware"]
     Seed["scripts_seed.py"]
     PyTest["pytest (28)"]
+    VitestSuite["vitest (12)"]
+    Playwright["Playwright E2E (8)"]
     Smoke["scripts/smoke.sh"]
     Verify["scripts/verify.sh"]
     PgVerify["scripts/pg_verify.sh"]
     DocBuild["scripts/build_docs.py"]
-    Make["Makefile<br/>install · verify · pg-verify · dev · web-*"]
-    CI[".github/workflows/ci.yml"]
+    ReleaseScript["scripts/release_build.sh"]
+    Make["Makefile<br/>install · verify · pg-verify · dev · web-* · e2e · release-build"]
+    CI[".github/workflows/<br/>ci.yml · release.yml"]
   end
 
   UI --> ApiClient
@@ -1464,6 +1611,9 @@ flowchart LR
   Alembic -.-> Engine
   Seed -.-> DB
   PyTest -.-> FastAPI
+  VitestSuite -.-> UI
+  Playwright -.->|"live browser"| UI
+  Playwright -.->|"live HTTP"| FastAPI
   Smoke -.-> FastAPI
   Verify --> Make
   PgVerify --> Make
@@ -1480,7 +1630,7 @@ flowchart LR
   Compose --> PG
 </div>
 </section>
-<section id="sec-19"><h2>Diagram — Encounter status machine</h2>
+<section id="sec-20"><h2>Diagram — Encounter status machine</h2>
 <h1>Encounter Status State Machine</h1>
 <div class="mermaid">
 stateDiagram-v2
@@ -1502,7 +1652,7 @@ stateDiagram-v2
 <p>Legend: any edge not shown is rejected at <code>POST /encounters/{id}/status</code></p>
 <p>with HTTP 400 <code>invalid_transition</code>.</p>
 </section>
-<section id="sec-20"><h2>Diagram — ER</h2>
+<section id="sec-21"><h2>Diagram — ER</h2>
 <h1>ER Diagram</h1>
 <div class="mermaid">
 erDiagram
@@ -1566,7 +1716,7 @@ erDiagram
 <p><code>users.organization_id</code> is the authoritative source of scope; never</p>
 <p>derived from client input.</p>
 </section>
-<section id="sec-21"><h2>Diagram — API / data flow</h2>
+<section id="sec-22"><h2>Diagram — API / data flow</h2>
 <h1>API / Data Flow &amp; CI</h1>
 <h2>UI → Backend request path</h2>
 <div class="mermaid">
@@ -1648,6 +1798,22 @@ flowchart TD
     X1[apt chromium] --> X2[build_docs.py]
     X2 --> X3[upload artifact]
   end
+</div>
+<h2>Release pipeline</h2>
+<div class="mermaid">
+flowchart LR
+  TAG[["git push tag v*.*.*"]] --> RB[release.yml]
+  RB --> V[resolve version]
+  V --> DK[docker buildx push<br/>ghcr.io/.../chartnav-api:version + :latest]
+  V --> RBS[scripts/release_build.sh]
+  RBS --> API[chartnav-api-&lt;v&gt;.tar]
+  RBS --> WEB[chartnav-web-&lt;v&gt;.tar.gz]
+  RBS --> M[MANIFEST.txt]
+  API --> GR[GitHub Release]
+  WEB --> GR
+  M --> GR
+  DK --> OPS[operator: docker pull + compose up]
+  GR --> OPS
 </div>
 </section>
 </body></html>

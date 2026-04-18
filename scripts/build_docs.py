@@ -40,6 +40,7 @@ SECTIONS = [
     ("14 — Postgres parity", BUILD / "14-postgres-parity.md"),
     ("15 — Frontend integration", BUILD / "15-frontend-integration.md"),
     ("16 — Frontend test strategy", BUILD / "16-frontend-test-strategy.md"),
+    ("17 — E2E & release", BUILD / "17-e2e-and-release.md"),
     ("Diagram — System architecture", DIAGR / "system-architecture.md"),
     ("Diagram — Encounter status machine", DIAGR / "encounter-status-machine.md"),
     ("Diagram — ER", DIAGR / "er-diagram.md"),
@@ -64,7 +65,9 @@ date.
 
 **Phase 7 — Frontend workflow UI.** Typed API client + identity seam + full two-pane workflow console (list + filters + detail + timeline + role-aware actions). Error banners surface the backend envelope verbatim.
 
-**Phase 8 — Create UI + frontend tests + frontend CI (this phase).** Admin/clinician can now create encounters through a modal wired to `/locations` and `POST /encounters`; success auto-selects the new row, failure surfaces `{error_code, reason}` inline. Every mutating control (transition, append event, create) now disables while in flight. Added a real Vitest + Testing Library harness (12 integration tests mocking `./api`) that locks down identity resolution, list rendering, filtering, detail/timeline, per-role affordances, create happy + sad paths, identity switching, and status transitions. A dedicated `frontend` CI job runs `npm ci → typecheck → test → build` in parallel with the backend gate. `make web-verify` is the one-shot local gate for the frontend.
+**Phase 8 — Create UI + frontend tests + frontend CI.** Admin/clinician can create encounters through a modal; Vitest + Testing Library harness (12 tests) locks the UI down; dedicated `frontend` CI job runs typecheck + tests + build on every push/PR.
+
+**Phase 9 — Playwright E2E + release pipeline (this phase).** Playwright boots backend and frontend together on ephemeral ports (SQLite-backed seed), drives 8 real Chromium scenarios covering identity resolution, scope switching, encounter create, event append, role-aware transitions, reviewer restrictions, unknown-email auth surface, and filters. A new `e2e` CI job runs the full browser suite on every PR. A new `release.yml` workflow triggers on `v*.*.*` tags, pushes `ghcr.io/<owner>/chartnav-api:<version>` via Buildx, runs `scripts/release_build.sh` to produce `chartnav-api-<version>.tar` + `chartnav-web-<version>.tar.gz` + a sha256 manifest, and attaches the artifacts to an auto-generated GitHub Release. No backend contract changes.
 
 Preserved untouched: `/health`, `/`, Alembic history, SQLite dev workflow, state machine + filtering surface, workflow_events model, existing endpoint contracts.
 """

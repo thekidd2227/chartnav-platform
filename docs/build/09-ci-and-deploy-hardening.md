@@ -13,6 +13,12 @@ Service container `postgres:16-alpine` on localhost:5432. Install deps (incl. `[
 ### `frontend`
 Node 20 + npm cache keyed on `apps/web/package-lock.json` → `npm ci` → `npm run typecheck` → `npm test` (vitest, 12 integration tests) → `npm run build`. Runs in parallel with `backend-sqlite` — the frontend is a peer quality gate, not blocked by backend CI.
 
+### `e2e` (needs: `backend-sqlite`, `frontend`)
+Python 3.11 + Node 20 installed. `pip install -e "apps/api[dev,postgres]"` + `npm ci` in `apps/web`. `npx playwright install --with-deps chromium`. Then `npx playwright test --reporter=list` — Playwright boots backend on 8001 (SQLite) and frontend on 5174, runs the 8 browser scenarios, tears both down. On failure, `playwright-report/` and `test-results/` are uploaded as a workflow artifact for triage.
+
+### `release.yml` (separate workflow)
+Triggers on `v*.*.*` tag push and manual dispatch. Builds + pushes `ghcr.io/<owner>/chartnav-api:<version>` (+ `:latest`), runs `scripts/release_build.sh` to produce `dist/release/<version>/` (docker-saved image tar, web bundle tar.gz, MANIFEST with sha256s), uploads the directory as an artifact, and on tag pushes attaches the files to a GitHub Release with auto-generated notes. Full reference in `17-e2e-and-release.md`.
+
 ### `docker-build` (needs: `backend-sqlite`)
 Buildx → build `chartnav-api:ci` from `apps/api/` → run the container with `DATABASE_URL=sqlite:///./chartnav.db` and `CHARTNAV_RUN_SEED=1` → poll `/health` → run `scripts/smoke.sh` against the live container. Proves the production image boots end-to-end.
 
