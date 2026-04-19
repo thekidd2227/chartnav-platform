@@ -44,7 +44,8 @@ export type ClinicalShortcutGroup =
   | "BRVO / CRVO / retinal vascular"
   | "Post-injection / post-vitrectomy / post-op"
   | "Glaucoma"
-  | "Cornea / anterior segment";
+  | "Cornea / anterior segment"
+  | "Oculoplastics / lids / adnexa";
 
 export const CLINICAL_SHORTCUT_GROUPS: ClinicalShortcutGroup[] = [
   "PVD",
@@ -56,6 +57,7 @@ export const CLINICAL_SHORTCUT_GROUPS: ClinicalShortcutGroup[] = [
   "Post-injection / post-vitrectomy / post-op",
   "Glaucoma",
   "Cornea / anterior segment",
+  "Oculoplastics / lids / adnexa",
 ];
 
 export const CLINICAL_SHORTCUTS: ClinicalShortcut[] = [
@@ -561,6 +563,86 @@ export const CLINICAL_SHORTCUTS: ClinicalShortcut[] = [
       "ac", "steroid", "cornea",
     ],
   },
+
+  // ---------- Oculoplastics / lids / adnexa ----------
+  // Compact adnexal note-fragment logic. Lid position + levator
+  // function + exposure status are the load-bearing data points
+  // for any oculoplastic assessment/plan.
+  {
+    id: "ocp-01",
+    group: "Oculoplastics / lids / adnexa",
+    body:
+      "Involutional ectropion OD with exposure keratopathy and reflex " +
+      "tearing; recommend aggressive lubrication and lateral tarsal " +
+      "strip procedure.",
+    tags: [
+      "ectropion", "lower lid", "involutional", "exposure keratopathy",
+      "lubrication", "tarsal strip", "oculoplastics", "lids",
+      "od",
+    ],
+  },
+  {
+    id: "ocp-02",
+    group: "Oculoplastics / lids / adnexa",
+    body:
+      "Involutional entropion OS with trichiasis and corneal epithelial " +
+      "staining; recommend epilation and lower lid retractor repair.",
+    tags: [
+      "entropion", "trichiasis", "lower lid", "involutional",
+      "retractor repair", "oculoplastics", "lids", "os", "spk",
+      "corneal staining",
+    ],
+  },
+  {
+    id: "ocp-03",
+    group: "Oculoplastics / lids / adnexa",
+    body:
+      "Dermatochalasis OU with superior visual field obstruction; " +
+      "recommend functional upper blepharoplasty with pre-op VF " +
+      "documentation.",
+    tags: [
+      "dermatochalasis", "upper lid", "blepharoplasty",
+      "visual field", "vf", "functional",
+      "oculoplastics", "lids", "ou",
+    ],
+  },
+  {
+    id: "ocp-04",
+    group: "Oculoplastics / lids / adnexa",
+    body:
+      "Aponeurotic ptosis OD with MRD1 ___ mm, levator function " +
+      "___ mm; plan external levator advancement.",
+    tags: [
+      "ptosis", "aponeurotic", "mrd1", "mrd2", "levator function",
+      "levator advancement", "upper lid",
+      "oculoplastics", "lids", "od",
+    ],
+  },
+  {
+    id: "ocp-05",
+    group: "Oculoplastics / lids / adnexa",
+    body:
+      "Chalazion OD lower lid, nontender, stable at ___ mm; recommend " +
+      "warm compresses and lid hygiene, consider I&D if non-resolving.",
+    tags: [
+      "chalazion", "stye", "hordeolum", "lower lid", "warm compress",
+      "lid hygiene", "i&d", "incision and drainage",
+      "oculoplastics", "lids", "od", "mgd",
+    ],
+  },
+  {
+    id: "ocp-06",
+    group: "Oculoplastics / lids / adnexa",
+    body:
+      "Lagophthalmos OD with exposure keratopathy; recommend nocturnal " +
+      "lubricating ointment and consideration of gold weight placement " +
+      "or lateral tarsorrhaphy.",
+    tags: [
+      "lagophthalmos", "exposure keratopathy", "gold weight",
+      "tarsorrhaphy", "lubrication", "ointment", "cn vii",
+      "facial nerve palsy", "oculoplastics", "lids", "od",
+    ],
+  },
 ];
 
 /**
@@ -659,6 +741,10 @@ export const ABBREVIATION_HINTS: Record<string, string> = {
   RCE: "Recurrent corneal erosion",
   SPK: "Superficial punctate keratitis",
   TBU: "Tear break-up time",
+  // ---- Oculoplastics / lids / adnexa ----
+  "I&D": "Incision and drainage",
+  MRD1: "Margin reflex distance 1 (upper lid)",
+  MRD2: "Margin reflex distance 2 (lower lid)",
 };
 
 /** Ordered list of abbreviation tokens, longest-first, so a body
@@ -691,17 +777,28 @@ export function clinicalShortcutMatches(
 
   if (haystack.includes(query)) return true;
 
-  // If the query is (or contains) an abbreviation we know, also
-  // match against its expanded meaning. E.g. `rd` ↔ "retinal
-  // detachment".
+  // Abbreviation-aware expansion. Tokenize the query so a search like
+  // `MRD1` is NOT mis-resolved to the `RD` abbreviation via a naive
+  // substring check (pre-phase-32 bug: "mrd1".includes("rd") → true).
+  // For single-token queries we also allow prefix-match on the
+  // abbreviation itself so typing `mrd` still surfaces MRD1.
+  const queryTokens = query
+    .split(/[\s,./]+/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+  const lowerTags = s.tags.map((t) => t.toLowerCase());
+
   for (const abbr of ABBREVIATION_TOKENS) {
     const lowerAbbr = abbr.toLowerCase();
-    if (query.includes(lowerAbbr) || lowerAbbr.includes(query)) {
-      const meaning = ABBREVIATION_HINTS[abbr].toLowerCase();
-      if (haystack.includes(meaning)) return true;
-      // Also match if any tag token equals the abbreviation itself.
-      if (s.tags.map((t) => t.toLowerCase()).includes(lowerAbbr)) return true;
-    }
+    const singleToken = queryTokens.length === 1 ? queryTokens[0] : null;
+    const matchesAbbrToken =
+      queryTokens.includes(lowerAbbr) ||
+      (singleToken !== null && lowerAbbr.startsWith(singleToken));
+    if (!matchesAbbrToken) continue;
+    const meaning = ABBREVIATION_HINTS[abbr].toLowerCase();
+    if (haystack.includes(meaning)) return true;
+    // Also match if any tag token equals the abbreviation itself.
+    if (lowerTags.includes(lowerAbbr)) return true;
   }
   return false;
 }
@@ -787,4 +884,22 @@ export function firstBlankOffset(body: string): number {
 export function nextBlankAfter(body: string, fromOffset: number): number {
   const safeFrom = Math.max(0, fromOffset | 0);
   return body.indexOf(SHORTCUT_BLANK_TOKEN, safeFrom);
+}
+
+/**
+ * Return the zero-based offset of the PREVIOUS `___` placeholder that
+ * starts STRICTLY before `fromOffset`, or `-1` if none exists. Used
+ * by the Shift+Tab handler to walk backward through blanks without
+ * re-selecting the placeholder the caret already sits on.
+ *
+ * The `-1` start index is intentional: if `fromOffset === 2` and the
+ * caret sits on a `___` at index 2, we do NOT want to resolve back to
+ * that same placeholder. `lastIndexOf(needle, fromIndex)` searches for
+ * a match whose start is at or before `fromIndex`, so we pass
+ * `fromOffset - 1` so the current selection's start is excluded.
+ */
+export function prevBlankBefore(body: string, fromOffset: number): number {
+  const cutoff = (fromOffset | 0) - 1;
+  if (cutoff < 0) return -1;
+  return body.lastIndexOf(SHORTCUT_BLANK_TOKEN, cutoff);
 }

@@ -72,6 +72,7 @@ import {
   clinicalShortcutMatches,
   firstBlankOffset,
   nextBlankAfter,
+  prevBlankBefore,
   segmentAbbreviations,
   type ClinicalShortcut,
 } from "./clinicalShortcuts";
@@ -1071,19 +1072,19 @@ export function NoteWorkspace({
                 className="workspace__draft"
                 value={editBody ?? ""}
                 onChange={(e) => setEditBody(e.target.value)}
-                // Phase 31 — Tab-to-next-blank. When the doctor has
-                // just inserted a shortcut containing `___ to ___ o'clock`
-                // the caret-to-first-blank already selected the first
-                // placeholder; Tab advances to the next one without
-                // leaving the field. We forward the default Tab to its
-                // usual "focus the next element" behaviour once every
-                // blank has been consumed. Modifier keys (Shift, Ctrl,
-                // Meta, Alt) are left untouched so users who actually
-                // want to tab out can still do so.
+                // Phase 31 — Tab-to-next-blank / Phase 32 — Shift+Tab
+                // walks backward. When the doctor has just inserted a
+                // shortcut containing `___ to ___ o'clock` the
+                // caret-to-first-blank already selected the first
+                // placeholder; Tab advances to the next one, Shift+Tab
+                // returns to the previous one, both without leaving the
+                // field. We forward the default Tab / Shift+Tab to the
+                // usual focus-cycle behaviour once every blank has been
+                // consumed in the relevant direction. Ctrl / Meta / Alt
+                // are left untouched so OS keybindings still work.
                 onKeyDown={(e) => {
                   if (
                     e.key !== "Tab" ||
-                    e.shiftKey ||
                     e.ctrlKey ||
                     e.metaKey ||
                     e.altKey
@@ -1091,6 +1092,22 @@ export function NoteWorkspace({
                     return;
                   const ta = e.currentTarget;
                   const body = ta.value ?? "";
+                  if (e.shiftKey) {
+                    // Walk to the previous `___`, strictly before the
+                    // current selection's start so sitting on a blank
+                    // + Shift+Tab hops BACK, not to the same blank.
+                    const startFrom = ta.selectionStart ?? 0;
+                    const prev = prevBlankBefore(body, startFrom);
+                    if (prev >= 0) {
+                      e.preventDefault();
+                      ta.setSelectionRange(
+                        prev,
+                        prev + SHORTCUT_BLANK_TOKEN.length
+                      );
+                    }
+                    // else: default Shift+Tab → focus previous element.
+                    return;
+                  }
                   const startFrom = ta.selectionEnd ?? 0;
                   const next = nextBlankAfter(body, startFrom);
                   if (next >= 0) {

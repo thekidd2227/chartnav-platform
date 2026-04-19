@@ -3426,6 +3426,127 @@ def unfavorite_clinical_shortcut(
 # catalog ref + count + timestamp.
 
 
+def _build_shortcut_usage_summary(
+    *,
+    organization_id: int,
+    days: int,
+    limit: int,
+    by_user: bool,
+) -> dict:
+    """Pure-python aggregator shared by the JSON + CSV endpoints.
+
+    Extracted so both HTTP handlers hit the exact same query + parse
+    + ranking + trimming logic. Staying below the handler layer keeps
+    PHI-minimisation obvious at the type level: the dict returned here
+    is the entire analytics surface.
+    """
+    import re
+    from datetime import datetime, timedelta, timezone
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=int(days))
+    rows = fetch_all(
+        "SELECT actor_email, detail, created_at FROM security_audit_events "
+        "WHERE event_type = :etype "
+        "AND organization_id = :org "
+        "AND created_at >= :since",
+        {
+            "etype": "clinician_shortcut_used",
+            "org": organization_id,
+            "since": cutoff,
+        },
+    )
+    pattern = re.compile(r"\bshortcut_id=([A-Za-z0-9_\-]+)")
+
+    total = 0
+    distinct_refs: set[str] = set()
+
+    if by_user:
+        # Group by (actor_email, shortcut_ref). Events whose
+        # actor_email is NULL (shouldn't happen for clinician-initiated
+        # audits) are grouped under an empty-string key; the UI can
+        # decide whether to render them.
+        per_bucket: dict[tuple[str, str], dict] = {}
+        for row in rows:
+            detail = (row.get("detail") or "").strip()
+            m = pattern.search(detail)
+            if not m:
+                continue
+            ref = m.group(1)
+            email = (row.get("actor_email") or "").strip()
+            key = (email, ref)
+            ts = row.get("created_at")
+            ts_str = ts.isoformat() if hasattr(ts, "isoformat") else str(ts or "")
+            bucket = per_bucket.get(key)
+            if bucket is None:
+                per_bucket[key] = {"count": 1, "last_used_at": ts_str}
+            else:
+                bucket["count"] += 1
+                if ts_str > (bucket["last_used_at"] or ""):
+                    bucket["last_used_at"] = ts_str
+            total += 1
+            distinct_refs.add(ref)
+        items = [
+            {
+                "user_email": email,
+                "shortcut_ref": ref,
+                "count": b["count"],
+                "last_used_at": b["last_used_at"],
+            }
+            for (email, ref), b in per_bucket.items()
+        ]
+        # Rank most-used first; stable secondary sort on (email, ref)
+        # so equal-count ties have a deterministic order.
+        items.sort(
+            key=lambda r: (-r["count"], r["user_email"], r["shortcut_ref"])
+        )
+        items = items[: int(limit)]
+        return {
+            "window_days": int(days),
+            "organization_id": organization_id,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "by_user": True,
+            "total_events": total,
+            "distinct_refs": len(distinct_refs),
+            "distinct_users": len({email for (email, _ref) in per_bucket}),
+            "items": items,
+        }
+
+    counts: dict[str, int] = {}
+    last_seen: dict[str, str] = {}
+    for row in rows:
+        detail = (row.get("detail") or "").strip()
+        m = pattern.search(detail)
+        if not m:
+            continue
+        ref = m.group(1)
+        counts[ref] = counts.get(ref, 0) + 1
+        total += 1
+        ts = row.get("created_at")
+        ts_str = ts.isoformat() if hasattr(ts, "isoformat") else str(ts or "")
+        prev = last_seen.get(ref, "")
+        if ts_str > prev:
+            last_seen[ref] = ts_str
+    items = [
+        {
+            "shortcut_ref": ref,
+            "count": count,
+            "last_used_at": last_seen.get(ref),
+        }
+        for ref, count in counts.items()
+    ]
+    items.sort(key=lambda r: (-r["count"], r["shortcut_ref"]))
+    items = items[: int(limit)]
+    return {
+        "window_days": int(days),
+        "organization_id": organization_id,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "by_user": False,
+        "total_events": total,
+        "distinct_refs": len(counts),
+        "items": items,
+    }
+
+
 @router.get("/admin/shortcut-usage-summary")
 def shortcut_usage_summary(
     days: int = Query(
@@ -3440,74 +3561,87 @@ def shortcut_usage_summary(
         le=200,
         description="Max ranked rows to return. Default 50.",
     ),
+    by_user: bool = Query(
+        False,
+        description=(
+            "If true, group by (user_email, shortcut_ref) instead of "
+            "just shortcut_ref."
+        ),
+    ),
     caller: Caller = Depends(require_admin),
 ) -> dict:
-    """Per-ref rollup of `clinician_shortcut_used` audit events.
+    """Rollup of `clinician_shortcut_used` audit events.
 
-    Intentionally narrow: no per-user breakdown, no encounter join, no
-    comment-body exposure. Just the catalog ref, a count, and the most
-    recent usage timestamp within the window, ranked descending by
-    count.
+    Intentionally narrow. No encounter join, no comment-body exposure.
+    Ranked descending by count within the window.
 
-    This is admin-only because it's an operational lens on
-    clinician-behaviour patterns, not a per-patient data view. Cross-
-    org queries are blocked by the `organization_id` filter on the
-    audit table (every event carries it).
+    Admin-only because it's an operational lens on clinician-behaviour
+    patterns, not a per-patient data view. Cross-org queries are
+    blocked by the `organization_id` filter on the audit table (every
+    event carries it). When `by_user=true`, the breakdown still stays
+    inside the caller's org.
     """
-    import re
-    from datetime import datetime, timedelta, timezone
-
-    cutoff = datetime.now(timezone.utc) - timedelta(days=int(days))
-    rows = fetch_all(
-        "SELECT detail, created_at FROM security_audit_events "
-        "WHERE event_type = :etype "
-        "AND organization_id = :org "
-        "AND created_at >= :since",
-        {
-            "etype": "clinician_shortcut_used",
-            "org": caller.organization_id,
-            "since": cutoff,
-        },
+    return _build_shortcut_usage_summary(
+        organization_id=caller.organization_id,
+        days=int(days),
+        limit=int(limit),
+        by_user=bool(by_user),
     )
 
-    # Parse the `shortcut_id=<ref>` token out of each detail string.
-    # Defensive: skip rows whose detail is missing / malformed.
-    pattern = re.compile(r"\bshortcut_id=([A-Za-z0-9_\-]+)")
-    counts: dict[str, int] = {}
-    last_seen: dict[str, str] = {}
-    total = 0
-    for row in rows:
-        detail = (row.get("detail") or "").strip()
-        m = pattern.search(detail)
-        if not m:
-            continue
-        ref = m.group(1)
-        counts[ref] = counts.get(ref, 0) + 1
-        total += 1
-        ts = row.get("created_at")
-        ts_str = ts.isoformat() if hasattr(ts, "isoformat") else str(ts or "")
-        prev = last_seen.get(ref, "")
-        if ts_str > prev:
-            last_seen[ref] = ts_str
 
-    items = [
-        {
-            "shortcut_ref": ref,
-            "count": count,
-            "last_used_at": last_seen.get(ref),
-        }
-        for ref, count in counts.items()
-    ]
-    # Rank most-used first; stable secondary sort on ref so equal-count
-    # ties have a deterministic order.
-    items.sort(key=lambda r: (-r["count"], r["shortcut_ref"]))
-    items = items[: int(limit)]
+@router.get(
+    "/admin/shortcut-usage-summary/export",
+    include_in_schema=True,
+)
+def shortcut_usage_summary_csv(
+    days: int = Query(30, ge=1, le=365),
+    limit: int = Query(50, ge=1, le=200),
+    by_user: bool = Query(False),
+    caller: Caller = Depends(require_admin),
+):
+    """CSV export of the shortcut-usage summary.
 
-    return {
-        "window_days": int(days),
-        "organization_id": caller.organization_id,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-        "total_events": total,
-        "distinct_refs": len(counts),
-        "items": items,
-    }
+    Ops-friendly, not fancy. Columns change with `by_user`:
+      aggregate  → shortcut_ref, count, last_used_at
+      by_user    → user_email, shortcut_ref, count, last_used_at
+
+    Same admin/org/window constraints as the JSON endpoint. Filename
+    pattern: `chartnav-shortcut-usage-YYYYMMDDTHHMMSSZ[-by-user].csv`.
+    """
+    from datetime import datetime
+    from fastapi.responses import Response as _PlainResponse
+
+    summary = _build_shortcut_usage_summary(
+        organization_id=caller.organization_id,
+        days=int(days),
+        limit=int(limit),
+        by_user=bool(by_user),
+    )
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    if summary["by_user"]:
+        writer.writerow(["user_email", "shortcut_ref", "count", "last_used_at"])
+        for r in summary["items"]:
+            writer.writerow([
+                r.get("user_email") or "",
+                r.get("shortcut_ref") or "",
+                r.get("count") or 0,
+                r.get("last_used_at") or "",
+            ])
+    else:
+        writer.writerow(["shortcut_ref", "count", "last_used_at"])
+        for r in summary["items"]:
+            writer.writerow([
+                r.get("shortcut_ref") or "",
+                r.get("count") or 0,
+                r.get("last_used_at") or "",
+            ])
+
+    stamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    suffix = "-by-user" if summary["by_user"] else ""
+    filename = f"chartnav-shortcut-usage-{stamp}{suffix}.csv"
+    return _PlainResponse(
+        content=buf.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

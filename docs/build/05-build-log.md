@@ -4,6 +4,93 @@ Reverse-chronological.
 
 ---
 
+## 2026-04-19 — Phase 32: Shift+Tab + per-user usage + CSV export + Oculoplastics
+
+Four tight wins on the Clinical Shortcuts surface: bidirectional
+blank navigation, optional per-user breakdown on the admin usage
+summary, a CSV export path, and a curated Oculoplastics / lids /
+adnexa pack. A substring-vs-token search bug that the new `MRD1`
+abbreviation would have surfaced is fixed at the same time.
+
+### Changes
+- **Shift+Tab backward blank nav** — new
+  `prevBlankBefore(body, fromOffset)` helper; NoteWorkspace's
+  `onKeyDown` adds a Shift+Tab branch that walks to the previous
+  `___` strictly before `selectionStart`, selects its 3 chars,
+  `preventDefault`s. No wrap, no mutation when there's no
+  previous blank.
+- **`by_user=true`** on the admin `GET /admin/shortcut-usage-summary`.
+  Groups by `(actor_email, shortcut_ref)`; response gains a
+  `distinct_users` counter and every row carries `user_email`.
+  Shared `_build_shortcut_usage_summary` aggregator extracted
+  from the JSON handler so the CSV path doesn't fork logic.
+- **New** `GET /admin/shortcut-usage-summary/export` — CSV
+  export with the same admin/org/window gating; columns change
+  with `by_user`; filename carries an ISO UTC timestamp plus an
+  optional `-by-user` suffix.
+- **Oculoplastics pack** — 6 shortcuts covering ectropion,
+  entropion, dermatochalasis, ptosis (MRD1 + levator function),
+  chalazion, lagophthalmos. All carry blanks so the caret +
+  Tab chain feels natural.
+- **Abbreviation additions** (3 tightly-bound entries):
+  `I&D`, `MRD1`, `MRD2`.
+- **`clinicalShortcutMatches` bug fix** — pre-existing naïve
+  `query.includes(lowerAbbr)` was flagging `RD` as a match on
+  queries like `MRD1` (substring). Replaced with a token-aware
+  match: query tokens must equal an abbreviation or a single
+  query token must be a **prefix** of an abbreviation. Typing
+  `mrd` still surfaces MRD1; typing `mrd1` no longer drags the
+  RD group in.
+- **PHI invariant tests tightened** — checks against the
+  row-serialized text of `body["items"]`, not the whole envelope,
+  so a coincidental `999` in `generated_at`'s microsecond
+  suffix can never flake the assertion.
+
+### Tests
+- Backend +8 (`test_shortcut_usage_summary.py`, 16 total):
+  `by_user` grouping + counts + `distinct_users`; `by_user`
+  org scoping; `by_user` role gate; `by_user` response-keys
+  invariant; CSV aggregate shape + ranked rows + filename;
+  CSV by-user shape + `-by-user` filename suffix; CSV role
+  gate; CSV org + window validation.
+  Full backend suite: **309 passed** (301 + 8).
+- Frontend +7 (`NoteWorkspace.test.tsx`): Shift+Tab walks
+  backward through two blanks; fallback when no previous
+  blank; Shift+Tab sitting on a blank hops to the previous
+  one (not the same); Oculoplastics group renders; `MRD1`
+  search surfaces ocp pack + drops PVD (regression check for
+  the fixed matcher bug); `ectropion` search surfaces ocp-01;
+  reviewer hides the Oculoplastics group entirely.
+  The phase-31 "Shift+Tab is untouched" test was retired /
+  reclassified — the behaviour has changed intentionally.
+  Full vitest suite: **114 passed**.
+- Typecheck clean. Vite build 252.84 kB JS / 21.26 kB CSS
+  (gzip 74.51 / 4.41 kB).
+
+### Docs
+- New `docs/build/43-shortcut-navigation-and-oculoplastics.md`.
+- Updated `docs/build/16-frontend-test-strategy.md`.
+
+### Files touched
+- `apps/api/app/api/routes.py`
+- `apps/api/tests/test_shortcut_usage_summary.py`
+- `apps/web/src/clinicalShortcuts.ts`
+- `apps/web/src/NoteWorkspace.tsx`
+- `apps/web/src/test/NoteWorkspace.test.tsx`
+- `docs/build/05-build-log.md`,
+  `16-frontend-test-strategy.md`,
+  `43-shortcut-navigation-and-oculoplastics.md` (new)
+
+### Files intentionally avoided
+- Marketing site.
+- No new DB table (summary remains a read over the audit stream).
+- No Playwright scenario (shared `spliceIntoDraft` helper is
+  already covered by phase-28's cross-stack spec; the Tab/
+  Shift+Tab semantics are unit-tested precisely).
+- No whole-PDF abbreviation dump (now 79 curated entries).
+
+---
+
 ## 2026-04-19 — Phase 31: Tab-to-next-blank + shortcut usage summary + glaucoma/cornea
 
 Three narrow ergonomic wins on the phase-29/30 Clinical Shortcuts

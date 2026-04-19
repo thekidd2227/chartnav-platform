@@ -159,10 +159,13 @@ def test_summary_does_not_leak_note_or_encounter_ids(client):
     # The summary should expose only ref + count + last_used_at.
     for row in body["items"]:
         assert set(row.keys()) == {"shortcut_ref", "count", "last_used_at"}
-    flat = str(body)
-    assert "note_version_id" not in flat
-    assert "encounter_id" not in flat
-    assert "999" not in flat
+    # Key-level PHI invariant: check row-serialized text, not the
+    # whole envelope (the top-level `generated_at` timestamp can
+    # coincidentally contain a "999" in its microseconds suffix).
+    flat_rows = str(body["items"])
+    assert "note_version_id" not in flat_rows
+    assert "encounter_id" not in flat_rows
+    assert "999" not in flat_rows
 
 
 # ---------------------------------------------------------------------
@@ -188,3 +191,165 @@ def test_quick_comment_events_are_not_rolled_into_shortcut_summary(client):
     # And the preloaded quick-comment ref must not appear.
     refs = {i["shortcut_ref"] for i in body["items"]}
     assert "sx-01" not in refs
+
+
+# ---------------------------------------------------------------------
+# Phase 32 — per-user breakdown
+# ---------------------------------------------------------------------
+
+
+def test_by_user_groups_by_user_email_and_ref(client):
+    _fire_usage(client, CLIN1, "glc-01")
+    _fire_usage(client, CLIN1, "glc-01")
+    _fire_usage(client, CLIN1, "cor-03")
+    _fire_usage(client, ADMIN1, "glc-01")
+
+    r = client.get(
+        "/admin/shortcut-usage-summary?by_user=true", headers=ADMIN1
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["by_user"] is True
+    assert body["total_events"] == 4
+    assert body["distinct_refs"] == 2
+    assert body["distinct_users"] == 2
+
+    by_key = {
+        (i["user_email"], i["shortcut_ref"]): i for i in body["items"]
+    }
+    assert by_key[("clin@chartnav.local", "glc-01")]["count"] == 2
+    assert by_key[("clin@chartnav.local", "cor-03")]["count"] == 1
+    assert by_key[("admin@chartnav.local", "glc-01")]["count"] == 1
+
+    # Each row carries a last_used_at.
+    for row in body["items"]:
+        assert row["last_used_at"]
+
+    # Ranking: highest-count row first; ties broken by (email, ref).
+    counts_order = [i["count"] for i in body["items"]]
+    assert counts_order == sorted(counts_order, reverse=True)
+
+
+def test_by_user_stays_org_scoped(client):
+    _fire_usage(client, CLIN1, "ocp-01")
+    _fire_usage(client, CLIN2, "ocp-01")
+    r1 = client.get(
+        "/admin/shortcut-usage-summary?by_user=true", headers=ADMIN1
+    ).json()
+    r2 = client.get(
+        "/admin/shortcut-usage-summary?by_user=true", headers=ADMIN2
+    ).json()
+    r1_emails = {i["user_email"] for i in r1["items"]}
+    r2_emails = {i["user_email"] for i in r2["items"]}
+    assert "clin@chartnav.local" in r1_emails
+    assert "clin@northside.local" not in r1_emails
+    assert "clin@northside.local" in r2_emails
+    assert "clin@chartnav.local" not in r2_emails
+
+
+def test_by_user_rejects_non_admins(client):
+    r = client.get(
+        "/admin/shortcut-usage-summary?by_user=true", headers=CLIN1
+    )
+    assert r.status_code == 403
+    r = client.get(
+        "/admin/shortcut-usage-summary?by_user=true", headers=REV1
+    )
+    assert r.status_code == 403
+
+
+def test_by_user_response_does_not_leak_ids(client):
+    _fire_usage(client, CLIN1, "ocp-03", note_version_id=77)
+    r = client.get(
+        "/admin/shortcut-usage-summary?by_user=true", headers=ADMIN1
+    )
+    body = r.json()
+    for row in body["items"]:
+        assert set(row.keys()) == {
+            "user_email", "shortcut_ref", "count", "last_used_at",
+        }
+    # Check row-serialized text, not the envelope, so a coincidental
+    # microsecond-suffix digit in `generated_at` never flakes the
+    # invariant.
+    flat_rows = str(body["items"])
+    assert "note_version_id" not in flat_rows
+    assert "encounter_id" not in flat_rows
+    assert "77" not in flat_rows
+
+
+# ---------------------------------------------------------------------
+# Phase 32 — CSV export
+# ---------------------------------------------------------------------
+
+
+def test_csv_export_aggregate_shape(client):
+    _fire_usage(client, CLIN1, "glc-02")
+    _fire_usage(client, CLIN1, "glc-02")
+    _fire_usage(client, CLIN1, "ocp-04")
+
+    r = client.get(
+        "/admin/shortcut-usage-summary/export", headers=ADMIN1
+    )
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/csv")
+    assert "attachment" in r.headers.get("content-disposition", "")
+    assert "chartnav-shortcut-usage-" in r.headers["content-disposition"]
+    assert "-by-user" not in r.headers["content-disposition"]
+
+    body = r.text.strip().splitlines()
+    # Header + 2 distinct refs.
+    assert body[0] == "shortcut_ref,count,last_used_at"
+    assert len(body) == 3
+    # glc-02 (count 2) ranks above ocp-04 (count 1).
+    assert body[1].startswith("glc-02,2,")
+    assert body[2].startswith("ocp-04,1,")
+
+
+def test_csv_export_by_user_shape(client):
+    _fire_usage(client, CLIN1, "cor-05")
+    _fire_usage(client, CLIN1, "cor-05")
+    _fire_usage(client, ADMIN1, "cor-05")
+
+    r = client.get(
+        "/admin/shortcut-usage-summary/export?by_user=true",
+        headers=ADMIN1,
+    )
+    assert r.status_code == 200
+    assert "-by-user" in r.headers.get("content-disposition", "")
+
+    lines = r.text.strip().splitlines()
+    assert lines[0] == "user_email,shortcut_ref,count,last_used_at"
+    # Two distinct (email, ref) buckets.
+    assert len(lines) == 3
+    # Highest count bucket comes first.
+    assert lines[1].startswith("clin@chartnav.local,cor-05,2,")
+    assert lines[2].startswith("admin@chartnav.local,cor-05,1,")
+
+
+def test_csv_export_rejects_non_admins(client):
+    r = client.get(
+        "/admin/shortcut-usage-summary/export", headers=CLIN1
+    )
+    assert r.status_code == 403
+    r = client.get(
+        "/admin/shortcut-usage-summary/export", headers=REV1
+    )
+    assert r.status_code == 403
+
+
+def test_csv_export_respects_org_and_window(client):
+    _fire_usage(client, CLIN1, "ocp-02")
+    _fire_usage(client, CLIN2, "ocp-02")
+
+    r = client.get(
+        "/admin/shortcut-usage-summary/export", headers=ADMIN1
+    )
+    # Org1 only sees their own ocp-02 usage.
+    lines = r.text.strip().splitlines()
+    assert lines[0].startswith("shortcut_ref,count")
+    assert lines[1].startswith("ocp-02,1,")
+    # Out-of-range window rejected cleanly.
+    r = client.get(
+        "/admin/shortcut-usage-summary/export?days=0", headers=ADMIN1
+    )
+    assert r.status_code == 422

@@ -206,6 +206,29 @@ two suites never cross-contaminate.
     disabled until a `completed` input exists.
   - Generate is enabled when a `completed` input is present.
 
+## Shift+Tab + oculoplastics + usage CSV (phase 32)
+
+- **+7** in `src/test/NoteWorkspace.test.tsx`:
+  - Shift+Tab walks backward through two placeholders; the caret
+    lands at the second `___` then the first on successive presses.
+  - Shift+Tab fallback: with no previous blank, the event's
+    `defaultPrevented` stays `false` and the textarea selection
+    does not mutate.
+  - Shift+Tab sitting ON a blank does NOT resolve back to the
+    current one — it hops to the one that starts strictly before
+    `selectionStart`.
+  - Oculoplastics group renders with verbatim phrasing spot-checks
+    (`ocp-01` ectropion, `ocp-04` ptosis + MRD1, `ocp-06`
+    lagophthalmos).
+  - `MRD1` search surfaces Oculoplastics and drops PVD (regression
+    check for the pre-existing substring-vs-token matcher bug).
+  - `ectropion` search surfaces `ocp-01` and drops glaucoma.
+  - Reviewer still cannot see the Oculoplastics group.
+- The phase-31 "Shift+Tab is left untouched by the handler" test
+  was reclassified — the behaviour changed on purpose in phase 32.
+- Vitest suite total: **114 tests** (NoteWorkspace 75, App 19,
+  AdminPanel 20).
+
 ## Tab-to-next-blank + glaucoma/cornea + usage summary (phase 31)
 
 - **+6** in `src/test/NoteWorkspace.test.tsx`:

@@ -1904,19 +1904,56 @@ describe("NoteWorkspace", () => {
     expect(textarea.selectionEnd).toBe(before.end);
   });
 
-  it("Tab with Shift modifier is left untouched by the next-blank handler", async () => {
+  it("Tab with Shift modifier now walks BACKWARD to the previous blank (phase 32)", async () => {
+    // Phase 32: Shift+Tab walks backward through placeholders.
+    // Previously (phase 31) this was a pass-through; the test now
+    // asserts the new behaviour.
     const user = userEvent.setup();
     renderWorkspace();
     const textarea = (await screen.findByTestId(
       "note-draft-textarea"
     )) as HTMLTextAreaElement;
     await user.clear(textarea);
-    await user.type(textarea, "___ here");
+    await user.type(textarea, "A ___ B ___ C");
+    // Caret sits at the very end — Shift+Tab should walk to the
+    // SECOND `___` (at "A ___ B ".length = 8).
+    textarea.focus();
+    const len = textarea.value.length;
+    textarea.setSelectionRange(len, len);
+
+    await user.keyboard("{Shift>}{Tab}{/Shift}");
+    await waitFor(() => {
+      const sel = textarea.value.slice(
+        textarea.selectionStart,
+        textarea.selectionEnd
+      );
+      expect(sel).toBe("___");
+      expect(textarea.selectionStart).toBe("A ___ B ".length);
+    });
+
+    // Shift+Tab again → walks to the FIRST `___` at "A ".length = 2.
+    await user.keyboard("{Shift>}{Tab}{/Shift}");
+    await waitFor(() => {
+      expect(textarea.selectionStart).toBe("A ".length);
+      const sel = textarea.value.slice(
+        textarea.selectionStart,
+        textarea.selectionEnd
+      );
+      expect(sel).toBe("___");
+    });
+  });
+
+  it("Shift+Tab fallback: no previous blank → default browser behaviour runs", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    const textarea = (await screen.findByTestId(
+      "note-draft-textarea"
+    )) as HTMLTextAreaElement;
+    await user.clear(textarea);
+    await user.type(textarea, "no blanks at all");
     textarea.focus();
     textarea.setSelectionRange(0, 0);
 
-    // Shift+Tab must NOT select the `___` — it should fall through
-    // to browser default (focus previous element).
     const ev = new KeyboardEvent("keydown", {
       key: "Tab",
       shiftKey: true,
@@ -1924,9 +1961,115 @@ describe("NoteWorkspace", () => {
       cancelable: true,
     });
     textarea.dispatchEvent(ev);
+    // Handler left the event alone so the browser default
+    // (focus previous element) runs; nothing in the textarea
+    // mutated.
     expect(ev.defaultPrevented).toBe(false);
-    // Selection is unchanged.
     expect(textarea.selectionStart).toBe(0);
     expect(textarea.selectionEnd).toBe(0);
+  });
+
+  it("Shift+Tab sitting ON a blank jumps to the PREVIOUS one, not the same one", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    const textarea = (await screen.findByTestId(
+      "note-draft-textarea"
+    )) as HTMLTextAreaElement;
+    await user.clear(textarea);
+    await user.type(textarea, "A ___ B ___ C");
+    // Put the selection ON the SECOND `___` (index 8..11).
+    const secondStart = "A ___ B ".length;
+    textarea.focus();
+    textarea.setSelectionRange(
+      secondStart,
+      secondStart + "___".length
+    );
+
+    await user.keyboard("{Shift>}{Tab}{/Shift}");
+    await waitFor(() => {
+      // Must have HOPPED to the FIRST `___`, not resolved back to
+      // the placeholder the caret was already sitting on.
+      expect(textarea.selectionStart).toBe("A ".length);
+      expect(textarea.selectionEnd).toBe("A ".length + "___".length);
+    });
+  });
+
+  // -------------------------------------------------------------------
+  // Phase 32 — Oculoplastics pack
+  // -------------------------------------------------------------------
+
+  it("renders the new Oculoplastics group with verbatim phrasing", async () => {
+    renderWorkspace();
+    await screen.findByTestId("clinical-shortcuts-panel");
+    expect(
+      screen.getByTestId(
+        "clinical-shortcuts-group-oculoplastics-lids-adnexa"
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("clinical-shortcut-ocp-01")
+    ).toHaveTextContent(/Involutional ectropion OD/i);
+    expect(
+      screen.getByTestId("clinical-shortcut-ocp-04")
+    ).toHaveTextContent(/Aponeurotic ptosis OD with MRD1/i);
+    expect(
+      screen.getByTestId("clinical-shortcut-ocp-06")
+    ).toHaveTextContent(/Lagophthalmos OD/i);
+  });
+
+  it("abbreviation-aware search: 'MRD1' surfaces the oculoplastics pack", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await screen.findByTestId("clinical-shortcuts-panel");
+    await user.type(
+      screen.getByTestId("clinical-shortcuts-search"),
+      "MRD1"
+    );
+    expect(
+      screen.getByTestId(
+        "clinical-shortcuts-group-oculoplastics-lids-adnexa"
+      )
+    ).toBeInTheDocument();
+    // Retina-only groups drop out.
+    expect(
+      screen.queryByTestId("clinical-shortcuts-group-pvd")
+    ).not.toBeInTheDocument();
+  });
+
+  it("abbreviation-aware search: 'ectropion' surfaces the relevant ocp shortcut", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await screen.findByTestId("clinical-shortcuts-panel");
+    await user.type(
+      screen.getByTestId("clinical-shortcuts-search"),
+      "ectropion"
+    );
+    expect(
+      screen.getByTestId("clinical-shortcut-ocp-01")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("clinical-shortcut-glc-01")
+    ).not.toBeInTheDocument();
+  });
+
+  it("reviewer still cannot see the Oculoplastics surface", async () => {
+    render(
+      <NoteWorkspace
+        identity="rev@chartnav.local"
+        me={REV}
+        encounterId={1}
+        patientDisplay="Test"
+        providerDisplay="Dr T"
+      />
+    );
+    await screen.findByTestId("workspace-tier-transcript");
+    expect(
+      screen.queryByTestId(
+        "clinical-shortcuts-group-oculoplastics-lids-adnexa"
+      )
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("clinical-shortcut-ocp-01")
+    ).not.toBeInTheDocument();
   });
 });
