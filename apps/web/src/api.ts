@@ -1285,3 +1285,57 @@ export function refreshBridgedEncounter(
     { email, method: "POST", body: "{}" }
   );
 }
+
+// ---------- Clinician quick-comment pad (phase 27) -----------------------
+
+export interface ClinicianQuickComment {
+  id: number;
+  organization_id: number;
+  user_id: number;
+  body: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/** List the caller's own saved custom quick comments. */
+export function listMyQuickComments(
+  email: string,
+  opts: { includeInactive?: boolean } = {}
+): Promise<ClinicianQuickComment[]> {
+  const qs = opts.includeInactive ? "?include_inactive=true" : "";
+  return request(`/me/quick-comments${qs}`, { email });
+}
+
+export function createMyQuickComment(
+  email: string,
+  body: string
+): Promise<ClinicianQuickComment> {
+  return request(`/me/quick-comments`, {
+    email,
+    method: "POST",
+    body: JSON.stringify({ body }),
+  });
+}
+
+export function updateMyQuickComment(
+  email: string,
+  id: number,
+  patch: { body?: string; is_active?: boolean }
+): Promise<ClinicianQuickComment> {
+  return request(`/me/quick-comments/${id}`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
+export function deleteMyQuickComment(
+  email: string,
+  id: number
+): Promise<ClinicianQuickComment> {
+  return request(`/me/quick-comments/${id}`, {
+    email,
+    method: "DELETE",
+  });
+}

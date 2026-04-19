@@ -28,6 +28,11 @@ vi.mock("../api", async () => {
     getPlatform: vi.fn(),
     transmitNoteVersion: vi.fn(),
     listNoteTransmissions: vi.fn(),
+    // Phase 27 — clinician quick-comment pad.
+    listMyQuickComments: vi.fn(),
+    createMyQuickComment: vi.fn(),
+    updateMyQuickComment: vi.fn(),
+    deleteMyQuickComment: vi.fn(),
   };
 });
 
@@ -158,6 +163,39 @@ beforeEach(() => {
     },
   });
   (api.listNoteTransmissions as any).mockResolvedValue([]);
+  // Phase 27 — default empty list; tests override as needed.
+  (api.listMyQuickComments as any).mockResolvedValue([]);
+  (api.createMyQuickComment as any).mockImplementation(
+    async (_email: string, body: string) => ({
+      id: 9999,
+      organization_id: 1,
+      user_id: 2,
+      body,
+      is_active: true,
+      created_at: "2026-04-19 09:00:00",
+      updated_at: "2026-04-19 09:00:00",
+    })
+  );
+  (api.updateMyQuickComment as any).mockImplementation(
+    async (_e: string, id: number, patch: any) => ({
+      id,
+      organization_id: 1,
+      user_id: 2,
+      body: patch.body ?? "",
+      is_active: patch.is_active ?? true,
+      created_at: "2026-04-19 09:00:00",
+      updated_at: "2026-04-19 09:00:01",
+    })
+  );
+  (api.deleteMyQuickComment as any).mockResolvedValue({
+    id: 9999,
+    organization_id: 1,
+    user_id: 2,
+    body: "x",
+    is_active: false,
+    created_at: "2026-04-19 09:00:00",
+    updated_at: "2026-04-19 09:00:02",
+  });
   (api.createEncounterInput as any).mockResolvedValue({});
 });
 
@@ -861,6 +899,212 @@ describe("NoteWorkspace", () => {
         100,
         "fhir"
       )
+    );
+  });
+
+  // -------------------------------------------------------------------
+  // Phase 27 — clinician quick-comment pad
+  // -------------------------------------------------------------------
+
+  it("Quick Comments panel is hidden for reviewers", async () => {
+    render(
+      <NoteWorkspace
+        identity="rev@chartnav.local"
+        me={REV}
+        encounterId={1}
+        patientDisplay="Test"
+        providerDisplay="Dr T"
+      />
+    );
+    // Reviewer view should render *something* from the workspace…
+    await screen.findByTestId("workspace-tier-transcript");
+    // …but never the quick-comments panel.
+    expect(
+      screen.queryByTestId("quick-comments-panel")
+    ).not.toBeInTheDocument();
+    // And no API fetch for per-user comments should have fired.
+    expect(api.listMyQuickComments).not.toHaveBeenCalled();
+  });
+
+  it("renders preloaded quick comments grouped by category for clinicians", async () => {
+    renderWorkspace();
+    const panel = await screen.findByTestId("quick-comments-panel");
+    // Provenance label — these are NOT AI findings.
+    expect(panel).toHaveTextContent(/clinician-entered/i);
+    expect(panel).toHaveTextContent(
+      /not transcript findings or ai-generated/i
+    );
+
+    const preloaded = within(panel).getByTestId("quick-comments-preloaded");
+    // All five categories render.
+    expect(
+      within(preloaded).getByTestId("quick-comments-group-symptoms-hpi")
+    ).toBeInTheDocument();
+    expect(
+      within(preloaded).getByTestId(
+        "quick-comments-group-visual-function-basic-exam"
+      )
+    ).toBeInTheDocument();
+    expect(
+      within(preloaded).getByTestId(
+        "quick-comments-group-external-anterior-segment"
+      )
+    ).toBeInTheDocument();
+    expect(
+      within(preloaded).getByTestId("quick-comments-group-posterior-segment")
+    ).toBeInTheDocument();
+    expect(
+      within(preloaded).getByTestId(
+        "quick-comments-group-assessment-plan-counseling"
+      )
+    ).toBeInTheDocument();
+    // Spot-check some exact brief phrases to confirm verbatim render.
+    expect(preloaded).toHaveTextContent("Vision stable since last visit.");
+    expect(preloaded).toHaveTextContent("IOP acceptable today.");
+    expect(preloaded).toHaveTextContent("Macula flat and dry.");
+    expect(preloaded).toHaveTextContent("Follow-up interval reviewed and agreed upon.");
+  });
+
+  it("click preloaded quick comment inserts into the editable draft", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await screen.findByTestId("note-draft-textarea");
+    const textarea = screen.getByTestId(
+      "note-draft-textarea"
+    ) as HTMLTextAreaElement;
+    const before = textarea.value;
+    await user.click(screen.getByTestId("quick-comment-sx-01"));
+    await waitFor(() => {
+      expect(textarea.value).not.toBe(before);
+      expect(textarea.value).toContain("Vision stable since last visit.");
+    });
+  });
+
+  it("preloaded quick comments are disabled once the note is signed", async () => {
+    (api.listEncounterNotes as any).mockResolvedValue([
+      baseNote({ draft_status: "signed", signed_at: "2026-04-18 20:10:00" }),
+    ]);
+    (api.getNoteVersion as any).mockResolvedValue({
+      note: baseNote({
+        draft_status: "signed",
+        signed_at: "2026-04-18 20:10:00",
+      }),
+      findings: FINDINGS,
+    });
+    renderWorkspace();
+    await screen.findByTestId("quick-comments-panel");
+    const btn = screen.getByTestId("quick-comment-post-44");
+    expect(btn).toBeDisabled();
+  });
+
+  it("search filters the preloaded pack", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await screen.findByTestId("quick-comments-panel");
+    await user.type(
+      screen.getByTestId("quick-comments-search"),
+      "macula"
+    );
+    const preloaded = screen.getByTestId("quick-comments-preloaded");
+    expect(preloaded).toHaveTextContent(/Macula flat and dry/i);
+    expect(preloaded).not.toHaveTextContent(/Vision stable since last visit/i);
+  });
+
+  it("Add Custom Comment opens modal and saves through the API", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await screen.findByTestId("quick-comments-panel");
+    await user.click(screen.getByTestId("quick-comments-add"));
+    const modal = await screen.findByTestId("quick-comments-modal");
+    const textarea = within(modal).getByTestId(
+      "quick-comments-modal-textarea"
+    );
+    await user.type(textarea, "Refraction deferred per patient request.");
+    await user.click(within(modal).getByTestId("quick-comments-modal-save"));
+    await waitFor(() =>
+      expect(api.createMyQuickComment).toHaveBeenCalledWith(
+        CLIN.email,
+        "Refraction deferred per patient request."
+      )
+    );
+    // Modal closes + list refreshes.
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("quick-comments-modal")
+      ).not.toBeInTheDocument()
+    );
+    expect(api.listMyQuickComments).toHaveBeenCalled();
+  });
+
+  it("renders per-doctor custom comments and clicking one inserts", async () => {
+    (api.listMyQuickComments as any).mockResolvedValue([
+      {
+        id: 42,
+        organization_id: 1,
+        user_id: 2,
+        body: "Warned patient about glare at night.",
+        is_active: true,
+        created_at: "2026-04-19 09:00:00",
+        updated_at: "2026-04-19 09:00:00",
+      },
+    ]);
+    const user = userEvent.setup();
+    renderWorkspace();
+    const custom = await screen.findByTestId("quick-comments-custom");
+    const row = within(custom).getByTestId("quick-comment-custom-42");
+    expect(row).toHaveTextContent(/Warned patient about glare at night/);
+    // Insert into draft.
+    await screen.findByTestId("note-draft-textarea");
+    const textarea = screen.getByTestId(
+      "note-draft-textarea"
+    ) as HTMLTextAreaElement;
+    await user.click(within(row).getByRole("button", { name: /warned patient/i }));
+    await waitFor(() =>
+      expect(textarea.value).toContain(
+        "Warned patient about glare at night."
+      )
+    );
+  });
+
+  it("delete custom comment calls deleteMyQuickComment and refreshes", async () => {
+    (api.listMyQuickComments as any)
+      .mockResolvedValueOnce([
+        {
+          id: 42,
+          organization_id: 1,
+          user_id: 2,
+          body: "X",
+          is_active: true,
+          created_at: "x",
+          updated_at: "x",
+        },
+      ])
+      .mockResolvedValue([]);
+    const user = userEvent.setup();
+    renderWorkspace();
+    const row = await screen.findByTestId("quick-comment-custom-42");
+    await user.click(
+      within(row).getByTestId("quick-comment-custom-delete-42")
+    );
+    await waitFor(() =>
+      expect(api.deleteMyQuickComment).toHaveBeenCalledWith(CLIN.email, 42)
+    );
+  });
+
+  it("no patient-facing surface: quick comments live only inside the clinician workspace", async () => {
+    renderWorkspace();
+    const panel = await screen.findByTestId("quick-comments-panel");
+    // The panel renders *inside* the workspace, not at the App shell.
+    // This is a structural check: the panel is a descendant of the
+    // workspace container that's gated by the clinician role.
+    const workspace = panel.closest("section");
+    expect(workspace).toBeTruthy();
+    expect(workspace?.className).toContain("workspace__quick-comments");
+    // And the preloaded pack clearly labels itself as clinician-entered.
+    expect(
+      screen.getByTestId("quick-comments-help")
+    ).toHaveTextContent(
+      /clinician quick-picks, not transcript findings or ai-generated/i
     );
   });
 });

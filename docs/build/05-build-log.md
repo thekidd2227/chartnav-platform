@@ -4,6 +4,89 @@ Reverse-chronological.
 
 ---
 
+## 2026-04-19 — Phase 27: clinician quick-comment pad (doctor-only)
+
+Doctor-only clipboard surface. 50 preloaded ophthalmology picks
+grouped into five categories (shipped with the frontend bundle),
+plus per-user custom comments persisted on the backend. Click to
+insert into the draft — never auto-populates a signed note, never
+surfaces on any patient-facing path, labeled as clinician-entered
+so it never reads as AI output.
+
+### Changes
+- **Migration `e1f2a3041503`** — new `clinician_quick_comments`
+  table. Per-user, org-scoped. Soft delete via `is_active`. Index
+  on `(organization_id, user_id, is_active)`. Deliberately not
+  linked to any `encounter_id` / `note_version_id` — these are
+  clipboard content, not encounter data.
+- **Routes** — `GET/POST /me/quick-comments`,
+  `PATCH/DELETE /me/quick-comments/{id}`. Admin/clinician only
+  (reviewers 403). Cross-user + cross-org masks to 404. Emits
+  `clinician_quick_comment_created/updated/deleted` audit events.
+- **Frontend pack** — `apps/web/src/quickComments.ts` ships the
+  50 preloaded picks with stable string ids (e.g. `sx-01`,
+  `post-44`) and five categories.
+- **API helpers** — `api.ts` gains `ClinicianQuickComment` type +
+  `listMyQuickComments`, `createMyQuickComment`,
+  `updateMyQuickComment`, `deleteMyQuickComment`.
+- **UI** — `NoteWorkspace.tsx` renders a new `Quick Comments`
+  section gated on `canEdit` (admin + clinician). Header carries a
+  `clinician-entered` trust pill + help caption explicitly calling
+  out "not transcript findings or AI-generated content". Search
+  filters across preloaded + custom. `Add Custom Comment` opens a
+  lightweight modal. Custom list renders with Edit/Delete per row.
+- **Insertion** — click appends `\n\n{body}\n` to the draft
+  buffer (`editBody`) that feeds the existing PATCH-save path.
+  Disabled when the note is signed/exported; button is not shown
+  and a guard toast fires if somehow invoked.
+- **Styles** — styles.css grows a compact quick-comment layout and
+  a minimal modal primitive reusing existing tokens.
+
+### Tests
+- Backend +12 (`tests/test_quick_comments.py`): role gate,
+  clinician create, empty body rejection, list scoping (own-only,
+  same org different user → own-only; different user cross-user
+  PATCH/DELETE → 404), cross-org → 404, PATCH body, soft-delete +
+  include_inactive, idempotent delete, audit events for
+  create/update/delete, surface isolation (quick comments do not
+  appear on `/encounters/{id}` or its events).
+  Full backend suite: **263 passed** (251 + 12).
+- Frontend +9 (`NoteWorkspace.test.tsx`): reviewer hides panel,
+  preloaded renders in all five categories with verbatim text,
+  click inserts into editable draft, signed note disables
+  preloaded buttons, search filters preloaded, Add Custom opens
+  modal + Save dispatches `createMyQuickComment`, custom rows
+  render + click inserts, delete dispatches
+  `deleteMyQuickComment`, structural clinician-only surface
+  assertion.
+  Full vitest suite: **73 passed** (19 + 20 + 34). Typecheck clean.
+  Vite build 228 kB JS / 20.65 kB CSS.
+
+### Docs
+- New `docs/build/38-clinician-quick-comments.md`.
+- Updated `docs/build/16-frontend-test-strategy.md`.
+
+### Files touched
+- `apps/api/alembic/versions/e1f2a3041503_clinician_quick_comments.py`
+- `apps/api/app/api/routes.py`
+- `apps/api/tests/test_quick_comments.py`
+- `apps/web/src/quickComments.ts`
+- `apps/web/src/api.ts`
+- `apps/web/src/NoteWorkspace.tsx`
+- `apps/web/src/styles.css`
+- `apps/web/src/test/NoteWorkspace.test.tsx`
+- `docs/build/05-build-log.md`,
+  `16-frontend-test-strategy.md`,
+  `38-clinician-quick-comments.md` (new)
+
+### Files intentionally avoided
+- Public marketing site.
+- `note_versions` / `encounter_inputs` / `extracted_findings` —
+  quick comments are a separate data class.
+- No auto-insertion into signed notes. No org-shared library.
+
+---
+
 ## 2026-04-19 — Phase 26: FHIR transport / write-path groundwork
 
 Builds the honest write-path on top of phase 25's packaging. No vendor

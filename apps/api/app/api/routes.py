@@ -2676,3 +2676,230 @@ def refresh_bridged_encounter(
         ),
     )
     return result
+
+
+# ===========================================================================
+# Clinician quick-comment pad (phase 27)
+# ===========================================================================
+#
+# Per-user, org-scoped bag of short reusable comment snippets the
+# clinician can click into a draft. NOT linked to any encounter or
+# note version — these are a doctor's personal clipboard. The 50
+# preloaded ophthalmology picks are UI content shipped with the
+# frontend; this table only stores what the doctor explicitly wrote.
+#
+# Visibility: each user sees only their own comments. There is no
+# "shared organization library" surface today (keep scope narrow).
+# A cross-user lookup of someone else's comment — even in the same
+# org — returns 404, same masking contract as other note-scoped rows.
+
+
+QC_COLUMNS = (
+    "id, organization_id, user_id, body, is_active, "
+    "created_at, updated_at"
+)
+QC_MAX_BODY_CHARS = 2000
+
+
+class QuickCommentBody(BaseModel):
+    body: str = Field(..., min_length=1, max_length=QC_MAX_BODY_CHARS)
+
+
+class QuickCommentPatchBody(BaseModel):
+    body: Optional[str] = Field(None, min_length=1, max_length=QC_MAX_BODY_CHARS)
+    is_active: Optional[bool] = None
+
+
+def _require_quick_comment_role(caller: Caller) -> None:
+    # Reviewers cannot author clinician comments — keep the seam
+    # consistent with the sign/patch rules.
+    if caller.role not in {"admin", "clinician"}:
+        raise _err(
+            "role_cannot_edit_quick_comments",
+            "only admin or clinician may author quick comments",
+            403,
+        )
+
+
+def _load_quick_comment_for_caller(
+    comment_id: int, caller: Caller
+) -> dict[str, Any]:
+    row = fetch_one(
+        f"SELECT {QC_COLUMNS} FROM clinician_quick_comments WHERE id = :id",
+        {"id": comment_id},
+    )
+    if row is None:
+        raise _err("quick_comment_not_found", "no such quick comment", 404)
+    row = dict(row)
+    # Mask cross-user + cross-org behind a 404 — mirrors the
+    # note-not-found pattern so existence of another user's comment
+    # is never leaked via status code.
+    if (
+        row["organization_id"] != caller.organization_id
+        or row["user_id"] != caller.user_id
+    ):
+        raise _err("quick_comment_not_found", "no such quick comment", 404)
+    return row
+
+
+@router.get("/me/quick-comments")
+def list_my_quick_comments(
+    include_inactive: bool = Query(False, description="Include soft-deleted"),
+    caller: Caller = Depends(require_caller),
+) -> list[dict]:
+    _require_quick_comment_role(caller)
+    sql = (
+        f"SELECT {QC_COLUMNS} FROM clinician_quick_comments "
+        "WHERE organization_id = :org AND user_id = :uid"
+    )
+    params: dict[str, Any] = {
+        "org": caller.organization_id,
+        "uid": caller.user_id,
+    }
+    if not include_inactive:
+        sql += " AND is_active = :active"
+        params["active"] = True
+    sql += " ORDER BY updated_at DESC, id DESC"
+    rows = fetch_all(sql, params)
+    return [dict(r) for r in rows]
+
+
+@router.post("/me/quick-comments", status_code=status.HTTP_201_CREATED)
+def create_my_quick_comment(
+    payload: QuickCommentBody,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    _require_quick_comment_role(caller)
+    body = payload.body.strip()
+    if not body:
+        raise _err(
+            "quick_comment_body_required",
+            "body is required and must be non-empty",
+            400,
+        )
+
+    with transaction() as conn:
+        new_id = conn.execute(
+            text(
+                "INSERT INTO clinician_quick_comments "
+                "(organization_id, user_id, body, is_active) "
+                "VALUES (:org, :uid, :body, :active) RETURNING id"
+            ),
+            {
+                "org": caller.organization_id,
+                "uid": caller.user_id,
+                "body": body,
+                "active": True,
+            },
+        ).mappings().first()["id"]
+
+    from app import audit as _audit
+    _audit.record(
+        event_type="clinician_quick_comment_created",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path="/me/quick-comments",
+        method="POST",
+        detail=f"quick_comment_id={new_id} chars={len(body)}",
+    )
+
+    return _load_quick_comment_for_caller(int(new_id), caller)
+
+
+@router.patch("/me/quick-comments/{comment_id}")
+def update_my_quick_comment(
+    comment_id: int,
+    payload: QuickCommentPatchBody,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    _require_quick_comment_role(caller)
+    existing = _load_quick_comment_for_caller(comment_id, caller)
+
+    set_parts: list[str] = ["updated_at = CURRENT_TIMESTAMP"]
+    params: dict[str, Any] = {"id": comment_id}
+    changed: list[str] = []
+
+    if payload.body is not None:
+        body = payload.body.strip()
+        if not body:
+            raise _err(
+                "quick_comment_body_required",
+                "body must be non-empty",
+                400,
+            )
+        set_parts.append("body = :body")
+        params["body"] = body
+        changed.append("body")
+    if payload.is_active is not None:
+        set_parts.append("is_active = :active")
+        params["active"] = payload.is_active
+        changed.append("is_active")
+
+    if not changed:
+        # Noop — return the unchanged row so the client can refresh
+        # without thinking about 304 semantics.
+        return existing
+
+    with transaction() as conn:
+        conn.execute(
+            text(
+                "UPDATE clinician_quick_comments SET "
+                f"{', '.join(set_parts)} "
+                "WHERE id = :id"
+            ),
+            params,
+        )
+
+    from app import audit as _audit
+    _audit.record(
+        event_type="clinician_quick_comment_updated",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path=f"/me/quick-comments/{comment_id}",
+        method="PATCH",
+        detail=f"quick_comment_id={comment_id} changed={','.join(changed)}",
+    )
+
+    return _load_quick_comment_for_caller(comment_id, caller)
+
+
+@router.delete("/me/quick-comments/{comment_id}")
+def delete_my_quick_comment(
+    comment_id: int,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    # Soft delete via is_active=false. Mirrors the pattern used for
+    # locations + users so audit/history queries still resolve refs.
+    _require_quick_comment_role(caller)
+    existing = _load_quick_comment_for_caller(comment_id, caller)
+    if not existing["is_active"]:
+        # Already deleted; idempotent.
+        return existing
+
+    with transaction() as conn:
+        conn.execute(
+            text(
+                "UPDATE clinician_quick_comments SET "
+                "is_active = :active, updated_at = CURRENT_TIMESTAMP "
+                "WHERE id = :id"
+            ),
+            {"id": comment_id, "active": False},
+        )
+
+    from app import audit as _audit
+    _audit.record(
+        event_type="clinician_quick_comment_deleted",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path=f"/me/quick-comments/{comment_id}",
+        method="DELETE",
+        detail=f"quick_comment_id={comment_id} soft=true",
+    )
+
+    return _load_quick_comment_for_caller(comment_id, caller)

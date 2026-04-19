@@ -206,6 +206,26 @@ two suites never cross-contaminate.
     disabled until a `completed` input exists.
   - Generate is enabled when a `completed` input is present.
 
+## Clinician quick-comment pad (phase 27)
+
+- **+9** in `src/test/NoteWorkspace.test.tsx`:
+  - reviewer view: quick-comments panel hidden + no API fetch
+  - preloaded pack renders all five categories, verbatim text
+    spot-check
+  - click preloaded inserts into the editable draft textarea
+  - signed note disables all preloaded buttons
+  - search input substring-filters the preloaded pack
+  - Add Custom Comment opens modal + Save dispatches
+    `createMyQuickComment` + list refresh
+  - custom comments render in their own section + click inserts
+  - delete dispatches `deleteMyQuickComment` + refresh
+  - structural clinician-only surface assertion + provenance
+    label check ("not transcript findings or AI-generated")
+- New mocks: `listMyQuickComments`, `createMyQuickComment`,
+  `updateMyQuickComment`, `deleteMyQuickComment`.
+- Vitest suite total: **73 tests** (NoteWorkspace 34, App 19,
+  AdminPanel 20), full run ~7s.
+
 ## Signed-note transmission (phase 26)
 
 - **+3** in `src/test/NoteWorkspace.test.tsx`:

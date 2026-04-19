@@ -18,9 +18,10 @@
  * refuses edits once the note is signed.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ApiError,
+  ClinicianQuickComment,
   EncounterInput,
   ExtractedFindings,
   Me,
@@ -29,12 +30,16 @@ import {
   ArtifactFormat,
   NoteTransmission,
   createEncounterInput,
+  createMyQuickComment,
+  deleteMyQuickComment,
   downloadNoteArtifact,
   exportNoteVersion,
   generateNoteVersion,
   getPlatform,
+  listMyQuickComments,
   listNoteTransmissions,
   transmitNoteVersion,
+  updateMyQuickComment,
   getNoteVersion,
   listEncounterInputs,
   listEncounterNotes,
@@ -44,6 +49,11 @@ import {
   signNoteVersion,
   submitNoteForReview,
 } from "./api";
+import {
+  PRELOADED_QUICK_COMMENTS,
+  QUICK_COMMENT_CATEGORIES,
+  type QuickCommentCategory,
+} from "./quickComments";
 
 // ---------------------------------------------------------------------
 // Types
@@ -89,6 +99,17 @@ export function NoteWorkspace({
   // doesn't change at runtime.
   const [transmitSupported, setTransmitSupported] = useState(false);
   const [transmissions, setTransmissions] = useState<NoteTransmission[]>([]);
+
+  // Phase 27 — doctor-only quick-comment pad. Preloaded pack is static
+  // UI content (ships with the bundle); custom comments live on the
+  // backend under `/me/quick-comments`. All state is per-user.
+  const [customComments, setCustomComments] = useState<
+    ClinicianQuickComment[]
+  >([]);
+  const [qcSearch, setQcSearch] = useState("");
+  const [qcModalOpen, setQcModalOpen] = useState(false);
+  const [qcDraft, setQcDraft] = useState("");
+  const [qcEditingId, setQcEditingId] = useState<number | null>(null);
 
   const canSign = me.role === "admin" || me.role === "clinician";
   const canEdit = canSign; // same set today
@@ -187,6 +208,120 @@ export function NoteWorkspace({
   useEffect(() => {
     loadTransmissions();
   }, [loadTransmissions]);
+
+  // -------- Quick-comment pad (phase 27) --------
+  // Only clinicians + admins can author quick comments, so only they
+  // see the panel + list. Reviewers never see it — they cannot edit
+  // the note anyway, and the backend would 403 their reads.
+  const canUseQuickComments = canEdit;
+
+  const loadCustomComments = useCallback(async () => {
+    if (!canUseQuickComments) {
+      setCustomComments([]);
+      return;
+    }
+    try {
+      setCustomComments(await listMyQuickComments(identity));
+    } catch {
+      // Silent: the panel just renders empty. A network error here
+      // shouldn't block the main workspace.
+      setCustomComments([]);
+    }
+  }, [identity, canUseQuickComments]);
+
+  useEffect(() => {
+    loadCustomComments();
+  }, [loadCustomComments]);
+
+  const filteredPreloaded = useMemo(() => {
+    const q = qcSearch.trim().toLowerCase();
+    if (!q) return PRELOADED_QUICK_COMMENTS;
+    return PRELOADED_QUICK_COMMENTS.filter((c) =>
+      c.body.toLowerCase().includes(q)
+    );
+  }, [qcSearch]);
+
+  const filteredCustom = useMemo(() => {
+    const q = qcSearch.trim().toLowerCase();
+    if (!q) return customComments;
+    return customComments.filter((c) => c.body.toLowerCase().includes(q));
+  }, [qcSearch, customComments]);
+
+  /** Append a quick-comment body into the draft textarea. Only fires
+   *  when the note is editable — signed/exported notes silently no-op
+   *  so a stray click never mutates an attested record. */
+  const insertQuickComment = useCallback(
+    (body: string) => {
+      if (!canEdit || noteSigned || !activeNote) {
+        showFlash(
+          "error",
+          "Quick comments can only be inserted into an editable draft."
+        );
+        return;
+      }
+      setEditBody((current) => {
+        const base = current ?? "";
+        const sep = base.endsWith("\n\n") ? "" : base.endsWith("\n") ? "\n" : "\n\n";
+        return `${base}${sep}${body}\n`;
+      });
+      showFlash("ok", "Inserted quick comment into draft.");
+    },
+    [canEdit, noteSigned, activeNote, showFlash]
+  );
+
+  const openQcModal = (comment?: ClinicianQuickComment) => {
+    if (comment) {
+      setQcEditingId(comment.id);
+      setQcDraft(comment.body);
+    } else {
+      setQcEditingId(null);
+      setQcDraft("");
+    }
+    setQcModalOpen(true);
+  };
+
+  const closeQcModal = () => {
+    setQcModalOpen(false);
+    setQcEditingId(null);
+    setQcDraft("");
+  };
+
+  const saveQcDraft = async () => {
+    const body = qcDraft.trim();
+    if (!body) {
+      showFlash("error", "Comment body cannot be empty.");
+      return;
+    }
+    setLoading(true);
+    try {
+      if (qcEditingId !== null) {
+        await updateMyQuickComment(identity, qcEditingId, { body });
+        showFlash("ok", "Custom comment updated.");
+      } else {
+        await createMyQuickComment(identity, body);
+        showFlash("ok", "Custom comment saved.");
+      }
+      closeQcModal();
+      await loadCustomComments();
+    } catch (err) {
+      showFlash("error", friendly(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteCustomComment = async (id: number) => {
+    setLoading(true);
+    try {
+      await deleteMyQuickComment(identity, id);
+      showFlash("ok", "Custom comment deleted.");
+      await loadCustomComments();
+    } catch (err) {
+      showFlash("error", friendly(err));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // ---- actions ----------------------------------------------------
 
@@ -867,6 +1002,206 @@ export function NoteWorkspace({
           </div>
         )}
       </section>
+
+      {/* Phase 27 — Quick-comment pad. Clinician-only surface.
+          Rendered as its own section under the workspace so it never
+          overlaps any patient-facing area (there isn't one in this
+          app today, but the isolation is explicit).
+
+          The panel labels itself as *clinician-entered* content to
+          keep provenance obvious — these are not AI findings, they
+          are doctor quick-picks. */}
+      {canUseQuickComments && (
+        <section
+          className="workspace workspace__quick-comments"
+          data-testid="quick-comments-panel"
+          aria-label="Clinician quick comments"
+        >
+          <header className="workspace__hdr">
+            <h3>Quick Comments</h3>
+            <span
+              className="workspace__trust-pill workspace__trust-pill--clinician"
+              title="Clinician-entered, not AI-generated"
+            >
+              clinician-entered
+            </span>
+          </header>
+          <p className="subtle-note" data-testid="quick-comments-help">
+            Click a phrase to insert it into the draft. These are
+            clinician quick-picks, not transcript findings or
+            AI-generated content.
+          </p>
+
+          <div className="workspace__qc-toolbar">
+            <input
+              type="search"
+              placeholder="Search quick comments…"
+              value={qcSearch}
+              onChange={(e) => setQcSearch(e.target.value)}
+              data-testid="quick-comments-search"
+              aria-label="Search quick comments"
+            />
+            <button
+              className="btn btn--primary"
+              onClick={() => openQcModal()}
+              data-testid="quick-comments-add"
+              disabled={loading}
+            >
+              Add Custom Comment
+            </button>
+          </div>
+
+          {/* Preloaded pack, grouped by category. */}
+          <div
+            className="workspace__qc-preloaded"
+            data-testid="quick-comments-preloaded"
+          >
+            {QUICK_COMMENT_CATEGORIES.map((cat) => {
+              const items = filteredPreloaded.filter((c) => c.category === cat);
+              if (items.length === 0) return null;
+              return (
+                <div
+                  key={cat}
+                  className="workspace__qc-group"
+                  data-testid={`quick-comments-group-${cat
+                    .toLowerCase()
+                    .replace(/[^a-z0-9]+/g, "-")}`}
+                >
+                  <div className="workspace__qc-group-title">{cat}</div>
+                  <ul className="workspace__qc-list">
+                    {items.map((c) => (
+                      <li key={c.id}>
+                        <button
+                          className="btn btn--muted btn--qc"
+                          onClick={() => insertQuickComment(c.body)}
+                          data-testid={`quick-comment-${c.id}`}
+                          disabled={!canEdit || noteSigned || !activeNote}
+                          title={
+                            !activeNote
+                              ? "Generate a draft first"
+                              : noteSigned
+                                ? "Note is signed — cannot insert"
+                                : "Click to insert into draft"
+                          }
+                        >
+                          {c.body}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+            {filteredPreloaded.length === 0 && (
+              <p className="empty" data-testid="quick-comments-preloaded-empty">
+                No preloaded comments match your search.
+              </p>
+            )}
+          </div>
+
+          {/* Per-doctor custom comments. Always a separate section so
+              nobody confuses "my saved clinician comments" with the
+              shared ophthalmology pack. */}
+          <div
+            className="workspace__qc-custom"
+            data-testid="quick-comments-custom"
+          >
+            <div className="workspace__qc-group-title">My Custom Comments</div>
+            {filteredCustom.length === 0 ? (
+              <p className="empty" data-testid="quick-comments-custom-empty">
+                You haven&apos;t saved any custom comments yet. Use
+                <strong> Add Custom Comment</strong> above.
+              </p>
+            ) : (
+              <ul className="workspace__qc-list">
+                {filteredCustom.map((c) => (
+                  <li
+                    key={c.id}
+                    className="workspace__qc-custom-row"
+                    data-testid={`quick-comment-custom-${c.id}`}
+                  >
+                    <button
+                      className="btn btn--muted btn--qc"
+                      onClick={() => insertQuickComment(c.body)}
+                      disabled={!canEdit || noteSigned || !activeNote}
+                      title="Click to insert your custom comment"
+                    >
+                      {c.body}
+                    </button>
+                    <span className="workspace__qc-custom-actions">
+                      <button
+                        className="btn btn--ghost"
+                        onClick={() => openQcModal(c)}
+                        data-testid={`quick-comment-custom-edit-${c.id}`}
+                        title="Edit"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className="btn btn--ghost"
+                        onClick={() => deleteCustomComment(c.id)}
+                        data-testid={`quick-comment-custom-delete-${c.id}`}
+                        title="Delete"
+                      >
+                        Delete
+                      </button>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* Phase 27 — custom-comment editor modal. */}
+      {canUseQuickComments && qcModalOpen && (
+        <div
+          className="modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label={
+            qcEditingId !== null ? "Edit custom comment" : "Add custom comment"
+          }
+          data-testid="quick-comments-modal"
+        >
+          <div className="modal">
+            <h3>
+              {qcEditingId !== null ? "Edit custom comment" : "New custom comment"}
+            </h3>
+            <p className="subtle-note">
+              Saved per clinician. Not shared with other users. Insert into
+              a draft by clicking it in the Quick Comments panel.
+            </p>
+            <textarea
+              value={qcDraft}
+              onChange={(e) => setQcDraft(e.target.value)}
+              rows={5}
+              data-testid="quick-comments-modal-textarea"
+              placeholder="e.g. Refraction deferred per patient request."
+              autoFocus
+            />
+            <div className="modal__actions">
+              <button
+                className="btn"
+                onClick={closeQcModal}
+                disabled={loading}
+                data-testid="quick-comments-modal-cancel"
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn--primary"
+                onClick={saveQcDraft}
+                disabled={loading || qcDraft.trim().length === 0}
+                data-testid="quick-comments-modal-save"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

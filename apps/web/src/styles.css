@@ -969,3 +969,118 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
   color: #92400E;
   border-color: #FCD34D;
 }
+
+/* ---- Phase 27 — clinician quick-comment pad ---- */
+.workspace__quick-comments {
+  margin-top: 20px;
+}
+.workspace__trust-pill--clinician {
+  background: #ECFDF5;
+  color: #065F46;
+  border-color: #A7F3D0;
+}
+.workspace__qc-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 12px 0 16px;
+}
+.workspace__qc-toolbar input[type="search"] {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid var(--cn-border, #E2E8F0);
+  border-radius: var(--cn-radius-sm, 6px);
+  font: inherit;
+  background: var(--cn-surface, #fff);
+}
+.workspace__qc-preloaded,
+.workspace__qc-custom {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.workspace__qc-custom {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--cn-border, #E2E8F0);
+}
+.workspace__qc-group-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--cn-muted, #64748B);
+  margin-bottom: 4px;
+}
+.workspace__qc-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.btn--qc {
+  font-size: 13px;
+  padding: 6px 10px;
+  text-align: left;
+  white-space: normal;
+  max-width: 520px;
+  line-height: 1.35;
+}
+.btn--qc[disabled] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.workspace__qc-custom-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+.workspace__qc-custom-row .btn--qc {
+  flex: 1;
+}
+.workspace__qc-custom-actions {
+  display: inline-flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Lightweight modal styling — reuses the existing surface/border
+   tokens so it feels native to the rest of the workspace. */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.modal {
+  width: min(520px, 90vw);
+  background: var(--cn-surface, #fff);
+  border-radius: var(--cn-radius-md, 10px);
+  padding: 20px;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.25);
+}
+.modal h3 {
+  margin: 0 0 4px;
+}
+.modal textarea {
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: var(--cn-radius-sm, 6px);
+  border: 1px solid var(--cn-border, #E2E8F0);
+  font: inherit;
+  resize: vertical;
+}
+.modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
