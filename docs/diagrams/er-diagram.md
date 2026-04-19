@@ -65,6 +65,8 @@ erDiagram
     int location_id FK
     int patient_id FK "nullable — native linkage (phase 18)"
     int provider_id FK "nullable — native linkage (phase 18)"
+    string external_ref "nullable — vendor id for bridged encounters (phase 21)"
+    string external_source "nullable — adapter key (phase 21)"
     string patient_identifier "display; kept for back-compat"
     string patient_name "display; kept for back-compat"
     string provider_name "display; kept for back-compat"

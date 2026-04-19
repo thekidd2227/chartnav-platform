@@ -185,6 +185,16 @@ two suites never cross-contaminate.
   exercised indirectly; add direct unit tests when more code
   consumes them.
 
+## Encounter bridge tests (phase 21)
+
+- **+1** in `src/test/App.test.tsx` — bridge button on an external
+  encounter detail dispatches `bridgeEncounter` with the vendor ref
+  + adapter source + mirror fields; location-navigate is stubbed
+  so the test doesn't actually reload.
+- External-note assertion updated from "ChartNav-native" to
+  matching `/bridg/i` since the copy now explains the bridge path
+  instead of a blanket native-only limitation.
+
 ## Gaps not yet covered
 - Visual regression not in CI (documented; OS-specific baselines).
 - No keyboard-only / screen-reader manual QA pass beyond axe's

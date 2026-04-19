@@ -36,10 +36,10 @@
 <body>
 <header class="cover">
   <h1>ChartNav — Consolidated Build</h1>
-  <div class="sub">Phases 1–20: spine → state machine → auth → RBAC → CI → production seam → Postgres → frontend → E2E → JWT + ops → staging → governance → control plane → invitations → enterprise quality &amp; compliance → platform mode &amp; interoperability → brand &amp; domain alignment → native clinical layer + FHIR → transcript → note draft → provider signoff → adapter-driven encounters &amp; integrated write gating<br>
+  <div class="sub">Phases 1–21: spine → state machine → auth → RBAC → CI → production seam → Postgres → frontend → E2E → JWT + ops → staging → governance → control plane → invitations → enterprise quality &amp; compliance → platform mode &amp; interoperability → brand &amp; domain alignment → native clinical layer + FHIR → transcript → note draft → provider signoff → adapter-driven encounters → external encounter bridge<br>
   Repo: <code>thekidd2227/chartnav-platform</code></div>
 </header>
-<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth, org scoping, RBAC</a></li><li><a href="#sec-9">08 — Test strategy</a></li><li><a href="#sec-10">09 — CI & deploy hardening</a></li><li><a href="#sec-11">10 — Doc artifact pipeline</a></li><li><a href="#sec-12">11 — Production-auth seam</a></li><li><a href="#sec-13">12 — Runtime config</a></li><li><a href="#sec-14">13 — Deploy target</a></li><li><a href="#sec-15">14 — Postgres parity</a></li><li><a href="#sec-16">15 — Frontend integration</a></li><li><a href="#sec-17">16 — Frontend test strategy</a></li><li><a href="#sec-18">17 — E2E & release</a></li><li><a href="#sec-19">18 — Operational hardening</a></li><li><a href="#sec-20">19 — Staging deployment</a></li><li><a href="#sec-21">20 — Observability</a></li><li><a href="#sec-22">21 — Staging runbook</a></li><li><a href="#sec-23">22 — Admin governance</a></li><li><a href="#sec-24">23 — Operator control plane</a></li><li><a href="#sec-25">24 — Invitations & governance</a></li><li><a href="#sec-26">25 — Enterprise quality & compliance</a></li><li><a href="#sec-27">26 — Platform mode & interoperability</a></li><li><a href="#sec-28">27 — Adoption & implementation model</a></li><li><a href="#sec-29">28 — Brand & domain alignment</a></li><li><a href="#sec-30">29 — Native clinical layer & FHIR</a></li><li><a href="#sec-31">30 — Transcript → findings → note → signoff</a></li><li><a href="#sec-32">31 — Adapter-driven encounters & integrated write gating</a></li><li><a href="#sec-33">Diagram — System architecture</a></li><li><a href="#sec-34">Diagram — Encounter status machine</a></li><li><a href="#sec-35">Diagram — ER</a></li><li><a href="#sec-36">Diagram — API / data flow</a></li></ol></nav>
+<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth, org scoping, RBAC</a></li><li><a href="#sec-9">08 — Test strategy</a></li><li><a href="#sec-10">09 — CI & deploy hardening</a></li><li><a href="#sec-11">10 — Doc artifact pipeline</a></li><li><a href="#sec-12">11 — Production-auth seam</a></li><li><a href="#sec-13">12 — Runtime config</a></li><li><a href="#sec-14">13 — Deploy target</a></li><li><a href="#sec-15">14 — Postgres parity</a></li><li><a href="#sec-16">15 — Frontend integration</a></li><li><a href="#sec-17">16 — Frontend test strategy</a></li><li><a href="#sec-18">17 — E2E & release</a></li><li><a href="#sec-19">18 — Operational hardening</a></li><li><a href="#sec-20">19 — Staging deployment</a></li><li><a href="#sec-21">20 — Observability</a></li><li><a href="#sec-22">21 — Staging runbook</a></li><li><a href="#sec-23">22 — Admin governance</a></li><li><a href="#sec-24">23 — Operator control plane</a></li><li><a href="#sec-25">24 — Invitations & governance</a></li><li><a href="#sec-26">25 — Enterprise quality & compliance</a></li><li><a href="#sec-27">26 — Platform mode & interoperability</a></li><li><a href="#sec-28">27 — Adoption & implementation model</a></li><li><a href="#sec-29">28 — Brand & domain alignment</a></li><li><a href="#sec-30">29 — Native clinical layer & FHIR</a></li><li><a href="#sec-31">30 — Transcript → findings → note → signoff</a></li><li><a href="#sec-32">31 — Adapter-driven encounters & integrated write gating</a></li><li><a href="#sec-33">32 — External encounter → native workflow bridge</a></li><li><a href="#sec-34">Diagram — System architecture</a></li><li><a href="#sec-35">Diagram — Encounter status machine</a></li><li><a href="#sec-36">Diagram — ER</a></li><li><a href="#sec-37">Diagram — API / data flow</a></li></ol></nav>
 <section id="sec-1"><h2>Executive summary</h2>
 <p>This document consolidates <strong>all</strong> ChartNav backend phases delivered to</p>
 <p>date.</p>
@@ -62,13 +62,15 @@
 <p><strong>Phase 17 — Brand &amp; domain alignment.</strong> Two cuts. (1) <strong>Domain</strong>: <code>chartnav.ai</code> and <code>www.chartnav.ai</code> → <code>https://arcgsystems.com/chartnav/</code> via GoDaddy 301 forwarding (primary, executed in the GoDaddy UI per <code>arcg-live/docs/chartnav-ai-domain-runbook.md</code>) plus an in-repo host-based safety-net in <code>arcg-live/index.html</code> + <code>public/404.html</code> that redirects the visitor before React mounts. The <code>CNAME</code> stays <code>arcgsystems.com</code> — Pages&#x27; primary domain is preserved. (2) <strong>Brand-aligned product UI</strong>: <code>apps/web/src/styles.css</code> now consumes the ChartNav marketing site&#x27;s token set directly (<code>--cn-*</code>). Teal <code>#0B6E79</code> primary with hover/active/tint/soft scale, Inter typography (cv02/03/04/11 features), tightened shadow scale, AA-safe muted text (<code>#475569</code>), pill admin tabs, brand-teal focus rings. The app header renders <code>public/brand/chartnav-logo.svg</code> (the real wordmark with the pulse-cross mark, copied from <code>arcg-live/public/chartnav/brand/</code>), and the app shell gains a footer with a single subtle <strong>Powered by ARCG Systems</strong> attribution (11px uppercase, 0.12em letter-spacing, <code>data-testid=&quot;app-footer-arcg&quot;</code>, Vitest-asserted copy). Legacy token names stayed as aliases so zero component code needed to change. Visual baselines regenerated (<code>visual.spec.ts-snapshots/*-darwin.png</code>); axe-AA 5/5 still green. Suites: 131 pytest, <strong>31 Vitest</strong> (+1 footer), 17 Playwright workflow+a11y, 4 visual. No endpoints changed.</p>
 <p><strong>Phase 18 — Native clinical layer + FHIR adapter.</strong> ChartNav&#x27;s dual-mode architecture becomes real. (1) <strong>Native clinical ownership</strong> — Alembic migration <code>f6a7b8c9d0e1</code> adds <code>patients</code> (org-scoped, <code>patient_identifier</code> unique per org, <code>external_ref</code> for integration mirroring, DOB + sex-at-birth, <code>is_active</code>) and <code>providers</code> (org-scoped, <code>display_name</code>, 10-digit <code>npi</code> unique per org when non-null, <code>specialty</code>, <code>external_ref</code>, <code>is_active</code>). Two nullable FKs land on <code>encounters</code> (<code>patient_id</code>, <code>provider_id</code>); legacy text fields stay for display continuity. Seed populates real rows and backfills FKs on re-seed without duplicating. (2) <strong>New HTTP surface</strong> — <code>GET/POST /patients</code> (admin + clinician write) and <code>GET/POST /providers</code> (admin-only write) with pagination + search + <code>X-Total-Count</code> headers. Mode-gated: <code>integrated_readthrough</code> returns 409 <code>native_write_disabled_in_integrated_mode</code> on both POSTs so the UI renders a clear banner instead of silently succeeding. (3) <strong>First real external adapter</strong> — <code>FHIRAdapter</code> in <code>app/integrations/fhir.py</code> implements the <code>ClinicalSystemAdapter</code> protocol against generic FHIR R4. Handles <code>fetch_patient</code>, <code>search_patients</code>, <code>fetch_encounter</code> with normalization (MRN extraction, participant display, <code>Encounter.status</code> → ChartNav status mapping). Writes raise <code>AdapterNotSupported</code> honestly. Pluggable transport (fixture injection for tests; urllib by default — zero new runtime deps). Config: <code>CHARTNAV_FHIR_BASE_URL</code>, <code>CHARTNAV_FHIR_AUTH_TYPE</code>, <code>CHARTNAV_FHIR_BEARER_TOKEN</code> with import-time validation. Registered at <code>fhir</code> in the vendor registry. (4) <strong>Native adapter honesty</strong> — <code>NativeChartNavAdapter</code> now implements <code>fetch_patient</code> + <code>search_patients</code>; <code>supports_patient_read</code>/<code>supports_patient_write</code> flip to True; source-of-truth map updated. (5) <strong>Frontend</strong> — <code>api.ts</code> gains <code>Patient</code>/<code>Provider</code> types + CRUD functions; <code>AdminPanel</code> adds Patients + Providers tabs with mode-aware banners + form gating. Suites: <strong>155 pytest</strong> (+24), <strong>34 Vitest</strong> (+3), 17 Playwright + 4 visual (baselines refreshed).</p>
 <table><thead><tr><th><strong>Phase 19 — Transcript → findings → note draft → provider signoff.</strong> The ChartNav wedge becomes real: ingest encounter input, extract structured ophthalmology facts, generate a draft, walk the provider through review/edit/sign/export. Alembic migration <code>a7b8c9d0e1f2</code> adds three org-scoped tables: <code>encounter_inputs</code> (audio upload metadata, pasted text, manual entry, imported transcript — input_type + processing_status + transcript_text + confidence_summary + source_metadata JSON), <code>extracted_findings</code> (CC, HPI, VA OD/OS, IOP OD/OS, extraction_confidence top-level + structured_json for diagnoses/medications/imaging/plan/follow-up), and <code>note_versions</code> (monotonic version_number per encounter, status machine <code>draft → provider_review → revised → signed → exported</code>, <code>generated_by</code> {system</th><th>manual}, missing_data_flags JSON array, signed_at + signed_by_user_id, exported_at). The <strong>trust model is enforced at both the data layer and the UI</strong>: three separate tables → three visually distinct tiers in <code>apps/web/src/NoteWorkspace.tsx</code> (transcript → extracted facts → AI draft → provider signed). Nine new endpoints (<code>POST/GET /encounters/{id}/inputs</code>, <code>POST /encounters/{id}/notes/generate</code>, <code>GET /encounters/{id}/notes</code>, <code>GET/PATCH /note-versions/{id}</code>, <code>POST /note-versions/{id}/submit-for-review</code>, <code>.../sign</code>, <code>.../export</code>); provider edit auto-flips to <code>revised</code> + <code>generated_by=manual</code>; signed/exported notes are immutable (<code>note_immutable</code> 409); reviewers cannot sign (<code>role_cannot_sign</code> 403); audit events recorded on every meaningful action. A dedicated service seam at <code>app/services/note_generator.py</code> is the <strong>one place</strong> a real LLM plugs in — today&#x27;s body is a deterministic regex extractor + SOAP template that never fabricates values the transcript doesn&#x27;t contain, emitting explicit missing-data flags instead. Export is a separate state (download <code>.txt</code> + clipboard copy), honest about not writing back to vendor EHRs. Suites grow to <strong>174 pytest</strong> (+19), <strong>42 Vitest</strong> (+8), 17 Playwright workflow+a11y + 4 visual (baselines refreshed for the new workspace). Zero new runtime deps.</th></tr></thead><tbody>
-<tr><td><strong>Phase 20 — Adapter-driven encounters + integrated write gating (this phase).</strong> The <code>/encounters</code> and <code>/encounters/{id}</code> HTTP handlers now dispatch through <code>resolve_adapter()</code> in every mode. Standalone → native adapter (same SQL); integrated → stub / FHIR / vendor adapter. The <code>ClinicalSystemAdapter</code> protocol grew a <code>list_encounters(organization_id, location_id, status, provider_name, limit, offset) → EncounterListResult</code> method; <code>fetch_encounter</code> was widened to return the full ChartNav row shape. Every encounter row carries <code>_source</code> (<code>chartnav</code> / <code>fhir</code> / <code>stub</code> / vendor key) and <code>_external_ref</code> where applicable. The FHIR adapter implements <code>list_encounters</code> via <code>GET /Encounter?_count=…&amp;status=&lt;mapped&gt;</code> with full ChartNav→FHIR status translation (<code>planned ↔ scheduled</code>, <code>in-progress ↔ in_progress</code>, <code>finished ↔ completed</code>). Write gating is mode-aware: <code>POST /encounters</code> returns 409 <code>encounter_write_unsupported</code> in both integrated modes; <code>POST /encounters/{id}/status</code> returns 409 in read-through and <strong>adapter-dispatches</strong> in write-through (generic FHIR still raises <code>AdapterNotSupported</code> → 501 <code>adapter_write_not_supported</code>, which is a transport-honest distinction from the 409 &quot;mode blocks this entirely&quot;). ChartNav-native tables (<code>workflow_events</code>, <code>encounter_inputs</code>, <code>extracted_findings</code>, <code>note_versions</code>, <code>security_audit_events</code>) remain fully writable in every mode because they&#x27;re ChartNav&#x27;s own tracking. Frontend surfaces the SoT explicitly: encounter detail renders a <strong>source chip</strong> (teal for native, info-blue for external) and, when the encounter is external, a banner explaining the external EHR owns the row + suppressed transitions + suppressed <code>NoteWorkspace</code> with an honest subtle-note. <code>Encounter.id</code> widens to `number</td><td>string<code> so FHIR vendor ids round-trip cleanly through </code>getEncounter<code>/</code>updateEncounterStatus<code>/</code>createEncounterEvent<code>. Suites: <strong>185 pytest</strong> (+11 </code>test_integrated_encounters.py`), <strong>44 Vitest</strong> (+2 SoT UI), 17 Playwright + 4 visual (baselines refreshed). Zero new runtime deps; Alembic history unchanged.</td></tr>
+<tr><td><strong>Phase 20 — Adapter-driven encounters + integrated write gating.</strong> The <code>/encounters</code> and <code>/encounters/{id}</code> HTTP handlers now dispatch through <code>resolve_adapter()</code> in every mode. Standalone → native adapter (same SQL); integrated → stub / FHIR / vendor adapter. The <code>ClinicalSystemAdapter</code> protocol grew a <code>list_encounters(organization_id, location_id, status, provider_name, limit, offset) → EncounterListResult</code> method; <code>fetch_encounter</code> was widened to return the full ChartNav row shape. Every encounter row carries <code>_source</code> (<code>chartnav</code> / <code>fhir</code> / <code>stub</code> / vendor key) and <code>_external_ref</code> where applicable. The FHIR adapter implements <code>list_encounters</code> via <code>GET /Encounter?_count=…&amp;status=&lt;mapped&gt;</code> with full ChartNav→FHIR status translation (<code>planned ↔ scheduled</code>, <code>in-progress ↔ in_progress</code>, <code>finished ↔ completed</code>). Write gating is mode-aware: <code>POST /encounters</code> returns 409 <code>encounter_write_unsupported</code> in both integrated modes; <code>POST /encounters/{id}/status</code> returns 409 in read-through and <strong>adapter-dispatches</strong> in write-through (generic FHIR still raises <code>AdapterNotSupported</code> → 501 <code>adapter_write_not_supported</code>, which is a transport-honest distinction from the 409 &quot;mode blocks this entirely&quot;). ChartNav-native tables (<code>workflow_events</code>, <code>encounter_inputs</code>, <code>extracted_findings</code>, <code>note_versions</code>, <code>security_audit_events</code>) remain fully writable in every mode because they&#x27;re ChartNav&#x27;s own tracking. Frontend surfaces the SoT explicitly: encounter detail renders a <strong>source chip</strong> (teal for native, info-blue for external) and, when the encounter is external, a banner explaining the external EHR owns the row + suppressed transitions + suppressed <code>NoteWorkspace</code> with an honest subtle-note. <code>Encounter.id</code> widens to `number</td><td>string<code> so FHIR vendor ids round-trip cleanly through </code>getEncounter<code>/</code>updateEncounterStatus<code>/</code>createEncounterEvent<code>. Suites: <strong>185 pytest</strong> (+11 </code>test_integrated_encounters.py`), <strong>44 Vitest</strong> (+2 SoT UI), 17 Playwright + 4 visual (baselines refreshed). Zero new runtime deps; Alembic history unchanged.</td></tr>
+</tbody></table>
+<table><thead><tr><th><strong>Phase 21 — External encounter → native workflow bridge (this phase).</strong> The ChartNav wedge (transcript → findings → note draft → provider signoff) now runs on externally-sourced encounters. Alembic migration <code>b8c9d0e1f203</code> adds <code>encounters.external_ref</code> + <code>encounters.external_source</code> (nullable) plus a UNIQUE <code>(organization_id, external_ref, external_source)</code> — the DB-level guarantee that makes the bridge idempotent. New <code>apps/api/app/services/bridge.py::resolve_or_create_bridged_encounter(...)</code> is the single service seam: idempotent get-or-create, returns the native row with a `_bridged: true</th><th>false<code> tag so the frontend can differentiate first-create from subsequent resolves. New </code>POST /encounters/bridge<code> HTTP endpoint (admin + clinician; reviewer 403; standalone 409 </code>bridge_not_available_in_standalone_mode<code>) calls the service, emits a </code>encounter_bridged<code> audit event on first create only. Phase-20 contract preserved: bridging does NOT reopen encounter state writes — </code>POST /encounters/{id}/status<code> on a bridged row in integrated_readthrough still returns 409 </code>encounter_write_unsupported<code>. Frontend </code>ExternalEncounterBanner<code> component adds a <strong>Bridge to ChartNav</strong> button inside the SoT banner; clicking dispatches </code>bridgeEncounter(...)<code> and navigates to the native id, at which point the full </code>NoteWorkspace<code> appears because </code>_source<code> is now </code>chartnav<code>. Reviewer role sees the banner but no button, with a subtle-note explanation. The external-note copy was rewritten to describe the bridge path instead of a generic native-only limitation. Suites grow to <strong>196 pytest</strong> (+11 </code>test_encounter_bridge.py`), <strong>45 Vitest</strong> (+1), 17 Playwright + 4 visual (baselines refreshed). Zero new runtime deps.</th></tr></thead><tbody>
 </tbody></table>
 <p>Preserved untouched: <code>/health</code>, <code>/</code>, SQLite dev workflow, state machine + filtering surface, workflow_events model, existing endpoint contracts.</p>
 </section>
 <section id="sec-2"><h2>01 — Current state</h2>
 <h1>ChartNav — Current State</h1>
-<p><strong>As of:</strong> 2026-04-18 (phase: adapter-driven encounters + integrated write gating)</p>
+<p><strong>As of:</strong> 2026-04-18 (phase: external encounter → native workflow bridge)</p>
 <h2>Repo layout (relevant)</h2>
 <pre class="code lang-"><code>
 chartnav-platform/
@@ -90,8 +92,8 @@ chartnav-platform/
 │   │   │   ├── services/        # domain service seam (phase 19)
 │   │   │   │   └── note_generator.py  # regex fake today; LLM slot in, shape locked
 │   │   │   └── api/routes.py    # + /inputs + /notes/generate + /note-versions/* (phase 19)
-│   │   ├── alembic/versions/    # 8 migrations through a7b8c9d0e1f2
-│   │   ├── tests/               # 185 pytest (+11 adapter-driven encounters)
+│   │   ├── alembic/versions/    # 9 migrations through b8c9d0e1f203
+│   │   ├── tests/               # 196 pytest (+11 encounter bridge)
 │   │   └── Dockerfile · entrypoint.sh · .env.example
 │   └── web/
 │       ├── src/
@@ -123,17 +125,18 @@ chartnav-platform/
 <li><strong>Platform mode</strong> (phase 16): <code>CHARTNAV_PLATFORM_MODE</code> ∈ {<code>standalone</code>, <code>integrated_readthrough</code>, <code>integrated_writethrough</code>}. Adapter boundary (<code>ClinicalSystemAdapter</code>) separates ChartNav core from any external EHR/EMR. Ships <code>NativeChartNavAdapter</code> (standalone) + <code>StubClinicalSystemAdapter</code> (integrated placeholder) + <strong><code>FHIRAdapter</code></strong> (phase 18). Vendor adapters plug in via <code>register_vendor_adapter</code>. Config fails loudly on misconfig. <code>GET /platform</code> surfaces mode + adapter + source-of-truth to the UI.</li>
 <li><strong>Native clinical layer</strong> (phase 18): <code>patients</code> and <code>providers</code> tables are org-scoped, soft-active, and carry <code>external_ref</code> for integrated-mode mirroring. <code>encounters.patient_id</code> + <code>encounters.provider_id</code> are nullable FKs so the legacy text fields (<code>patient_identifier</code>, <code>provider_name</code>) continue to render. Standalone mode persists and queries via the native adapter; <code>integrated_readthrough</code> refuses native writes with a clear error code.</li>
 <li><strong>FHIR adapter</strong> (phase 18): real R4 read-through over a pluggable transport. Normalizes Patient + Encounter resources into ChartNav&#x27;s internal shape (status mapping, participant display, MRN extraction, birthDate/gender passthrough). Write paths raise <code>AdapterNotSupported</code> honestly. Config: <code>CHARTNAV_FHIR_BASE_URL</code>, <code>CHARTNAV_FHIR_AUTH_TYPE</code>, <code>CHARTNAV_FHIR_BEARER_TOKEN</code>.</li>
+<li><strong>External encounter → native workflow bridge</strong> (phase 21): <code>POST /encounters/bridge</code> get-or-creates a native <code>encounters</code> row keyed on <code>(organization_id, external_ref, external_source)</code> for externally-sourced encounters. Idempotent. Preserves the phase-20 contract — the external EHR still owns encounter state; the bridge only unlocks ChartNav-native workflow (transcript → findings → draft → sign → export). Refused in standalone mode. Frontend surfaces a <strong>Bridge to ChartNav</strong> action on external encounter detail; after bridging, the encounter flips to <code>_source=&quot;chartnav&quot;</code> and the full <code>NoteWorkspace</code> is available.</li>
 <li><strong>Adapter-driven encounters</strong> (phase 20): <code>GET /encounters</code> and <code>GET /encounters/{id}</code> dispatch through the resolved adapter. Standalone → native adapter (same SQL as before). Integrated → adapter-owned rows tagged <code>_source</code> (<code>chartnav</code> / <code>fhir</code> / <code>stub</code> / vendor). Write gating is mode-aware: <code>POST /encounters</code> returns 409 <code>encounter_write_unsupported</code> in both integrated modes; <code>POST /encounters/{id}/status</code> returns 409 in read-through and dispatches through the adapter in write-through (501 <code>adapter_write_not_supported</code> when the adapter raises <code>AdapterNotSupported</code>). Frontend surfaces a source-of-truth chip + SoT banner; status controls and the note workspace are suppressed on external encounters.</li>
 <li><strong>Transcript → note drafting → signoff</strong> (phase 19): three org-scoped tables (<code>encounter_inputs</code>, <code>extracted_findings</code>, <code>note_versions</code>), a note-generator service seam at <code>app/services/note_generator.py</code> (deterministic fake today; LLM plugs in at one function, output contract locked), provider review workspace in the frontend with three visually distinct trust tiers (transcript → findings → draft → signed), status state machine (<code>draft → provider_review → revised → signed → exported</code>), immutability after sign, audit events on every meaningful action, text download + clipboard export.</li>
 <li><strong>Brand alignment</strong> (phase 17): product UI uses the ChartNav marketing site&#x27;s exact token set (<code>--cn-*</code>). Inter typography, teal <code>#0B6E79</code> primary, real logo SVG in the header, subtle <code>Powered by ARCG Systems</code> footer. Axe-AA contrast preserved.</li>
 <li><strong>Domain</strong>: <code>chartnav.ai</code> → <code>https://arcgsystems.com/chartnav/</code> via GoDaddy 301 forwarding (external) + in-repo host-based safety-net in <code>arcg-live</code>. Runbook: <code>arcg-live/docs/chartnav-ai-domain-runbook.md</code>.</li>
-<li>Alembic head: <code>a7b8c9d0e1f2</code> (phase 19 — transcript ingestion + extracted findings + note versions).</li>
+<li>Alembic head: <code>b8c9d0e1f203</code> (phase 21 — encounters.external_ref + external_source + unique bridge constraint).</li>
 </ul>
 <h2>Testing layers</h2>
 <table><thead><tr><th>Layer</th><th>Tool</th><th>Count</th><th>Notes</th></tr></thead><tbody>
-<tr><td>pytest</td><td>pytest</td><td>185</td><td>+11 adapter-driven encounters + integrated write gating</td></tr>
+<tr><td>pytest</td><td>pytest</td><td>196</td><td>+11 encounter bridge (idempotent get-or-create + full wedge on bridged row)</td></tr>
 <tr><td>shell smoke</td><td>smoke.sh</td><td>9</td><td>unchanged</td></tr>
-<tr><td>Vitest</td><td>vitest</td><td>44</td><td>+2 encounter source-chip + external-EHR banner</td></tr>
+<tr><td>Vitest</td><td>vitest</td><td>45</td><td>+1 bridge-button dispatches bridgeEncounter</td></tr>
 <tr><td>Playwright workflow</td><td>@playwright</td><td>12</td><td>unchanged contract</td></tr>
 <tr><td>Playwright a11y</td><td>@axe-core/playwright</td><td>5</td><td>NEW</td></tr>
 <tr><td>Playwright visual</td><td>Playwright snapshots</td><td>4</td><td>NEW (local only)</td></tr>
@@ -145,8 +148,8 @@ chartnav-platform/
 <p>older callers that pass no params still see the first 100 rows.</p>
 <h2>Automation</h2>
 <ul>
-<li><code>make verify</code> → 185 pytest + 9 smoke</li>
-<li><code>make web-verify</code> → 44 vitest + typecheck + build</li>
+<li><code>make verify</code> → 196 pytest + 9 smoke</li>
+<li><code>make web-verify</code> → 45 vitest + typecheck + build</li>
 <li><code>make e2e</code> → 12 workflow + 5 a11y + 4 visual (local)</li>
 <li><code>make e2e-a11y</code> / <code>make e2e-visual</code> / <code>make e2e-visual-update</code></li>
 <li><code>make audit-prune ARGS=&quot;--days 90 --dry-run&quot;</code></li>
@@ -256,6 +259,12 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 </tbody></table>
 <p>Encounter responses now also include <code>patient_id</code> + <code>provider_id</code></p>
 <p>nullable FKs pointing at the rows above.</p>
+<h2>Encounter bridge (phase 21)</h2>
+<table><thead><tr><th>Method</th><th>Path</th><th>Role</th><th>Behavior</th></tr></thead><tbody>
+<tr><td><code>POST</code></td><td><code>/encounters/bridge</code></td><td>admin + clinician</td><td>Get-or-create a native <code>encounters</code> row keyed on <code>(org, external_ref, external_source)</code>. Returns `{..., _bridged: true</td><td>false}<code>. 409 </code>bridge_not_available_in_standalone_mode<code> in standalone. 403 </code>role_forbidden<code> for reviewer. 400 </code>invalid_status<code> if </code>status<code> is out of the ALLOWED_STATUSES set. Emits </code>encounter_bridged` audit event on first create only.</td></tr>
+</tbody></table>
+<p>Encounter rows everywhere now include <code>external_ref</code> + <code>external_source</code></p>
+<p>(both nullable; populated only for bridged rows).</p>
 <h2>Encounter write gating per platform mode (phase 20)</h2>
 <table><thead><tr><th>Route</th><th><code>standalone</code></th><th><code>integrated_readthrough</code></th><th><code>integrated_writethrough</code></th></tr></thead><tbody>
 <tr><td><code>GET /encounters</code></td><td>native adapter (SQL)</td><td>adapter dispatch</td><td>adapter dispatch</td></tr>
@@ -558,6 +567,15 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <tr><td>is_active</td><td>BOOLEAN</td><td>NOT NULL default <code>true</code></td></tr>
 <tr><td>created_at</td><td>DATETIME</td><td>NOT NULL default now()</td></tr>
 </tbody></table>
+<h3><code>encounters</code> — external bridge linkage (phase 21)</h3>
+<p>Two additional nullable columns land on <code>encounters</code>:</p>
+<table><thead><tr><th>column</th><th>type</th><th>notes</th></tr></thead><tbody>
+<tr><td><code>external_ref</code></td><td>VARCHAR(128)</td><td>vendor encounter id (FHIR <code>Encounter.id</code>, Epic contact id, …). Indexed.</td></tr>
+<tr><td><code>external_source</code></td><td>VARCHAR(64)</td><td>adapter key (<code>fhir</code>, <code>stub</code>, vendor).</td></tr>
+</tbody></table>
+<p>New UNIQUE constraint `(organization_id, external_ref,</p>
+<p>external_source)` is the DB-level guarantee that makes the bridge</p>
+<p>idempotent. Standalone encounters keep both columns NULL.</p>
 <h3><code>encounters</code> — native linkage (phase 18)</h3>
 <p>Two new nullable FK columns land on <code>encounters</code>:</p>
 <table><thead><tr><th>column</th><th>type</th><th>constraints</th></tr></thead><tbody>
@@ -625,6 +643,113 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <section id="sec-6"><h2>05 — Build log</h2>
 <h1>Build Log</h1>
 <p>Reverse-chronological.</p>
+<p>---</p>
+<h2>2026-04-18 — Phase 21: external encounter → native workflow bridge</h2>
+<h3>Step 1 — Migration <code>b8c9d0e1f203</code></h3>
+<ul>
+<li><code>encounters.external_ref</code> (<code>VARCHAR(128)</code> nullable, indexed) +</li>
+</ul>
+<p><code>encounters.external_source</code> (<code>VARCHAR(64)</code> nullable).</p>
+<ul>
+<li>New UNIQUE <code>(organization_id, external_ref, external_source)</code> —</li>
+</ul>
+<p>database-level guarantee of idempotent bridge.</p>
+<ul>
+<li>Backward compatible: standalone encounters leave both NULL.</li>
+</ul>
+<h3>Step 2 — Service seam</h3>
+<ul>
+<li><code>apps/api/app/services/bridge.py::resolve_or_create_bridged_encounter(...)</code>.</li>
+</ul>
+<p>Idempotent on <code>(org, external_ref, external_source)</code>; returns the</p>
+<p>native row with <code>_bridged</code> tag so first-create UX differs from</p>
+<p>subsequent resolves.</p>
+<ul>
+<li>Falls back to the org&#x27;s first active location when the caller</li>
+</ul>
+<p>doesn&#x27;t supply one (encounters.location_id is NOT NULL today).</p>
+<ul>
+<li>Default status <code>scheduled</code> so ChartNav&#x27;s state machine has a</li>
+</ul>
+<p>valid starting point that doesn&#x27;t imply the external EHR&#x27;s</p>
+<p>state.</p>
+<h3>Step 3 — HTTP surface</h3>
+<ul>
+<li><code>POST /encounters/bridge</code> (admin + clinician):</li>
+<li>refused in standalone mode</li>
+</ul>
+<p>(409 <code>bridge_not_available_in_standalone_mode</code>).</p>
+<ul>
+<li>emits <code>encounter_bridged</code> audit event on first create; silent</li>
+</ul>
+<p>on idempotent resolve.</p>
+<ul>
+<li><code>ENCOUNTER_COLUMNS</code> + native adapter&#x27;s list/fetch queries extended</li>
+</ul>
+<p>to include <code>external_ref</code> + <code>external_source</code> so the frontend</p>
+<p>sees them on every encounter row.</p>
+<h3>Step 4 — Frontend</h3>
+<ul>
+<li><code>api.ts</code> gains <code>EncounterBridgeBody</code>, <code>BridgedEncounter</code>, and</li>
+</ul>
+<p><code>bridgeEncounter(email, body)</code>.</p>
+<ul>
+<li>External encounter detail now shows a <strong>Bridge to ChartNav</strong></li>
+</ul>
+<p>button inside the SoT banner (admin + clinician only; reviewer</p>
+<p>sees an explicit disabled note). Clicking dispatches</p>
+<p><code>bridgeEncounter</code> with <code>_external_ref</code> + <code>_source</code> + mirror</p>
+<p>fields, then navigates to <code>?encounter=&lt;native_id&gt;</code> so the detail</p>
+<p>pane remounts against the bridged native row. Because the new</p>
+<p>row is <code>_source=&quot;chartnav&quot;</code>, the full <code>NoteWorkspace</code> appears</p>
+<p>immediately.</p>
+<ul>
+<li>Copy on the external-note section was rewritten to describe the</li>
+</ul>
+<p>bridge instead of a generic native-only limitation.</p>
+<h3>Step 5 — Tests</h3>
+<ul>
+<li><strong>Backend +11</strong> in <code>tests/test_encounter_bridge.py</code>: create +</li>
+</ul>
+<p>idempotency + standalone refusal + RBAC + integrated_writethrough</p>
+<p>OK + invalid status 400 + <strong>full wedge</strong> (transcript → generate</p>
+<p>→ sign → export + workflow event) + phase-20 status-write gate</p>
+<p>still holds on bridged row + org scoping + standalone regression.</p>
+<ul>
+<li><strong>Frontend +1</strong> in <code>App.test.tsx</code> + 1 updated: bridge button</li>
+</ul>
+<p>dispatches <code>bridgeEncounter</code>; external-note copy changed to</p>
+<p>mention bridging.</p>
+<ul>
+<li>Full suites: <strong>196/196 pytest</strong>, <strong>45/45 Vitest</strong>, 17/17</li>
+</ul>
+<p>Playwright workflow+a11y, 4/4 visual (baselines refreshed).</p>
+<h3>Step 6 — Docs</h3>
+<ul>
+<li>New <code>docs/build/32-external-encounter-bridge.md</code> — full phase</li>
+</ul>
+<p>reference (SoT, schema, service, HTTP surface, UI flow,</p>
+<p>verification, explicit non-goals).</p>
+<ul>
+<li>Updated <code>01-current-state</code>, <code>03-api-endpoints</code>,</li>
+</ul>
+<p><code>04-data-model</code> (new cols + unique constraint),</p>
+<p><code>05-build-log</code> (this entry), <code>06-known-gaps</code>,</p>
+<p><code>08-test-strategy</code>, <code>15-frontend-integration</code>,</p>
+<p><code>16-frontend-test-strategy</code>,</p>
+<p><code>26-platform-mode-and-interoperability</code>,</p>
+<p><code>27-adoption-and-implementation-model</code>; ER diagram gains</p>
+<p><code>external_ref</code>/<code>external_source</code> on encounters.</p>
+<ul>
+<li><code>scripts/build_docs.py</code> picks up section 32; executive summary</li>
+</ul>
+<p>extended. Final HTML + PDF regenerated.</p>
+<h3>Step 7 — Hygiene</h3>
+<ul>
+<li>Dev DB reset to pristine seeded state before commit.</li>
+<li>Visual baselines refreshed.</li>
+<li>No new runtime deps.</li>
+</ul>
 <p>---</p>
 <h2>2026-04-18 — Phase 20: adapter-driven encounters + integrated write gating</h2>
 <h3>Step 1 — Protocol</h3>
@@ -1518,6 +1643,13 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <h3>Playwright summary (12)</h3>
 <p>Adds &quot;admin can issue an invitation and download audit CSV&quot; on top of</p>
 <p>the 11 scenarios shipped through phase 13.</p>
+<h2>Phase-21 additions</h2>
+<ul>
+<li><strong>External encounter → native workflow bridge</strong>: <code>POST /encounters/bridge</code> creates/resolves a native row keyed on <code>(org, external_ref, external_source)</code>. Idempotent. Frontend bridge button on external encounter detail.</li>
+<li><strong>Full wedge on bridged row</strong>: transcript ingest + findings + note generate + sign + export all work identically to standalone after bridging.</li>
+<li><strong>Phase-20 contract preserved</strong>: bridging does NOT reopen encounter state writes — external EHR still owns status in integrated_readthrough.</li>
+<li><strong>196 pytest</strong> (+11), <strong>45 Vitest</strong> (+1), 17 Playwright + 4 visual (local, refreshed).</li>
+</ul>
 <h2>Phase-20 additions</h2>
 <ul>
 <li><strong>Adapter-driven encounter reads</strong>: <code>/encounters</code> and <code>/encounters/{id}</code> dispatch through <code>resolve_adapter()</code>; standalone uses native (same SQL), integrated uses stub/FHIR/vendor. Rows tagged <code>_source</code> end-to-end.</li>
@@ -1574,7 +1706,8 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <p>0. <strong>No PDF or HL7 export</strong> — plain text only. Deliberate: honest paste-into-EHR, not a vendor-format we don&#x27;t own.</p>
 <p>0. <strong>No SMART-on-FHIR auth</strong> on the FHIR adapter — <code>auth_type=bearer</code> takes a pre-provisioned token. Full SMART launch flow is future work.</p>
 <p>0. <strong>No vendor-specific FHIR writer</strong> — generic adapter refuses with <code>AdapterNotSupported</code>; 501 surfaces honestly. Epic / Cerner / Athena writers plug in via the registry.</p>
-<p>0. <strong>No integrated-mode note drafting</strong> — <code>NoteWorkspace</code> is suppressed on external encounters today. Follow-up: mirror external encounters into native <code>encounters</code> via <code>external_ref</code> so notes can be drafted against them.</p>
+<p>0. <strong>~~No integrated-mode note drafting~~</strong> — <strong>resolved in phase 21</strong>. <code>POST /encounters/bridge</code> creates a native row tied to the external one; the full wedge (transcript → findings → draft → sign → export) runs on bridged rows.</p>
+<p>0. <strong>No automatic background sync</strong> of external encounter state onto bridged rows — the mirror happens at bridge-time only. A dedicated sync worker is the next natural step.</p>
 <p>0. <strong>~~Encounter/status routes still bypass the adapter path~~</strong> in integrated modes — HTTP handlers hit the native DB directly rather than routing through <code>resolve_adapter()</code>. Standalone this is a nop (native adapter wraps the same DB); integrated_* needs the handler-level adapter dispatch + translation work in a follow-up phase so FHIR reads can actually surface through <code>/encounters</code>.</p>
 <p>0. <strong>No vendor-specific FHIR adapter yet</strong> — generic <code>FHIRAdapter</code> handles the common case. Epic/Cerner/Athena/Nextech SMART-on-FHIR auth + vendor quirks remain future work. Start with SMART-on-FHIR handshake + Epic sandbox.</p>
 <p>0. <strong>FHIR writes are intentionally unsupported</strong> — <code>update_encounter_status</code> and <code>write_note</code> raise <code>AdapterNotSupported</code>. <code>DocumentReference</code> + Binary upload is a real project and belongs in a vendor adapter.</p>
@@ -1793,6 +1926,32 @@ make docker-build
 <li><code>make verify</code> (SQLite): 28 pytest + 9 smoke — all green</li>
 <li><code>scripts/pg_verify.sh</code>: migrations + seed (x2) + smoke + status transition + event write — <strong>PASS</strong></li>
 </ul>
+<h2>Backend coverage (phase 21)</h2>
+<ul>
+<li><strong>196 pytest.</strong> New <code>tests/test_encounter_bridge.py</code> (+11):</li>
+<li>bridge creates native row + carries <code>external_ref</code> +</li>
+</ul>
+<p><code>external_source</code> + <code>_bridged: True</code>.</p>
+<ul>
+<li>second call idempotent → same <code>id</code>, <code>_bridged: False</code>.</li>
+<li>standalone refusal (409).</li>
+<li>RBAC: reviewer → 403, admin + clinician OK.</li>
+<li>integrated_writethrough allowed.</li>
+<li>invalid status → 400 <code>invalid_status</code>.</li>
+<li><strong>full wedge</strong>: transcript ingest → generate → sign → export →</li>
+</ul>
+<p>workflow event, all on the bridged native id.</p>
+<ul>
+<li>phase-20 status-write gate still holds on bridged row.</li>
+<li>org scoping: same <code>external_ref</code> in two orgs → two native rows.</li>
+<li>standalone regression: native encounters keep <code>external_ref=NULL</code>.</li>
+<li>Frontend: <strong>45 Vitest</strong> — bridge button dispatches</li>
+</ul>
+<p><code>bridgeEncounter</code>; external-note copy asserts on &quot;bridg&quot;.</p>
+<ul>
+<li>Playwright: 17/17 workflow + a11y unchanged. Visual baselines</li>
+</ul>
+<p>refreshed (4/4 local).</p>
 <h2>Backend coverage (phase 20)</h2>
 <ul>
 <li><strong>185 pytest.</strong> New <code>tests/test_integrated_encounters.py</code> (+11):</li>
@@ -2807,6 +2966,29 @@ make web-build        # vite build -&gt; apps/web/dist
 <li>Helpers <code>encounterIsNative(enc)</code> and <code>encounterSourceLabel(enc)</code></li>
 </ul>
 <p>are the single public surface for source-of-truth rendering.</p>
+<h2>External encounter bridge UI (phase 21)</h2>
+<ul>
+<li>When an integrated encounter is opened, the SoT banner now</li>
+</ul>
+<p>includes a <strong>Bridge to ChartNav</strong> action for admin + clinician.</p>
+<ul>
+<li>Clicking it calls <code>POST /encounters/bridge</code> with the external</li>
+</ul>
+<p>reference + adapter source + mirror fields (patient id, patient</p>
+<p>name, provider name, status), then navigates the URL to</p>
+<p><code>?encounter=&lt;native_id&gt;</code> so the detail pane remounts against the</p>
+<p>bridged native row. The <code>_source</code> flips to <code>chartnav</code> and the</p>
+<p>full <code>NoteWorkspace</code> (transcript → findings → draft → sign →</p>
+<p>export) becomes available.</p>
+<ul>
+<li>Reviewer role sees the external banner but no Bridge button — a</li>
+</ul>
+<p>subtle-note explains.</p>
+<ul>
+<li>Copy on the external-note (shown when no native id is selected)</li>
+</ul>
+<p>was rewritten to describe the bridge instead of a blanket</p>
+<p>&quot;native-only&quot; limitation.</p>
 <h2>What this phase explicitly does NOT do</h2>
 <ul>
 <li>No real login flow — <code>X-User-Email</code> is still dev transport.</li>
@@ -3020,6 +3202,18 @@ make web-verify      # typecheck + test + build
 </ul>
 <p>exercised indirectly; add direct unit tests when more code</p>
 <p>consumes them.</p>
+<h2>Encounter bridge tests (phase 21)</h2>
+<ul>
+<li><strong>+1</strong> in <code>src/test/App.test.tsx</code> — bridge button on an external</li>
+</ul>
+<p>encounter detail dispatches <code>bridgeEncounter</code> with the vendor ref</p>
+<p>+ adapter source + mirror fields; location-navigate is stubbed</p>
+<p>so the test doesn&#x27;t actually reload.</p>
+<ul>
+<li>External-note assertion updated from &quot;ChartNav-native&quot; to</li>
+</ul>
+<p>matching <code>/bridg/i</code> since the copy now explains the bridge path</p>
+<p>instead of a blanket native-only limitation.</p>
 <h2>Gaps not yet covered</h2>
 <ul>
 <li>Visual regression not in CI (documented; OS-specific baselines).</li>
@@ -4449,6 +4643,15 @@ export CHARTNAV_INTEGRATION_ADAPTER=stub   # or a vendor key
 <tr><td><code>stub</code></td><td><code>app/integrations/stub.py</code></td><td>Integrated without a real vendor yet</td><td>✓ (canned)</td><td>✓</td><td>write-through only</td></tr>
 <tr><td><code>fhir</code></td><td><code>app/integrations/fhir.py</code> (phase 18)</td><td>Generic FHIR R4 read-through</td><td>✓ (<code>GET /Encounter</code>)</td><td>✓ (<code>GET /Encounter/&lt;id&gt;</code>)</td><td>✗ <code>AdapterNotSupported</code></td></tr>
 </tbody></table>
+<h3>External encounter → native workflow bridge (phase 21)</h3>
+<p><code>POST /encounters/bridge</code> get-or-creates a native <code>encounters</code> row</p>
+<p>carrying <code>external_ref</code> + <code>external_source</code>. The bridge is idempotent</p>
+<p>(unique per <code>(org, external_ref, external_source)</code>), available in</p>
+<p>both integrated modes, and refused in standalone. Once bridged, the</p>
+<p>full transcript → findings → note draft → signoff wedge works</p>
+<p>identically to a standalone encounter; the external EHR remains SoR</p>
+<p>for the encounter shell and status. See</p>
+<p><code>32-external-encounter-bridge.md</code>.</p>
 <p>Both implementations are honest:</p>
 <ul>
 <li><code>NativeChartNavAdapter</code> reuses the same SQLAlchemy Core query</li>
@@ -5421,7 +5624,188 @@ class ClinicalSystemAdapter(Protocol):
 <li>Does not change standalone behavior for existing encounter routes.</li>
 </ul>
 </section>
-<section id="sec-33"><h2>Diagram — System architecture</h2>
+<section id="sec-33"><h2>32 — External encounter → native workflow bridge</h2>
+<h1>External Encounter → Native Workflow Bridge (phase 21)</h1>
+<p>The ChartNav wedge (transcript → findings → note draft → provider</p>
+<p>signoff) now works on externally-sourced encounters. The bridge is</p>
+<p>minimal, honest, and idempotent: given an external encounter&#x27;s</p>
+<p>identifier, ChartNav creates (or resolves) a native <code>encounters</code> row</p>
+<p>that mirrors the shell fields and carries the vendor reference. All</p>
+<p>downstream workflow endpoints attach to that native row.</p>
+<p>The external EHR continues to own the encounter. ChartNav owns the</p>
+<p>workflow overlay.</p>
+<h2>1. Source-of-truth boundary</h2>
+<table><thead><tr><th>Concern</th><th>External EHR</th><th>ChartNav (bridged native row)</th></tr></thead><tbody>
+<tr><td>Encounter id (authoritative)</td><td>✅ (via <code>external_ref</code>)</td><td>mirrored on native row</td></tr>
+<tr><td>Encounter status</td><td>✅</td><td>mirrored; ChartNav keeps its own workflow state via <code>workflow_events</code> + note draft status</td></tr>
+<tr><td>Patient / provider display</td><td>✅</td><td>mirrored on bridge create</td></tr>
+<tr><td>Transcript inputs</td><td>—</td><td>✅</td></tr>
+<tr><td>Extracted findings</td><td>—</td><td>✅</td></tr>
+<tr><td>Note versions + signoff</td><td>—</td><td>✅</td></tr>
+<tr><td>Export/handoff state</td><td>—</td><td>✅</td></tr>
+<tr><td><code>POST /encounters</code></td><td>❌ refused (phase 20)</td><td>allowed in standalone only</td></tr>
+<tr><td><code>POST /encounters/{id}/status</code></td><td>❌ refused in readthrough; adapter-dispatched in writethrough (phase 20)</td><td>unchanged after bridge — external still owns</td></tr>
+<tr><td><code>POST /encounters/{id}/events</code></td><td>—</td><td>✅ (ChartNav-native workflow tracking, every mode)</td></tr>
+</tbody></table>
+<p>The bridge unlocks <strong>ChartNav-native workflow</strong>. It does NOT reopen</p>
+<p>encounter-state writes: <code>POST /encounters/{id}/status</code> on a bridged</p>
+<p>row in integrated_readthrough still returns 409</p>
+<p><code>encounter_write_unsupported</code>. That contract is test-asserted.</p>
+<h2>2. Schema change (migration <code>b8c9d0e1f203</code>)</h2>
+<p>Two nullable columns added to <code>encounters</code> via batch rewrite:</p>
+<table><thead><tr><th>column</th><th>type</th><th>notes</th></tr></thead><tbody>
+<tr><td><code>external_ref</code></td><td><code>VARCHAR(128)</code> nullable, indexed</td><td>vendor encounter id (FHIR <code>Encounter.id</code>, Epic contact id, …)</td></tr>
+<tr><td><code>external_source</code></td><td><code>VARCHAR(64)</code> nullable</td><td>adapter key (<code>fhir</code>, <code>stub</code>, vendor)</td></tr>
+</tbody></table>
+<p>New unique constraint:</p>
+<p><code>UNIQUE(organization_id, external_ref, external_source)</code> — the</p>
+<p>database-level guarantee that makes the bridge idempotent and</p>
+<p>org-scoped.</p>
+<p>Standalone encounters keep both columns NULL. Backward compatible.</p>
+<h2>3. Service seam</h2>
+<p><code>apps/api/app/services/bridge.py::resolve_or_create_bridged_encounter(...)</code></p>
+<p>is the single entry point. Signature:</p>
+<pre class="code lang-python"><code>
+def resolve_or_create_bridged_encounter(
+    *,
+    organization_id: int,
+    external_ref: str,
+    external_source: str,
+    patient_identifier: str | None = None,
+    patient_name: str | None = None,
+    provider_name: str | None = None,
+    status: str | None = None,
+    location_id: int | None = None,
+) -&gt; dict[str, Any]
+</code></pre>
+<p>Behavior:</p>
+<ul>
+<li>Idempotent on <code>(organization_id, external_ref, external_source)</code>.</li>
+<li>First creation returns the new row with <code>_bridged: True</code>; subsequent</li>
+</ul>
+<p>resolves return the existing row with <code>_bridged: False</code>.</p>
+<ul>
+<li>Location: if not supplied, the caller&#x27;s first active location in</li>
+</ul>
+<p>the org is used. Rationale: <code>encounters.location_id</code> is <code>NOT NULL</code></p>
+<p>today, and most external systems don&#x27;t map cleanly to ChartNav</p>
+<p>location ids out of the gate. Operators can re-assign later.</p>
+<ul>
+<li>Status defaults to <code>scheduled</code> when not supplied (so the native</li>
+</ul>
+<p>state machine has a valid starting point ChartNav can drive from</p>
+<p>its own workflow events and note drafting without touching the</p>
+<p>external encounter).</p>
+<h2>4. HTTP surface</h2>
+<h3><code>POST /encounters/bridge</code></h3>
+<p>Idempotent get-or-create. Body:</p>
+<pre class="code lang-json"><code>
+{
+  &quot;external_ref&quot;: &quot;ENC-XYZ&quot;,
+  &quot;external_source&quot;: &quot;fhir&quot;,
+  &quot;patient_identifier&quot;: &quot;EXT-1001&quot;,
+  &quot;patient_name&quot;: &quot;Morgan External&quot;,
+  &quot;provider_name&quot;: &quot;Dr. External&quot;,
+  &quot;status&quot;: &quot;in_progress&quot;
+}
+</code></pre>
+<p>Returns the full native row plus <code>_bridged: true|false</code>,</p>
+<p><code>_source: &quot;chartnav&quot;</code>, and the <code>_external_ref</code>/<code>_external_source</code></p>
+<p>mirror tags.</p>
+<p>Rules:</p>
+<ul>
+<li><code>admin</code> + <code>clinician</code> can bridge; reviewer → 403 <code>role_forbidden</code>.</li>
+<li>Standalone mode → 409 <code>bridge_not_available_in_standalone_mode</code></li>
+</ul>
+<p>(there is nothing external to bridge from).</p>
+<ul>
+<li>Both integrated modes are supported.</li>
+<li>Emits a <code>security_audit_events</code> row of type <code>encounter_bridged</code> on</li>
+</ul>
+<p>first create (no audit event on idempotent re-resolve — intentional).</p>
+<h2>5. Frontend</h2>
+<p>External encounter detail now renders a <strong>Bridge to ChartNav</strong> action</p>
+<p>inside the SoT banner. On click:</p>
+<p>1. The frontend calls <code>POST /encounters/bridge</code> with the external</p>
+<p>encounter&#x27;s <code>external_ref</code> (from <code>_external_ref</code>),</p>
+<p><code>external_source</code> (from <code>_source</code>), and the mirror fields it</p>
+<p>already has (patient display, provider display, status).</p>
+<p>2. Navigation flips the <code>?encounter=&lt;native_id&gt;</code> query param and</p>
+<p>reloads, so the detail pane remounts against the native row.</p>
+<p>3. Because the row is now <code>_source: &quot;chartnav&quot;</code>, the existing</p>
+<p>detail view automatically shows the full <code>NoteWorkspace</code></p>
+<p>(transcript ingest → findings → draft → sign → export).</p>
+<p>Reviewer role sees the external banner but no Bridge button; a</p>
+<p><code>bridge-disabled-note</code> subtle-note explains.</p>
+<h2>6. Tests</h2>
+<p>Backend (<code>tests/test_encounter_bridge.py</code>, +11):</p>
+<ul>
+<li>bridge creates native row + carries <code>external_ref</code> +</li>
+</ul>
+<p><code>external_source</code> + <code>_bridged: True</code>.</p>
+<ul>
+<li>second call with same external ref returns the same <code>id</code> with</li>
+</ul>
+<p><code>_bridged: False</code>.</p>
+<ul>
+<li>standalone mode refuses (409 <code>bridge_not_available_in_standalone_mode</code>).</li>
+<li>reviewer → 403, admin + clinician allowed.</li>
+<li>writethrough mode allowed.</li>
+<li>invalid status → 400 <code>invalid_status</code>.</li>
+<li><strong>full wedge</strong> runs on bridged row: transcript ingest → generate</li>
+</ul>
+<p>→ sign → export → workflow event.</p>
+<ul>
+<li>integrated_readthrough still refuses encounter status writes on the</li>
+</ul>
+<p>bridged row (phase 20 contract preserved).</p>
+<ul>
+<li>org scoping: same <code>external_ref</code> in two orgs → two native rows.</li>
+<li>standalone regression: existing encounters keep</li>
+</ul>
+<p><code>external_ref=NULL</code> and <code>_source=&quot;chartnav&quot;</code>.</p>
+<p>Frontend (<code>src/test/App.test.tsx</code>, +1 new + 1 updated):</p>
+<ul>
+<li>external encounter shows the <code>Bridge to ChartNav</code> button enabled</li>
+</ul>
+<p>for admin/clinician; the subtle-note copy now talks about</p>
+<p>bridging instead of generic native-only.</p>
+<ul>
+<li>clicking the button dispatches <code>bridgeEncounter</code> with the external</li>
+</ul>
+<p>ref + source + mirror fields.</p>
+<p>Verification:</p>
+<ul>
+<li><code>make verify</code> → <strong>196/196 pytest + 9/9 smoke</strong>.</li>
+<li><code>npm run typecheck</code> clean · <code>npm test</code> → <strong>45/45 Vitest</strong>.</li>
+<li><code>npm run build</code> → 209 KB JS / 18.1 KB CSS.</li>
+<li><code>npx playwright test workflow.spec.ts a11y.spec.ts</code> → <strong>17/17</strong>.</li>
+<li><code>npx playwright test visual.spec.ts --update-snapshots</code> → 4/4</li>
+</ul>
+<p>(baselines refreshed).</p>
+<h2>7. What this phase does NOT do</h2>
+<ul>
+<li>Does NOT write back to the external EHR. ChartNav never tries to</li>
+</ul>
+<p>push a new encounter into the source system.</p>
+<ul>
+<li>Does NOT sync external status changes onto the bridged row in the</li>
+</ul>
+<p>background. The bridge mirrors the shell at bridge-time; re-fetch</p>
+<p>would need a dedicated sync worker (future phase).</p>
+<ul>
+<li>Does NOT implement <code>external_ref</code> for <code>workflow_events</code>,</li>
+</ul>
+<p><code>encounter_inputs</code>, <code>extracted_findings</code>, or <code>note_versions</code>.</p>
+<p>Those stay native-only — their external counterparts live on the</p>
+<p>external side or don&#x27;t exist at all (notes).</p>
+<ul>
+<li>Does NOT attempt to reconcile multiple external sources pointing at</li>
+</ul>
+<p>the same logical encounter (<code>external_source</code> is part of the key;</p>
+<p>two vendor mirrors of one encounter get two native rows by design).</p>
+</section>
+<section id="sec-34"><h2>Diagram — System architecture</h2>
 <h1>System Architecture</h1>
 <div class="mermaid">
 flowchart LR
@@ -5532,7 +5916,7 @@ flowchart LR
   Compose --> PG
 </div>
 </section>
-<section id="sec-34"><h2>Diagram — Encounter status machine</h2>
+<section id="sec-35"><h2>Diagram — Encounter status machine</h2>
 <h1>Encounter Status State Machine</h1>
 <div class="mermaid">
 stateDiagram-v2
@@ -5554,7 +5938,7 @@ stateDiagram-v2
 <p>Legend: any edge not shown is rejected at <code>POST /encounters/{id}/status</code></p>
 <p>with HTTP 400 <code>invalid_transition</code>.</p>
 </section>
-<section id="sec-35"><h2>Diagram — ER</h2>
+<section id="sec-36"><h2>Diagram — ER</h2>
 <h1>ER Diagram</h1>
 <div class="mermaid">
 erDiagram
@@ -5621,6 +6005,8 @@ erDiagram
     int location_id FK
     int patient_id FK "nullable — native linkage (phase 18)"
     int provider_id FK "nullable — native linkage (phase 18)"
+    string external_ref "nullable — vendor id for bridged encounters (phase 21)"
+    string external_source "nullable — adapter key (phase 21)"
     string patient_identifier "display; kept for back-compat"
     string patient_name "display; kept for back-compat"
     string provider_name "display; kept for back-compat"
@@ -5717,7 +6103,7 @@ erDiagram
 <p><code>users.organization_id</code> is the authoritative source of scope; never</p>
 <p>derived from client input.</p>
 </section>
-<section id="sec-36"><h2>Diagram — API / data flow</h2>
+<section id="sec-37"><h2>Diagram — API / data flow</h2>
 <h1>API / Data Flow &amp; CI</h1>
 <h2>UI → Backend request path</h2>
 <div class="mermaid">

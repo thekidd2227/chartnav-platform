@@ -39,6 +39,13 @@
 Adds "admin can issue an invitation and download audit CSV" on top of
 the 11 scenarios shipped through phase 13.
 
+## Phase-21 additions
+
+- **External encounter → native workflow bridge**: `POST /encounters/bridge` creates/resolves a native row keyed on `(org, external_ref, external_source)`. Idempotent. Frontend bridge button on external encounter detail.
+- **Full wedge on bridged row**: transcript ingest + findings + note generate + sign + export all work identically to standalone after bridging.
+- **Phase-20 contract preserved**: bridging does NOT reopen encounter state writes — external EHR still owns status in integrated_readthrough.
+- **196 pytest** (+11), **45 Vitest** (+1), 17 Playwright + 4 visual (local, refreshed).
+
 ## Phase-20 additions
 
 - **Adapter-driven encounter reads**: `/encounters` and `/encounters/{id}` dispatch through `resolve_adapter()`; standalone uses native (same SQL), integrated uses stub/FHIR/vendor. Rows tagged `_source` end-to-end.
@@ -96,7 +103,8 @@ the 11 scenarios shipped through phase 13.
 0. **No PDF or HL7 export** — plain text only. Deliberate: honest paste-into-EHR, not a vendor-format we don't own.
 0. **No SMART-on-FHIR auth** on the FHIR adapter — `auth_type=bearer` takes a pre-provisioned token. Full SMART launch flow is future work.
 0. **No vendor-specific FHIR writer** — generic adapter refuses with `AdapterNotSupported`; 501 surfaces honestly. Epic / Cerner / Athena writers plug in via the registry.
-0. **No integrated-mode note drafting** — `NoteWorkspace` is suppressed on external encounters today. Follow-up: mirror external encounters into native `encounters` via `external_ref` so notes can be drafted against them.
+0. **~~No integrated-mode note drafting~~** — **resolved in phase 21**. `POST /encounters/bridge` creates a native row tied to the external one; the full wedge (transcript → findings → draft → sign → export) runs on bridged rows.
+0. **No automatic background sync** of external encounter state onto bridged rows — the mirror happens at bridge-time only. A dedicated sync worker is the next natural step.
 0. **~~Encounter/status routes still bypass the adapter path~~** in integrated modes — HTTP handlers hit the native DB directly rather than routing through `resolve_adapter()`. Standalone this is a nop (native adapter wraps the same DB); integrated_* needs the handler-level adapter dispatch + translation work in a follow-up phase so FHIR reads can actually surface through `/encounters`.
 0. **No vendor-specific FHIR adapter yet** — generic `FHIRAdapter` handles the common case. Epic/Cerner/Athena/Nextech SMART-on-FHIR auth + vendor quirks remain future work. Start with SMART-on-FHIR handshake + Epic sandbox.
 0. **FHIR writes are intentionally unsupported** — `update_encounter_status` and `write_note` raise `AdapterNotSupported`. `DocumentReference` + Binary upload is a real project and belongs in a vendor adapter.

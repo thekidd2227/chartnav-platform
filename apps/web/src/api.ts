@@ -129,8 +129,10 @@ export interface Encounter {
   created_at: string | null;
   /** Source-of-truth tag — "chartnav" (native) or adapter key (e.g. "fhir", "stub"). */
   _source?: "chartnav" | "fhir" | "stub" | string;
-  _external_ref?: string;
+  _external_ref?: string | null;
+  _external_source?: string | null;
   _fhir_status?: string;
+  _bridged?: boolean;
 }
 
 export interface WorkflowEvent {
@@ -958,4 +960,34 @@ export function encounterSourceLabel(enc: Encounter | null | undefined): string 
     default:
       return `External (${src})`;
   }
+}
+
+// ---------- Encounter bridge (phase 21) ----------
+
+export interface EncounterBridgeBody {
+  external_ref: string;
+  external_source: string;
+  patient_identifier?: string | null;
+  patient_name?: string | null;
+  provider_name?: string | null;
+  status?: string | null;
+}
+
+export interface BridgedEncounter extends Encounter {
+  external_ref: string | null;
+  external_source: string | null;
+  _bridged: boolean;
+  _external_ref: string | null;
+  _external_source: string | null;
+}
+
+export function bridgeEncounter(
+  email: string,
+  body: EncounterBridgeBody
+): Promise<BridgedEncounter> {
+  return request("/encounters/bridge", {
+    email,
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }

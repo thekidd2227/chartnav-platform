@@ -4,6 +4,84 @@ Reverse-chronological.
 
 ---
 
+## 2026-04-18 — Phase 21: external encounter → native workflow bridge
+
+### Step 1 — Migration `b8c9d0e1f203`
+- `encounters.external_ref` (`VARCHAR(128)` nullable, indexed) +
+  `encounters.external_source` (`VARCHAR(64)` nullable).
+- New UNIQUE `(organization_id, external_ref, external_source)` —
+  database-level guarantee of idempotent bridge.
+- Backward compatible: standalone encounters leave both NULL.
+
+### Step 2 — Service seam
+- `apps/api/app/services/bridge.py::resolve_or_create_bridged_encounter(...)`.
+  Idempotent on `(org, external_ref, external_source)`; returns the
+  native row with `_bridged` tag so first-create UX differs from
+  subsequent resolves.
+- Falls back to the org's first active location when the caller
+  doesn't supply one (encounters.location_id is NOT NULL today).
+- Default status `scheduled` so ChartNav's state machine has a
+  valid starting point that doesn't imply the external EHR's
+  state.
+
+### Step 3 — HTTP surface
+- `POST /encounters/bridge` (admin + clinician):
+  - refused in standalone mode
+    (409 `bridge_not_available_in_standalone_mode`).
+  - emits `encounter_bridged` audit event on first create; silent
+    on idempotent resolve.
+- `ENCOUNTER_COLUMNS` + native adapter's list/fetch queries extended
+  to include `external_ref` + `external_source` so the frontend
+  sees them on every encounter row.
+
+### Step 4 — Frontend
+- `api.ts` gains `EncounterBridgeBody`, `BridgedEncounter`, and
+  `bridgeEncounter(email, body)`.
+- External encounter detail now shows a **Bridge to ChartNav**
+  button inside the SoT banner (admin + clinician only; reviewer
+  sees an explicit disabled note). Clicking dispatches
+  `bridgeEncounter` with `_external_ref` + `_source` + mirror
+  fields, then navigates to `?encounter=<native_id>` so the detail
+  pane remounts against the bridged native row. Because the new
+  row is `_source="chartnav"`, the full `NoteWorkspace` appears
+  immediately.
+- Copy on the external-note section was rewritten to describe the
+  bridge instead of a generic native-only limitation.
+
+### Step 5 — Tests
+- **Backend +11** in `tests/test_encounter_bridge.py`: create +
+  idempotency + standalone refusal + RBAC + integrated_writethrough
+  OK + invalid status 400 + **full wedge** (transcript → generate
+  → sign → export + workflow event) + phase-20 status-write gate
+  still holds on bridged row + org scoping + standalone regression.
+- **Frontend +1** in `App.test.tsx` + 1 updated: bridge button
+  dispatches `bridgeEncounter`; external-note copy changed to
+  mention bridging.
+- Full suites: **196/196 pytest**, **45/45 Vitest**, 17/17
+  Playwright workflow+a11y, 4/4 visual (baselines refreshed).
+
+### Step 6 — Docs
+- New `docs/build/32-external-encounter-bridge.md` — full phase
+  reference (SoT, schema, service, HTTP surface, UI flow,
+  verification, explicit non-goals).
+- Updated `01-current-state`, `03-api-endpoints`,
+  `04-data-model` (new cols + unique constraint),
+  `05-build-log` (this entry), `06-known-gaps`,
+  `08-test-strategy`, `15-frontend-integration`,
+  `16-frontend-test-strategy`,
+  `26-platform-mode-and-interoperability`,
+  `27-adoption-and-implementation-model`; ER diagram gains
+  `external_ref`/`external_source` on encounters.
+- `scripts/build_docs.py` picks up section 32; executive summary
+  extended. Final HTML + PDF regenerated.
+
+### Step 7 — Hygiene
+- Dev DB reset to pristine seeded state before commit.
+- Visual baselines refreshed.
+- No new runtime deps.
+
+---
+
 ## 2026-04-18 — Phase 20: adapter-driven encounters + integrated write gating
 
 ### Step 1 — Protocol

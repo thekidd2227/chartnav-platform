@@ -36,6 +36,15 @@ Base URL (local dev): `http://127.0.0.1:8000`. All error bodies use
 Encounter responses now also include `patient_id` + `provider_id`
 nullable FKs pointing at the rows above.
 
+## Encounter bridge (phase 21)
+
+| Method | Path                 | Role              | Behavior |
+|--------|----------------------|-------------------|----------|
+| `POST` | `/encounters/bridge` | admin + clinician | Get-or-create a native `encounters` row keyed on `(org, external_ref, external_source)`. Returns `{..., _bridged: true|false}`. 409 `bridge_not_available_in_standalone_mode` in standalone. 403 `role_forbidden` for reviewer. 400 `invalid_status` if `status` is out of the ALLOWED_STATUSES set. Emits `encounter_bridged` audit event on first create only. |
+
+Encounter rows everywhere now include `external_ref` + `external_source`
+(both nullable; populated only for bridged rows).
+
 ## Encounter write gating per platform mode (phase 20)
 
 | Route                              | `standalone`          | `integrated_readthrough` | `integrated_writethrough` |

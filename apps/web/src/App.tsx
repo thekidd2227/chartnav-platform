@@ -13,6 +13,7 @@ import {
   allowedNextStatuses,
   canCreateEncounter,
   canCreateEvent,
+  bridgeEncounter,
   createEncounter,
   createEncounterEvent,
   encounterIsNative,
@@ -663,16 +664,11 @@ function EncounterDetail({
       </div>
 
       {!nativeEncounter && (
-        <div
-          className="banner banner--info"
-          data-testid="external-encounter-banner"
-          role="note"
-        >
-          <strong>This encounter lives in the external EHR.</strong>{" "}
-          Status transitions and encounter-level edits are disabled in this
-          mode. ChartNav's workflow events, transcript ingestion, and note
-          drafting remain available — those are ChartNav-native.
-        </div>
+        <ExternalEncounterBanner
+          identity={identity}
+          encounter={encounter}
+          canBridge={role === "admin" || role === "clinician"}
+        />
       )}
 
       <dl className="detail__facts">
@@ -732,9 +728,12 @@ function EncounterDetail({
       {me && !nativeEncounter && (
         <section className="section" data-testid="note-workspace-external-note">
           <div className="subtle-note">
-            Note drafting is available on ChartNav-native encounters today.
-            For externally-sourced encounters, ingest via the workflow
-            once the encounter is mirrored into ChartNav.
+            Note drafting on an externally-sourced encounter requires
+            bridging it into ChartNav first. Use the{" "}
+            <strong>Bridge to ChartNav</strong> action above — once
+            bridged, the full transcript → findings → draft → signoff
+            workflow is available here while the encounter shell
+            continues to live in the external EHR.
           </div>
         </section>
       )}
@@ -1049,4 +1048,91 @@ function friendly(e: unknown): string {
   if (e instanceof ApiError) return `${e.status} ${e.errorCode} — ${e.reason}`;
   if (e instanceof Error) return e.message;
   return String(e);
+}
+
+// ---------------------------------------------------------------------
+// External encounter banner + bridge action (phase 21)
+// ---------------------------------------------------------------------
+
+function ExternalEncounterBanner({
+  identity,
+  encounter,
+  canBridge,
+}: {
+  identity: string;
+  encounter: Encounter;
+  canBridge: boolean;
+}) {
+  const [pending, setPending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const externalRef =
+    (encounter as any)._external_ref ?? String(encounter.id);
+  const externalSource = (encounter as any)._source ?? "fhir";
+
+  const onBridge = async () => {
+    setPending(true);
+    setErr(null);
+    try {
+      const bridged = await bridgeEncounter(identity, {
+        external_ref: String(externalRef),
+        external_source: String(externalSource),
+        patient_identifier: encounter.patient_identifier,
+        patient_name: encounter.patient_name,
+        provider_name: encounter.provider_name,
+        status: encounter.status,
+      });
+      // Rewire URL hash so the detail pane reloads against the
+      // native id; the App-level selectedId picker reads on mount
+      // via the row click, but we explicitly navigate by reload
+      // so the workspace mounts with the native id.
+      const url = new URL(window.location.href);
+      url.searchParams.set("encounter", String(bridged.id));
+      window.location.assign(url.toString());
+    } catch (e) {
+      if (e instanceof ApiError) setErr(`${e.status} ${e.errorCode} — ${e.reason}`);
+      else if (e instanceof Error) setErr(e.message);
+      else setErr(String(e));
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <div
+      className="banner banner--info"
+      data-testid="external-encounter-banner"
+      role="note"
+    >
+      <div>
+        <strong>This encounter lives in the external EHR.</strong> Status
+        transitions and encounter-level edits remain disabled in this mode.
+        Bridge it into ChartNav to unlock the full transcript → findings →
+        note → signoff workflow while the external EHR keeps owning the
+        encounter shell.
+      </div>
+      {canBridge && (
+        <div className="actions" style={{ marginTop: 10 }}>
+          <button
+            className="btn btn--primary"
+            onClick={onBridge}
+            disabled={pending}
+            data-testid="bridge-encounter"
+          >
+            {pending ? "Bridging…" : "Bridge to ChartNav"}
+          </button>
+          {err && (
+            <span className="subtle-note" data-testid="bridge-error">
+              {err}
+            </span>
+          )}
+        </div>
+      )}
+      {!canBridge && (
+        <p className="subtle-note" data-testid="bridge-disabled-note">
+          Reviewer role cannot bridge encounters. Ask an admin or clinician.
+        </p>
+      )}
+    </div>
+  );
 }

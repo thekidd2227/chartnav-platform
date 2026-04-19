@@ -184,6 +184,7 @@ def _hydrate_event(row: dict) -> dict:
 ENCOUNTER_COLUMNS = (
     "id, organization_id, location_id, patient_identifier, patient_name, "
     "provider_name, status, patient_id, provider_id, "
+    "external_ref, external_source, "
     "scheduled_at, started_at, completed_at, created_at"
 )
 
@@ -502,6 +503,87 @@ def list_encounters(
     response.headers["X-Limit"] = str(result.limit)
     response.headers["X-Offset"] = str(result.offset)
     return result.items
+
+
+class EncounterBridgeBody(BaseModel):
+    """Body for POST /encounters/bridge (phase 21).
+
+    Fields beyond `external_ref` + `external_source` are mirror hints
+    — the bridge uses them to populate the native row's display
+    fields on first create. They're optional because callers can also
+    pre-fetch the external row via `/encounters/{vendor_id}` and
+    forward what they saw.
+    """
+    external_ref: str = Field(..., min_length=1, max_length=128)
+    external_source: str = Field(..., min_length=1, max_length=64)
+    patient_identifier: Optional[str] = Field(default=None, max_length=64)
+    patient_name: Optional[str] = Field(default=None, max_length=255)
+    provider_name: Optional[str] = Field(default=None, max_length=255)
+    status: Optional[str] = Field(default=None)
+
+
+@router.post("/encounters/bridge", status_code=status.HTTP_200_OK)
+def bridge_encounter(
+    payload: EncounterBridgeBody,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Get-or-create a native encounter tied to an external one.
+
+    - Idempotent on `(organization_id, external_ref, external_source)`.
+    - Returns the full native row plus `_bridged: True` on first
+      creation, `False` on subsequent resolves.
+    - Refused in `standalone` mode (nothing external to bridge from).
+    - Works in both integrated modes.
+    - admin + clinician can bridge; reviewer cannot.
+    """
+    if caller.role not in {"admin", "clinician"}:
+        raise _err(
+            "role_forbidden",
+            "only admin or clinician may bridge an external encounter",
+            403,
+        )
+    from app.config import settings as _settings
+    if _settings.platform_mode == "standalone":
+        raise _err(
+            "bridge_not_available_in_standalone_mode",
+            "encounter bridging is only supported in integrated modes",
+            409,
+        )
+    if payload.status is not None and payload.status not in ALLOWED_STATUSES:
+        raise _err(
+            "invalid_status",
+            f"status must be one of {sorted(ALLOWED_STATUSES)}",
+            400,
+        )
+
+    from app.services.bridge import resolve_or_create_bridged_encounter
+    from app import audit as _audit
+
+    row = resolve_or_create_bridged_encounter(
+        organization_id=caller.organization_id,
+        external_ref=payload.external_ref,
+        external_source=payload.external_source,
+        patient_identifier=payload.patient_identifier,
+        patient_name=payload.patient_name,
+        provider_name=payload.provider_name,
+        status=payload.status,
+    )
+    if row.get("_bridged"):
+        _audit.record(
+            event_type="encounter_bridged",
+            request_id=None,
+            actor_email=caller.email,
+            actor_user_id=caller.user_id,
+            organization_id=caller.organization_id,
+            path="/encounters/bridge",
+            method="POST",
+            detail=(
+                f"external_source={payload.external_source} "
+                f"external_ref={payload.external_ref} "
+                f"native_id={row['id']}"
+            ),
+        )
+    return row
 
 
 @router.get("/encounters/{encounter_id}")

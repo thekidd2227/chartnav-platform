@@ -304,6 +304,23 @@ the RBAC reason explicit.
 - Helpers `encounterIsNative(enc)` and `encounterSourceLabel(enc)`
   are the single public surface for source-of-truth rendering.
 
+## External encounter bridge UI (phase 21)
+
+- When an integrated encounter is opened, the SoT banner now
+  includes a **Bridge to ChartNav** action for admin + clinician.
+- Clicking it calls `POST /encounters/bridge` with the external
+  reference + adapter source + mirror fields (patient id, patient
+  name, provider name, status), then navigates the URL to
+  `?encounter=<native_id>` so the detail pane remounts against the
+  bridged native row. The `_source` flips to `chartnav` and the
+  full `NoteWorkspace` (transcript → findings → draft → sign →
+  export) becomes available.
+- Reviewer role sees the external banner but no Bridge button — a
+  subtle-note explains.
+- Copy on the external-note (shown when no native id is selected)
+  was rewritten to describe the bridge instead of a blanket
+  "native-only" limitation.
+
 ## What this phase explicitly does NOT do
 
 - No real login flow — `X-User-Email` is still dev transport.

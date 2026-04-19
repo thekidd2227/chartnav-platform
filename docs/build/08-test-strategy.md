@@ -65,6 +65,26 @@ make docker-build
 - `make verify` (SQLite): 28 pytest + 9 smoke — all green
 - `scripts/pg_verify.sh`: migrations + seed (x2) + smoke + status transition + event write — **PASS**
 
+## Backend coverage (phase 21)
+
+- **196 pytest.** New `tests/test_encounter_bridge.py` (+11):
+  - bridge creates native row + carries `external_ref` +
+    `external_source` + `_bridged: True`.
+  - second call idempotent → same `id`, `_bridged: False`.
+  - standalone refusal (409).
+  - RBAC: reviewer → 403, admin + clinician OK.
+  - integrated_writethrough allowed.
+  - invalid status → 400 `invalid_status`.
+  - **full wedge**: transcript ingest → generate → sign → export →
+    workflow event, all on the bridged native id.
+  - phase-20 status-write gate still holds on bridged row.
+  - org scoping: same `external_ref` in two orgs → two native rows.
+  - standalone regression: native encounters keep `external_ref=NULL`.
+- Frontend: **45 Vitest** — bridge button dispatches
+  `bridgeEncounter`; external-note copy asserts on "bridg".
+- Playwright: 17/17 workflow + a11y unchanged. Visual baselines
+  refreshed (4/4 local).
+
 ## Backend coverage (phase 20)
 
 - **185 pytest.** New `tests/test_integrated_encounters.py` (+11):

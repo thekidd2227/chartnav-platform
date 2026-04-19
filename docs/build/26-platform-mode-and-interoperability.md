@@ -50,6 +50,17 @@ client directly. They talk to an adapter.
 | `stub`     | `app/integrations/stub.py`             | Integrated without a real vendor yet   | ✓ (canned) | ✓ | write-through only |
 | `fhir`     | `app/integrations/fhir.py` (phase 18)  | Generic FHIR R4 read-through           | ✓ (`GET /Encounter`) | ✓ (`GET /Encounter/<id>`) | ✗ `AdapterNotSupported` |
 
+### External encounter → native workflow bridge (phase 21)
+
+`POST /encounters/bridge` get-or-creates a native `encounters` row
+carrying `external_ref` + `external_source`. The bridge is idempotent
+(unique per `(org, external_ref, external_source)`), available in
+both integrated modes, and refused in standalone. Once bridged, the
+full transcript → findings → note draft → signoff wedge works
+identically to a standalone encounter; the external EHR remains SoR
+for the encounter shell and status. See
+`32-external-encounter-bridge.md`.
+
 Both implementations are honest:
 
 - `NativeChartNavAdapter` reuses the same SQLAlchemy Core query

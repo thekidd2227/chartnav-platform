@@ -149,6 +149,19 @@ vendor id.
 | is_active       | BOOLEAN      | NOT NULL default `true` |
 | created_at      | DATETIME     | NOT NULL default now() |
 
+### `encounters` — external bridge linkage (phase 21)
+
+Two additional nullable columns land on `encounters`:
+
+| column            | type         | notes |
+|-------------------|--------------|-------|
+| `external_ref`    | VARCHAR(128) | vendor encounter id (FHIR `Encounter.id`, Epic contact id, …). Indexed. |
+| `external_source` | VARCHAR(64)  | adapter key (`fhir`, `stub`, vendor). |
+
+New UNIQUE constraint `(organization_id, external_ref,
+external_source)` is the DB-level guarantee that makes the bridge
+idempotent. Standalone encounters keep both columns NULL.
+
 ### `encounters` — native linkage (phase 18)
 
 Two new nullable FK columns land on `encounters`:

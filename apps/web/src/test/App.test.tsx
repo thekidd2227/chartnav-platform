@@ -18,6 +18,7 @@ vi.mock("../api", async () => {
     updateEncounterStatus: vi.fn(),
     listLocations: vi.fn(),
     createEncounter: vi.fn(),
+    bridgeEncounter: vi.fn(),
     // Phase-19 workspace endpoints — keep App-level tests from
     // blowing up on NoteWorkspace mounting inside the detail pane.
     listEncounterInputs: vi.fn().mockResolvedValue([]),
@@ -440,9 +441,60 @@ describe("ChartNav frontend", () => {
     expect(
       screen.queryByTestId("note-workspace")
     ).not.toBeInTheDocument();
+    // Phase 21 copy: external-note now mentions bridging.
     expect(
       screen.getByTestId("note-workspace-external-note")
-    ).toHaveTextContent(/ChartNav-native/i);
+    ).toHaveTextContent(/bridg/i);
+    // Bridge button visible for admin + clinician.
+    expect(screen.getByTestId("bridge-encounter")).toBeEnabled();
+  });
+
+  it("bridge button calls bridgeEncounter with the external ref", async () => {
+    const external: api.Encounter = {
+      ...ORG1_ENCOUNTERS[0],
+      _source: "fhir",
+      _external_ref: "ENC-XYZ",
+    };
+    (api.getEncounter as any).mockResolvedValueOnce(external);
+    (api.bridgeEncounter as any).mockResolvedValueOnce({
+      ...ORG1_ENCOUNTERS[0],
+      id: 999,
+      external_ref: "ENC-XYZ",
+      external_source: "fhir",
+      _bridged: true,
+      _source: "chartnav",
+      _external_ref: "ENC-XYZ",
+      _external_source: "fhir",
+    });
+    // jsdom's window.location can't have its methods redefined; replace
+    // the whole object with a stub for this test.
+    const originalLocation = window.location;
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...originalLocation, assign: vi.fn(), href: "http://localhost/" },
+    });
+    try {
+      const user = userEvent.setup();
+      await waitForAdminLoaded();
+      await user.click(await screen.findByTestId("enc-row-1"));
+      await screen.findByTestId("encounter-detail");
+      await user.click(await screen.findByTestId("bridge-encounter"));
+      await waitFor(() =>
+        expect(api.bridgeEncounter).toHaveBeenCalledWith(
+          ADMIN1.email,
+          expect.objectContaining({
+            external_ref: "ENC-XYZ",
+            external_source: "fhir",
+            patient_identifier: expect.any(String),
+          })
+        )
+      );
+    } finally {
+      Object.defineProperty(window, "location", {
+        configurable: true,
+        value: originalLocation,
+      });
+    }
   });
 
   it("performs a status transition and refreshes detail + events", async () => {
