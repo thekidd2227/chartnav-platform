@@ -71,6 +71,7 @@ import {
   SHORTCUT_BLANK_TOKEN,
   clinicalShortcutMatches,
   firstBlankOffset,
+  nextBlankAfter,
   segmentAbbreviations,
   type ClinicalShortcut,
 } from "./clinicalShortcuts";
@@ -1070,6 +1071,38 @@ export function NoteWorkspace({
                 className="workspace__draft"
                 value={editBody ?? ""}
                 onChange={(e) => setEditBody(e.target.value)}
+                // Phase 31 — Tab-to-next-blank. When the doctor has
+                // just inserted a shortcut containing `___ to ___ o'clock`
+                // the caret-to-first-blank already selected the first
+                // placeholder; Tab advances to the next one without
+                // leaving the field. We forward the default Tab to its
+                // usual "focus the next element" behaviour once every
+                // blank has been consumed. Modifier keys (Shift, Ctrl,
+                // Meta, Alt) are left untouched so users who actually
+                // want to tab out can still do so.
+                onKeyDown={(e) => {
+                  if (
+                    e.key !== "Tab" ||
+                    e.shiftKey ||
+                    e.ctrlKey ||
+                    e.metaKey ||
+                    e.altKey
+                  )
+                    return;
+                  const ta = e.currentTarget;
+                  const body = ta.value ?? "";
+                  const startFrom = ta.selectionEnd ?? 0;
+                  const next = nextBlankAfter(body, startFrom);
+                  if (next >= 0) {
+                    e.preventDefault();
+                    ta.setSelectionRange(
+                      next,
+                      next + SHORTCUT_BLANK_TOKEN.length
+                    );
+                  }
+                  // else: no placeholder left → default Tab behaviour
+                  // (caret leaves the textarea for the next element).
+                }}
                 data-testid="note-draft-textarea"
                 rows={18}
               />

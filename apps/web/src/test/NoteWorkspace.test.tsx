@@ -1770,4 +1770,163 @@ describe("NoteWorkspace", () => {
       expect.stringMatching(/Status post/i)
     );
   });
+
+  // -------------------------------------------------------------------
+  // Phase 31 — glaucoma + cornea expansion, Tab-to-next-blank
+  // -------------------------------------------------------------------
+
+  it("renders the two new subspecialty groups", async () => {
+    renderWorkspace();
+    await screen.findByTestId("clinical-shortcuts-panel");
+    expect(
+      screen.getByTestId("clinical-shortcuts-group-glaucoma")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("clinical-shortcuts-group-cornea-anterior-segment")
+    ).toBeInTheDocument();
+    // Spot-check conservative specialist phrasing.
+    expect(screen.getByTestId("clinical-shortcut-glc-02")).toHaveTextContent(
+      /Ocular hypertension without glaucomatous optic neuropathy/i
+    );
+    expect(screen.getByTestId("clinical-shortcut-glc-04")).toHaveTextContent(
+      /Narrow angles on gonioscopy OU without evidence of angle-closure/i
+    );
+    expect(screen.getByTestId("clinical-shortcut-cor-03")).toHaveTextContent(
+      /Keratoconus with inferior steepening on topography/i
+    );
+    expect(screen.getByTestId("clinical-shortcut-cor-05")).toHaveTextContent(
+      /Fuchs endothelial dystrophy/i
+    );
+  });
+
+  it("abbreviation-aware search: 'POAG' surfaces the glaucoma group", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await screen.findByTestId("clinical-shortcuts-panel");
+    await user.type(
+      screen.getByTestId("clinical-shortcuts-search"),
+      "POAG"
+    );
+    expect(
+      screen.getByTestId("clinical-shortcuts-group-glaucoma")
+    ).toBeInTheDocument();
+    // Retina-only groups drop out.
+    expect(
+      screen.queryByTestId("clinical-shortcuts-group-pvd")
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("clinical-shortcuts-group-wet-dry-amd")
+    ).not.toBeInTheDocument();
+  });
+
+  it("abbreviation-aware search: 'CXL' surfaces cornea with keratoconus", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await screen.findByTestId("clinical-shortcuts-panel");
+    await user.type(
+      screen.getByTestId("clinical-shortcuts-search"),
+      "CXL"
+    );
+    expect(
+      screen.getByTestId("clinical-shortcuts-group-cornea-anterior-segment")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("clinical-shortcut-cor-03")
+    ).toBeInTheDocument();
+  });
+
+  it("Tab-to-next-blank: pressing Tab inside the draft selects the next `___`", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    const textarea = (await screen.findByTestId(
+      "note-draft-textarea"
+    )) as HTMLTextAreaElement;
+
+    // Seed a body containing two placeholders with known offsets.
+    await user.clear(textarea);
+    await user.type(textarea, "A ___ B ___ C");
+    // Place caret at the start of the field.
+    textarea.focus();
+    textarea.setSelectionRange(0, 0);
+
+    // Tab → first `___`.
+    await user.keyboard("{Tab}");
+    await waitFor(() => {
+      const sel = textarea.value.slice(
+        textarea.selectionStart,
+        textarea.selectionEnd
+      );
+      expect(sel).toBe("___");
+      expect(textarea.selectionStart).toBe("A ".length);
+    });
+
+    // Tab again → second `___`.
+    await user.keyboard("{Tab}");
+    await waitFor(() => {
+      const sel = textarea.value.slice(
+        textarea.selectionStart,
+        textarea.selectionEnd
+      );
+      expect(sel).toBe("___");
+      expect(textarea.selectionStart).toBe("A ___ B ".length);
+    });
+  });
+
+  it("Tab fallback: with no remaining blanks, default Tab behaviour runs", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    const textarea = (await screen.findByTestId(
+      "note-draft-textarea"
+    )) as HTMLTextAreaElement;
+    await user.clear(textarea);
+    await user.type(textarea, "no placeholders here");
+    textarea.focus();
+    textarea.setSelectionRange(3, 3);
+
+    const before = {
+      value: textarea.value,
+      start: textarea.selectionStart,
+      end: textarea.selectionEnd,
+    };
+
+    // Dispatch a Tab keydown and confirm the handler did NOT
+    // preventDefault (i.e. the default event remains cancelable=true
+    // and the value + selection are unchanged by our handler).
+    const ev = new KeyboardEvent("keydown", {
+      key: "Tab",
+      bubbles: true,
+      cancelable: true,
+    });
+    textarea.dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(false);
+    expect(textarea.value).toBe(before.value);
+    expect(textarea.selectionStart).toBe(before.start);
+    expect(textarea.selectionEnd).toBe(before.end);
+  });
+
+  it("Tab with Shift modifier is left untouched by the next-blank handler", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    const textarea = (await screen.findByTestId(
+      "note-draft-textarea"
+    )) as HTMLTextAreaElement;
+    await user.clear(textarea);
+    await user.type(textarea, "___ here");
+    textarea.focus();
+    textarea.setSelectionRange(0, 0);
+
+    // Shift+Tab must NOT select the `___` — it should fall through
+    // to browser default (focus previous element).
+    const ev = new KeyboardEvent("keydown", {
+      key: "Tab",
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    textarea.dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(false);
+    // Selection is unchanged.
+    expect(textarea.selectionStart).toBe(0);
+    expect(textarea.selectionEnd).toBe(0);
+  });
 });

@@ -206,6 +206,27 @@ two suites never cross-contaminate.
     disabled until a `completed` input exists.
   - Generate is enabled when a `completed` input is present.
 
+## Tab-to-next-blank + glaucoma/cornea + usage summary (phase 31)
+
+- **+6** in `src/test/NoteWorkspace.test.tsx`:
+  - two new subspecialty groups render with verbatim phrasing
+    spot-checks via `toHaveTextContent` (crosses `<abbr>` nodes).
+  - abbreviation-aware search: `POAG` surfaces Glaucoma and
+    drops retina groups; `CXL` surfaces Cornea with keratoconus.
+  - Tab inside the editable draft walks first→second `___`
+    placeholder; selection starts exactly at the expected
+    offsets (`"A ".length` then `"A ___ B ".length`).
+  - Tab fallback: when no blanks remain, `defaultPrevented`
+    stays `false`, the textarea value + selection do not
+    mutate — browser default owns the event.
+  - Shift+Tab is deliberately untouched by the handler; the
+    backward-focus default runs.
+- No new mocks this phase — the usage-summary endpoint is
+  admin-side only and tested end-to-end in the backend pytest
+  suite.
+- Vitest suite total: **108 tests** (NoteWorkspace 69, App 19,
+  AdminPanel 20).
+
 ## Shortcut ergonomics + retina expansion (phase 30)
 
 - **+10** in `src/test/NoteWorkspace.test.tsx`:

@@ -4,6 +4,91 @@ Reverse-chronological.
 
 ---
 
+## 2026-04-19 — Phase 31: Tab-to-next-blank + shortcut usage summary + glaucoma/cornea
+
+Three narrow ergonomic wins on the phase-29/30 Clinical Shortcuts
+surface. Tab inside the draft textarea walks from one `___`
+placeholder to the next so multi-blank phrases can be filled in a
+single keyboard flow. An admin `/admin/shortcut-usage-summary`
+endpoint rolls up the existing `clinician_shortcut_used` audit
+stream into a ranked `{ref, count, last_used_at}` list — no new
+storage, PHI-minimising. Catalog grows from 30 to 42 shortcuts
+with 12 new conservative specialist phrases across Glaucoma and
+Cornea / anterior segment. Abbreviation reference grows from 50
+to 76 curated entries — only terms the new live content uses.
+
+### Changes
+- **Backend** — new `GET /admin/shortcut-usage-summary?days&limit`
+  route (admin-only, org-scoped). Reads `security_audit_events`
+  where `event_type='clinician_shortcut_used'`, regex-parses the
+  `shortcut_id=<ref>` token, aggregates per-ref counts +
+  last_used_at. Ranked most-used-first with stable tie-break.
+  No new tables, no cron. `days` clamped [1,365]; `limit`
+  clamped [1,200].
+- **Catalog** — 12 new shortcuts in `clinicalShortcuts.ts`:
+  - **Glaucoma** (`glc-01..06`): POAG severity+target; OHT+CCT;
+    PXF/PDS secondary OAG; narrow angles→LPI; post-op trab;
+    post-op GDD.
+  - **Cornea / anterior segment** (`cor-01..06`): DED+SPK+
+    Schirmer+ATs; MGD; keratoconus+CXL vs obs; RCE→BSCL/PTK;
+    Fuchs+guttae+DSEK counseling; post-op DSEK.
+- **Abbreviation table** grew by 26 entries (ACG, CCT, GDD,
+  LPI, NAG, OHT, PDG, PDS, POAG, PXF, PXFG, RNFL, SLT, Trab,
+  VF, AT, BSCL, CXL, DED, DSEK, KC, KCS, MGD, PTK, RCE, SPK,
+  TBU) — only additions the new shortcuts actually use or
+  plausibly search. Full PDF still not dumped.
+- **Tab-to-next-blank** — new `nextBlankAfter(body, fromOffset)`
+  helper; draft-textarea `onKeyDown` handler previews the next
+  `___` from `selectionEnd`, selects its 3 chars, and
+  `preventDefault()`s. Modifier keys (Shift/Ctrl/Meta/Alt) pass
+  through to browser default — no regression on existing keyboard
+  navigation.
+
+### Tests
+- Backend +8 (`test_shortcut_usage_summary.py`): clinician +
+  reviewer 403, ranked rollup with counts + last_used_at,
+  cross-org isolation, days validation (422 on out-of-range),
+  limit caps rows but not `distinct_refs`, PHI invariant
+  (note_version_id + encounter_id never surface), quick-comment
+  events not conflated into the shortcut summary.
+  Full backend suite: **301 passed** (293 + 8).
+- Frontend +6 (`NoteWorkspace.test.tsx`): new glaucoma + cornea
+  groups render with verbatim phrasing spot-checks; abbreviation-
+  aware search for `POAG` surfaces glaucoma (drops retina),
+  `CXL` surfaces cornea with keratoconus; Tab inside the draft
+  walks first→second `___`; Tab fallback when no blanks
+  (`defaultPrevented===false`, no mutation); Shift+Tab is
+  untouched by the handler.
+  Full vitest suite: **108 passed** (19 + 20 + 69).
+- Typecheck clean. Vite build 251.18 kB JS / 21.26 kB CSS
+  (gzip 74.05 / 4.41 kB).
+
+### Docs
+- New `docs/build/42-shortcut-intelligence-glaucoma-cornea.md`.
+- Updated `docs/build/16-frontend-test-strategy.md`.
+
+### Files touched
+- `apps/api/app/api/routes.py`
+- `apps/api/tests/test_shortcut_usage_summary.py` (new)
+- `apps/web/src/clinicalShortcuts.ts`
+- `apps/web/src/NoteWorkspace.tsx`
+- `apps/web/src/test/NoteWorkspace.test.tsx`
+- `docs/build/05-build-log.md`,
+  `16-frontend-test-strategy.md`,
+  `42-shortcut-intelligence-glaucoma-cornea.md` (new)
+
+### Files intentionally avoided
+- Marketing site.
+- No new DB table for usage analytics — summary reads the audit
+  stream directly.
+- No unified favorites table.
+- No backward Tab (Shift+Tab walks backward) — scope was "next
+  blank" only.
+- No Playwright scenario — existing phase-28 spec covers the
+  cross-stack insertion wedge through the shared splice helper.
+
+---
+
 ## 2026-04-19 — Phase 30: shortcut favorites + caret-to-blank + retina expansion
 
 Three narrow ergonomic wins on the phase-29 Clinical Shortcuts

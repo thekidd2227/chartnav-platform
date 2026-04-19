@@ -42,7 +42,9 @@ export type ClinicalShortcutGroup =
   | "Diabetic retinopathy / DME"
   | "ERM / VMT / macular hole"
   | "BRVO / CRVO / retinal vascular"
-  | "Post-injection / post-vitrectomy / post-op";
+  | "Post-injection / post-vitrectomy / post-op"
+  | "Glaucoma"
+  | "Cornea / anterior segment";
 
 export const CLINICAL_SHORTCUT_GROUPS: ClinicalShortcutGroup[] = [
   "PVD",
@@ -52,6 +54,8 @@ export const CLINICAL_SHORTCUT_GROUPS: ClinicalShortcutGroup[] = [
   "ERM / VMT / macular hole",
   "BRVO / CRVO / retinal vascular",
   "Post-injection / post-vitrectomy / post-op",
+  "Glaucoma",
+  "Cornea / anterior segment",
 ];
 
 export const CLINICAL_SHORTCUTS: ClinicalShortcut[] = [
@@ -413,6 +417,150 @@ export const CLINICAL_SHORTCUTS: ClinicalShortcut[] = [
       "pdr", "nve", "neovascularization", "laser",
     ],
   },
+
+  // ---------- Glaucoma ----------
+  // Conservative AAO-style phrasing. C/D, RNFL, VF, target-IOP
+  // language is stable across AOA/ICO glaucoma documentation.
+  {
+    id: "glc-01",
+    group: "Glaucoma",
+    body:
+      "POAG, ___ severity, OD C/D ___ / OS C/D ___; VF ___ and RNFL ___ " +
+      "on OCT; currently on ___ drops. Target IOP ___.",
+    tags: [
+      "poag", "open angle glaucoma", "glc", "c/d", "vf", "rnfl",
+      "oct", "target iop", "iop", "drops",
+    ],
+  },
+  {
+    id: "glc-02",
+    group: "Glaucoma",
+    body:
+      "Ocular hypertension without glaucomatous optic neuropathy; C/D ___, " +
+      "IOP ___, CCT ___ microns. Continue monitoring; target IOP ___.",
+    tags: [
+      "oht", "ocular hypertension", "c/d", "iop", "cct", "pachymetry",
+      "target iop", "glc",
+    ],
+  },
+  {
+    id: "glc-03",
+    group: "Glaucoma",
+    body:
+      "Pseudoexfoliation / pigment dispersion on gonioscopy with " +
+      "secondary open-angle glaucoma; on ___ drops, target IOP ___.",
+    tags: [
+      "pxf", "pseudoexfoliation", "pds", "pigment dispersion",
+      "pdg", "pxfg", "gonioscopy", "iop", "glc", "drops",
+    ],
+  },
+  {
+    id: "glc-04",
+    group: "Glaucoma",
+    body:
+      "Narrow angles on gonioscopy OU without evidence of angle-closure; " +
+      "recommend prophylactic LPI ___.",
+    tags: [
+      "nag", "narrow angles", "gonioscopy", "lpi",
+      "angle closure", "acg", "glc",
+    ],
+  },
+  {
+    id: "glc-05",
+    group: "Glaucoma",
+    body:
+      "Post-op s/p trabeculectomy: bleb diffuse and functional, AC deep, " +
+      "IOP ___; continue topical steroid taper, strict no-rubbing.",
+    tags: [
+      "postop", "post-op", "s/p", "trab", "trabeculectomy", "bleb",
+      "iop", "ac", "glc", "steroid",
+    ],
+  },
+  {
+    id: "glc-06",
+    group: "Glaucoma",
+    body:
+      "Post-op s/p glaucoma drainage device: tube in good position in AC, " +
+      "no conjunctival erosion over plate; IOP ___.",
+    tags: [
+      "postop", "post-op", "s/p", "tube shunt", "gdd", "ahmed", "baerveldt",
+      "tube", "iop", "glc",
+    ],
+  },
+
+  // ---------- Cornea / anterior segment ----------
+  {
+    id: "cor-01",
+    group: "Cornea / anterior segment",
+    body:
+      "Dry eye disease with punctate epithelial staining OU and reduced " +
+      "tear break-up time; Schirmer ___ mm. Start / continue artificial " +
+      "tears, warm compresses, and lid hygiene.",
+    tags: [
+      "ded", "dry eye", "kcs", "spk", "punctate",
+      "tbu", "tear break-up", "schirmer", "at", "artificial tears",
+      "warm compress", "lid hygiene",
+    ],
+  },
+  {
+    id: "cor-02",
+    group: "Cornea / anterior segment",
+    body:
+      "Meibomian gland dysfunction with inspissated glands, lid-margin " +
+      "telangiectasia, and posterior blepharitis.",
+    tags: [
+      "mgd", "meibomian gland dysfunction", "img", "blepharitis",
+      "lid hygiene", "lids", "ded",
+    ],
+  },
+  {
+    id: "cor-03",
+    group: "Cornea / anterior segment",
+    body:
+      "Keratoconus with inferior steepening on topography; K-max ___, " +
+      "thinnest pachymetry ___ microns. Discussed observation vs. CXL.",
+    tags: [
+      "kc", "keratoconus", "topography", "topo", "k-max",
+      "pachymetry", "cxl", "corneal cross-linking",
+    ],
+  },
+  {
+    id: "cor-04",
+    group: "Cornea / anterior segment",
+    body:
+      "Recurrent corneal erosion OS with epithelial loosening; start " +
+      "BSCL and aggressive lubrication, consider debridement or PTK if " +
+      "refractory.",
+    tags: [
+      "rce", "recurrent corneal erosion", "corab", "erosion",
+      "bscl", "bsl", "bandage contact lens", "lubrication",
+      "ptk", "debridement",
+    ],
+  },
+  {
+    id: "cor-05",
+    group: "Cornea / anterior segment",
+    body:
+      "Fuchs endothelial dystrophy with central guttae and mild stromal " +
+      "edema; pachymetry ___ microns. Monitor with pachymetry + " +
+      "specular microscopy; counsel regarding DSEK when visually " +
+      "significant.",
+    tags: [
+      "fuchs", "endothelial dystrophy", "guttae", "stromal edema",
+      "pachymetry", "specular microscopy", "dsek", "cornea",
+    ],
+  },
+  {
+    id: "cor-06",
+    group: "Cornea / anterior segment",
+    body:
+      "Post-op s/p DSEK: graft well-adhered, no interface fluid on OCT, " +
+      "AC quiet; continue steroid taper and no-rub precautions.",
+    tags: [
+      "postop", "post-op", "s/p", "dsek", "graft", "oct",
+      "ac", "steroid", "cornea",
+    ],
+  },
 ];
 
 /**
@@ -482,6 +630,35 @@ export const ABBREVIATION_HINTS: Record<string, string> = {
   "S/P": "Status post",
   VA: "Visual acuity",
   VMT: "Vitreomacular traction",
+  // ---- Glaucoma ----
+  ACG: "Angle-closure glaucoma",
+  CCT: "Central corneal thickness",
+  GDD: "Glaucoma drainage device",
+  LPI: "Laser peripheral iridotomy",
+  NAG: "Narrow-angle glaucoma",
+  OHT: "Ocular hypertension",
+  PDG: "Pigmentary dispersion glaucoma",
+  PDS: "Pigment dispersion syndrome",
+  POAG: "Primary open-angle glaucoma",
+  PXF: "Pseudoexfoliation",
+  PXFG: "Pseudoexfoliative glaucoma",
+  RNFL: "Retinal nerve fiber layer",
+  SLT: "Selective laser trabeculoplasty",
+  Trab: "Trabeculectomy",
+  VF: "Visual field",
+  // ---- Cornea / anterior segment ----
+  AT: "Artificial tears",
+  BSCL: "Bandage soft contact lens",
+  CXL: "Corneal cross-linking",
+  DED: "Dry eye disease",
+  DSEK: "Descemet stripping endothelial keratoplasty",
+  KC: "Keratoconus",
+  KCS: "Keratoconjunctivitis sicca",
+  MGD: "Meibomian gland dysfunction",
+  PTK: "Phototherapeutic keratectomy",
+  RCE: "Recurrent corneal erosion",
+  SPK: "Superficial punctate keratitis",
+  TBU: "Tear break-up time",
 };
 
 /** Ordered list of abbreviation tokens, longest-first, so a body
@@ -599,4 +776,15 @@ export const SHORTCUT_BLANK_TOKEN = "___";
  */
 export function firstBlankOffset(body: string): number {
   return body.indexOf(SHORTCUT_BLANK_TOKEN);
+}
+
+/**
+ * Return the zero-based offset of the NEXT `___` placeholder at or
+ * after `fromOffset`, or `-1` if none remains. Used by the Tab
+ * handler in the draft textarea to walk from one blank to the next
+ * without leaving the field.
+ */
+export function nextBlankAfter(body: string, fromOffset: number): number {
+  const safeFrom = Math.max(0, fromOffset | 0);
+  return body.indexOf(SHORTCUT_BLANK_TOKEN, safeFrom);
 }

@@ -3409,3 +3409,105 @@ def unfavorite_clinical_shortcut(
             detail=f"shortcut_ref={ref}",
         )
     return {"removed": int(removed)}
+
+
+# ===========================================================================
+# Shortcut usage-summary admin report (phase 31)
+# ===========================================================================
+#
+# Thin operational read on top of the existing audit stream. Answers
+# "which Clinical Shortcuts are the doctors in this org actually
+# reaching for?" without standing up a new storage layer.
+#
+# Reads `security_audit_events` where event_type='clinician_shortcut_used',
+# parses `shortcut_id=<ref>` out of the detail string, and aggregates
+# per-ref counts + last-used-at. Admin-gated; org-scoped. PHI-minimising:
+# the summary never emits note_version_id or encounter_id — only the
+# catalog ref + count + timestamp.
+
+
+@router.get("/admin/shortcut-usage-summary")
+def shortcut_usage_summary(
+    days: int = Query(
+        30,
+        ge=1,
+        le=365,
+        description="Rolling window in days (1-365). Default 30.",
+    ),
+    limit: int = Query(
+        50,
+        ge=1,
+        le=200,
+        description="Max ranked rows to return. Default 50.",
+    ),
+    caller: Caller = Depends(require_admin),
+) -> dict:
+    """Per-ref rollup of `clinician_shortcut_used` audit events.
+
+    Intentionally narrow: no per-user breakdown, no encounter join, no
+    comment-body exposure. Just the catalog ref, a count, and the most
+    recent usage timestamp within the window, ranked descending by
+    count.
+
+    This is admin-only because it's an operational lens on
+    clinician-behaviour patterns, not a per-patient data view. Cross-
+    org queries are blocked by the `organization_id` filter on the
+    audit table (every event carries it).
+    """
+    import re
+    from datetime import datetime, timedelta, timezone
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=int(days))
+    rows = fetch_all(
+        "SELECT detail, created_at FROM security_audit_events "
+        "WHERE event_type = :etype "
+        "AND organization_id = :org "
+        "AND created_at >= :since",
+        {
+            "etype": "clinician_shortcut_used",
+            "org": caller.organization_id,
+            "since": cutoff,
+        },
+    )
+
+    # Parse the `shortcut_id=<ref>` token out of each detail string.
+    # Defensive: skip rows whose detail is missing / malformed.
+    pattern = re.compile(r"\bshortcut_id=([A-Za-z0-9_\-]+)")
+    counts: dict[str, int] = {}
+    last_seen: dict[str, str] = {}
+    total = 0
+    for row in rows:
+        detail = (row.get("detail") or "").strip()
+        m = pattern.search(detail)
+        if not m:
+            continue
+        ref = m.group(1)
+        counts[ref] = counts.get(ref, 0) + 1
+        total += 1
+        ts = row.get("created_at")
+        ts_str = ts.isoformat() if hasattr(ts, "isoformat") else str(ts or "")
+        prev = last_seen.get(ref, "")
+        if ts_str > prev:
+            last_seen[ref] = ts_str
+
+    items = [
+        {
+            "shortcut_ref": ref,
+            "count": count,
+            "last_used_at": last_seen.get(ref),
+        }
+        for ref, count in counts.items()
+    ]
+    # Rank most-used first; stable secondary sort on ref so equal-count
+    # ties have a deterministic order.
+    items.sort(key=lambda r: (-r["count"], r["shortcut_ref"]))
+    items = items[: int(limit)]
+
+    return {
+        "window_days": int(days),
+        "organization_id": caller.organization_id,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "total_events": total,
+        "distinct_refs": len(counts),
+        "items": items,
+    }
