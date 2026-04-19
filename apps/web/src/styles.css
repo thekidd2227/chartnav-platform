@@ -1111,3 +1111,17 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
 .btn--qc-star--on {
   color: #B45309;
 }
+
+/* ---- Phase 29 — Clinical Shortcuts section ---- */
+.workspace__clinical-shortcuts {
+  margin-top: 20px;
+}
+/* Subtle abbreviation hint inside shortcut bodies. Underline with a
+   dotted rule so the hover target reads as "more info" rather than
+   as a clickable link. */
+.cn-abbr {
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+  cursor: help;
+  font-variant-numeric: tabular-nums;
+}

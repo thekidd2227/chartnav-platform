@@ -38,6 +38,8 @@ vi.mock("../api", async () => {
     favoriteQuickComment: vi.fn(),
     unfavoriteQuickComment: vi.fn(),
     recordQuickCommentUsage: vi.fn(),
+    // Phase 29 — clinical shortcuts usage audit.
+    recordClinicalShortcutUsage: vi.fn(),
   };
 });
 
@@ -217,6 +219,10 @@ beforeEach(() => {
   (api.recordQuickCommentUsage as any).mockResolvedValue({
     recorded: true,
     kind: "preloaded",
+  });
+  (api.recordClinicalShortcutUsage as any).mockResolvedValue({
+    recorded: true,
+    shortcut_id: "rd-01",
   });
   (api.createEncounterInput as any).mockResolvedValue({});
 });
@@ -1331,5 +1337,205 @@ describe("NoteWorkspace", () => {
     );
     const call = (api.recordQuickCommentUsage as any).mock.calls.at(-1);
     expect(call?.[1]).not.toHaveProperty("body");
+  });
+
+  // -------------------------------------------------------------------
+  // Phase 29 — Clinical Shortcuts
+  // -------------------------------------------------------------------
+
+  it("Clinical Shortcuts panel is hidden for reviewers", async () => {
+    render(
+      <NoteWorkspace
+        identity="rev@chartnav.local"
+        me={REV}
+        encounterId={1}
+        patientDisplay="Test"
+        providerDisplay="Dr T"
+      />
+    );
+    await screen.findByTestId("workspace-tier-transcript");
+    expect(
+      screen.queryByTestId("clinical-shortcuts-panel")
+    ).not.toBeInTheDocument();
+    // No shortcut usage-audit POST should have fired for reviewer.
+    expect(api.recordClinicalShortcutUsage).not.toHaveBeenCalled();
+  });
+
+  it("renders the three specialist groups with verbatim phrasing", async () => {
+    renderWorkspace();
+    const panel = await screen.findByTestId("clinical-shortcuts-panel");
+    // Provenance label is unambiguous.
+    expect(panel).toHaveTextContent(/clinician-entered/i);
+    expect(panel).toHaveTextContent(
+      /doctor-inserted shortcuts, not transcript findings or ai-generated/i
+    );
+    // All three clinical groups render.
+    expect(
+      screen.getByTestId("clinical-shortcuts-group-pvd")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("clinical-shortcuts-group-retinal-detachment")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("clinical-shortcuts-group-wet-dry-amd")
+    ).toBeInTheDocument();
+    // Spot-check exact clinical phrasing per the brief.
+    expect(panel).toHaveTextContent(/Acute PVD noted with vitreous syneresis/);
+    expect(panel).toHaveTextContent(/Negative Shafer sign/);
+    expect(panel).toHaveTextContent(/Rhegmatogenous retinal detachment/);
+    expect(panel).toHaveTextContent(/macula on \/ macula off/);
+    expect(panel).toHaveTextContent(/Dry AMD with drusen and RPE mottling/);
+  });
+
+  it("abbreviations inside shortcut bodies render with hover-help (<abbr title>)", async () => {
+    renderWorkspace();
+    await screen.findByTestId("clinical-shortcuts-panel");
+    // "AMD" appears inside the Dry AMD shortcut; should be wrapped
+    // with a title attribute carrying the expansion.
+    const abbrs = screen.getAllByTestId("clinical-shortcut-abbr-AMD");
+    expect(abbrs.length).toBeGreaterThan(0);
+    expect(abbrs[0]).toHaveAttribute(
+      "title",
+      expect.stringMatching(/Age-related macular degeneration/i)
+    );
+    // "RPE" is present in "Dry AMD with drusen and RPE mottling".
+    const rpe = screen.getAllByTestId("clinical-shortcut-abbr-RPE");
+    expect(rpe[0]).toHaveAttribute(
+      "title",
+      expect.stringMatching(/Retinal pigment epithelium/i)
+    );
+  });
+
+  it("click-to-insert routes the full clinical phrase into the draft", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    const textarea = (await screen.findByTestId(
+      "note-draft-textarea"
+    )) as HTMLTextAreaElement;
+    await screen.findByTestId("clinical-shortcuts-panel");
+    await user.click(screen.getByTestId("clinical-shortcut-pvd-01"));
+    await waitFor(() => {
+      expect(textarea.value).toContain(
+        "Acute PVD noted with vitreous syneresis."
+      );
+      expect(textarea.value).toContain(
+        "No retinal tear or retinal detachment on scleral depressed exam."
+      );
+    });
+  });
+
+  it("click-to-insert fires recordClinicalShortcutUsage with shortcut_id + no body", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await screen.findByTestId("clinical-shortcuts-panel");
+    await user.click(screen.getByTestId("clinical-shortcut-rd-02"));
+    await waitFor(() =>
+      expect(api.recordClinicalShortcutUsage).toHaveBeenCalledWith(
+        CLIN.email,
+        expect.objectContaining({ shortcut_id: "rd-02" })
+      )
+    );
+    // PHI invariant: the payload must not carry the shortcut body.
+    const call = (api.recordClinicalShortcutUsage as any).mock.calls.at(-1);
+    expect(call?.[1]).not.toHaveProperty("body");
+  });
+
+  it("signed notes disable every Clinical Shortcut button", async () => {
+    (api.listEncounterNotes as any).mockResolvedValue([
+      baseNote({ draft_status: "signed", signed_at: "2026-04-18 20:10:00" }),
+    ]);
+    (api.getNoteVersion as any).mockResolvedValue({
+      note: baseNote({
+        draft_status: "signed",
+        signed_at: "2026-04-18 20:10:00",
+      }),
+      findings: FINDINGS,
+    });
+    renderWorkspace();
+    await screen.findByTestId("clinical-shortcuts-panel");
+    const btn = screen.getByTestId("clinical-shortcut-amd-01");
+    expect(btn).toBeDisabled();
+  });
+
+  it("abbreviation-aware search: 'RD' surfaces the retinal-detachment group even without typing 'detachment'", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await screen.findByTestId("clinical-shortcuts-panel");
+    await user.type(screen.getByTestId("clinical-shortcuts-search"), "RD");
+    // The Retinal detachment group must still render.
+    expect(
+      screen.getByTestId("clinical-shortcuts-group-retinal-detachment")
+    ).toBeInTheDocument();
+    // And the PVD shortcuts that explicitly rule out an RD (tagged
+    // with `rd`) should still be visible, too.
+    expect(
+      screen.queryByTestId("clinical-shortcuts-group-pvd")
+    ).toBeInTheDocument();
+  });
+
+  it("abbreviation-aware search: 'SRF' surfaces the shortcuts that mention subretinal fluid", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await screen.findByTestId("clinical-shortcuts-panel");
+    await user.type(screen.getByTestId("clinical-shortcuts-search"), "SRF");
+    // rd-02 has the phrase "subretinal fluid"; rd-04 has "SRF" literally.
+    expect(
+      screen.getByTestId("clinical-shortcut-rd-02")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("clinical-shortcut-rd-04")
+    ).toBeInTheDocument();
+  });
+
+  it("abbreviation-aware search: 'AMD' restricts results to the Wet/Dry AMD group", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await screen.findByTestId("clinical-shortcuts-panel");
+    await user.type(screen.getByTestId("clinical-shortcuts-search"), "AMD");
+    expect(
+      screen.getByTestId("clinical-shortcuts-group-wet-dry-amd")
+    ).toBeInTheDocument();
+    // No PVD or RD group visible (their bodies never say "age-related
+    // macular degeneration" and their tags don't include 'amd').
+    expect(
+      screen.queryByTestId("clinical-shortcuts-group-pvd")
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("clinical-shortcuts-group-retinal-detachment")
+    ).not.toBeInTheDocument();
+  });
+
+  it("Clinical Shortcuts live in their own panel, separate from Quick Comments", async () => {
+    renderWorkspace();
+    const shortcuts = await screen.findByTestId("clinical-shortcuts-panel");
+    const qc = await screen.findByTestId("quick-comments-panel");
+    // Structurally distinct sections (no ancestor sharing beyond the
+    // workspace shell).
+    expect(shortcuts).not.toBe(qc);
+    expect(shortcuts.contains(qc)).toBe(false);
+    expect(qc.contains(shortcuts)).toBe(false);
+    // Each carries its own clinician-entered trust pill + its own
+    // help caption.
+    expect(qc).toHaveTextContent(/clinician-entered/i);
+    expect(shortcuts).toHaveTextContent(/clinician-entered/i);
+    expect(
+      screen.getByTestId("clinical-shortcuts-help")
+    ).toHaveTextContent(/specialty shorthand/i);
+    expect(
+      screen.getByTestId("quick-comments-help")
+    ).toHaveTextContent(/clinician quick-picks/i);
+  });
+
+  it("Clinical Shortcut insertion does NOT fire the Quick-Comment audit", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await screen.findByTestId("clinical-shortcuts-panel");
+    await user.click(screen.getByTestId("clinical-shortcut-amd-03"));
+    await waitFor(() =>
+      expect(api.recordClinicalShortcutUsage).toHaveBeenCalled()
+    );
+    // The two audit streams must stay separate — a shortcut click
+    // must never register as a quick-comment event.
+    expect(api.recordQuickCommentUsage).not.toHaveBeenCalled();
   });
 });

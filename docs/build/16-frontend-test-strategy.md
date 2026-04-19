@@ -206,6 +206,31 @@ two suites never cross-contaminate.
     disabled until a `completed` input exists.
   - Generate is enabled when a `completed` input is present.
 
+## Clinical Shortcuts — specialist shorthand pack (phase 29)
+
+- **+11** in `src/test/NoteWorkspace.test.tsx`:
+  - reviewer view hides the panel AND
+    `recordClinicalShortcutUsage` never fires.
+  - three specialist groups render with verbatim phrasing
+    (includes the explicit "macula on / macula off" slash).
+  - inline `<abbr title="…">` hover help renders for AMD + RPE
+    with the expected expansion.
+  - click-to-insert lands the full phrase in the editable
+    draft via the shared `spliceIntoDraft` helper.
+  - click fires `recordClinicalShortcutUsage` with the ref id
+    and no `body` key (PHI invariant).
+  - signed note disables every shortcut button.
+  - abbreviation-aware search: queries `RD`, `SRF`, `AMD` each
+    return the expected filtered groups/rows.
+  - panel-isolation assertion: Clinical Shortcuts and Quick
+    Comments are structurally disjoint siblings, each with its
+    own `clinician-entered` trust pill + help caption.
+  - two audit streams stay separate: a shortcut click must not
+    fire `recordQuickCommentUsage`.
+- New mock: `recordClinicalShortcutUsage` on the `api` module.
+- Vitest suite total: **92 tests** (NoteWorkspace 53, App 19,
+  AdminPanel 20).
+
 ## Quick-comment favorites + cursor insertion + usage audit (phase 28)
 
 - **+8** in `src/test/NoteWorkspace.test.tsx`:

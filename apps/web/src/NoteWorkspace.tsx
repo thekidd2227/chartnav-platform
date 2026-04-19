@@ -41,6 +41,7 @@ import {
   listMyQuickComments,
   listMyQuickCommentFavorites,
   listNoteTransmissions,
+  recordClinicalShortcutUsage,
   recordQuickCommentUsage,
   transmitNoteVersion,
   unfavoriteQuickComment,
@@ -59,6 +60,14 @@ import {
   QUICK_COMMENT_CATEGORIES,
   type QuickCommentCategory,
 } from "./quickComments";
+import {
+  ABBREVIATION_HINTS,
+  CLINICAL_SHORTCUTS,
+  CLINICAL_SHORTCUT_GROUPS,
+  clinicalShortcutMatches,
+  segmentAbbreviations,
+  type ClinicalShortcut,
+} from "./clinicalShortcuts";
 
 // ---------------------------------------------------------------------
 // Types
@@ -123,6 +132,12 @@ export function NoteWorkspace({
     ClinicianQuickCommentFavorite[]
   >([]);
   const draftTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Phase 29 — Clinical Shortcuts. Static content, separate search
+  // state so the specialist pack doesn't fight the quick-comments
+  // filter. Abbreviation-aware matching lives in
+  // `clinicalShortcutMatches` (see clinicalShortcuts.ts).
+  const [shortcutSearch, setShortcutSearch] = useState("");
 
   const canSign = me.role === "admin" || me.role === "clinician";
   const canEdit = canSign; // same set today
@@ -295,37 +310,23 @@ export function NoteWorkspace({
     return customComments.filter((c) => c.body.toLowerCase().includes(q));
   }, [qcSearch, customComments]);
 
-  /** Insert a quick-comment body into the draft textarea.
+  /** Cursor-aware splice of `body` into the current draft buffer.
    *
-   *  Phase 28 cursor-aware behaviour:
-   *  - If the draft textarea is mounted and has a valid selection
-   *    range, splice the body at the current caret (or over the
-   *    selection if non-empty), using a single React state update so
-   *    the browser's undo stack stays coherent.
-   *  - If the ref or selection state is unavailable (textarea not
-   *    mounted, just read-only view etc.), fall back to the old
-   *    append-at-end behaviour.
-   *  - Never mutates a signed / exported note — the buttons are
-   *    disabled for that state, but we guard here too.
-   *
-   *  Also fires a best-effort usage-audit POST so ops can answer
-   *  "which picks do clinicians actually reach for?". Failure is
-   *  swallowed by `recordQuickCommentUsage`; we never block the
-   *  clinician on telemetry.
+   *  Shared by phase-27/28 Quick Comments and phase-29 Clinical
+   *  Shortcuts so both insertion paths behave identically with
+   *  respect to cursor placement, newline handling, and undo.
+   *  Returns `true` when the splice actually landed; returns
+   *  `false` when the note is not in an editable state so callers
+   *  can skip telemetry.
    */
-  const insertQuickComment = useCallback(
-    (
-      body: string,
-      ref:
-        | { kind: "preloaded"; preloaded_ref: string }
-        | { kind: "custom"; custom_comment_id: number }
-    ) => {
+  const spliceIntoDraft = useCallback(
+    (body: string, flashLabel: string): boolean => {
       if (!canEdit || noteSigned || !activeNote) {
         showFlash(
           "error",
-          "Quick comments can only be inserted into an editable draft."
+          `${flashLabel} can only be inserted into an editable draft.`
         );
-        return;
+        return false;
       }
 
       const textarea = draftTextareaRef.current;
@@ -371,7 +372,6 @@ export function NoteWorkspace({
 
       setEditBody(next);
 
-      // Restore caret after React re-renders the textarea.
       if (textarea !== null && caretAfter !== null) {
         const place = caretAfter;
         requestAnimationFrame(() => {
@@ -384,9 +384,22 @@ export function NoteWorkspace({
         });
       }
 
-      showFlash("ok", "Inserted quick comment into draft.");
+      showFlash("ok", `Inserted ${flashLabel.toLowerCase()} into draft.`);
+      return true;
+    },
+    [canEdit, noteSigned, activeNote, editBody, showFlash]
+  );
 
-      // Fire-and-forget usage audit. Never block the clinician on it.
+  /** Phase 27/28 Quick-Comment insert: splice + Quick-Comment usage audit. */
+  const insertQuickComment = useCallback(
+    (
+      body: string,
+      ref:
+        | { kind: "preloaded"; preloaded_ref: string }
+        | { kind: "custom"; custom_comment_id: number }
+    ) => {
+      if (!spliceIntoDraft(body, "Quick comment")) return;
+      // Fire-and-forget usage audit.
       recordQuickCommentUsage(
         identity,
         ref.kind === "preloaded"
@@ -402,15 +415,20 @@ export function NoteWorkspace({
             }
       );
     },
-    [
-      canEdit,
-      noteSigned,
-      activeNote,
-      editBody,
-      identity,
-      encounterId,
-      showFlash,
-    ]
+    [spliceIntoDraft, identity, activeNote, encounterId]
+  );
+
+  /** Phase 29 Clinical Shortcut insert: splice + separate usage audit. */
+  const insertClinicalShortcut = useCallback(
+    (shortcut: ClinicalShortcut) => {
+      if (!spliceIntoDraft(shortcut.body, "Clinical shortcut")) return;
+      recordClinicalShortcutUsage(identity, {
+        shortcut_id: shortcut.id,
+        note_version_id: activeNote?.id ?? null,
+        encounter_id: encounterId,
+      });
+    },
+    [spliceIntoDraft, identity, activeNote, encounterId]
   );
 
   const togglePreloadedFavorite = useCallback(
@@ -1444,6 +1462,118 @@ export function NoteWorkspace({
                   );
                 })}
               </ul>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* Phase 29 — Clinical Shortcuts (specialist shorthand pack).
+          Separate section from Quick Comments on purpose. Same role
+          gate (admin + clinician); same provenance label
+          ("clinician-entered, not AI-generated"). Static content so
+          the catalog renders with zero round-trips. */}
+      {canUseQuickComments && (
+        <section
+          className="workspace workspace__clinical-shortcuts"
+          data-testid="clinical-shortcuts-panel"
+          aria-label="Clinical Shortcuts"
+        >
+          <header className="workspace__hdr">
+            <h3>Clinical Shortcuts</h3>
+            <span
+              className="workspace__trust-pill workspace__trust-pill--clinician"
+              title="Clinician-inserted specialist shorthand, not AI-generated"
+            >
+              clinician-entered
+            </span>
+          </header>
+          <p
+            className="subtle-note"
+            data-testid="clinical-shortcuts-help"
+          >
+            Specialty shorthand note fragments for clinician use. These
+            are doctor-inserted shortcuts, not transcript findings or
+            AI-generated content.
+          </p>
+
+          <div className="workspace__qc-toolbar">
+            <input
+              type="search"
+              placeholder="Search by phrase, group, or abbreviation (e.g. RD, SRF, AMD)…"
+              value={shortcutSearch}
+              onChange={(e) => setShortcutSearch(e.target.value)}
+              data-testid="clinical-shortcuts-search"
+              aria-label="Search clinical shortcuts"
+            />
+          </div>
+
+          <div
+            className="workspace__qc-preloaded"
+            data-testid="clinical-shortcuts-list"
+          >
+            {CLINICAL_SHORTCUT_GROUPS.map((group) => {
+              const items = CLINICAL_SHORTCUTS.filter(
+                (s) =>
+                  s.group === group &&
+                  clinicalShortcutMatches(s, shortcutSearch)
+              );
+              if (items.length === 0) return null;
+              return (
+                <div
+                  key={group}
+                  className="workspace__qc-group"
+                  data-testid={`clinical-shortcuts-group-${group
+                    .toLowerCase()
+                    .replace(/[^a-z0-9]+/g, "-")}`}
+                >
+                  <div className="workspace__qc-group-title">{group}</div>
+                  <ul className="workspace__qc-list">
+                    {items.map((shortcut) => (
+                      <li key={shortcut.id} className="workspace__qc-row">
+                        <button
+                          className="btn btn--muted btn--qc"
+                          onClick={() => insertClinicalShortcut(shortcut)}
+                          data-testid={`clinical-shortcut-${shortcut.id}`}
+                          disabled={!canEdit || noteSigned || !activeNote}
+                          title={
+                            !activeNote
+                              ? "Generate a draft first"
+                              : noteSigned
+                                ? "Note is signed — cannot insert"
+                                : "Click to insert into draft"
+                          }
+                        >
+                          {segmentAbbreviations(shortcut.body).map(
+                            (seg, i) =>
+                              typeof seg === "string" ? (
+                                <span key={i}>{seg}</span>
+                              ) : (
+                                <abbr
+                                  key={i}
+                                  title={seg.meaning}
+                                  className="cn-abbr"
+                                  data-testid={`clinical-shortcut-abbr-${seg.abbr}`}
+                                >
+                                  {seg.abbr}
+                                </abbr>
+                              )
+                          )}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+            {CLINICAL_SHORTCUTS.every(
+              (s) => !clinicalShortcutMatches(s, shortcutSearch)
+            ) && (
+              <p
+                className="empty"
+                data-testid="clinical-shortcuts-empty"
+              >
+                No clinical shortcuts match your search.
+              </p>
             )}
           </div>
         </section>

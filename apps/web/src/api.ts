@@ -1415,3 +1415,32 @@ export async function recordQuickCommentUsage(
     return null;
   }
 }
+
+// ---------- Clinical Shortcut usage audit (phase 29) --------------------
+
+/** Fire-and-forget usage-audit POST for a Clinical Shortcut insertion.
+ *  Distinct from `recordQuickCommentUsage` on purpose so analytics can
+ *  separate clipboard-style Quick Comments from specialist shorthand.
+ *  Failure is swallowed — a missed telemetry event must not block
+ *  the clinician's workflow. */
+export async function recordClinicalShortcutUsage(
+  email: string,
+  payload: {
+    shortcut_id: string;
+    note_version_id?: number | null;
+    encounter_id?: number | null;
+  }
+): Promise<{ recorded: boolean; shortcut_id: string } | null> {
+  try {
+    return await request<{ recorded: boolean; shortcut_id: string }>(
+      "/me/clinical-shortcuts/used",
+      {
+        email,
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+  } catch {
+    return null;
+  }
+}

@@ -4,6 +4,93 @@ Reverse-chronological.
 
 ---
 
+## 2026-04-19 — Phase 29: Clinical Shortcuts (specialist shorthand pack)
+
+A second doctor-only layer on the clinician workspace: a curated
+specialist shorthand phrase bank ("Clinical Shortcuts"), separate
+from the phase-27 Quick Comments clipboard. 10 verbatim phrases
+across PVD, Retinal detachment, and Wet/Dry AMD groups, with
+abbreviation-aware search and subtle hover help on 29 curated
+ophthalmic abbreviations. Click-to-insert reuses the phase-28
+cursor splice. Dedicated usage-audit stream
+(`clinician_shortcut_used`) so shorthand ergonomics can be analysed
+independently of Quick Comments clicks.
+
+### Changes
+- **Frontend static catalog** — new `apps/web/src/clinicalShortcuts.ts`:
+  10 shortcuts with stable IDs (`pvd-01`…`amd-03`), per-group
+  tags for search, `ABBREVIATION_HINTS` (29 curated entries from
+  the Spokane Eye Clinic sheet), longest-first token list,
+  `clinicalShortcutMatches()` abbreviation-aware predicate,
+  `segmentAbbreviations()` body tokenizer for `<abbr>` rendering.
+- **Backend** — `POST /me/clinical-shortcuts/used` emits a new
+  `clinician_shortcut_used` audit event. Admin/clinician only
+  (reviewer → 403 `role_cannot_edit_quick_comments`).
+  PHI-minimising: the audit detail carries only
+  `shortcut_id`, optional `note_version_id`, `encounter_id`;
+  never the phrase body.
+- **NoteWorkspace refactor** — extracted `spliceIntoDraft(body,
+  flashLabel)` from phase-28's `insertQuickComment`. Both
+  `insertQuickComment` and the new `insertClinicalShortcut`
+  delegate to it, so cursor placement, newline handling, and
+  undo behaviour stay identical across both insertion paths.
+  Shortcut clicks fire `recordClinicalShortcutUsage` fire-and-
+  forget.
+- **UI** — new section below Quick Comments titled
+  **Clinical Shortcuts** with the brief's exact helper text.
+  Grouped by condition with a single search input
+  ("Search by phrase, group, or abbreviation (e.g. RD, SRF,
+  AMD)…"). Each shortcut body renders with inline `<abbr title>`
+  wrappers on known abbreviations (dotted-underline). Disabled
+  state when note is signed/exported or no draft exists.
+- **api.ts** — `recordClinicalShortcutUsage` helper,
+  error-swallowing.
+
+### Tests
+- Backend +6 (`test_clinical_shortcuts.py`): happy path + audit
+  detail shape; empty id rejected; reviewer 403; PHI invariant
+  (sneaked `body` never lands in audit); shortcut stream is
+  distinct from quick-comment stream; surface isolation (doesn't
+  leak into encounter reads).
+  Full backend suite: **285 passed** (279 + 6).
+- Frontend +11 (`NoteWorkspace.test.tsx`): reviewer hides panel
+  + skips audit POST; three groups render with verbatim phrasing;
+  `<abbr>` hover help for AMD + RPE; click inserts full phrase;
+  click fires `recordClinicalShortcutUsage` with id and no `body`
+  key; signed note disables buttons; abbreviation-aware search
+  for `RD`, `SRF`, `AMD`; panel-isolation assertion (separate
+  from Quick Comments); two audit streams stay separate.
+  Full vitest suite: **92 passed** (19 + 20 + 53). Typecheck
+  clean. Vite build 238 kB JS / 21.26 kB CSS
+  (gzip 70.22 kB / 4.41 kB).
+
+### Docs
+- New `docs/build/40-clinical-shortcuts.md`.
+- Updated `docs/build/16-frontend-test-strategy.md`.
+
+### Files touched
+- `apps/api/app/api/routes.py`
+- `apps/api/tests/test_clinical_shortcuts.py` (new)
+- `apps/web/src/clinicalShortcuts.ts` (new)
+- `apps/web/src/api.ts`
+- `apps/web/src/NoteWorkspace.tsx`
+- `apps/web/src/styles.css`
+- `apps/web/src/test/NoteWorkspace.test.tsx`
+- `docs/build/05-build-log.md`,
+  `16-frontend-test-strategy.md`,
+  `40-clinical-shortcuts.md` (new)
+
+### Files intentionally avoided
+- Marketing site.
+- `note_versions` / `encounter_inputs` / `extracted_findings`.
+- No DB table for the catalog (shared static UI content).
+- No whole-PDF abbreviation dump (narrowed to 29 curated entries).
+- No second Playwright spec (phase-28's
+  `quick-comments.spec.ts` already proves the cross-stack wedge
+  through the shared splice helper + audit plumbing).
+
+---
+
 ## 2026-04-19 — Phase 28: quick-comment favorites + cursor insertion + usage audit
 
 Production-readying pass on the phase-27 doctor quick-comment pad.

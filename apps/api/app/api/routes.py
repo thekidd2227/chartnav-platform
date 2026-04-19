@@ -3190,3 +3190,75 @@ def record_quick_comment_use(
         detail=f"kind={kind} {ref_detail}{ctx}",
     )
     return {"recorded": True, "kind": kind}
+
+
+# ===========================================================================
+# Clinical Shortcuts usage audit (phase 29)
+# ===========================================================================
+#
+# Parallel to phase-28's `/me/quick-comments/used` but for the
+# clinician-specialist shorthand pack shipped client-side. Kept as a
+# separate endpoint (not a param on the quick-comments one) so the
+# two usage streams are cleanly separable for analytics — shorthand
+# phrase-bank usage is a different ergonomic question than clipboard-
+# style quick-comment usage.
+#
+# The shortcut catalog lives on the frontend as static content; the
+# backend never needs to know the full list, only the ref (string id)
+# the doctor just inserted. PHI-minimising: no body, no draft text.
+
+
+CLINICAL_SHORTCUT_ID_MAX = 64
+
+
+class ClinicalShortcutUsageBody(BaseModel):
+    shortcut_id: str = Field(..., min_length=1, max_length=CLINICAL_SHORTCUT_ID_MAX)
+    note_version_id: Optional[int] = None
+    encounter_id: Optional[int] = None
+
+
+@router.post(
+    "/me/clinical-shortcuts/used", status_code=status.HTTP_202_ACCEPTED,
+)
+def record_clinical_shortcut_use(
+    payload: ClinicalShortcutUsageBody,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Record that a clinician inserted a Clinical Shortcut.
+
+    Thin audit signal, same rules as the phase-28 quick-comment usage
+    endpoint: admin/clinician only, reviewer → 403, PHI-minimising
+    (no body, only the shortcut ref). Returns 202 Accepted — best-
+    effort telemetry; a failure must not block the clinician.
+    """
+    # Reuse the quick-comment role gate — specialist shorthand is
+    # clinician-authored content insertion, same class of action.
+    _require_quick_comment_role(caller)
+
+    shortcut_id = payload.shortcut_id.strip()
+    if not shortcut_id:
+        raise _err(
+            "shortcut_id_required",
+            "shortcut_id is required and must be non-empty",
+            400,
+        )
+
+    ctx_parts: list[str] = []
+    if payload.note_version_id is not None:
+        ctx_parts.append(f"note_version_id={payload.note_version_id}")
+    if payload.encounter_id is not None:
+        ctx_parts.append(f"encounter_id={payload.encounter_id}")
+    ctx = (" " + " ".join(ctx_parts)) if ctx_parts else ""
+
+    from app import audit as _audit
+    _audit.record(
+        event_type="clinician_shortcut_used",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path="/me/clinical-shortcuts/used",
+        method="POST",
+        detail=f"shortcut_id={shortcut_id}{ctx}",
+    )
+    return {"recorded": True, "shortcut_id": shortcut_id}
