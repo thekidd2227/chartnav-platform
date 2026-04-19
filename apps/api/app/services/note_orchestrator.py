@@ -167,6 +167,11 @@ def run_note_generation(
                 "draft_status": "draft",
                 "note_format": note_format,
                 "note_text": result.note_text,
+                # Phase 25: immutable snapshot of the generator's output.
+                # `note_text` mutates on provider edit; this column never
+                # does, so the artifact endpoint can show generated vs.
+                # clinician-final side-by-side at audit time.
+                "generated_note_text": result.note_text,
                 "source_input_id": source["id"],
                 "extracted_findings_id": findings_id,
                 "generated_by": "system",

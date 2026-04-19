@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
@@ -1777,7 +1778,8 @@ FINDINGS_COLUMNS = (
 )
 NOTE_COLUMNS = (
     "id, encounter_id, version_number, draft_status, note_format, "
-    "note_text, source_input_id, extracted_findings_id, generated_by, "
+    "note_text, generated_note_text, source_input_id, "
+    "extracted_findings_id, generated_by, "
     "provider_review_required, missing_data_flags, signed_at, "
     "signed_by_user_id, exported_at, created_at, updated_at"
 )
@@ -2274,6 +2276,76 @@ def export_note(
         detail=f"note_id={note_id}",
     )
     return _load_note_for_caller(note_id, caller)
+
+
+# ===========================================================================
+# Signed-note artifact (phase 25)
+# ===========================================================================
+#
+# GET /note-versions/{id}/artifact?format=json|text|fhir
+#
+# Returns a packaged, provenance-bearing view of a signed note. Three
+# format variants share a single canonical builder:
+#
+#   json  → application/vnd.chartnav.signed-note+json  (default)
+#   text  → text/plain; charset=utf-8
+#   fhir  → application/fhir+json  (DocumentReference R4)
+#
+# This is a **read**. It does not mutate state — the existing POST
+# /export endpoint continues to own the state transition
+# draft_status=signed → exported. Artifact retrieval can happen before
+# or after that transition; both are operationally valid.
+#
+# Org scoping reuses the same cross-org → 404 contract as other note
+# reads. Unsigned notes return 409 `note_not_signed` — the point of the
+# artifact is to package a clinician-attested document; half-attested
+# is not a thing ChartNav emits.
+
+@router.get("/note-versions/{note_id}/artifact")
+def get_note_artifact(
+    note_id: int,
+    response: Response,
+    format: Optional[str] = Query(None, description="json | text | fhir"),
+    caller: Caller = Depends(require_caller),
+):
+    from app.services.note_artifact import ArtifactError, build_for_format
+
+    try:
+        body, mime, variant = build_for_format(
+            note_id=note_id,
+            format_variant=format,
+            caller_email=caller.email,
+            caller_user_id=caller.user_id,
+            caller_organization_id=caller.organization_id,
+        )
+    except ArtifactError as e:
+        raise _err(e.error_code, e.reason, e.status_code)
+
+    from app import audit as _audit
+    _audit.record(
+        event_type="note_version_artifact_issued",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path=f"/note-versions/{note_id}/artifact",
+        method="GET",
+        detail=f"note_id={note_id} format={variant}",
+    )
+
+    # All three variants need a custom Content-Type. Text goes through
+    # the generic Response so it isn't double-encoded; json + fhir go
+    # through JSONResponse with an explicit media_type so downstream
+    # clients can distinguish a ChartNav canonical artifact
+    # (``application/vnd.chartnav.signed-note+json``) from a generic
+    # FHIR document (``application/fhir+json``).
+    extra_headers = {
+        "X-ChartNav-Artifact-Variant": variant,
+        "X-ChartNav-Artifact-Type": "chartnav.signed_note.v1",
+    }
+    if isinstance(body, str):
+        return Response(content=body, media_type=mime, headers=extra_headers)
+    return JSONResponse(content=body, media_type=mime, headers=extra_headers)
 
 
 # ===========================================================================

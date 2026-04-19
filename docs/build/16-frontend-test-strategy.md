@@ -206,6 +206,25 @@ two suites never cross-contaminate.
     disabled until a `completed` input exists.
   - Generate is enabled when a `completed` input is present.
 
+## Signed-note artifact export (phase 25)
+
+- **+3** in `src/test/NoteWorkspace.test.tsx`:
+  - signed note renders the artifact actions row (`note-artifact-actions`)
+    with three buttons — `note-artifact-json`, `note-artifact-text`,
+    `note-artifact-fhir` — and the expected labels.
+  - unsigned notes hide the artifact actions row entirely.
+  - click on `note-artifact-fhir` dispatches `downloadNoteArtifact`
+    with `(email, id, "fhir")`.
+- New mock: `downloadNoteArtifact: vi.fn()` in the NoteWorkspace test
+  harness. Mocking at the `api.ts` seam means the test never touches
+  jsdom's `Blob` / anchor download plumbing — the component's
+  intent is what we're asserting.
+- Vitest suite total grows to **61 tests** (NoteWorkspace 22, App 19,
+  AdminPanel 20), full run 6.65s.
+- Playwright not extended in this phase; artifact download plumbing
+  needs a file-handler harness change. Sign-then-export scenarios
+  continue to cover the surrounding UI path.
+
 ## Operator-UX hardening for async ingestion (phase 24)
 
 - **+3** in `src/test/NoteWorkspace.test.tsx`:

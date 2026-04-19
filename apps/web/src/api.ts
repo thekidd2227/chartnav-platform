@@ -936,6 +936,147 @@ export function exportNoteVersion(
   return request(`/note-versions/${noteId}/export`, { email, method: "POST" });
 }
 
+// ---------- Signed-note artifact (phase 25) --------------------------------
+
+export type ArtifactFormat = "json" | "text" | "fhir";
+
+/** Canonical ChartNav signed-note artifact envelope. */
+export interface NoteArtifact {
+  artifact_version: number;
+  artifact_type: "chartnav.signed_note.v1";
+  chartnav: {
+    platform_mode: string;
+    adapter_display_name: string | null;
+    organization_id: number;
+  };
+  encounter: {
+    id: number;
+    status: string | null;
+    patient_display: string | null;
+    provider_display: string | null;
+    source: "chartnav_native" | "fhir" | string;
+    external_ref: string | null;
+  };
+  transcript_source: {
+    input_id: number;
+    input_type: string | null;
+    processing_status: string | null;
+    confidence_summary: string | null;
+    transcript_excerpt: string;
+    transcript_truncated: boolean;
+    transcript_chars: number;
+  } | null;
+  extracted_findings: {
+    chief_complaint: string | null;
+    hpi_summary: string | null;
+    visual_acuity: { od: string | null; os: string | null };
+    iop: { od: string | null; os: string | null };
+    structured: Record<string, unknown>;
+    extraction_confidence: string | null;
+  } | null;
+  note: {
+    id: number;
+    version_number: number;
+    format: string;
+    draft_status: string;
+    generated_by: string | null;
+    generated_draft: string;
+    clinician_final: string;
+    edit_applied: boolean;
+  };
+  missing_data_flags: string[];
+  signature: {
+    signed_at: string | null;
+    signed_by_email: string | null;
+    signed_by_user_id: number | null;
+    content_hash_sha256: string;
+    hash_inputs: string;
+  };
+  export_envelope: {
+    issued_at: string;
+    issued_by_email: string | null;
+    issued_by_user_id: number | null;
+    format_variant: string;
+    mime_type: string;
+  };
+}
+
+/** Fetch the canonical JSON artifact for a signed note. */
+export function getNoteArtifact(
+  email: string,
+  noteId: number
+): Promise<NoteArtifact> {
+  return request(`/note-versions/${noteId}/artifact?format=json`, { email });
+}
+
+/** Fetch the artifact in a chosen format. Returns the raw body — caller
+ *  decides whether to render, download, or hand to an EHR adapter.
+ *  Text comes back as a string; json/fhir as parsed JSON. */
+export async function fetchNoteArtifactRaw(
+  email: string,
+  noteId: number,
+  format: ArtifactFormat
+): Promise<{ body: unknown; contentType: string; variant: string }> {
+  const headers = new Headers({ "X-User-Email": email });
+  const res = await fetch(
+    `${API_URL}/note-versions/${noteId}/artifact?format=${format}`,
+    { headers }
+  );
+  const contentType = res.headers.get("content-type") || "";
+  const variant = res.headers.get("x-chartnav-artifact-variant") || "";
+  const text = await res.text();
+  if (!res.ok) {
+    // Reuse the envelope contract from `request` for error parity.
+    let detail: any;
+    try {
+      detail = JSON.parse(text)?.detail;
+    } catch {
+      detail = undefined;
+    }
+    const code =
+      (detail && typeof detail === "object" && detail.error_code) ||
+      "http_error";
+    const reason =
+      (detail && typeof detail === "object" && detail.reason) || text || res.statusText;
+    throw new ApiError(res.status, code, reason);
+  }
+  const body = contentType.includes("json") && text ? JSON.parse(text) : text;
+  return { body, contentType, variant };
+}
+
+/** Trigger a browser download for the chosen artifact format. The file
+ *  extension + filename are stable so repeated exports of the same
+ *  note-version land on the same name and a clinician can spot a
+ *  re-export vs. a new version in their downloads folder. */
+export async function downloadNoteArtifact(
+  email: string,
+  noteId: number,
+  format: ArtifactFormat
+): Promise<{ filename: string; variant: string }> {
+  const { body, contentType, variant } = await fetchNoteArtifactRaw(
+    email,
+    noteId,
+    format
+  );
+  const ext = format === "text" ? "txt" : "json";
+  const filename = `chartnav-note-${noteId}.${format}.${ext}`;
+  const payload =
+    typeof body === "string" ? body : JSON.stringify(body, null, 2);
+  const blob = new Blob([payload], {
+    type: contentType || "application/octet-stream",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  // Give the browser a tick before revoking so the download actually starts.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+  return { filename, variant };
+}
+
 export const MISSING_FLAG_LABELS: Record<string, string> = {
   chief_complaint_missing: "Chief complaint",
   visual_acuity_missing: "Visual acuity",

@@ -4,6 +4,106 @@ Reverse-chronological.
 
 ---
 
+## 2026-04-19 — Phase 25: signed-note artifact + export interoperability groundwork
+
+Exports the first **packaged, provenance-bearing** representation of a
+ChartNav signed note. Not a SMART-on-FHIR transaction, not a vendor
+write-back — a **document package** that downstream systems (humans,
+EHRs, audit reviewers) can ingest in three shapes. Narrow wedge on
+purpose: the wedge is that the artifact is correct *before* transport
+is ever wired.
+
+### Changes
+
+- **Migration `e1f2a3041501`** — adds `note_versions.generated_note_text`
+  (TEXT NULL), a one-shot snapshot of the generator's draft that is
+  never mutated by subsequent provider edits. Backfills legacy rows
+  from current `note_text` so existing data keeps rendering; the
+  `edit_applied` flag in the artifact reads as False for those rows
+  (honest — we never recorded their pre-edit text).
+- **Orchestrator** writes both `note_text` and `generated_note_text`
+  at draft creation; PATCH handler continues to mutate only `note_text`.
+- **New service** `apps/api/app/services/note_artifact.py` — pure
+  builder that reads the note + encounter + source input + findings
+  + signer in one bundle, separates transcript-derived facts from
+  generated draft from clinician-edited final, and renders three
+  variants from a single canonical dict:
+  - `chartnav.v1.json`  — MIME `application/vnd.chartnav.signed-note+json`
+  - `chartnav.v1.text`  — plain text with metadata header + audit footer
+  - `fhir.DocumentReference.v1` — FHIR R4 DocumentReference with the
+    clinician-final text inlined as base64 `content.attachment.data`,
+    typed as LOINC `11506-3` "Progress note", tagged with the
+    ChartNav URN (`urn:chartnav:note:{id}:v{n}`). For externally-sourced
+    encounters the `context.encounter` identifier carries the FHIR
+    Encounter ref so a future integrator can tie back without a
+    second round-trip.
+- **Integrity** — every artifact carries
+  `signature.content_hash_sha256 = sha256(version_number|note_format|clinician_final)`
+  so downstream consumers can detect tamper. Not a cryptographic
+  signature (ChartNav does not hold a signing key today); it is
+  tamper-evidence.
+- **HTTP** — new `GET /note-versions/{id}/artifact?format=json|text|fhir`.
+  Read-only, does not mutate state. Cross-org → 404 (same contract as
+  other note reads). Unsigned → 409 `note_not_signed`. Unknown format
+  → 400 `unsupported_artifact_format`. Each successful call emits an
+  audit event `note_version_artifact_issued` with the chosen variant
+  in the detail string. The existing `POST /note-versions/{id}/export`
+  state transition is unchanged; artifact retrieval is orthogonal.
+- **Frontend** — `api.ts` gains `NoteArtifact` type, `getNoteArtifact`,
+  `fetchNoteArtifactRaw`, and `downloadNoteArtifact` (triggers a
+  browser anchor-click with a stable filename per note-id + format).
+  NoteWorkspace renders three `Download JSON / TEXT / FHIR` buttons
+  under the sign/export row once the note is signed; each button has
+  a hover tooltip explaining when you'd reach for that format.
+
+### Tests
+
+- **Backend** +9 (`apps/api/tests/test_note_artifact.py`) — unsigned
+  refused, cross-org 404, unsupported format 400, default json tiers +
+  signature + hash, edit-applied flag when provider edits, text body
+  contains header + hash, FHIR DocumentReference shape + base64
+  round-trip + hash parity with canonical JSON, deterministic hash,
+  audit event captures variant.
+  Full backend suite: **240 passed in 2m 57s** (231 prior + 9 new).
+- **Frontend** +3 (`src/test/NoteWorkspace.test.tsx`) — artifact
+  actions row visible only on signed notes, button labels, click
+  dispatches `downloadNoteArtifact(email, id, "fhir")`.
+  Full vitest suite: **61 passed in 6.65s** (22 + 19 + 20).
+- Typecheck clean. Vite build 216 KB JS / 18.85 KB CSS gzip 64 KB.
+
+### Docs
+
+- New `docs/build/36-signed-note-artifact-and-export.md` —
+  shape, format variants, integrity model, what this is not (no
+  vendor write-back), test coverage, files touched.
+- Updated `docs/build/16-frontend-test-strategy.md` — new vitest
+  count + phase-25 section.
+
+### Files touched
+
+- `apps/api/alembic/versions/e1f2a3041501_note_generated_text_snapshot.py`
+- `apps/api/app/services/note_orchestrator.py`
+- `apps/api/app/services/note_artifact.py` (new)
+- `apps/api/app/api/routes.py`
+- `apps/api/tests/test_note_artifact.py` (new)
+- `apps/web/src/api.ts`
+- `apps/web/src/NoteWorkspace.tsx`
+- `apps/web/src/test/NoteWorkspace.test.tsx`
+- `docs/build/05-build-log.md`, `16-frontend-test-strategy.md`,
+  `36-signed-note-artifact-and-export.md` (new)
+
+### Files intentionally avoided
+
+- Public marketing site (separate lane).
+- `apps/api/app/integrations/fhir.py` — no write-back seam; the
+  FHIR format variant is a packaging shape, not a transport.
+- Playwright e2e — deferred; artifact feature is gated behind a signed
+  note, and the existing sign-then-export scenarios already exercise
+  the surrounding UI path. Add one scenario when the artifact
+  buttons get a clickable e2e case.
+
+---
+
 ## 2026-04-19 — Phase 24 (hardening): frontend operator UX for async ingestion
 
 Lane-safe frontend/test/docs pass on top of the phase-22 async

@@ -26,7 +26,9 @@ import {
   Me,
   MISSING_FLAG_LABELS,
   NoteVersion,
+  ArtifactFormat,
   createEncounterInput,
+  downloadNoteArtifact,
   exportNoteVersion,
   generateNoteVersion,
   getNoteVersion,
@@ -670,6 +672,52 @@ export function NoteWorkspace({
                 >
                   Copy to clipboard
                 </button>
+              )}
+              {noteSigned && activeNote && (
+                <div
+                  className="workspace__artifact-actions"
+                  data-testid="note-artifact-actions"
+                >
+                  {(["json", "text", "fhir"] as ArtifactFormat[]).map(
+                    (fmt) => (
+                      <button
+                        key={fmt}
+                        className="btn btn--ghost"
+                        onClick={async () => {
+                          try {
+                            const { filename, variant } =
+                              await downloadNoteArtifact(
+                                identity,
+                                activeNote.id,
+                                fmt
+                              );
+                            showFlash(
+                              "ok",
+                              `Downloaded ${filename} (${variant})`
+                            );
+                          } catch (e: any) {
+                            showFlash(
+                              "error",
+                              `Artifact download failed: ${
+                                e?.reason || e?.message || e
+                              }`
+                            );
+                          }
+                        }}
+                        data-testid={`note-artifact-${fmt}`}
+                        title={
+                          fmt === "json"
+                            ? "ChartNav canonical signed-note artifact"
+                            : fmt === "text"
+                              ? "Plain text with metadata header (EHR paste)"
+                              : "FHIR R4 DocumentReference (packaging shape)"
+                        }
+                      >
+                        Download {fmt.toUpperCase()}
+                      </button>
+                    )
+                  )}
+                </div>
               )}
             </div>
             {!canSign && (

@@ -18,6 +18,10 @@ vi.mock("../api", async () => {
     // Phase 22 — ingestion lifecycle.
     processEncounterInput: vi.fn(),
     retryEncounterInput: vi.fn(),
+    // Phase 25 — artifact download. The component triggers a browser
+    // anchor-click to actually download; mocking `downloadNoteArtifact`
+    // means the test never touches jsdom's blob/anchor plumbing.
+    downloadNoteArtifact: vi.fn(),
   };
 });
 
@@ -613,5 +617,82 @@ describe("NoteWorkspace", () => {
     await waitFor(() => {
       expect(listMock.mock.calls.length).toBeGreaterThan(callsBefore);
     });
+  });
+
+  // -------------------------------------------------------------------
+  // Phase 25 — signed-note artifact export
+  // -------------------------------------------------------------------
+
+  it("exposes Download JSON/TEXT/FHIR once the note is signed", async () => {
+    (api.listEncounterNotes as any).mockResolvedValue([
+      baseNote({
+        draft_status: "signed",
+        signed_at: "2026-04-18 20:10:00",
+      }),
+    ]);
+    (api.getNoteVersion as any).mockResolvedValue({
+      note: baseNote({
+        draft_status: "signed",
+        signed_at: "2026-04-18 20:10:00",
+      }),
+      findings: FINDINGS,
+    });
+    renderWorkspace();
+    const actions = await screen.findByTestId("note-artifact-actions");
+    expect(within(actions).getByTestId("note-artifact-json")).toHaveTextContent(
+      /download json/i
+    );
+    expect(within(actions).getByTestId("note-artifact-text")).toHaveTextContent(
+      /download text/i
+    );
+    expect(within(actions).getByTestId("note-artifact-fhir")).toHaveTextContent(
+      /download fhir/i
+    );
+  });
+
+  it("unsigned notes do not show the artifact actions", async () => {
+    (api.listEncounterNotes as any).mockResolvedValue([
+      baseNote({ draft_status: "draft" }),
+    ]);
+    (api.getNoteVersion as any).mockResolvedValue({
+      note: baseNote({ draft_status: "draft" }),
+      findings: FINDINGS,
+    });
+    renderWorkspace();
+    await screen.findByTestId("note-draft-textarea");
+    expect(
+      screen.queryByTestId("note-artifact-actions")
+    ).not.toBeInTheDocument();
+  });
+
+  it("click Download FHIR dispatches downloadNoteArtifact with the right format", async () => {
+    (api.listEncounterNotes as any).mockResolvedValue([
+      baseNote({
+        draft_status: "signed",
+        signed_at: "2026-04-18 20:10:00",
+      }),
+    ]);
+    (api.getNoteVersion as any).mockResolvedValue({
+      note: baseNote({
+        draft_status: "signed",
+        signed_at: "2026-04-18 20:10:00",
+      }),
+      findings: FINDINGS,
+    });
+    (api.downloadNoteArtifact as any).mockResolvedValue({
+      filename: "chartnav-note-100.fhir.json",
+      variant: "fhir.DocumentReference.v1",
+    });
+    const user = userEvent.setup();
+    renderWorkspace();
+    await screen.findByTestId("note-artifact-actions");
+    await user.click(screen.getByTestId("note-artifact-fhir"));
+    await waitFor(() =>
+      expect(api.downloadNoteArtifact).toHaveBeenCalledWith(
+        CLIN.email,
+        100,
+        "fhir"
+      )
+    );
   });
 });
