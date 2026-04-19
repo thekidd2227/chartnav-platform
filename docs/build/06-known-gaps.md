@@ -39,6 +39,13 @@
 Adds "admin can issue an invitation and download audit CSV" on top of
 the 11 scenarios shipped through phase 13.
 
+## Phase-23 additions
+
+- **Background worker foundation**: claim/release/stale-recovery primitives in `app/services/worker.py`, admin HTTP endpoints (`/workers/tick` / `drain` / `requeue-stale`), and `scripts/run_worker.py` CLI (once / drain / loop / requeue-stale).
+- **Bridged encounter refresh**: `app/services/bridge_sync.py` + `POST /encounters/{id}/refresh` re-fetches the external shell and reconciles only the mirror fields, with a source-of-truth-mismatch guard.
+- **Queue banner UI** + manual refresh in NoteWorkspace; bridged-encounter refresh banner in encounter detail.
+- **231 pytest** (+21), **55 Vitest** (+6), 17 Playwright + 4 visual.
+
 ## Phase-22 additions
 
 - **Async ingestion lifecycle**: `encounter_inputs` grew `retry_count`, `last_error`, `last_error_code`, `started_at`, `finished_at`, `worker_id`. Real state machine: `queued → processing → completed | failed | needs_review`.
@@ -107,7 +114,8 @@ the 11 scenarios shipped through phase 13.
 
 0. **No real LLM wired into the note generator yet** — `app/services/note_generator.py` ships a deterministic regex + SOAP-template fake. The seam is a single function; output contract is locked. Next: swap for a real inference endpoint (or SMART-on-FHIR-aware model).
 0. **No real audio STT yet** — `app/services/ingestion.py::transcribe_audio` is a `NotImplementedError`-shape stub. A real transcriber plugs in via `set_transcriber(fn)`; the full state machine, retry, and UI lifecycle are ready for it.
-0. **No background-worker infrastructure** — ingestion runs in the request path. The contract survives a move to cron / Celery / RQ without HTTP changes.
+0. **~~No background-worker infrastructure~~** — **resolved in phase 23**. `app/services/worker.py` + `scripts/run_worker.py` + admin `/workers/*` endpoints provide claim-based pickup, stale-claim recovery, and drain-to-empty. A real deployment wires `run_worker.py --loop` into systemd / cron.
+0. **No continuous bridged-encounter sync loop** — phase-23 refresh is operator-triggered (or callable from cron). Scheduled periodic sync is future work.
 0. **No streaming / WebSocket progress** — the UI polls on action completion. SSE or WebSocket updates are future work.
 0. **No EHR write-back for signed notes** — export is download + clipboard only. FHIR `DocumentReference` writes remain `AdapterNotSupported`; vendor adapters layer real push.
 0. **No PDF or HL7 export** — plain text only. Deliberate: honest paste-into-EHR, not a vendor-format we don't own.

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   API_URL,
   ALLOWED_STATUSES,
@@ -19,6 +19,7 @@ import {
   encounterIsNative,
   encounterSourceLabel,
   getEncounter,
+  refreshBridgedEncounter,
   getEncounterEvents,
   getMe,
   isAdmin,
@@ -101,15 +102,27 @@ export default function App() {
     }
   }, [identity, filters, selectedId, offset]);
 
+  // Track the id currently rendered in the detail pane without
+  // tying `refreshDetail` to the `encounter` state value — depending
+  // on `encounter` would cause an infinite re-fetch loop.
+  const loadedEncounterIdRef = useRef<string | null>(null);
+
   const refreshDetail = useCallback(
     async (id: number | string | null) => {
       if (id == null) {
+        loadedEncounterIdRef.current = null;
         setEncounter(null);
         setEvents([]);
         setDetailError(null);
         return;
       }
-      setDetailLoading(true);
+      // Only show the "Loading…" fallback on the FIRST load for this
+      // id; subsequent re-fetches (e.g. after a bridged-refresh or
+      // status transition) keep the detail pane mounted so child
+      // components that hold UI state (banner messages, draft edits)
+      // don't get unmounted mid-flow.
+      const isInitial = loadedEncounterIdRef.current !== String(id);
+      if (isInitial) setDetailLoading(true);
       setDetailError(null);
       try {
         const [enc, evs] = await Promise.all([
@@ -118,12 +131,14 @@ export default function App() {
         ]);
         setEncounter(enc);
         setEvents(evs);
+        loadedEncounterIdRef.current = String(id);
       } catch (e) {
+        loadedEncounterIdRef.current = null;
         setEncounter(null);
         setEvents([]);
         setDetailError(friendly(e));
       } finally {
-        setDetailLoading(false);
+        if (isInitial) setDetailLoading(false);
       }
     },
     [identity]
@@ -318,6 +333,7 @@ export default function App() {
               identity={identity}
               onTransition={onTransition}
               onAddEvent={onAddEvent}
+              onRefreshDetail={() => refreshDetail(selectedId)}
             />
           )}
         </section>
@@ -603,6 +619,7 @@ function EncounterDetail({
   identity,
   onTransition,
   onAddEvent,
+  onRefreshDetail,
 }: {
   loading: boolean;
   error: string | null;
@@ -612,6 +629,7 @@ function EncounterDetail({
   identity: string;
   onTransition: (status: string) => Promise<void> | void;
   onAddEvent: (type: string, data: string) => Promise<void> | void;
+  onRefreshDetail: () => void;
 }) {
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
   const [pendingEvent, setPendingEvent] = useState(false);
@@ -668,6 +686,15 @@ function EncounterDetail({
           identity={identity}
           encounter={encounter}
           canBridge={role === "admin" || role === "clinician"}
+        />
+      )}
+
+      {nativeEncounter && (encounter as any).external_ref && (
+        <BridgedEncounterRefreshBanner
+          identity={identity}
+          encounter={encounter}
+          canRefresh={role === "admin" || role === "clinician"}
+          onRefreshed={onRefreshDetail}
         />
       )}
 
@@ -1133,6 +1160,99 @@ function ExternalEncounterBanner({
           Reviewer role cannot bridge encounters. Ask an admin or clinician.
         </p>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------
+// Bridged-encounter refresh banner (phase 23)
+// ---------------------------------------------------------------------
+
+function BridgedEncounterRefreshBanner({
+  identity,
+  encounter,
+  canRefresh,
+  onRefreshed,
+}: {
+  identity: string;
+  encounter: Encounter;
+  canRefresh: boolean;
+  onRefreshed: () => void;
+}) {
+  const [pending, setPending] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const externalRef = (encounter as any).external_ref;
+  const externalSource = (encounter as any).external_source;
+
+  if (!externalRef) return null;
+
+  const onRefresh = async () => {
+    if (typeof encounter.id !== "number") return;
+    setPending(true);
+    setMsg(null);
+    setErr(null);
+    try {
+      const res = await refreshBridgedEncounter(identity, encounter.id);
+      if (res.refreshed) {
+        const fields = Object.keys(res.mirrored).join(", ");
+        setMsg(`Refreshed ${fields} from the external system.`);
+      } else {
+        setMsg("External shell unchanged — nothing to mirror.");
+      }
+      onRefreshed();
+    } catch (e) {
+      if (e instanceof ApiError) setErr(`${e.status} ${e.errorCode} — ${e.reason}`);
+      else if (e instanceof Error) setErr(e.message);
+      else setErr(String(e));
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <div
+      className="banner banner--info"
+      role="note"
+      data-testid="bridged-refresh-banner"
+    >
+      <div>
+        <strong>Bridged from external ({externalSource}):</strong>{" "}
+        <code data-testid="bridged-external-ref">{externalRef}</code>. ChartNav
+        owns the workflow; the external EHR owns the encounter shell. Refresh
+        to re-fetch patient / provider / status from the source.
+      </div>
+      <div className="actions" style={{ marginTop: 8 }}>
+        {canRefresh && (
+          <button
+            type="button"
+            className="btn"
+            onClick={onRefresh}
+            disabled={pending}
+            data-testid="bridged-refresh"
+          >
+            {pending ? "Refreshing…" : "Refresh from external"}
+          </button>
+        )}
+        {!canRefresh && (
+          <span
+            className="subtle-note"
+            data-testid="bridged-refresh-disabled-note"
+          >
+            Reviewer role cannot refresh. Ask an admin or clinician.
+          </span>
+        )}
+        {msg && (
+          <span className="subtle-note" data-testid="bridged-refresh-ok">
+            {msg}
+          </span>
+        )}
+        {err && (
+          <span className="subtle-note" data-testid="bridged-refresh-error">
+            {err}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

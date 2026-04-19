@@ -178,6 +178,19 @@ preferred source of truth going forward; integrations can populate
 `external_ref` on the corresponding `patients`/`providers` row and
 the encounter FK for full lineage.
 
+### `encounter_inputs` — background-worker claim (phase 23)
+
+Two nullable columns + one index added via batch rewrite:
+
+| column       | type         | notes |
+|--------------|--------------|-------|
+| `claimed_by` | VARCHAR(64) nullable | worker id that currently owns the row |
+| `claimed_at` | DATETIME nullable    | when the claim was taken; stale-claim recovery threshold |
+
+Index `ix_encounter_inputs_queue` on `(processing_status, claimed_by)`
+keeps the "one unclaimed queued row" query cheap. Migration
+`d0e1f2a30415`. Existing rows unaffected.
+
 ### `encounter_inputs` — async job lifecycle (phase 22)
 
 Six columns added (all nullable / sensibly defaulted):

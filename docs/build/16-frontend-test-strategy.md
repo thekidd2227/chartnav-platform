@@ -206,6 +206,17 @@ two suites never cross-contaminate.
     disabled until a `completed` input exists.
   - Generate is enabled when a `completed` input is present.
 
+## Background-processing UX tests (phase 23)
+
+- **+4** in `src/test/NoteWorkspace.test.tsx`: queued-input renders
+  the background banner with "waiting for a worker" copy;
+  processing-claimed row renders "currently processing"; banner
+  absent when all inputs are completed; manual refresh re-fetches
+  the input list.
+- **+2** in `src/test/App.test.tsx`: bridged-native encounter shows
+  the refresh banner and dispatches `refreshBridgedEncounter`;
+  reviewer sees the banner with a disabled-note and no button.
+
 ## Gaps not yet covered
 - Visual regression not in CI (documented; OS-specific baselines).
 - No keyboard-only / screen-reader manual QA pass beyond axe's

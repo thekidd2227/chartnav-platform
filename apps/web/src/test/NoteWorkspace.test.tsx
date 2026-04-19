@@ -417,4 +417,129 @@ describe("NoteWorkspace", () => {
     await screen.findByTestId("transcript-status-10");
     expect(screen.getByTestId("generate-draft")).toBeEnabled();
   });
+
+  // -------------------------------------------------------------------
+  // Phase 23 — background-processing UX
+  // -------------------------------------------------------------------
+
+  it("renders a processing-continues-in-background banner when any input is queued", async () => {
+    (api.listEncounterInputs as any).mockResolvedValue([
+      {
+        id: 30,
+        encounter_id: 1,
+        input_type: "audio_upload",
+        processing_status: "queued",
+        transcript_text: null,
+        confidence_summary: null,
+        source_metadata: null,
+        created_by_user_id: 1,
+        retry_count: 0,
+        last_error: null,
+        last_error_code: null,
+        started_at: null,
+        finished_at: null,
+        worker_id: null,
+        claimed_by: null,
+        claimed_at: null,
+        created_at: "x",
+        updated_at: "x",
+      },
+    ]);
+    renderWorkspace();
+    const banner = await screen.findByTestId("workspace-queue-banner");
+    expect(banner).toHaveTextContent(/Processing continues in the background/i);
+    expect(banner).toHaveTextContent(/waiting for a worker/i);
+  });
+
+  it("renders the banner with 'currently processing' when a row is claimed", async () => {
+    (api.listEncounterInputs as any).mockResolvedValue([
+      {
+        id: 31,
+        encounter_id: 1,
+        input_type: "audio_upload",
+        processing_status: "processing",
+        transcript_text: null,
+        confidence_summary: null,
+        source_metadata: null,
+        created_by_user_id: 1,
+        retry_count: 0,
+        last_error: null,
+        last_error_code: null,
+        started_at: "2026-04-19 00:00:00",
+        finished_at: null,
+        worker_id: "worker-a",
+        claimed_by: "worker-a",
+        claimed_at: "2026-04-19 00:00:00",
+        created_at: "x",
+        updated_at: "x",
+      },
+    ]);
+    renderWorkspace();
+    expect(
+      await screen.findByTestId("workspace-queue-banner")
+    ).toHaveTextContent(/currently processing/i);
+  });
+
+  it("hides the banner when all inputs are completed", async () => {
+    (api.listEncounterInputs as any).mockResolvedValue([
+      {
+        id: 32,
+        encounter_id: 1,
+        input_type: "text_paste",
+        processing_status: "completed",
+        transcript_text: "done",
+        confidence_summary: null,
+        source_metadata: null,
+        created_by_user_id: 1,
+        retry_count: 0,
+        last_error: null,
+        last_error_code: null,
+        started_at: "x",
+        finished_at: "x",
+        worker_id: "inline",
+        claimed_by: null,
+        claimed_at: null,
+        created_at: "x",
+        updated_at: "x",
+      },
+    ]);
+    renderWorkspace();
+    await screen.findByTestId("transcript-status-32");
+    expect(
+      screen.queryByTestId("workspace-queue-banner")
+    ).not.toBeInTheDocument();
+  });
+
+  it("manual refresh button re-fetches the input list", async () => {
+    const listMock = (api.listEncounterInputs as any).mockResolvedValue([
+      {
+        id: 33,
+        encounter_id: 1,
+        input_type: "audio_upload",
+        processing_status: "queued",
+        transcript_text: null,
+        confidence_summary: null,
+        source_metadata: null,
+        created_by_user_id: 1,
+        retry_count: 0,
+        last_error: null,
+        last_error_code: null,
+        started_at: null,
+        finished_at: null,
+        worker_id: null,
+        claimed_by: null,
+        claimed_at: null,
+        created_at: "x",
+        updated_at: "x",
+      },
+    ]);
+    renderWorkspace();
+    await screen.findByTestId("transcript-refresh");
+    const callsBefore = listMock.mock.calls.length;
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("transcript-refresh"));
+    await waitFor(() => {
+      expect(listMock.mock.calls.length).toBeGreaterThan(callsBefore);
+    });
+  });
 });

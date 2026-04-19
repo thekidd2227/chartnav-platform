@@ -345,6 +345,23 @@ All actions route through new `api.ts` helpers
 (`processEncounterInput`, `retryEncounterInput`) on top of the
 existing `listEncounterInputs` refresh cycle.
 
+## Background-processing UX (phase 23)
+
+- **NoteWorkspace Tier 1** gains a "↻ Refresh" button and a
+  `banner banner--info` that reads "Processing continues in the
+  background" whenever any input is `queued` or `processing`. The
+  banner differentiates "waiting for a worker" from "currently
+  processing" so operators know whether to click Refresh or wait.
+- **Encounter detail** gains a `BridgedEncounterRefreshBanner` when
+  the native row carries an `external_ref`. Admin + clinician see
+  a **Refresh from external** button that dispatches
+  `refreshBridgedEncounter` and surfaces which mirror fields
+  changed. Reviewer sees a disabled-note.
+- `refreshDetail` in App.tsx now preserves the mounted detail pane
+  on re-fetch so banner state doesn't get unmounted mid-flow; the
+  "Loading…" fallback only appears on the first load for a given
+  encounter id.
+
 ## What this phase explicitly does NOT do
 
 - No real login flow — `X-User-Email` is still dev transport.

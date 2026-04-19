@@ -120,6 +120,8 @@ erDiagram
     datetime started_at "phase 22 — nullable"
     datetime finished_at "phase 22 — nullable"
     string worker_id "phase 22 — inline/worker tag"
+    string claimed_by "phase 23 — background-worker claim"
+    datetime claimed_at "phase 23 — claim timestamp for stale recovery"
     datetime created_at
     datetime updated_at
   }

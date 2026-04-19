@@ -36,6 +36,17 @@ Base URL (local dev): `http://127.0.0.1:8000`. All error bodies use
 Encounter responses now also include `patient_id` + `provider_id`
 nullable FKs pointing at the rows above.
 
+## Background worker + bridged refresh (phase 23)
+
+| Method | Path | Role | Behavior |
+|---|---|---|---|
+| `POST` | `/workers/tick` | admin | Claim-and-process one queued input. Returns `{processed, queue_empty, input_id, status, ingestion_error}`. |
+| `POST` | `/workers/drain` | admin | Drain up to 100 rows. Returns `{worker_id, processed, completed, failed, error_codes}`. |
+| `POST` | `/workers/requeue-stale` | admin | Recover `processing` rows whose claim exceeded `CHARTNAV_WORKER_CLAIM_TTL_SECONDS`. Returns `{recovered: N}`. |
+| `POST` | `/encounters/{id}/refresh` | admin + clinician | Re-fetch the external shell + reconcile mirror fields. 409 `not_bridged` on standalone-native. 409 `external_source_mismatch` if the active adapter differs from `external_source`. Emits `encounter_refreshed` audit event. |
+
+Encounter-input responses now also include `claimed_by`, `claimed_at`.
+
 ## Ingestion lifecycle (phase 22)
 
 | Method | Path | Role | Behavior |

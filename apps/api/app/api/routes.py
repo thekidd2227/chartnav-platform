@@ -1767,6 +1767,7 @@ INPUT_COLUMNS = (
     "confidence_summary, source_metadata, created_by_user_id, "
     "retry_count, last_error, last_error_code, "
     "started_at, finished_at, worker_id, "
+    "claimed_by, claimed_at, "
     "created_at, updated_at"
 )
 FINDINGS_COLUMNS = (
@@ -2368,3 +2369,129 @@ def retry_encounter_input(
         {"id": input_id},
     )
     return updated
+
+
+# ===========================================================================
+# Background worker surfaces + bridged-encounter refresh (phase 23)
+# ===========================================================================
+
+@router.post("/workers/tick", status_code=status.HTTP_200_OK)
+def worker_tick(caller: Caller = Depends(require_caller)) -> dict:
+    """Claim-and-process one queued input.
+
+    Admin-only HTTP hook for driving the worker remotely (ops
+    console, smoke tests, scheduled cron calling curl). A deployment
+    with a real worker process calls `app.services.worker.run_one()`
+    directly; this endpoint is the same function behind HTTP so
+    operators aren't locked out.
+
+    Returns `{processed: bool, ...tick}` — `processed=false` means
+    the queue was empty. Always 200 regardless of success or
+    failure of the claimed row (the row itself carries the terminal
+    state in `last_error` / `last_error_code`).
+    """
+    require_admin(caller)
+    from app.services import worker as _worker
+
+    tick = _worker.run_one()
+    if tick is None:
+        return {"processed": False, "queue_empty": True}
+    return {
+        "processed": True,
+        "input_id": tick.input_id,
+        "status": tick.status,
+        "ingestion_error": tick.ingestion_error,
+    }
+
+
+@router.post("/workers/drain", status_code=status.HTTP_200_OK)
+def worker_drain(caller: Caller = Depends(require_caller)) -> dict:
+    """Drain the queue. Returns the run summary.
+
+    Admin-only. Capped at 100 ticks by the service layer so a
+    runaway queue can't spin the process forever. Safe to call from
+    a cron or a smoke script. Not cheap — never put this on a user
+    request path.
+    """
+    require_admin(caller)
+    from app.services import worker as _worker
+
+    summary = _worker.run_until_empty()
+    return summary
+
+
+@router.post("/workers/requeue-stale", status_code=status.HTTP_200_OK)
+def worker_requeue_stale(caller: Caller = Depends(require_caller)) -> dict:
+    """Recover any stale `processing` rows.
+
+    Stale = claim older than `CHARTNAV_WORKER_CLAIM_TTL_SECONDS`
+    (default 900s = 15 minutes). Idempotent; safe to call on every
+    worker-tick or from a recovery cron.
+    """
+    require_admin(caller)
+    from app.services import worker as _worker
+
+    n = _worker.requeue_stale_claims()
+    return {"recovered": int(n)}
+
+
+class BridgeRefreshBody(BaseModel):
+    """Optional body for /encounters/{id}/refresh.
+
+    Reserved for future knobs (e.g. `dry_run: bool`); today the
+    request carries no parameters but having the model means we can
+    extend without breaking clients.
+    """
+    pass
+
+
+@router.post("/encounters/{encounter_id}/refresh", status_code=status.HTTP_200_OK)
+def refresh_bridged_encounter(
+    encounter_id: int,
+    payload: BridgeRefreshBody | None = None,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Re-fetch the external shell + reconcile mirror fields.
+
+    Only works on bridged encounters (rows with `external_ref` +
+    `external_source` set). Preserves source-of-truth:
+    ChartNav-native workflow is untouched; only the mirror fields
+    (`patient_identifier`, `patient_name`, `provider_name`, `status`)
+    can change. Admin + clinician can invoke; reviewer cannot.
+
+    Refuses with 409 `not_bridged` on standalone-native rows, 404
+    `encounter_not_found` cross-org, 409 `external_source_mismatch`
+    if the deployment's active adapter no longer matches the
+    historical source.
+    """
+    require_create_event(caller)
+    _load_encounter_for_caller(encounter_id, caller)  # scope + 404
+
+    from app.services.bridge_sync import (
+        BridgeRefreshError,
+        refresh_bridged_encounter as _refresh,
+    )
+
+    try:
+        result = _refresh(
+            native_id=encounter_id,
+            organization_id=caller.organization_id,
+        )
+    except BridgeRefreshError as e:
+        raise _err(e.error_code, e.reason, e.status_code)
+
+    from app import audit as _audit
+    _audit.record(
+        event_type="encounter_refreshed",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path=f"/encounters/{encounter_id}/refresh",
+        method="POST",
+        detail=(
+            f"native_id={encounter_id} refreshed={result['refreshed']} "
+            f"mirrored={list(result['mirrored'].keys())}"
+        ),
+    )
+    return result

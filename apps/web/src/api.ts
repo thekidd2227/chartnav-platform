@@ -791,6 +791,9 @@ export interface EncounterInput {
   started_at?: string | null;
   finished_at?: string | null;
   worker_id?: string | null;
+  // Phase 23 — background-worker claim fields.
+  claimed_by?: string | null;
+  claimed_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -1033,4 +1036,53 @@ export function retryEncounterInput(
     email,
     method: "POST",
   });
+}
+
+// ---------- Background worker + bridge refresh (phase 23) ----------
+
+export interface WorkerTickResult {
+  processed: boolean;
+  queue_empty?: boolean;
+  input_id?: number;
+  status?: string;
+  ingestion_error?: string | null;
+}
+
+export interface WorkerDrainSummary {
+  worker_id: string;
+  processed: number;
+  completed: number;
+  failed: number;
+  error_codes: string[];
+}
+
+export interface BridgeRefreshResult {
+  id: number;
+  refreshed: boolean;
+  mirrored: Record<string, string>;
+  skipped_unchanged: string[];
+}
+
+export function runWorkerTick(email: string): Promise<WorkerTickResult> {
+  return request("/workers/tick", { email, method: "POST" });
+}
+
+export function drainWorkerQueue(email: string): Promise<WorkerDrainSummary> {
+  return request("/workers/drain", { email, method: "POST" });
+}
+
+export function requeueStaleClaims(
+  email: string
+): Promise<{ recovered: number }> {
+  return request("/workers/requeue-stale", { email, method: "POST" });
+}
+
+export function refreshBridgedEncounter(
+  email: string,
+  encounterId: number | string
+): Promise<BridgeRefreshResult> {
+  return request(
+    `/encounters/${encodeURIComponent(String(encounterId))}/refresh`,
+    { email, method: "POST", body: "{}" }
+  );
 }

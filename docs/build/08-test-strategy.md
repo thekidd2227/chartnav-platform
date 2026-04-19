@@ -65,6 +65,24 @@ make docker-build
 - `make verify` (SQLite): 28 pytest + 9 smoke — all green
 - `scripts/pg_verify.sh`: migrations + seed (x2) + smoke + status transition + event write — **PASS**
 
+## Backend coverage (phase 23)
+
+- **231 pytest.** New:
+  - `tests/test_worker.py` (12) — claim atomicity (two workers →
+    one winner), claim stamps, happy path drive to `completed`,
+    failure path clears the claim, drain, stale-claim recovery
+    with manual ageing, fresh claim not recovered, HTTP tick +
+    drain + requeue-stale admin-only, HTTP tick processes a row,
+    inline text wedge unchanged.
+  - `tests/test_bridge_sync.py` (9) — standalone refusal, mirror
+    updates on bridged row, idempotent re-run, ChartNav-native
+    workflow tables untouched, source-of-truth mismatch refusal,
+    reviewer 403, cross-org 404, audit event emitted.
+- Frontend **55 Vitest** (+6) — queue banner (queued + processing +
+  hidden-when-completed), manual refresh button, bridged refresh
+  banner (admin dispatch + reviewer disabled-note).
+- Playwright unchanged contract. Visual baselines refreshed.
+
 ## Backend coverage (phase 22)
 
 - **210 pytest.** New `tests/test_ingestion_lifecycle.py` (+14):

@@ -36,10 +36,10 @@
 <body>
 <header class="cover">
   <h1>ChartNav — Consolidated Build</h1>
-  <div class="sub">Phases 1–22: spine → state machine → auth → RBAC → CI → production seam → Postgres → frontend → E2E → JWT + ops → staging → governance → control plane → invitations → enterprise quality &amp; compliance → platform mode &amp; interoperability → brand &amp; domain alignment → native clinical layer + FHIR → transcript → note draft → provider signoff → adapter-driven encounters → external encounter bridge → async ingestion + orchestration lifecycle<br>
+  <div class="sub">Phases 1–23: spine → state machine → auth → RBAC → CI → production seam → Postgres → frontend → E2E → JWT + ops → staging → governance → control plane → invitations → enterprise quality &amp; compliance → platform mode &amp; interoperability → brand &amp; domain alignment → native clinical layer + FHIR → transcript → note draft → provider signoff → adapter-driven encounters → external encounter bridge → async ingestion lifecycle → background worker + bridged refresh<br>
   Repo: <code>thekidd2227/chartnav-platform</code></div>
 </header>
-<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth, org scoping, RBAC</a></li><li><a href="#sec-9">08 — Test strategy</a></li><li><a href="#sec-10">09 — CI & deploy hardening</a></li><li><a href="#sec-11">10 — Doc artifact pipeline</a></li><li><a href="#sec-12">11 — Production-auth seam</a></li><li><a href="#sec-13">12 — Runtime config</a></li><li><a href="#sec-14">13 — Deploy target</a></li><li><a href="#sec-15">14 — Postgres parity</a></li><li><a href="#sec-16">15 — Frontend integration</a></li><li><a href="#sec-17">16 — Frontend test strategy</a></li><li><a href="#sec-18">17 — E2E & release</a></li><li><a href="#sec-19">18 — Operational hardening</a></li><li><a href="#sec-20">19 — Staging deployment</a></li><li><a href="#sec-21">20 — Observability</a></li><li><a href="#sec-22">21 — Staging runbook</a></li><li><a href="#sec-23">22 — Admin governance</a></li><li><a href="#sec-24">23 — Operator control plane</a></li><li><a href="#sec-25">24 — Invitations & governance</a></li><li><a href="#sec-26">25 — Enterprise quality & compliance</a></li><li><a href="#sec-27">26 — Platform mode & interoperability</a></li><li><a href="#sec-28">27 — Adoption & implementation model</a></li><li><a href="#sec-29">28 — Brand & domain alignment</a></li><li><a href="#sec-30">29 — Native clinical layer & FHIR</a></li><li><a href="#sec-31">30 — Transcript → findings → note → signoff</a></li><li><a href="#sec-32">31 — Adapter-driven encounters & integrated write gating</a></li><li><a href="#sec-33">32 — External encounter → native workflow bridge</a></li><li><a href="#sec-34">33 — Async ingestion + orchestration lifecycle</a></li><li><a href="#sec-35">Diagram — System architecture</a></li><li><a href="#sec-36">Diagram — Encounter status machine</a></li><li><a href="#sec-37">Diagram — ER</a></li><li><a href="#sec-38">Diagram — API / data flow</a></li></ol></nav>
+<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth, org scoping, RBAC</a></li><li><a href="#sec-9">08 — Test strategy</a></li><li><a href="#sec-10">09 — CI & deploy hardening</a></li><li><a href="#sec-11">10 — Doc artifact pipeline</a></li><li><a href="#sec-12">11 — Production-auth seam</a></li><li><a href="#sec-13">12 — Runtime config</a></li><li><a href="#sec-14">13 — Deploy target</a></li><li><a href="#sec-15">14 — Postgres parity</a></li><li><a href="#sec-16">15 — Frontend integration</a></li><li><a href="#sec-17">16 — Frontend test strategy</a></li><li><a href="#sec-18">17 — E2E & release</a></li><li><a href="#sec-19">18 — Operational hardening</a></li><li><a href="#sec-20">19 — Staging deployment</a></li><li><a href="#sec-21">20 — Observability</a></li><li><a href="#sec-22">21 — Staging runbook</a></li><li><a href="#sec-23">22 — Admin governance</a></li><li><a href="#sec-24">23 — Operator control plane</a></li><li><a href="#sec-25">24 — Invitations & governance</a></li><li><a href="#sec-26">25 — Enterprise quality & compliance</a></li><li><a href="#sec-27">26 — Platform mode & interoperability</a></li><li><a href="#sec-28">27 — Adoption & implementation model</a></li><li><a href="#sec-29">28 — Brand & domain alignment</a></li><li><a href="#sec-30">29 — Native clinical layer & FHIR</a></li><li><a href="#sec-31">30 — Transcript → findings → note → signoff</a></li><li><a href="#sec-32">31 — Adapter-driven encounters & integrated write gating</a></li><li><a href="#sec-33">32 — External encounter → native workflow bridge</a></li><li><a href="#sec-34">33 — Async ingestion + orchestration lifecycle</a></li><li><a href="#sec-35">34 — Background worker foundation + bridged refresh</a></li><li><a href="#sec-36">Diagram — System architecture</a></li><li><a href="#sec-37">Diagram — Encounter status machine</a></li><li><a href="#sec-38">Diagram — ER</a></li><li><a href="#sec-39">Diagram — API / data flow</a></li></ol></nav>
 <section id="sec-1"><h2>Executive summary</h2>
 <p>This document consolidates <strong>all</strong> ChartNav backend phases delivered to</p>
 <p>date.</p>
@@ -65,13 +65,14 @@
 <tr><td><strong>Phase 20 — Adapter-driven encounters + integrated write gating.</strong> The <code>/encounters</code> and <code>/encounters/{id}</code> HTTP handlers now dispatch through <code>resolve_adapter()</code> in every mode. Standalone → native adapter (same SQL); integrated → stub / FHIR / vendor adapter. The <code>ClinicalSystemAdapter</code> protocol grew a <code>list_encounters(organization_id, location_id, status, provider_name, limit, offset) → EncounterListResult</code> method; <code>fetch_encounter</code> was widened to return the full ChartNav row shape. Every encounter row carries <code>_source</code> (<code>chartnav</code> / <code>fhir</code> / <code>stub</code> / vendor key) and <code>_external_ref</code> where applicable. The FHIR adapter implements <code>list_encounters</code> via <code>GET /Encounter?_count=…&amp;status=&lt;mapped&gt;</code> with full ChartNav→FHIR status translation (<code>planned ↔ scheduled</code>, <code>in-progress ↔ in_progress</code>, <code>finished ↔ completed</code>). Write gating is mode-aware: <code>POST /encounters</code> returns 409 <code>encounter_write_unsupported</code> in both integrated modes; <code>POST /encounters/{id}/status</code> returns 409 in read-through and <strong>adapter-dispatches</strong> in write-through (generic FHIR still raises <code>AdapterNotSupported</code> → 501 <code>adapter_write_not_supported</code>, which is a transport-honest distinction from the 409 &quot;mode blocks this entirely&quot;). ChartNav-native tables (<code>workflow_events</code>, <code>encounter_inputs</code>, <code>extracted_findings</code>, <code>note_versions</code>, <code>security_audit_events</code>) remain fully writable in every mode because they&#x27;re ChartNav&#x27;s own tracking. Frontend surfaces the SoT explicitly: encounter detail renders a <strong>source chip</strong> (teal for native, info-blue for external) and, when the encounter is external, a banner explaining the external EHR owns the row + suppressed transitions + suppressed <code>NoteWorkspace</code> with an honest subtle-note. <code>Encounter.id</code> widens to `number</td><td>string<code> so FHIR vendor ids round-trip cleanly through </code>getEncounter<code>/</code>updateEncounterStatus<code>/</code>createEncounterEvent<code>. Suites: <strong>185 pytest</strong> (+11 </code>test_integrated_encounters.py`), <strong>44 Vitest</strong> (+2 SoT UI), 17 Playwright + 4 visual (baselines refreshed). Zero new runtime deps; Alembic history unchanged.</td></tr>
 </tbody></table>
 <table><thead><tr><th><strong>Phase 21 — External encounter → native workflow bridge.</strong> The ChartNav wedge (transcript → findings → note draft → provider signoff) now runs on externally-sourced encounters. Alembic migration <code>b8c9d0e1f203</code> adds <code>encounters.external_ref</code> + <code>encounters.external_source</code> (nullable) plus a UNIQUE <code>(organization_id, external_ref, external_source)</code> — the DB-level guarantee that makes the bridge idempotent. New <code>apps/api/app/services/bridge.py::resolve_or_create_bridged_encounter(...)</code> is the single service seam: idempotent get-or-create, returns the native row with a `_bridged: true</th><th>false<code> tag so the frontend can differentiate first-create from subsequent resolves. New </code>POST /encounters/bridge<code> HTTP endpoint (admin + clinician; reviewer 403; standalone 409 </code>bridge_not_available_in_standalone_mode<code>) calls the service, emits a </code>encounter_bridged<code> audit event on first create only. Phase-20 contract preserved: bridging does NOT reopen encounter state writes — </code>POST /encounters/{id}/status<code> on a bridged row in integrated_readthrough still returns 409 </code>encounter_write_unsupported<code>. Frontend </code>ExternalEncounterBanner<code> component adds a <strong>Bridge to ChartNav</strong> button inside the SoT banner; clicking dispatches </code>bridgeEncounter(...)<code> and navigates to the native id, at which point the full </code>NoteWorkspace<code> appears because </code>_source<code> is now </code>chartnav<code>. Reviewer role sees the banner but no button, with a subtle-note explanation. The external-note copy was rewritten to describe the bridge path instead of a generic native-only limitation. Suites grow to <strong>196 pytest</strong> (+11 </code>test_encounter_bridge.py`), <strong>45 Vitest</strong> (+1), 17 Playwright + 4 visual (baselines refreshed). Zero new runtime deps.</th></tr></thead><tbody>
-<tr><td><strong>Phase 22 — Async ingestion + orchestration lifecycle (this phase).</strong> The transcript-to-note wedge now runs on a real async-job state machine instead of flipping rows straight to <code>completed</code> on arrival. Alembic migration <code>c9d0e1f2a304</code> adds six columns to <code>encounter_inputs</code> (<code>retry_count</code>, <code>last_error</code>, <code>last_error_code</code>, <code>started_at</code>, <code>finished_at</code>, <code>worker_id</code>). New <code>app/services/ingestion.py</code> owns the `queued → processing → completed</td><td>failed</td><td>needs_review<code> state machine, persists every transition as a single DB write, and exposes a </code>set_transcriber(fn)<code> seam for real audio STT (default is an honest </code>NotImplementedError<code>-shape stub). New </code>app/services/note_orchestrator.py<code> wraps the phase-19 </code>note_generator<code> so the HTTP handler never touches the generator directly — a real LLM drops into one function, the pipeline contract (input ready → findings extracted → note drafted → provider review required) is enforced. Two new endpoints ship: </code>POST /encounter-inputs/{id}/process<code> drives a queued row through the pipeline and returns </code>{input, ingestion_error}<code>; </code>POST /encounter-inputs/{id}/retry<code> flips </code>failed<code>/</code>needs_review<code> rows back to </code>queued<code> with </code>retry_count++<code> and emits an </code>encounter_input_retried<code> audit event. Frontend surfaces the full lifecycle in NoteWorkspace Tier 1: color-coded status pills, a </code>retries N<code> chip, an error banner with </code>last_error_code<code>+</code>last_error<code>, Retry + Process-now buttons, and a Generate-draft button gated on at least one </code>completed<code> input. Suites grow to <strong>210 pytest</strong> (+14 </code>test_ingestion_lifecycle.py`), <strong>49 Vitest</strong> (+4 NoteWorkspace lifecycle), 17 Playwright + 4 visual (baselines refreshed). No new runtime deps; the ingestion service + orchestrator are stdlib-only.</td></tr>
+<tr><td><strong>Phase 22 — Async ingestion + orchestration lifecycle.</strong> The transcript-to-note wedge now runs on a real async-job state machine instead of flipping rows straight to <code>completed</code> on arrival. Alembic migration <code>c9d0e1f2a304</code> adds six columns to <code>encounter_inputs</code> (<code>retry_count</code>, <code>last_error</code>, <code>last_error_code</code>, <code>started_at</code>, <code>finished_at</code>, <code>worker_id</code>). New <code>app/services/ingestion.py</code> owns the `queued → processing → completed</td><td>failed</td><td>needs_review<code> state machine, persists every transition as a single DB write, and exposes a </code>set_transcriber(fn)<code> seam for real audio STT (default is an honest </code>NotImplementedError<code>-shape stub). New </code>app/services/note_orchestrator.py<code> wraps the phase-19 </code>note_generator<code> so the HTTP handler never touches the generator directly — a real LLM drops into one function, the pipeline contract (input ready → findings extracted → note drafted → provider review required) is enforced. Two new endpoints ship: </code>POST /encounter-inputs/{id}/process<code> drives a queued row through the pipeline and returns </code>{input, ingestion_error}<code>; </code>POST /encounter-inputs/{id}/retry<code> flips </code>failed<code>/</code>needs_review<code> rows back to </code>queued<code> with </code>retry_count++<code> and emits an </code>encounter_input_retried<code> audit event. Frontend surfaces the full lifecycle in NoteWorkspace Tier 1: color-coded status pills, a </code>retries N<code> chip, an error banner with </code>last_error_code<code>+</code>last_error<code>, Retry + Process-now buttons, and a Generate-draft button gated on at least one </code>completed<code> input. Suites grow to <strong>210 pytest</strong> (+14 </code>test_ingestion_lifecycle.py`), <strong>49 Vitest</strong> (+4 NoteWorkspace lifecycle), 17 Playwright + 4 visual (baselines refreshed). No new runtime deps; the ingestion service + orchestrator are stdlib-only.</td></tr>
 </tbody></table>
+<p><strong>Phase 23 — Background worker foundation + bridged-encounter refresh (this phase).</strong> The ingestion pipeline gains a real background-worker seam without new infrastructure (no Redis, no Celery, no broker). Alembic migration <code>d0e1f2a30415</code> adds <code>encounter_inputs.claimed_by</code> + <code>claimed_at</code> and an index on <code>(processing_status, claimed_by)</code> so the &quot;one unclaimed queued row&quot; query is cheap. New <code>app/services/worker.py</code> owns claim-based pickup: atomic claim via conditional UPDATE + read-back confirm (two workers cannot win the same row), <code>requeue_stale_claims()</code> recovers <code>processing</code> rows whose claim is older than <code>CHARTNAV_WORKER_CLAIM_TTL_SECONDS</code> (default 900s, 30s floor), and <code>run_one()</code> / <code>run_until_empty()</code> drive the existing phase-22 <code>run_ingestion_now()</code> with explicit failure-path claim release. Admin HTTP surfaces (<code>POST /workers/tick</code> / <code>/drain</code> / <code>/requeue-stale</code>) make the primitives ops-console-accessible; <code>scripts/run_worker.py</code> ships a CLI (<code>--once</code> / <code>--drain</code> / <code>--loop</code> / <code>--requeue-stale</code>) with JSON-per-line output. New <code>app/services/bridge_sync.py</code> + <code>POST /encounters/{id}/refresh</code> re-fetches the external shell via the resolved adapter and reconciles ONLY the mirror fields (<code>patient_identifier</code>, <code>patient_name</code>, <code>provider_name</code>, <code>status</code>). Source-of-truth guard: 409 <code>not_bridged</code> on standalone-native, 409 <code>external_source_mismatch</code> when the active adapter key differs from the historical <code>external_source</code>. Emits <code>encounter_refreshed</code> audit event; never writes back to the external EHR; never touches ChartNav-native workflow tables. Frontend: NoteWorkspace Tier 1 gains a manual &quot;↻ Refresh&quot; button + a &quot;Processing continues in the background&quot; info banner that differentiates &quot;waiting for a worker&quot; from &quot;currently processing&quot;; encounter detail gains a <code>BridgedEncounterRefreshBanner</code> for native rows with <code>external_ref</code> (admin + clinician only; reviewer disabled-note). <code>refreshDetail</code> in App.tsx preserves the mounted detail pane across re-fetches so banner state doesn&#x27;t unmount mid-flow. Suites: <strong>231 pytest</strong> (+21 <code>test_worker.py</code> + <code>test_bridge_sync.py</code>), <strong>55 Vitest</strong> (+6), 17 Playwright + 4 visual (baselines refreshed). Zero new runtime deps; worker is stdlib + SQLAlchemy only.</p>
 <p>Preserved untouched: <code>/health</code>, <code>/</code>, SQLite dev workflow, state machine + filtering surface, workflow_events model, existing endpoint contracts.</p>
 </section>
 <section id="sec-2"><h2>01 — Current state</h2>
 <h1>ChartNav — Current State</h1>
-<p><strong>As of:</strong> 2026-04-18 (phase: async ingestion + orchestration lifecycle)</p>
+<p><strong>As of:</strong> 2026-04-19 (phase: background worker foundation + bridged-encounter refresh)</p>
 <h2>Repo layout (relevant)</h2>
 <pre class="code lang-"><code>
 chartnav-platform/
@@ -93,8 +94,8 @@ chartnav-platform/
 │   │   │   ├── services/        # domain service seam (phase 19)
 │   │   │   │   └── note_generator.py  # regex fake today; LLM slot in, shape locked
 │   │   │   └── api/routes.py    # + /inputs + /notes/generate + /note-versions/* (phase 19)
-│   │   ├── alembic/versions/    # 10 migrations through c9d0e1f2a304
-│   │   ├── tests/               # 210 pytest (+14 ingestion lifecycle)
+│   │   ├── alembic/versions/    # 11 migrations through d0e1f2a30415
+│   │   ├── tests/               # 231 pytest (+21 worker + bridge sync)
 │   │   └── Dockerfile · entrypoint.sh · .env.example
 │   └── web/
 │       ├── src/
@@ -126,19 +127,20 @@ chartnav-platform/
 <li><strong>Platform mode</strong> (phase 16): <code>CHARTNAV_PLATFORM_MODE</code> ∈ {<code>standalone</code>, <code>integrated_readthrough</code>, <code>integrated_writethrough</code>}. Adapter boundary (<code>ClinicalSystemAdapter</code>) separates ChartNav core from any external EHR/EMR. Ships <code>NativeChartNavAdapter</code> (standalone) + <code>StubClinicalSystemAdapter</code> (integrated placeholder) + <strong><code>FHIRAdapter</code></strong> (phase 18). Vendor adapters plug in via <code>register_vendor_adapter</code>. Config fails loudly on misconfig. <code>GET /platform</code> surfaces mode + adapter + source-of-truth to the UI.</li>
 <li><strong>Native clinical layer</strong> (phase 18): <code>patients</code> and <code>providers</code> tables are org-scoped, soft-active, and carry <code>external_ref</code> for integrated-mode mirroring. <code>encounters.patient_id</code> + <code>encounters.provider_id</code> are nullable FKs so the legacy text fields (<code>patient_identifier</code>, <code>provider_name</code>) continue to render. Standalone mode persists and queries via the native adapter; <code>integrated_readthrough</code> refuses native writes with a clear error code.</li>
 <li><strong>FHIR adapter</strong> (phase 18): real R4 read-through over a pluggable transport. Normalizes Patient + Encounter resources into ChartNav&#x27;s internal shape (status mapping, participant display, MRN extraction, birthDate/gender passthrough). Write paths raise <code>AdapterNotSupported</code> honestly. Config: <code>CHARTNAV_FHIR_BASE_URL</code>, <code>CHARTNAV_FHIR_AUTH_TYPE</code>, <code>CHARTNAV_FHIR_BEARER_TOKEN</code>.</li>
+<li><strong>Background worker foundation + bridged-encounter refresh</strong> (phase 23): <code>encounter_inputs</code> gains <code>claimed_by</code> + <code>claimed_at</code> with a unique <code>(processing_status, claimed_by)</code> index. New <code>app/services/worker.py</code> provides claim-based <code>claim_one</code>, <code>release_claim</code>, <code>requeue_stale_claims</code>, <code>run_one</code>, <code>run_until_empty</code>. New <code>scripts/run_worker.py</code> CLI (once / drain / loop / requeue-stale) + admin HTTP surfaces (<code>/workers/tick</code>, <code>/workers/drain</code>, <code>/workers/requeue-stale</code>). New <code>app/services/bridge_sync.py</code> + <code>POST /encounters/{id}/refresh</code> re-fetches the external shell and reconciles only the mirror fields (<code>patient_identifier</code>, <code>patient_name</code>, <code>provider_name</code>, <code>status</code>) with a source-of-truth-mismatch guard. Frontend adds a &quot;Processing continues in the background&quot; banner + manual Refresh button in the NoteWorkspace, and a bridged-encounter refresh banner (admin/clinician only) in the encounter detail.</li>
 <li><strong>Async ingestion + orchestration lifecycle</strong> (phase 22): <code>encounter_inputs</code> rows now run through a real job lifecycle (<code>queued → processing → completed | failed | needs_review</code>) with <code>retry_count</code>, <code>last_error</code>, <code>last_error_code</code>, <code>started_at</code>, <code>finished_at</code>, <code>worker_id</code>. New <code>app/services/ingestion.py</code> owns the state machine + an <code>set_transcriber(fn)</code> seam for real audio STT. New <code>app/services/note_orchestrator.py</code> wraps <code>note_generator</code> so the HTTP handler never touches the generator directly — an LLM drops into one function. Two new endpoints — <code>POST /encounter-inputs/{id}/process</code> (drive queued → terminal) and <code>POST /encounter-inputs/{id}/retry</code> (bump retry_count + flip back to queued). Frontend surfaces the full lifecycle: status pills, retry-count chip, honest error banner, Retry + Process-now buttons, and Generate gated on a completed input.</li>
 <li><strong>External encounter → native workflow bridge</strong> (phase 21): <code>POST /encounters/bridge</code> get-or-creates a native <code>encounters</code> row keyed on <code>(organization_id, external_ref, external_source)</code> for externally-sourced encounters. Idempotent. Preserves the phase-20 contract — the external EHR still owns encounter state; the bridge only unlocks ChartNav-native workflow (transcript → findings → draft → sign → export). Refused in standalone mode. Frontend surfaces a <strong>Bridge to ChartNav</strong> action on external encounter detail; after bridging, the encounter flips to <code>_source=&quot;chartnav&quot;</code> and the full <code>NoteWorkspace</code> is available.</li>
 <li><strong>Adapter-driven encounters</strong> (phase 20): <code>GET /encounters</code> and <code>GET /encounters/{id}</code> dispatch through the resolved adapter. Standalone → native adapter (same SQL as before). Integrated → adapter-owned rows tagged <code>_source</code> (<code>chartnav</code> / <code>fhir</code> / <code>stub</code> / vendor). Write gating is mode-aware: <code>POST /encounters</code> returns 409 <code>encounter_write_unsupported</code> in both integrated modes; <code>POST /encounters/{id}/status</code> returns 409 in read-through and dispatches through the adapter in write-through (501 <code>adapter_write_not_supported</code> when the adapter raises <code>AdapterNotSupported</code>). Frontend surfaces a source-of-truth chip + SoT banner; status controls and the note workspace are suppressed on external encounters.</li>
 <li><strong>Transcript → note drafting → signoff</strong> (phase 19): three org-scoped tables (<code>encounter_inputs</code>, <code>extracted_findings</code>, <code>note_versions</code>), a note-generator service seam at <code>app/services/note_generator.py</code> (deterministic fake today; LLM plugs in at one function, output contract locked), provider review workspace in the frontend with three visually distinct trust tiers (transcript → findings → draft → signed), status state machine (<code>draft → provider_review → revised → signed → exported</code>), immutability after sign, audit events on every meaningful action, text download + clipboard export.</li>
 <li><strong>Brand alignment</strong> (phase 17): product UI uses the ChartNav marketing site&#x27;s exact token set (<code>--cn-*</code>). Inter typography, teal <code>#0B6E79</code> primary, real logo SVG in the header, subtle <code>Powered by ARCG Systems</code> footer. Axe-AA contrast preserved.</li>
 <li><strong>Domain</strong>: <code>chartnav.ai</code> → <code>https://arcgsystems.com/chartnav/</code> via GoDaddy 301 forwarding (external) + in-repo host-based safety-net in <code>arcg-live</code>. Runbook: <code>arcg-live/docs/chartnav-ai-domain-runbook.md</code>.</li>
-<li>Alembic head: <code>c9d0e1f2a304</code> (phase 22 — encounter_inputs job lifecycle: retry_count, last_error, started_at/finished_at, worker_id).</li>
+<li>Alembic head: <code>d0e1f2a30415</code> (phase 23 — encounter_inputs claim columns: claimed_by, claimed_at + queue index).</li>
 </ul>
 <h2>Testing layers</h2>
 <table><thead><tr><th>Layer</th><th>Tool</th><th>Count</th><th>Notes</th></tr></thead><tbody>
-<tr><td>pytest</td><td>pytest</td><td>210</td><td>+14 ingestion lifecycle (state machine, retry, transcriber seam, orchestrator contract)</td></tr>
+<tr><td>pytest</td><td>pytest</td><td>231</td><td>+21 worker primitives (claim atomicity, drain, stale recovery) + bridge sync (mirror fields + SoT guard)</td></tr>
 <tr><td>shell smoke</td><td>smoke.sh</td><td>9</td><td>unchanged</td></tr>
-<tr><td>Vitest</td><td>vitest</td><td>49</td><td>+4 workspace lifecycle (retry, process, error banner, generate gating)</td></tr>
+<tr><td>Vitest</td><td>vitest</td><td>55</td><td>+6 worker lifecycle banner + manual refresh + bridged refresh UX</td></tr>
 <tr><td>Playwright workflow</td><td>@playwright</td><td>12</td><td>unchanged contract</td></tr>
 <tr><td>Playwright a11y</td><td>@axe-core/playwright</td><td>5</td><td>NEW</td></tr>
 <tr><td>Playwright visual</td><td>Playwright snapshots</td><td>4</td><td>NEW (local only)</td></tr>
@@ -150,8 +152,8 @@ chartnav-platform/
 <p>older callers that pass no params still see the first 100 rows.</p>
 <h2>Automation</h2>
 <ul>
-<li><code>make verify</code> → 210 pytest + 9 smoke</li>
-<li><code>make web-verify</code> → 49 vitest + typecheck + build</li>
+<li><code>make verify</code> → 231 pytest + 9 smoke</li>
+<li><code>make web-verify</code> → 55 vitest + typecheck + build</li>
 <li><code>make e2e</code> → 12 workflow + 5 a11y + 4 visual (local)</li>
 <li><code>make e2e-a11y</code> / <code>make e2e-visual</code> / <code>make e2e-visual-update</code></li>
 <li><code>make audit-prune ARGS=&quot;--days 90 --dry-run&quot;</code></li>
@@ -261,6 +263,14 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 </tbody></table>
 <p>Encounter responses now also include <code>patient_id</code> + <code>provider_id</code></p>
 <p>nullable FKs pointing at the rows above.</p>
+<h2>Background worker + bridged refresh (phase 23)</h2>
+<table><thead><tr><th>Method</th><th>Path</th><th>Role</th><th>Behavior</th></tr></thead><tbody>
+<tr><td><code>POST</code></td><td><code>/workers/tick</code></td><td>admin</td><td>Claim-and-process one queued input. Returns <code>{processed, queue_empty, input_id, status, ingestion_error}</code>.</td></tr>
+<tr><td><code>POST</code></td><td><code>/workers/drain</code></td><td>admin</td><td>Drain up to 100 rows. Returns <code>{worker_id, processed, completed, failed, error_codes}</code>.</td></tr>
+<tr><td><code>POST</code></td><td><code>/workers/requeue-stale</code></td><td>admin</td><td>Recover <code>processing</code> rows whose claim exceeded <code>CHARTNAV_WORKER_CLAIM_TTL_SECONDS</code>. Returns <code>{recovered: N}</code>.</td></tr>
+<tr><td><code>POST</code></td><td><code>/encounters/{id}/refresh</code></td><td>admin + clinician</td><td>Re-fetch the external shell + reconcile mirror fields. 409 <code>not_bridged</code> on standalone-native. 409 <code>external_source_mismatch</code> if the active adapter differs from <code>external_source</code>. Emits <code>encounter_refreshed</code> audit event.</td></tr>
+</tbody></table>
+<p>Encounter-input responses now also include <code>claimed_by</code>, <code>claimed_at</code>.</p>
 <h2>Ingestion lifecycle (phase 22)</h2>
 <table><thead><tr><th>Method</th><th>Path</th><th>Role</th><th>Behavior</th></tr></thead><tbody>
 <tr><td><code>POST</code></td><td><code>/encounter-inputs/{id}/process</code></td><td>admin + clinician</td><td>Synchronously drive a <code>queued</code> row through the pipeline. Returns <code>{input, ingestion_error}</code>. <code>ingestion_error</code> is <code>null</code> on success or <code>{error_code, reason}</code> on failure.</td></tr>
@@ -600,6 +610,15 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <p>preferred source of truth going forward; integrations can populate</p>
 <p><code>external_ref</code> on the corresponding <code>patients</code>/<code>providers</code> row and</p>
 <p>the encounter FK for full lineage.</p>
+<h3><code>encounter_inputs</code> — background-worker claim (phase 23)</h3>
+<p>Two nullable columns + one index added via batch rewrite:</p>
+<table><thead><tr><th>column</th><th>type</th><th>notes</th></tr></thead><tbody>
+<tr><td><code>claimed_by</code></td><td>VARCHAR(64) nullable</td><td>worker id that currently owns the row</td></tr>
+<tr><td><code>claimed_at</code></td><td>DATETIME nullable</td><td>when the claim was taken; stale-claim recovery threshold</td></tr>
+</tbody></table>
+<p>Index <code>ix_encounter_inputs_queue</code> on <code>(processing_status, claimed_by)</code></p>
+<p>keeps the &quot;one unclaimed queued row&quot; query cheap. Migration</p>
+<p><code>d0e1f2a30415</code>. Existing rows unaffected.</p>
 <h3><code>encounter_inputs</code> — async job lifecycle (phase 22)</h3>
 <p>Six columns added (all nullable / sensibly defaulted):</p>
 <table><thead><tr><th>column</th><th>type</th><th>notes</th></tr></thead><tbody>
@@ -666,6 +685,137 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <section id="sec-6"><h2>05 — Build log</h2>
 <h1>Build Log</h1>
 <p>Reverse-chronological.</p>
+<p>---</p>
+<h2>2026-04-19 — Phase 23: background worker foundation + bridged-encounter refresh</h2>
+<h3>Step 1 — Migration <code>d0e1f2a30415</code></h3>
+<ul>
+<li><code>encounter_inputs.claimed_by</code> (VARCHAR(64) nullable) +</li>
+</ul>
+<p><code>claimed_at</code> (DATETIME nullable) via batch rewrite.</p>
+<ul>
+<li>New index on <code>(processing_status, claimed_by)</code> for cheap</li>
+</ul>
+<p>&quot;unclaimed queued&quot; queries.</p>
+<ul>
+<li>Pure additive; standalone + integrated flows unaffected.</li>
+</ul>
+<h3>Step 2 — Worker service (<code>app/services/worker.py</code>)</h3>
+<ul>
+<li>Atomic claim via conditional UPDATE + read-back confirm. Two</li>
+</ul>
+<p>concurrent callers never win the same row.</p>
+<ul>
+<li><code>requeue_stale_claims()</code> recovers <code>processing</code> rows whose</li>
+</ul>
+<p>claim is older than <code>CHARTNAV_WORKER_CLAIM_TTL_SECONDS</code></p>
+<p>(default 900s; 30s floor).</p>
+<ul>
+<li><code>run_one()</code> = claim + run; <code>run_until_empty()</code> drains up to</li>
+</ul>
+<p>100 ticks. Failure path clears the claim so retry doesn&#x27;t hit</p>
+<p>stale-claim logic.</p>
+<ul>
+<li>Worker identity: <code>&lt;hostname&gt;/&lt;pid&gt;</code> by default, overrideable</li>
+</ul>
+<p>via <code>CHARTNAV_WORKER_ID</code>.</p>
+<h3>Step 3 — Bridge sync (<code>app/services/bridge_sync.py</code>)</h3>
+<ul>
+<li><code>refresh_bridged_encounter(native_id, organization_id)</code></li>
+</ul>
+<p>re-fetches via the resolved adapter and reconciles only the</p>
+<p>four mirror fields (<code>patient_identifier</code>, <code>patient_name</code>,</p>
+<p><code>provider_name</code>, <code>status</code>).</p>
+<ul>
+<li>Source-of-truth guards:</li>
+<li>409 <code>not_bridged</code> on standalone-native rows.</li>
+<li>409 <code>external_source_mismatch</code> when the active adapter key</li>
+</ul>
+<p>doesn&#x27;t match the historical <code>external_source</code>.</p>
+<ul>
+<li>Never writes back to the external EHR.</li>
+<li>Never touches ChartNav-native workflow tables.</li>
+</ul>
+<h3>Step 4 — HTTP + CLI surfaces</h3>
+<ul>
+<li><code>POST /workers/tick</code> (admin) — one tick.</li>
+<li><code>POST /workers/drain</code> (admin) — drain up to 100.</li>
+<li><code>POST /workers/requeue-stale</code> (admin) — recovery.</li>
+<li><code>POST /encounters/{id}/refresh</code> (admin + clinician; 409 <code>not_bridged</code></li>
+</ul>
+<p>if standalone-native; 409 <code>external_source_mismatch</code>; cross-org</p>
+<p>404; emits <code>encounter_refreshed</code> audit event).</p>
+<ul>
+<li><code>scripts/run_worker.py</code> — <code>--once | --drain | --loop | --requeue-stale</code>;</li>
+</ul>
+<p>JSON-per-line output for ops tailing.</p>
+<h3>Step 5 — Frontend</h3>
+<ul>
+<li><code>api.ts</code>: <code>runWorkerTick</code>, <code>drainWorkerQueue</code>, <code>requeueStaleClaims</code>,</li>
+</ul>
+<p><code>refreshBridgedEncounter</code> helpers. <code>EncounterInput</code> gains</p>
+<p><code>claimed_by</code>/<code>claimed_at</code>.</p>
+<ul>
+<li><code>NoteWorkspace.tsx</code>: Tier 1 gains a manual &quot;↻ Refresh&quot; button +</li>
+</ul>
+<p>a &quot;Processing continues in the background&quot; info banner that</p>
+<p>differentiates &quot;waiting for a worker&quot; from &quot;currently</p>
+<p>processing&quot;.</p>
+<ul>
+<li><code>App.tsx</code>: new <code>BridgedEncounterRefreshBanner</code> component for</li>
+</ul>
+<p>native rows that carry an <code>external_ref</code>. <code>refreshDetail</code> now</p>
+<p>preserves the mounted detail pane on re-fetch (stops the</p>
+<p>&quot;Loading…&quot; flicker that was unmounting child banner state).</p>
+<ul>
+<li><code>EncounterDetail</code> takes an <code>onRefreshDetail</code> prop so children can</li>
+</ul>
+<p>request a re-fetch without the App-level closure.</p>
+<h3>Step 6 — Tests</h3>
+<ul>
+<li><strong>Backend +21</strong>:</li>
+<li><code>tests/test_worker.py</code> (12): claim atomicity, stamps,</li>
+</ul>
+<p>happy-path drive, failure-path claim release, drain,</p>
+<p>stale-claim recovery, fresh claim not recovered, HTTP tick +</p>
+<p>drain + requeue-stale admin-only, HTTP tick processes a row,</p>
+<p>no regression on the inline text wedge.</p>
+<ul>
+<li><code>tests/test_bridge_sync.py</code> (9): standalone refusal, mirror</li>
+</ul>
+<p>updates, idempotent re-run, native workflow tables untouched,</p>
+<p>source-of-truth mismatch, reviewer 403, cross-org 404, audit</p>
+<p>event.</p>
+<ul>
+<li><strong>Frontend +6</strong>: queue banner (queued + processing variants +</li>
+</ul>
+<p>absent-when-all-completed), manual refresh, bridged refresh UX</p>
+<p>(admin dispatches + reviewer sees disabled note).</p>
+<ul>
+<li>Full suites: <strong>231/231 pytest</strong>, <strong>55/55 Vitest</strong>, 17/17</li>
+</ul>
+<p>Playwright + 4 visual (baselines refreshed).</p>
+<h3>Step 7 — Docs</h3>
+<ul>
+<li>New <code>docs/build/34-background-worker-foundation.md</code> — full phase</li>
+</ul>
+<p>reference (state machine, services, HTTP + CLI, UI contract,</p>
+<p>verification, explicit non-goals).</p>
+<ul>
+<li>Updated <code>01-current-state</code>, <code>03-api-endpoints</code>, <code>04-data-model</code>,</li>
+</ul>
+<p><code>05-build-log</code> (this entry), <code>06-known-gaps</code>, <code>08-test-strategy</code>,</p>
+<p><code>15-frontend-integration</code>, <code>16-frontend-test-strategy</code>;</p>
+<p>ER diagram gains the two new claim columns.</p>
+<ul>
+<li><code>scripts/build_docs.py</code> picks up section 34; executive summary</li>
+</ul>
+<p>extended. Final HTML + PDF regenerated.</p>
+<h3>Step 8 — Hygiene</h3>
+<ul>
+<li>Dev DB reset to pristine seeded state before commit.</li>
+<li>Visual baselines refreshed for the new bridged refresh banner.</li>
+<li>No new runtime deps; worker is stdlib + SQLAlchemy only.</li>
+</ul>
 <p>---</p>
 <h2>2026-04-18 — Phase 22: async ingestion + orchestration lifecycle</h2>
 <h3>Step 1 — Migration <code>c9d0e1f2a304</code></h3>
@@ -1797,6 +1947,13 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <h3>Playwright summary (12)</h3>
 <p>Adds &quot;admin can issue an invitation and download audit CSV&quot; on top of</p>
 <p>the 11 scenarios shipped through phase 13.</p>
+<h2>Phase-23 additions</h2>
+<ul>
+<li><strong>Background worker foundation</strong>: claim/release/stale-recovery primitives in <code>app/services/worker.py</code>, admin HTTP endpoints (<code>/workers/tick</code> / <code>drain</code> / <code>requeue-stale</code>), and <code>scripts/run_worker.py</code> CLI (once / drain / loop / requeue-stale).</li>
+<li><strong>Bridged encounter refresh</strong>: <code>app/services/bridge_sync.py</code> + <code>POST /encounters/{id}/refresh</code> re-fetches the external shell and reconciles only the mirror fields, with a source-of-truth-mismatch guard.</li>
+<li><strong>Queue banner UI</strong> + manual refresh in NoteWorkspace; bridged-encounter refresh banner in encounter detail.</li>
+<li><strong>231 pytest</strong> (+21), <strong>55 Vitest</strong> (+6), 17 Playwright + 4 visual.</li>
+</ul>
 <h2>Phase-22 additions</h2>
 <ul>
 <li><strong>Async ingestion lifecycle</strong>: <code>encounter_inputs</code> grew <code>retry_count</code>, <code>last_error</code>, <code>last_error_code</code>, <code>started_at</code>, <code>finished_at</code>, <code>worker_id</code>. Real state machine: <code>queued → processing → completed | failed | needs_review</code>.</li>
@@ -1864,7 +2021,8 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <h2>Real gaps (prioritized for next phase)</h2>
 <p>0. <strong>No real LLM wired into the note generator yet</strong> — <code>app/services/note_generator.py</code> ships a deterministic regex + SOAP-template fake. The seam is a single function; output contract is locked. Next: swap for a real inference endpoint (or SMART-on-FHIR-aware model).</p>
 <p>0. <strong>No real audio STT yet</strong> — <code>app/services/ingestion.py::transcribe_audio</code> is a <code>NotImplementedError</code>-shape stub. A real transcriber plugs in via <code>set_transcriber(fn)</code>; the full state machine, retry, and UI lifecycle are ready for it.</p>
-<p>0. <strong>No background-worker infrastructure</strong> — ingestion runs in the request path. The contract survives a move to cron / Celery / RQ without HTTP changes.</p>
+<p>0. <strong>~~No background-worker infrastructure~~</strong> — <strong>resolved in phase 23</strong>. <code>app/services/worker.py</code> + <code>scripts/run_worker.py</code> + admin <code>/workers/*</code> endpoints provide claim-based pickup, stale-claim recovery, and drain-to-empty. A real deployment wires <code>run_worker.py --loop</code> into systemd / cron.</p>
+<p>0. <strong>No continuous bridged-encounter sync loop</strong> — phase-23 refresh is operator-triggered (or callable from cron). Scheduled periodic sync is future work.</p>
 <p>0. <strong>No streaming / WebSocket progress</strong> — the UI polls on action completion. SSE or WebSocket updates are future work.</p>
 <p>0. <strong>No EHR write-back for signed notes</strong> — export is download + clipboard only. FHIR <code>DocumentReference</code> writes remain <code>AdapterNotSupported</code>; vendor adapters layer real push.</p>
 <p>0. <strong>No PDF or HL7 export</strong> — plain text only. Deliberate: honest paste-into-EHR, not a vendor-format we don&#x27;t own.</p>
@@ -2089,6 +2247,30 @@ make docker-build
 <li><code>pytest</code>: <strong>28 passed in ~19s</strong></li>
 <li><code>make verify</code> (SQLite): 28 pytest + 9 smoke — all green</li>
 <li><code>scripts/pg_verify.sh</code>: migrations + seed (x2) + smoke + status transition + event write — <strong>PASS</strong></li>
+</ul>
+<h2>Backend coverage (phase 23)</h2>
+<ul>
+<li><strong>231 pytest.</strong> New:</li>
+<li><code>tests/test_worker.py</code> (12) — claim atomicity (two workers →</li>
+</ul>
+<p>one winner), claim stamps, happy path drive to <code>completed</code>,</p>
+<p>failure path clears the claim, drain, stale-claim recovery</p>
+<p>with manual ageing, fresh claim not recovered, HTTP tick +</p>
+<p>drain + requeue-stale admin-only, HTTP tick processes a row,</p>
+<p>inline text wedge unchanged.</p>
+<ul>
+<li><code>tests/test_bridge_sync.py</code> (9) — standalone refusal, mirror</li>
+</ul>
+<p>updates on bridged row, idempotent re-run, ChartNav-native</p>
+<p>workflow tables untouched, source-of-truth mismatch refusal,</p>
+<p>reviewer 403, cross-org 404, audit event emitted.</p>
+<ul>
+<li>Frontend <strong>55 Vitest</strong> (+6) — queue banner (queued + processing +</li>
+</ul>
+<p>hidden-when-completed), manual refresh button, bridged refresh</p>
+<p>banner (admin dispatch + reviewer disabled-note).</p>
+<ul>
+<li>Playwright unchanged contract. Visual baselines refreshed.</li>
 </ul>
 <h2>Backend coverage (phase 22)</h2>
 <ul>
@@ -3199,6 +3381,27 @@ make web-build        # vite build -&gt; apps/web/dist
 <p>All actions route through new <code>api.ts</code> helpers</p>
 <p>(<code>processEncounterInput</code>, <code>retryEncounterInput</code>) on top of the</p>
 <p>existing <code>listEncounterInputs</code> refresh cycle.</p>
+<h2>Background-processing UX (phase 23)</h2>
+<ul>
+<li><strong>NoteWorkspace Tier 1</strong> gains a &quot;↻ Refresh&quot; button and a</li>
+</ul>
+<p><code>banner banner--info</code> that reads &quot;Processing continues in the</p>
+<p>background&quot; whenever any input is <code>queued</code> or <code>processing</code>. The</p>
+<p>banner differentiates &quot;waiting for a worker&quot; from &quot;currently</p>
+<p>processing&quot; so operators know whether to click Refresh or wait.</p>
+<ul>
+<li><strong>Encounter detail</strong> gains a <code>BridgedEncounterRefreshBanner</code> when</li>
+</ul>
+<p>the native row carries an <code>external_ref</code>. Admin + clinician see</p>
+<p>a <strong>Refresh from external</strong> button that dispatches</p>
+<p><code>refreshBridgedEncounter</code> and surfaces which mirror fields</p>
+<p>changed. Reviewer sees a disabled-note.</p>
+<ul>
+<li><code>refreshDetail</code> in App.tsx now preserves the mounted detail pane</li>
+</ul>
+<p>on re-fetch so banner state doesn&#x27;t get unmounted mid-flow; the</p>
+<p>&quot;Loading…&quot; fallback only appears on the first load for a given</p>
+<p>encounter id.</p>
 <h2>What this phase explicitly does NOT do</h2>
 <ul>
 <li>No real login flow — <code>X-User-Email</code> is still dev transport.</li>
@@ -3439,6 +3642,19 @@ make web-verify      # typecheck + test + build
 <ul>
 <li>Generate is enabled when a <code>completed</code> input is present.</li>
 </ul>
+<h2>Background-processing UX tests (phase 23)</h2>
+<ul>
+<li><strong>+4</strong> in <code>src/test/NoteWorkspace.test.tsx</code>: queued-input renders</li>
+</ul>
+<p>the background banner with &quot;waiting for a worker&quot; copy;</p>
+<p>processing-claimed row renders &quot;currently processing&quot;; banner</p>
+<p>absent when all inputs are completed; manual refresh re-fetches</p>
+<p>the input list.</p>
+<ul>
+<li><strong>+2</strong> in <code>src/test/App.test.tsx</code>: bridged-native encounter shows</li>
+</ul>
+<p>the refresh banner and dispatches <code>refreshBridgedEncounter</code>;</p>
+<p>reviewer sees the banner with a disabled-note and no button.</p>
 <h2>Gaps not yet covered</h2>
 <ul>
 <li>Visual regression not in CI (documented; OS-specific baselines).</li>
@@ -6234,7 +6450,186 @@ stateDiagram-v2
 </ul>
 <p>regex + SOAP template (phase 19 seam, unchanged).</p>
 </section>
-<section id="sec-35"><h2>Diagram — System architecture</h2>
+<section id="sec-35"><h2>34 — Background worker foundation + bridged refresh</h2>
+<h1>Background Worker Foundation + Bridged Encounter Refresh (phase 23)</h1>
+<p>Ingestion now has a real worker seam: claim-based queue pickup</p>
+<p>prevents double-processing, stale claims get recovered, and the</p>
+<p>phase-22 <code>run_ingestion_now()</code> is wrapped by a <code>run_one()</code></p>
+<p><code>run_until_empty()</code> pair that a cron, systemd timer, or background</p>
+<p>process can call without touching the HTTP layer. Bridged external</p>
+<p>encounters gained a small, honest refresh foundation — the first</p>
+<p>real step toward periodic mirror sync — with strict source-of-truth</p>
+<p>enforcement.</p>
+<p>No new infra (no Redis, no Celery, no broker), no fake STT, no</p>
+<p>write-back to the external EHR.</p>
+<h2>1. Schema change (migration <code>d0e1f2a30415</code>)</h2>
+<p>Two columns added to <code>encounter_inputs</code> via batch rewrite:</p>
+<table><thead><tr><th>column</th><th>type</th><th>notes</th></tr></thead><tbody>
+<tr><td><code>claimed_by</code></td><td>VARCHAR(64) nullable</td><td>worker id currently owning the row</td></tr>
+<tr><td><code>claimed_at</code></td><td>DATETIME nullable</td><td>when the claim was taken; used for stale-claim recovery</td></tr>
+</tbody></table>
+<p>Plus an index on <code>(processing_status, claimed_by)</code> so the</p>
+<p>&quot;give me one queued + unclaimed row&quot; query is cheap.</p>
+<p>Pure additive. Existing rows unchanged.</p>
+<h2>2. Worker primitives (<code>app/services/worker.py</code>)</h2>
+<pre class="code lang-python"><code>
+claim_one(worker_id=None)          # -&gt; ClaimResult(input_id, claimed)
+release_claim(input_id, reason=…)  # explicit release
+requeue_stale_claims(worker_id=None)
+run_one(worker_id=None)            # claim + process + return WorkerTick
+run_until_empty(worker_id=None, max_ticks=100)
+</code></pre>
+<p><strong>Claim atomicity.</strong> Two concurrent callers never win the same row —</p>
+<p><code>claim_one()</code> issues an UPDATE conditioned on <code>claimed_by IS NULL</code></p>
+<p>and re-reads the row to confirm the winner. Mutual exclusion at the</p>
+<p>row level; no advisory locks required, works identically on SQLite</p>
+<p>and Postgres.</p>
+<p><strong>Stale-claim TTL.</strong> A row whose claim is older than</p>
+<p><code>CHARTNAV_WORKER_CLAIM_TTL_SECONDS</code> (default <code>900</code> = 15 minutes)</p>
+<p>gets re-queued on the next <code>claim_one()</code> or <code>requeue_stale_claims()</code></p>
+<p>call. TTL is env-tunable with a 30-second floor.</p>
+<p><strong>Worker identity.</strong> <code>&lt;hostname&gt;/&lt;pid&gt;</code> by default. Operators override</p>
+<p>via <code>CHARTNAV_WORKER_ID</code> for semantic names.</p>
+<p><strong>Failure path.</strong> A pipeline failure is already persisted on the row</p>
+<p>by <code>run_ingestion_now()</code> (phase 22); the worker additionally clears</p>
+<p>the claim so a follow-up <code>retry</code> doesn&#x27;t hit stale-claim logic.</p>
+<h2>3. HTTP + CLI</h2>
+<table><thead><tr><th>Surface</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>POST /workers/tick</code> (admin)</td><td>Claim-and-process one row; <code>200 {processed:false}</code> if queue empty.</td></tr>
+<tr><td><code>POST /workers/drain</code> (admin)</td><td>Run until empty (capped at 100 ticks); returns <code>{processed, completed, failed, error_codes}</code>.</td></tr>
+<tr><td><code>POST /workers/requeue-stale</code> (admin)</td><td>Recover stale <code>processing</code> rows; returns <code>{recovered: N}</code>.</td></tr>
+<tr><td><code>scripts/run_worker.py --once</code></td><td>One tick; JSON-per-line output.</td></tr>
+<tr><td><code>scripts/run_worker.py --drain</code></td><td>Drain the queue.</td></tr>
+<tr><td><code>scripts/run_worker.py --loop [--interval 5]</code></td><td>Long-running worker loop; SIGINT-safe.</td></tr>
+<tr><td><code>scripts/run_worker.py --requeue-stale</code></td><td>Recovery one-shot.</td></tr>
+</tbody></table>
+<p>All three primitives are admin-only HTTP for the ops console / smoke</p>
+<p>script use case. A deployment with a real worker process calls the</p>
+<p><code>app.services.worker</code> primitives directly; the HTTP hook is the same</p>
+<p>function behind HTTP so operators aren&#x27;t locked out.</p>
+<h2>4. Bridged encounter refresh (<code>app/services/bridge_sync.py</code>)</h2>
+<pre class="code lang-python"><code>
+refresh_bridged_encounter(*, native_id, organization_id)
+</code></pre>
+<ul>
+<li>Only works on bridged encounters (<code>external_ref</code> + <code>external_source</code></li>
+</ul>
+<p>set). 409 <code>not_bridged</code> on standalone-native rows.</p>
+<ul>
+<li>Re-calls the adapter&#x27;s <code>fetch_encounter</code> and reconciles <strong>only</strong></li>
+</ul>
+<p>the mirror fields (<code>patient_identifier</code>, <code>patient_name</code>,</p>
+<p><code>provider_name</code>, <code>status</code>). Everything else — especially</p>
+<p>ChartNav-native tables (workflow_events, encounter_inputs,</p>
+<p>extracted_findings, note_versions) — is untouched.</p>
+<ul>
+<li><strong>Source-of-truth guard.</strong> If the deployment&#x27;s current adapter</li>
+</ul>
+<p>key doesn&#x27;t match the historical <code>external_source</code> on the row,</p>
+<p>refresh refuses with 409 <code>external_source_mismatch</code>. No silent</p>
+<p>cross-vendor re-mapping.</p>
+<ul>
+<li>Never writes back to the external EHR.</li>
+</ul>
+<p>HTTP: <code>POST /encounters/{id}/refresh</code> (admin + clinician; reviewer</p>
+<p>403; cross-org 404). Emits <code>encounter_refreshed</code> audit event</p>
+<p>regardless of whether any mirror field actually changed.</p>
+<h2>5. Frontend UX</h2>
+<ul>
+<li><strong>NoteWorkspace Tier 1</strong> gains:</li>
+<li>A &quot;↻ Refresh&quot; button next to the tier heading — re-fetches the</li>
+</ul>
+<p>input list so operators can pick up worker-completed rows</p>
+<p>without reloading the page.</p>
+<ul>
+<li>A <code>banner--info</code> &quot;Processing continues in the background&quot; block</li>
+</ul>
+<p>that appears whenever any input is <code>queued</code> OR <code>processing</code>.</p>
+<p>The banner text differentiates &quot;waiting for a worker&quot; from</p>
+<p>&quot;currently processing&quot;.</p>
+<ul>
+<li><strong>Encounter detail</strong> gains a <strong>BridgedEncounterRefreshBanner</strong> when</li>
+</ul>
+<p>the native row carries an <code>external_ref</code>. Admin + clinician see a</p>
+<p><strong>Refresh from external</strong> button that dispatches</p>
+<p><code>refreshBridgedEncounter</code> and surfaces which fields changed.</p>
+<p>Reviewer sees a subtle-note explaining the RBAC.</p>
+<ul>
+<li><code>refreshDetail</code> in App.tsx now preserves the mounted detail pane</li>
+</ul>
+<p>on re-fetch (only shows the &quot;Loading…&quot; fallback on initial load</p>
+<p>for a given id), so banner state persists across refresh cycles.</p>
+<h2>6. Tests</h2>
+<p>Backend <strong>+21</strong>:</p>
+<ul>
+<li><code>tests/test_worker.py</code> (12): claim atomicity, claim stamps,</li>
+</ul>
+<p>run_one happy path, failure path clears the claim, drain,</p>
+<p>stale-claim recovery, fresh claims not recovered, HTTP</p>
+<p>endpoints (tick / drain / requeue-stale) admin-only, HTTP tick</p>
+<p>processes one row and empties the queue, no regression on the</p>
+<p>phase-19/22 inline text wedge.</p>
+<ul>
+<li><code>tests/test_bridge_sync.py</code> (9): standalone refusal, bridged row</li>
+</ul>
+<p>updates mirror fields only, idempotent on unchanged shell,</p>
+<p>doesn&#x27;t touch ChartNav-native workflow, source-of-truth mismatch</p>
+<p>refusal, reviewer 403, cross-org 404, audit event emitted on</p>
+<p>refresh.</p>
+<p>Frontend <strong>+6</strong> (total 55/55 Vitest):</p>
+<ul>
+<li>NoteWorkspace queue banner renders for queued rows with</li>
+</ul>
+<p>&quot;waiting for a worker&quot; copy.</p>
+<ul>
+<li>Banner differentiates &quot;currently processing&quot; when a row is</li>
+</ul>
+<p>claimed.</p>
+<ul>
+<li>Banner hidden when all inputs are <code>completed</code>.</li>
+<li>Manual refresh button re-fetches the input list.</li>
+<li>Bridged-native encounter renders the refresh banner + button,</li>
+</ul>
+<p>dispatches <code>refreshBridgedEncounter</code>, shows the success message.</p>
+<ul>
+<li>Reviewer role sees the refresh banner but no button and a</li>
+</ul>
+<p>disabled-note.</p>
+<p>Playwright: 17/17 workflow + a11y. Visual baselines refreshed.</p>
+<h2>7. Configuration</h2>
+<table><thead><tr><th>Env var</th><th>Default</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>CHARTNAV_WORKER_CLAIM_TTL_SECONDS</code></td><td><code>900</code></td><td>Stale-claim TTL, min 30s</td></tr>
+<tr><td><code>CHARTNAV_WORKER_ID</code></td><td><code>&lt;hostname&gt;/&lt;pid&gt;</code></td><td>Semantic override</td></tr>
+</tbody></table>
+<h2>8. What this phase does NOT do</h2>
+<ul>
+<li>No real STT. Phase-22 seam + phase-23 worker wire together cleanly,</li>
+</ul>
+<p>but <code>ingestion.transcribe_audio</code> still raises</p>
+<p><code>audio_transcription_not_implemented</code> by default. A deployment</p>
+<p>installs a real transcriber via <code>ingestion.set_transcriber(fn)</code> at</p>
+<p>boot; the worker picks it up automatically.</p>
+<ul>
+<li>No WebSocket / SSE push. The UI polls via explicit refresh. A</li>
+</ul>
+<p>future phase can wire a push channel without changing the</p>
+<p>contract.</p>
+<ul>
+<li>No bridged-encounter background sync loop — the refresh is</li>
+</ul>
+<p>operator-triggered (or callable from a future cron). Full</p>
+<p>continuous sync belongs to a dedicated phase.</p>
+<ul>
+<li>No <code>DocumentReference</code> write-back to external EHRs. Export stays</li>
+</ul>
+<p>download + clipboard.</p>
+<ul>
+<li>No broker / queue infrastructure. The in-repo worker is enough</li>
+</ul>
+<p>for single-node deployments; a future Celery/RQ/SQS adapter can</p>
+<p>keep the same primitives.</p>
+</section>
+<section id="sec-36"><h2>Diagram — System architecture</h2>
 <h1>System Architecture</h1>
 <div class="mermaid">
 flowchart LR
@@ -6345,7 +6740,7 @@ flowchart LR
   Compose --> PG
 </div>
 </section>
-<section id="sec-36"><h2>Diagram — Encounter status machine</h2>
+<section id="sec-37"><h2>Diagram — Encounter status machine</h2>
 <h1>Encounter Status State Machine</h1>
 <div class="mermaid">
 stateDiagram-v2
@@ -6367,7 +6762,7 @@ stateDiagram-v2
 <p>Legend: any edge not shown is rejected at <code>POST /encounters/{id}/status</code></p>
 <p>with HTTP 400 <code>invalid_transition</code>.</p>
 </section>
-<section id="sec-37"><h2>Diagram — ER</h2>
+<section id="sec-38"><h2>Diagram — ER</h2>
 <h1>ER Diagram</h1>
 <div class="mermaid">
 erDiagram
@@ -6489,6 +6884,8 @@ erDiagram
     datetime started_at "phase 22 — nullable"
     datetime finished_at "phase 22 — nullable"
     string worker_id "phase 22 — inline/worker tag"
+    string claimed_by "phase 23 — background-worker claim"
+    datetime claimed_at "phase 23 — claim timestamp for stale recovery"
     datetime created_at
     datetime updated_at
   }
@@ -6538,7 +6935,7 @@ erDiagram
 <p><code>users.organization_id</code> is the authoritative source of scope; never</p>
 <p>derived from client input.</p>
 </section>
-<section id="sec-38"><h2>Diagram — API / data flow</h2>
+<section id="sec-39"><h2>Diagram — API / data flow</h2>
 <h1>API / Data Flow &amp; CI</h1>
 <h2>UI → Backend request path</h2>
 <div class="mermaid">

@@ -341,10 +341,45 @@ export function NoteWorkspace({
         className="workspace__tier workspace__tier--transcript"
         data-testid="workspace-tier-transcript"
       >
-        <h4>1. Transcript input</h4>
+        <div className="workspace__tier-head">
+          <h4>1. Transcript input</h4>
+          {inputs.length > 0 && (
+            <button
+              type="button"
+              className="btn btn--muted"
+              onClick={loadInputs}
+              disabled={loading}
+              data-testid="transcript-refresh"
+              title="Re-fetch input list from the server"
+            >
+              ↻ Refresh
+            </button>
+          )}
+        </div>
         <p className="subtle-note">
           Raw operator input. Source of record for what was said.
         </p>
+        {inputs.some(
+          (i) =>
+            i.processing_status === "queued" ||
+            i.processing_status === "processing"
+        ) && (
+          <div
+            className="banner banner--info"
+            role="note"
+            data-testid="workspace-queue-banner"
+          >
+            <strong>Processing continues in the background.</strong>{" "}
+            An input is {inputs.find(
+              (i) => i.processing_status === "processing"
+            )
+              ? "currently processing"
+              : "waiting for a worker"}{" "}
+            — use <strong>Refresh</strong> to pick up the latest
+            status. Drafts can be generated once an input reaches{" "}
+            <code>completed</code>.
+          </div>
+        )}
         {inputs.length === 0 && (
           <p className="empty">No transcript ingested yet.</p>
         )}

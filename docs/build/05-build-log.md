@@ -4,6 +4,99 @@ Reverse-chronological.
 
 ---
 
+## 2026-04-19 — Phase 23: background worker foundation + bridged-encounter refresh
+
+### Step 1 — Migration `d0e1f2a30415`
+- `encounter_inputs.claimed_by` (VARCHAR(64) nullable) +
+  `claimed_at` (DATETIME nullable) via batch rewrite.
+- New index on `(processing_status, claimed_by)` for cheap
+  "unclaimed queued" queries.
+- Pure additive; standalone + integrated flows unaffected.
+
+### Step 2 — Worker service (`app/services/worker.py`)
+- Atomic claim via conditional UPDATE + read-back confirm. Two
+  concurrent callers never win the same row.
+- `requeue_stale_claims()` recovers `processing` rows whose
+  claim is older than `CHARTNAV_WORKER_CLAIM_TTL_SECONDS`
+  (default 900s; 30s floor).
+- `run_one()` = claim + run; `run_until_empty()` drains up to
+  100 ticks. Failure path clears the claim so retry doesn't hit
+  stale-claim logic.
+- Worker identity: `<hostname>/<pid>` by default, overrideable
+  via `CHARTNAV_WORKER_ID`.
+
+### Step 3 — Bridge sync (`app/services/bridge_sync.py`)
+- `refresh_bridged_encounter(native_id, organization_id)`
+  re-fetches via the resolved adapter and reconciles only the
+  four mirror fields (`patient_identifier`, `patient_name`,
+  `provider_name`, `status`).
+- Source-of-truth guards:
+  - 409 `not_bridged` on standalone-native rows.
+  - 409 `external_source_mismatch` when the active adapter key
+    doesn't match the historical `external_source`.
+  - Never writes back to the external EHR.
+  - Never touches ChartNav-native workflow tables.
+
+### Step 4 — HTTP + CLI surfaces
+- `POST /workers/tick` (admin) — one tick.
+- `POST /workers/drain` (admin) — drain up to 100.
+- `POST /workers/requeue-stale` (admin) — recovery.
+- `POST /encounters/{id}/refresh` (admin + clinician; 409 `not_bridged`
+  if standalone-native; 409 `external_source_mismatch`; cross-org
+  404; emits `encounter_refreshed` audit event).
+- `scripts/run_worker.py` — `--once | --drain | --loop | --requeue-stale`;
+  JSON-per-line output for ops tailing.
+
+### Step 5 — Frontend
+- `api.ts`: `runWorkerTick`, `drainWorkerQueue`, `requeueStaleClaims`,
+  `refreshBridgedEncounter` helpers. `EncounterInput` gains
+  `claimed_by`/`claimed_at`.
+- `NoteWorkspace.tsx`: Tier 1 gains a manual "↻ Refresh" button +
+  a "Processing continues in the background" info banner that
+  differentiates "waiting for a worker" from "currently
+  processing".
+- `App.tsx`: new `BridgedEncounterRefreshBanner` component for
+  native rows that carry an `external_ref`. `refreshDetail` now
+  preserves the mounted detail pane on re-fetch (stops the
+  "Loading…" flicker that was unmounting child banner state).
+- `EncounterDetail` takes an `onRefreshDetail` prop so children can
+  request a re-fetch without the App-level closure.
+
+### Step 6 — Tests
+- **Backend +21**:
+  - `tests/test_worker.py` (12): claim atomicity, stamps,
+    happy-path drive, failure-path claim release, drain,
+    stale-claim recovery, fresh claim not recovered, HTTP tick +
+    drain + requeue-stale admin-only, HTTP tick processes a row,
+    no regression on the inline text wedge.
+  - `tests/test_bridge_sync.py` (9): standalone refusal, mirror
+    updates, idempotent re-run, native workflow tables untouched,
+    source-of-truth mismatch, reviewer 403, cross-org 404, audit
+    event.
+- **Frontend +6**: queue banner (queued + processing variants +
+  absent-when-all-completed), manual refresh, bridged refresh UX
+  (admin dispatches + reviewer sees disabled note).
+- Full suites: **231/231 pytest**, **55/55 Vitest**, 17/17
+  Playwright + 4 visual (baselines refreshed).
+
+### Step 7 — Docs
+- New `docs/build/34-background-worker-foundation.md` — full phase
+  reference (state machine, services, HTTP + CLI, UI contract,
+  verification, explicit non-goals).
+- Updated `01-current-state`, `03-api-endpoints`, `04-data-model`,
+  `05-build-log` (this entry), `06-known-gaps`, `08-test-strategy`,
+  `15-frontend-integration`, `16-frontend-test-strategy`;
+  ER diagram gains the two new claim columns.
+- `scripts/build_docs.py` picks up section 34; executive summary
+  extended. Final HTML + PDF regenerated.
+
+### Step 8 — Hygiene
+- Dev DB reset to pristine seeded state before commit.
+- Visual baselines refreshed for the new bridged refresh banner.
+- No new runtime deps; worker is stdlib + SQLAlchemy only.
+
+---
+
 ## 2026-04-18 — Phase 22: async ingestion + orchestration lifecycle
 
 ### Step 1 — Migration `c9d0e1f2a304`

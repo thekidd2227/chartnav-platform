@@ -33,6 +33,10 @@ vi.mock("../api", async () => {
     // Phase 22 — ingestion lifecycle.
     processEncounterInput: vi.fn(),
     retryEncounterInput: vi.fn(),
+    refreshBridgedEncounter: vi.fn(),
+    runWorkerTick: vi.fn(),
+    drainWorkerQueue: vi.fn(),
+    requeueStaleClaims: vi.fn(),
   };
 });
 
@@ -498,6 +502,73 @@ describe("ChartNav frontend", () => {
         value: originalLocation,
       });
     }
+  });
+
+  it("bridged-native encounter shows a refresh banner and dispatches refreshBridgedEncounter", async () => {
+    // A native row that carries external_ref = it was bridged.
+    const bridged: api.Encounter = {
+      ...ORG1_ENCOUNTERS[0],
+      _source: "chartnav",
+      external_ref: "ENC-BR-1",
+      external_source: "stub",
+    } as any;
+    // Use mockResolvedValue (not Once) so post-refresh re-fetches stay bridged.
+    (api.getEncounter as any).mockResolvedValue(bridged);
+    (api.refreshBridgedEncounter as any).mockResolvedValue({
+      id: 1,
+      refreshed: true,
+      mirrored: { provider_name: "Stub Provider" },
+      skipped_unchanged: [],
+    });
+    const user = userEvent.setup();
+    await waitForAdminLoaded();
+    await user.click(await screen.findByTestId("enc-row-1"));
+    await screen.findByTestId("encounter-detail");
+
+    const banner = await screen.findByTestId("bridged-refresh-banner");
+    expect(banner).toHaveTextContent(/bridged from external/i);
+    expect(screen.getByTestId("bridged-external-ref")).toHaveTextContent(
+      "ENC-BR-1"
+    );
+    await user.click(screen.getByTestId("bridged-refresh"));
+    await waitFor(() =>
+      expect(api.refreshBridgedEncounter).toHaveBeenCalledWith(
+        ADMIN1.email, 1
+      )
+    );
+    expect(
+      await screen.findByTestId("bridged-refresh-ok")
+    ).toHaveTextContent(/provider_name/);
+  });
+
+  it("reviewer sees the refresh banner disabled note and no refresh button", async () => {
+    const bridged: api.Encounter = {
+      ...ORG1_ENCOUNTERS[0],
+      _source: "chartnav",
+      external_ref: "ENC-BR-R",
+      external_source: "stub",
+    } as any;
+    (api.getEncounter as any).mockResolvedValue(bridged);
+    // Wait for initial admin load.
+    const user = userEvent.setup();
+    await waitForAdminLoaded();
+    // Switch to reviewer identity via the existing seeded picker.
+    await user.selectOptions(
+      screen.getByLabelText(/identity/i),
+      "rev@chartnav.local"
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("identity-badge")).toHaveTextContent(
+        /rev@chartnav.local/i
+      )
+    );
+    await user.click(await screen.findByTestId("enc-row-1"));
+    await screen.findByTestId("encounter-detail");
+    await screen.findByTestId("bridged-refresh-banner");
+    expect(screen.queryByTestId("bridged-refresh")).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("bridged-refresh-disabled-note")
+    ).toHaveTextContent(/cannot refresh/i);
   });
 
   it("performs a status transition and refreshes detail + events", async () => {
