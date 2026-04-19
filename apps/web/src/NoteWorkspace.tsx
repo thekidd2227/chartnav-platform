@@ -369,15 +369,22 @@ export function NoteWorkspace({
             role="note"
             data-testid="workspace-queue-banner"
           >
-            <strong>Processing continues in the background.</strong>{" "}
-            An input is {inputs.find(
-              (i) => i.processing_status === "processing"
-            )
-              ? "currently processing"
-              : "waiting for a worker"}{" "}
-            — use <strong>Refresh</strong> to pick up the latest
-            status. Drafts can be generated once an input reaches{" "}
-            <code>completed</code>.
+            {inputs.some((i) => i.processing_status === "processing") ? (
+              <>
+                <strong>Transcript is processing in the background.</strong>{" "}
+                A worker picked up the input and is extracting text. Draft
+                generation will unlock automatically once processing
+                finishes — click <strong>Refresh</strong> to pull the
+                latest status, or step away and come back.
+              </>
+            ) : (
+              <>
+                <strong>Transcript is queued in the background.</strong>{" "}
+                It's waiting for a worker to pick it up. Click{" "}
+                <strong>Process now</strong> on the queued row to run it
+                immediately, or wait for the next worker tick.
+              </>
+            )}
           </div>
         )}
         {inputs.length === 0 && (
@@ -496,6 +503,33 @@ export function NoteWorkspace({
                 Generate draft
               </button>
             </div>
+            {/* Honest "why is Generate disabled" hint. Appears only
+                when no completed input exists; differentiates the
+                "still processing" case from the "nothing ingested
+                yet" case so operators know whether to wait, retry,
+                or paste something fresh. */}
+            {!inputs.some((i) => i.processing_status === "completed") && (
+              <p
+                className="subtle-note workspace__generate-blocked"
+                data-testid="generate-blocked-note"
+              >
+                {inputs.length === 0
+                  ? "Generation unlocks once a transcript has been ingested and finished processing."
+                  : inputs.some(
+                      (i) =>
+                        i.processing_status === "queued" ||
+                        i.processing_status === "processing"
+                    )
+                  ? "Generation is waiting on transcript processing. Background work continues — use Refresh to pull the latest status."
+                  : inputs.some(
+                      (i) =>
+                        i.processing_status === "failed" ||
+                        i.processing_status === "needs_review"
+                    )
+                  ? "The most recent input failed or needs review. Retry it, or ingest a fresh transcript before generating."
+                  : "No completed input is available yet."}
+              </p>
+            )}
           </form>
         )}
       </section>

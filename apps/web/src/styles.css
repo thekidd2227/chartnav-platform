@@ -935,6 +935,14 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
 /* ============================================================
    Async ingestion lifecycle indicators (phase 22)
    ============================================================ */
+.workspace__generate-blocked {
+  margin: 6px 0 0;
+  padding: 8px 12px;
+  border-left: 2px solid var(--cn-line);
+  background: var(--cn-surface-alt);
+  color: var(--cn-muted);
+  border-radius: 0 var(--cn-radius-sm) var(--cn-radius-sm) 0;
+}
 .workspace__retry-count {
   margin-left: 6px;
   font-weight: 500;

@@ -206,6 +206,22 @@ two suites never cross-contaminate.
     disabled until a `completed` input exists.
   - Generate is enabled when a `completed` input is present.
 
+## Operator-UX hardening for async ingestion (phase 24)
+
+- **+3** in `src/test/NoteWorkspace.test.tsx`:
+  - empty-state blocked hint: "Generation unlocks once a transcript…"
+  - queued/processing blocked hint: "Generation is waiting on
+    transcript processing. Background work continues…"
+  - failed/needs-review blocked hint: "The most recent input failed
+    or needs review. Retry it…"
+- Existing queue-banner tests updated for the tightened copy
+  (differentiated "queued in the background" vs "processing in
+  the background" variants).
+- **New Playwright spec** `apps/web/tests/e2e/note-workspace-hardening.spec.ts`
+  (3 scenarios): baseline blocked-hint on a fresh encounter,
+  ingest→completed unlocks Generate, manual Refresh actually
+  re-fetches the input list via an intercepted response.
+
 ## Background-processing UX tests (phase 23)
 
 - **+4** in `src/test/NoteWorkspace.test.tsx`: queued-input renders

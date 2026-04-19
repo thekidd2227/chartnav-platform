@@ -4,6 +4,57 @@ Reverse-chronological.
 
 ---
 
+## 2026-04-19 — Phase 24 (hardening): frontend operator UX for async ingestion
+
+Lane-safe frontend/test/docs pass on top of the phase-22 async
+ingestion lifecycle + phase-23 background-worker foundation. No
+backend code touched; no migrations; no backend phase doc collisions.
+
+### Changes
+- **Queue banner copy** — split the single "Processing continues in
+  the background" banner into two honest variants: a "Processing…"
+  message for rows a worker has picked up, and a "Queued…" message
+  with a nudge toward the **Process now** button for rows still
+  waiting. Clearer "what happens next" at a glance.
+- **Generate-blocked hint** — new `subtle-note` under the Generate
+  button that tells the operator exactly why Generate is disabled
+  (empty-state, still-processing, failed/needs-review, or generic).
+  Rendered with `data-testid="generate-blocked-note"` +
+  `.workspace__generate-blocked` utility.
+
+### Tests
+- Vitest +3 (`src/test/NoteWorkspace.test.tsx`): blocked-hint
+  variants per state. Existing queue-banner tests updated for the
+  tightened copy.
+- Playwright — new `tests/e2e/note-workspace-hardening.spec.ts`
+  (3 scenarios): baseline blocked-hint, ingest→completed unlocks
+  Generate, manual Refresh actually re-fetches.
+- 58/58 Vitest, 20/20 Playwright (17 workflow+a11y + 3 hardening).
+- typecheck clean; build 215 KB JS / 18.9 KB CSS.
+
+### Docs
+- New `docs/build/35-frontend-operator-ux-for-async-ingestion.md`
+  (scope, UI changes, test coverage, files touched + avoided,
+  verification).
+- Updated `docs/build/16-frontend-test-strategy.md`.
+- Did NOT regenerate `docs/final/*` (lane-safe rule).
+
+### Files touched
+- apps/web/src/NoteWorkspace.tsx
+- apps/web/src/styles.css
+- apps/web/src/test/NoteWorkspace.test.tsx
+- apps/web/tests/e2e/note-workspace-hardening.spec.ts
+- docs/build/05-build-log.md, 16-frontend-test-strategy.md, 35-…md
+
+### Files intentionally avoided
+- apps/api/app/services/*, apps/api/app/api/routes.py,
+  apps/api/alembic/versions/*
+- docs/build/33-async-ingestion-lifecycle.md
+- docs/build/34-background-worker-foundation.md
+- docs/final/chartnav-workflow-state-machine-build.html / .pdf
+
+---
+
 ## 2026-04-19 — Phase 23: background worker foundation + bridged-encounter refresh
 
 ### Step 1 — Migration `d0e1f2a30415`

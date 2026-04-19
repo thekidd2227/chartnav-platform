@@ -447,8 +447,9 @@ describe("NoteWorkspace", () => {
     ]);
     renderWorkspace();
     const banner = await screen.findByTestId("workspace-queue-banner");
-    expect(banner).toHaveTextContent(/Processing continues in the background/i);
+    expect(banner).toHaveTextContent(/queued in the background/i);
     expect(banner).toHaveTextContent(/waiting for a worker/i);
+    expect(banner).toHaveTextContent(/Process now/i);
   });
 
   it("renders the banner with 'currently processing' when a row is claimed", async () => {
@@ -475,9 +476,9 @@ describe("NoteWorkspace", () => {
       },
     ]);
     renderWorkspace();
-    expect(
-      await screen.findByTestId("workspace-queue-banner")
-    ).toHaveTextContent(/currently processing/i);
+    const banner = await screen.findByTestId("workspace-queue-banner");
+    expect(banner).toHaveTextContent(/processing in the background/i);
+    expect(banner).toHaveTextContent(/Refresh/i);
   });
 
   it("hides the banner when all inputs are completed", async () => {
@@ -508,6 +509,77 @@ describe("NoteWorkspace", () => {
     expect(
       screen.queryByTestId("workspace-queue-banner")
     ).not.toBeInTheDocument();
+  });
+
+  // -------------------------------------------------------------------
+  // Phase 24 (frontend hardening) — generate-blocked hints
+  // -------------------------------------------------------------------
+
+  it("generate-blocked hint: empty state tells the operator to ingest first", async () => {
+    (api.listEncounterInputs as any).mockResolvedValue([]);
+    renderWorkspace();
+    await screen.findByTestId("workspace-tier-transcript");
+    const hint = screen.getByTestId("generate-blocked-note");
+    expect(hint).toHaveTextContent(/unlocks once a transcript/i);
+    expect(screen.getByTestId("generate-draft")).toBeDisabled();
+  });
+
+  it("generate-blocked hint: queued input tells the operator processing is pending", async () => {
+    (api.listEncounterInputs as any).mockResolvedValue([
+      {
+        id: 40,
+        encounter_id: 1,
+        input_type: "audio_upload",
+        processing_status: "queued",
+        transcript_text: null,
+        confidence_summary: null,
+        source_metadata: null,
+        created_by_user_id: 1,
+        retry_count: 0,
+        last_error: null,
+        last_error_code: null,
+        started_at: null,
+        finished_at: null,
+        worker_id: null,
+        claimed_by: null,
+        claimed_at: null,
+        created_at: "x",
+        updated_at: "x",
+      },
+    ]);
+    renderWorkspace();
+    const hint = await screen.findByTestId("generate-blocked-note");
+    expect(hint).toHaveTextContent(/waiting on transcript processing/i);
+    expect(hint).toHaveTextContent(/Background work continues/i);
+  });
+
+  it("generate-blocked hint: failed input tells the operator to retry", async () => {
+    (api.listEncounterInputs as any).mockResolvedValue([
+      {
+        id: 41,
+        encounter_id: 1,
+        input_type: "text_paste",
+        processing_status: "failed",
+        transcript_text: "tiny",
+        confidence_summary: null,
+        source_metadata: null,
+        created_by_user_id: 1,
+        retry_count: 1,
+        last_error: "transcript_too_short",
+        last_error_code: "transcript_too_short",
+        started_at: "x",
+        finished_at: "x",
+        worker_id: "inline",
+        claimed_by: null,
+        claimed_at: null,
+        created_at: "x",
+        updated_at: "x",
+      },
+    ]);
+    renderWorkspace();
+    const hint = await screen.findByTestId("generate-blocked-note");
+    expect(hint).toHaveTextContent(/failed or needs review/i);
+    expect(hint).toHaveTextContent(/Retry it/i);
   });
 
   it("manual refresh button re-fetches the input list", async () => {
