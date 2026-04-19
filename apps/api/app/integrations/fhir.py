@@ -47,6 +47,7 @@ from app.integrations.base import (
     AdapterError,
     AdapterInfo,
     AdapterNotSupported,
+    EncounterListResult,
     SourceOfTruth,
 )
 
@@ -159,7 +160,11 @@ def _normalize_patient(resource: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _normalize_encounter(resource: dict[str, Any]) -> dict[str, Any]:
+def _normalize_encounter(
+    resource: dict[str, Any],
+    *,
+    organization_id: int | None = None,
+) -> dict[str, Any]:
     # FHIR Encounter.status vocabulary differs from ChartNav's; expose
     # the raw FHIR status and a best-effort ChartNav mapping. Callers
     # that need strict ChartNav semantics should layer their own logic.
@@ -182,14 +187,26 @@ def _normalize_encounter(resource: dict[str, Any]) -> dict[str, Any]:
         if ind.get("display"):
             provider_name = ind["display"]
             break
+    # Expose a ChartNav-shape row alongside the FHIR-specific fields
+    # so the HTTP layer can serve it directly without another
+    # translation pass.
     return {
         "id": resource.get("id"),
-        "source": "fhir",
-        "external_ref": resource.get("id"),
-        "status": chartnav_status,
-        "fhir_status": fhir_status,
-        "patient_id": patient_id,
+        "organization_id": organization_id,
+        "location_id": None,
+        "patient_identifier": patient_id or "",
+        "patient_name": None,
         "provider_name": provider_name,
+        "status": chartnav_status,
+        "patient_id": None,
+        "provider_id": None,
+        "scheduled_at": (resource.get("period") or {}).get("start"),
+        "started_at": (resource.get("period") or {}).get("start"),
+        "completed_at": (resource.get("period") or {}).get("end"),
+        "created_at": None,
+        "_source": "fhir",
+        "_external_ref": resource.get("id"),
+        "_fhir_status": fhir_status,
     }
 
 
@@ -280,6 +297,69 @@ class FHIRAdapter:
         return out
 
     # ---------- encounters ----------
+    def list_encounters(
+        self,
+        *,
+        organization_id: int,
+        location_id: int | None = None,
+        status: str | None = None,
+        provider_name: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> EncounterListResult:
+        """GET /Encounter?_count=...&status=<mapped>.
+
+        ChartNav status values are mapped back to FHIR status values
+        for the server query. We intentionally do NOT support
+        `location_id` or `provider_name` pass-through (they have no
+        direct FHIR equivalent without vendor-specific extensions) —
+        they are applied as a post-filter on the normalized rows so
+        the frontend gets predictable semantics in both modes.
+        """
+        from urllib.parse import quote
+        chartnav_to_fhir_status = {
+            "scheduled": "planned",
+            "in_progress": "in-progress",
+            "draft_ready": "in-progress",
+            "review_needed": "in-progress",
+            "completed": "finished",
+        }
+        params = [f"_count={int(limit)}"]
+        if offset:
+            # FHIR uses `_offset` on some servers (HAPI supports it).
+            # Vendor adapters override this method when they have a
+            # richer search surface.
+            params.append(f"_offset={int(offset)}")
+        if status and status in chartnav_to_fhir_status:
+            params.append(f"status={quote(chartnav_to_fhir_status[status])}")
+        qs = "&".join(params)
+        bundle = self._get(f"/Encounter?{qs}")
+        if bundle.get("resourceType") != "Bundle":
+            raise AdapterError(
+                "fhir_unexpected_resource",
+                f"expected Bundle, got {bundle.get('resourceType')!r}",
+            )
+        entries = bundle.get("entry") or []
+        items: list[dict[str, Any]] = []
+        for e in entries:
+            resource = e.get("resource") or {}
+            if resource.get("resourceType") != "Encounter":
+                continue
+            items.append(
+                _normalize_encounter(resource, organization_id=organization_id)
+            )
+
+        # Post-filter for fields FHIR doesn't natively search by.
+        if provider_name:
+            items = [i for i in items if i.get("provider_name") == provider_name]
+
+        # Prefer Bundle.total when available; otherwise use the count
+        # we actually materialized.
+        total = int(bundle.get("total") or len(items))
+        return EncounterListResult(
+            items=items, total=total, limit=int(limit), offset=int(offset)
+        )
+
     def fetch_encounter(self, encounter_id: str) -> dict[str, Any]:
         resource = self._get(f"/Encounter/{encounter_id}")
         if resource.get("resourceType") != "Encounter":

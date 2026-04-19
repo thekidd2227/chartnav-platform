@@ -44,11 +44,11 @@ client directly. They talk to an adapter.
 
 ### 2.1 Shipped adapters
 
-| Key        | Module                                 | Use                                    | `supports_encounter_write` |
-|------------|----------------------------------------|----------------------------------------|:--:|
-| `native`   | `app/integrations/native.py`           | Standalone — ChartNav DB is SoR        | ✓ |
-| `stub`     | `app/integrations/stub.py`             | Integrated without a real vendor yet   | ✓ (write-through only) |
-| `fhir`     | `app/integrations/fhir.py` (phase 18)  | Generic FHIR R4 read-through           | ✗ (read-only by design) |
+| Key        | Module                                 | Use                                    | `list_encounters` | `fetch_encounter` | `update_encounter_status` |
+|------------|----------------------------------------|----------------------------------------|:--:|:--:|:--:|
+| `native`   | `app/integrations/native.py`           | Standalone — ChartNav DB is SoR        | ✓ | ✓ | ✓ |
+| `stub`     | `app/integrations/stub.py`             | Integrated without a real vendor yet   | ✓ (canned) | ✓ | write-through only |
+| `fhir`     | `app/integrations/fhir.py` (phase 18)  | Generic FHIR R4 read-through           | ✓ (`GET /Encounter`) | ✓ (`GET /Encounter/<id>`) | ✗ `AdapterNotSupported` |
 
 Both implementations are honest:
 

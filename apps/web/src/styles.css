@@ -897,3 +897,37 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
   color: var(--cn-success);
   font-weight: 600;
 }
+
+/* ============================================================
+   Source-of-truth chip on encounter detail (phase 20)
+   ============================================================ */
+.detail__head-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+.source-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: var(--cn-radius-pill);
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border: 1px solid var(--cn-line);
+  background: var(--cn-surface-alt);
+  color: var(--cn-muted);
+}
+.source-chip[data-source="chartnav"] {
+  background: var(--cn-primary-soft);
+  color: var(--cn-primary-active);
+  border-color: var(--cn-primary-tint);
+}
+.source-chip[data-source="fhir"],
+.source-chip[data-source="stub"] {
+  background: var(--cn-info-tint);
+  color: var(--cn-info);
+  border-color: #BFDBFE;
+}

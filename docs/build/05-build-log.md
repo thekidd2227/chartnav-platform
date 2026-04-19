@@ -4,6 +4,115 @@ Reverse-chronological.
 
 ---
 
+## 2026-04-18 — Phase 20: adapter-driven encounters + integrated write gating
+
+### Step 1 — Protocol
+- `ClinicalSystemAdapter.list_encounters(organization_id, location_id,
+  status, provider_name, limit, offset) → EncounterListResult` added
+  to `app/integrations/base.py`.
+- `EncounterListResult` dataclass (`items`, `total`, `limit`, `offset`)
+  added to match the HTTP paging headers one-to-one.
+- `fetch_encounter` shape widened — every adapter now returns the full
+  ChartNav row shape plus `_source` + `_external_ref` metadata.
+
+### Step 2 — Adapter implementations
+- **Native**: `list_encounters` queries `encounters` with the same
+  filter surface the old direct-SQL handler used; rows tagged
+  `_source: "chartnav"`. `fetch_encounter` returns the full column
+  set.
+- **Stub**: two deterministic canned external rows (`EXT-1001`,
+  `EXT-1002`) tagged `_source: "stub"`; supports `status` and
+  `provider_name` post-filters so integrated_readthrough is
+  exercisable end-to-end without a real FHIR server.
+- **FHIR**: `list_encounters` → `GET /Encounter?_count=...&status=<mapped>`;
+  ChartNav→FHIR status translation (`in_progress→in-progress`,
+  `completed→finished`, …). `fetch_encounter` + `_normalize_encounter`
+  widened to emit the full shape; `_fhir_status` preserved alongside
+  the mapped ChartNav status.
+
+### Step 3 — HTTP handlers
+- `GET /encounters` dispatches through `resolve_adapter()` in every
+  mode. Standalone takes the native adapter (same SQL); integrated
+  modes take whatever adapter is resolved.
+- `GET /encounters/{id}` path param widened to `str` so FHIR vendor
+  ids pass through. Standalone path preserved via the existing
+  `_load_encounter_for_caller` (now emits `_source: "chartnav"`);
+  integrated mode fetches via adapter, stamps caller's org when the
+  adapter returns None, and translates adapter errors into clean
+  HTTP codes (`encounter_not_found` → 404, other `AdapterError` →
+  502).
+- New helper `_assert_encounter_write_allowed()`: `POST /encounters`
+  returns 409 `encounter_write_unsupported` in BOTH integrated modes.
+- `POST /encounters/{id}/status` is mode-split: readthrough → 409
+  `encounter_write_unsupported`; writethrough → adapter dispatch
+  (`AdapterNotSupported` → 501 `adapter_write_not_supported`, other
+  `AdapterError` → 502); standalone → native state machine.
+- `POST /encounters/{id}/events` stays allowed in every mode — those
+  are ChartNav-native workflow events, not encounter mutations.
+
+### Step 4 — Frontend
+- `Encounter` type widens `id` to `number | string`; optional
+  `_source`, `_external_ref`, `_fhir_status` surface the tag.
+- New helpers `encounterIsNative(enc)` + `encounterSourceLabel(enc)`.
+- `EncounterDetail` header renders a **source chip** in a brand-teal
+  soft background for native, info-blue for external. A
+  `banner--info` SoT banner appears on external encounters; status
+  transitions are suppressed; `NoteWorkspace` is replaced with a
+  honest subtle-note explaining native-only note drafting.
+- `getEncounter`, `getEncounterEvents`, `updateEncounterStatus`,
+  `createEncounterEvent` accept `number | string`.
+- New `.source-chip` / `.detail__head-right` CSS using the brand
+  token scale.
+
+### Step 5 — Tests
+- **Backend +11** in `tests/test_integrated_encounters.py`:
+  - standalone list/detail carry `_source: "chartnav"`.
+  - integrated_readthrough + stub list/detail dispatch to the stub
+    adapter and return `_source: "stub"`.
+  - integrated_readthrough refuses encounter creation (409
+    `encounter_write_unsupported`) and status writes (409).
+  - workflow events still writable in integrated mode.
+  - integrated_writethrough + stub allows status writes (stub
+    records in-process).
+  - integrated_writethrough + fhir refuses status writes with 501
+    `adapter_write_not_supported`.
+  - FHIR `list_encounters` normalizes Bundle entries; status mapping
+    threads through the FHIR URL (`status=in-progress`).
+  - RBAC: `/encounters` still requires auth in integrated mode.
+  - Env cleanup in `finally` blocks so integrated-mode tests don't
+    pollute the rest of the suite.
+- `test_fhir_adapter.py` existing encounter test updated for the new
+  normalized shape (`patient_identifier` + `_source` + `_fhir_status`).
+- **Frontend +2** in `App.test.tsx`:
+  - native encounter detail renders the `ChartNav (native)` source
+    chip and no external banner; transitions visible.
+  - external encounter (`_source: "fhir"`) hides transitions, hides
+    `NoteWorkspace`, and renders the SoT banner + subtle-note
+    explaining native-only note drafting.
+- **185/185 pytest**, **44/44 Vitest**, 17/17 Playwright workflow+a11y,
+  4/4 visual (baselines refreshed for the source chip).
+
+### Step 6 — Docs
+- New `docs/build/31-adapter-driven-encounters.md` — full phase
+  reference (SoT rules, protocol, adapter implementations, HTTP
+  changes, error codes, frontend UX, verification, non-goals).
+- Updated `01-current-state`, `03-api-endpoints` (encounter write
+  gating table), `04-data-model` (SoT matrix extended), `05-build-log`
+  (this entry), `06-known-gaps`, `08-test-strategy`,
+  `15-frontend-integration`, `16-frontend-test-strategy`,
+  `26-platform-mode-and-interoperability` (adapter encounter
+  methods), `27-adoption-and-implementation-model` (mode-aware
+  encounter workflow).
+- `scripts/build_docs.py` picks up section 31; executive summary
+  extended. Final HTML + PDF regenerated.
+
+### Step 7 — Hygiene
+- Dev DB reset to pristine seeded state before commit.
+- Visual baselines refreshed.
+- No new runtime deps.
+
+---
+
 ## 2026-04-18 — Phase 19: transcript → findings → note draft → signoff
 
 ### Step 1 — Migration `a7b8c9d0e1f2`

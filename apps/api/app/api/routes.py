@@ -195,7 +195,9 @@ def _load_encounter_for_caller(encounter_id: int, caller: Caller) -> dict:
     )
     if not row or row["organization_id"] != caller.organization_id:
         raise _err("encounter_not_found", "no such encounter in your organization", 404)
-    return row
+    # Phase 20 — tag the source so the frontend can render a
+    # source-of-truth chip consistently in every mode.
+    return {**row, "_source": "chartnav"}
 
 
 # ---------- Pydantic models ----------
@@ -469,49 +471,73 @@ def list_encounters(
             "requested organization does not match caller's organization",
             403,
         )
+    if status is not None and status not in ALLOWED_STATUSES:
+        raise _err(
+            "invalid_status",
+            f"must be one of {sorted(ALLOWED_STATUSES)}",
+            400,
+        )
 
-    clauses: list[str] = ["organization_id = :org"]
-    params: dict[str, Any] = {"org": caller.organization_id}
+    # Phase 20 — dispatch through the adapter so integrated modes stop
+    # assuming native DB ownership. Standalone mode resolves to the
+    # native adapter, which queries the same table the old direct-SQL
+    # path did, so behavior is identical.
+    from app.integrations import resolve_adapter
+    from app.integrations.base import AdapterError
 
-    if location_id is not None:
-        clauses.append("location_id = :loc")
-        params["loc"] = location_id
-    if status is not None:
-        if status not in ALLOWED_STATUSES:
-            raise _err(
-                "invalid_status",
-                f"must be one of {sorted(ALLOWED_STATUSES)}",
-                400,
-            )
-        clauses.append("status = :status")
-        params["status"] = status
-    if provider_name is not None:
-        clauses.append("provider_name = :provider")
-        params["provider"] = provider_name
+    adapter = resolve_adapter()
+    try:
+        result = adapter.list_encounters(
+            organization_id=caller.organization_id,
+            location_id=location_id,
+            status=status,
+            provider_name=provider_name,
+            limit=limit,
+            offset=offset,
+        )
+    except AdapterError as e:
+        raise _err(e.error_code, e.reason, 502)
 
-    where = " WHERE " + " AND ".join(clauses)
-
-    count_row = fetch_one(f"SELECT COUNT(*) AS n FROM encounters{where}", params)
-    total = int(count_row["n"]) if count_row else 0
-
-    page_params = {**params, "limit": limit, "offset": offset}
-    rows = fetch_all(
-        f"SELECT {ENCOUNTER_COLUMNS} FROM encounters{where} "
-        "ORDER BY id LIMIT :limit OFFSET :offset",
-        page_params,
-    )
-
-    response.headers["X-Total-Count"] = str(total)
-    response.headers["X-Limit"] = str(limit)
-    response.headers["X-Offset"] = str(offset)
-    return rows
+    response.headers["X-Total-Count"] = str(result.total)
+    response.headers["X-Limit"] = str(result.limit)
+    response.headers["X-Offset"] = str(result.offset)
+    return result.items
 
 
 @router.get("/encounters/{encounter_id}")
 def get_encounter(
-    encounter_id: int, caller: Caller = Depends(require_caller)
+    encounter_id: str, caller: Caller = Depends(require_caller)
 ) -> dict:
-    return _load_encounter_for_caller(encounter_id, caller)
+    """Adapter-dispatched encounter read.
+
+    Native adapter keeps the old behavior (includes cross-org 404
+    and `encounter_not_found` semantics via `_load_encounter_for_caller`).
+    Integrated modes fetch through the resolved adapter; the response
+    carries `_source` and `_external_ref` so the UI can render
+    source-of-truth correctly.
+    """
+    from app.config import settings as _settings
+    if _settings.platform_mode == "standalone":
+        try:
+            return _load_encounter_for_caller(int(encounter_id), caller)
+        except (ValueError, TypeError):
+            raise _err("encounter_not_found", "no such encounter in your organization", 404)
+
+    from app.integrations import resolve_adapter
+    from app.integrations.base import AdapterError
+
+    adapter = resolve_adapter()
+    try:
+        row = adapter.fetch_encounter(str(encounter_id))
+    except AdapterError as e:
+        if e.error_code == "encounter_not_found":
+            raise _err("encounter_not_found", e.reason, 404)
+        raise _err(e.error_code, e.reason, 502)
+    # Stamp caller's org so the UI scope is explicit even when the
+    # adapter doesn't know about ChartNav orgs (FHIR is global-namespace).
+    if row.get("organization_id") is None:
+        row["organization_id"] = caller.organization_id
+    return row
 
 
 @router.get("/encounters/{encounter_id}/events")
@@ -527,11 +553,32 @@ def list_encounter_events(
     return [_hydrate_event(r) for r in rows]
 
 
+def _assert_encounter_write_allowed() -> None:
+    """Refuse encounter-creation mutations honestly in integrated modes.
+
+    For create_encounter specifically: both integrated modes currently
+    refuse, because creating an encounter that doesn't exist in the
+    external EHR yet is a push-back operation we do not implement.
+    `update_encounter_status` follows a different path — see its
+    handler for the write-through adapter dispatch.
+    """
+    from app.config import settings as _settings
+    mode = _settings.platform_mode
+    if mode in {"integrated_readthrough", "integrated_writethrough"}:
+        raise _err(
+            "encounter_write_unsupported",
+            f"encounter creation is disabled in {mode} mode; the external "
+            "EHR owns encounter provisioning",
+            409,
+        )
+
+
 @router.post("/encounters", status_code=status.HTTP_201_CREATED)
 def create_encounter(
     payload: EncounterCreate,
     caller: Caller = Depends(require_create_encounter),
 ) -> dict:
+    _assert_encounter_write_allowed()
     if payload.status not in ALLOWED_STATUSES:
         raise _err(
             "invalid_status",
@@ -613,6 +660,9 @@ def create_encounter_event(
     payload: EventCreate,
     caller: Caller = Depends(require_create_event),
 ) -> dict:
+    # Workflow events are ChartNav-native tracking of operator work,
+    # not mutations to the external encounter — they're allowed in
+    # every mode. See docs/build/26-platform-mode-and-interoperability.md.
     _load_encounter_for_caller(encounter_id, caller)
 
     # Validate event_type + event_data shape.
@@ -645,6 +695,37 @@ def update_encounter_status(
     payload: StatusUpdate,
     caller: Caller = Depends(require_caller),
 ) -> dict:
+    # Read-through is always refused. Write-through goes through the
+    # adapter — which may still refuse honestly (FHIR raises
+    # AdapterNotSupported because generic R4 status writes are
+    # vendor-specific). Standalone keeps the existing native path.
+    from app.config import settings as _settings
+    mode = _settings.platform_mode
+    if mode == "integrated_readthrough":
+        raise _err(
+            "encounter_write_unsupported",
+            "encounter status writes are disabled in integrated_readthrough mode; "
+            "the external EHR remains source of record",
+            409,
+        )
+    if mode == "integrated_writethrough":
+        from app.integrations import resolve_adapter
+        from app.integrations.base import AdapterError, AdapterNotSupported
+        adapter = resolve_adapter()
+        try:
+            result = adapter.update_encounter_status(
+                str(encounter_id), payload.status, changed_by=caller.email
+            )
+        except AdapterNotSupported as e:
+            raise _err(
+                "adapter_write_not_supported",
+                e.reason,
+                501,
+            )
+        except AdapterError as e:
+            raise _err(e.error_code, e.reason, 502)
+        return result
+
     new_status = payload.status
     if new_status not in ALLOWED_STATUSES:
         raise _err(

@@ -99,7 +99,7 @@ beforeEach(() => {
     note: baseNote({ version_number: 2, id: 101 }),
     findings: FINDINGS,
   }));
-  (api.patchNoteVersion as any).mockImplementation(async (_e, _id, body) =>
+  (api.patchNoteVersion as any).mockImplementation(async (_e: any, _id: any, body: any) =>
     baseNote({
       ...baseNote(),
       draft_status: body.draft_status ?? "revised",

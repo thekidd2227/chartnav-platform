@@ -111,17 +111,26 @@ export interface Location {
 }
 
 export interface Encounter {
-  id: number;
-  organization_id: number;
-  location_id: number;
+  // Note: when the row comes from an integrated adapter (e.g. FHIR),
+  // `id` is a string vendor id rather than a number. Typed as
+  // `number | string` to keep the contract honest.
+  id: number | string;
+  organization_id: number | null;
+  location_id: number | null;
   patient_identifier: string;
   patient_name: string | null;
   provider_name: string;
   status: string;
+  patient_id?: number | string | null;
+  provider_id?: number | string | null;
   scheduled_at: string | null;
   started_at: string | null;
   completed_at: string | null;
-  created_at: string;
+  created_at: string | null;
+  /** Source-of-truth tag — "chartnav" (native) or adapter key (e.g. "fhir", "stub"). */
+  _source?: "chartnav" | "fhir" | "stub" | string;
+  _external_ref?: string;
+  _fhir_status?: string;
 }
 
 export interface WorkflowEvent {
@@ -251,20 +260,23 @@ export function listEncounters(
   return request(`/encounters${suffix}`, { email });
 }
 
-export function getEncounter(email: string, id: number): Promise<Encounter> {
-  return request(`/encounters/${id}`, { email });
+export function getEncounter(
+  email: string,
+  id: number | string
+): Promise<Encounter> {
+  return request(`/encounters/${encodeURIComponent(String(id))}`, { email });
 }
 
 export function getEncounterEvents(
   email: string,
-  id: number
+  id: number | string
 ): Promise<WorkflowEvent[]> {
   return request(`/encounters/${id}/events`, { email });
 }
 
 export function createEncounterEvent(
   email: string,
-  id: number,
+  id: number | string,
   body: { event_type: string; event_data?: unknown }
 ): Promise<WorkflowEvent> {
   return request(`/encounters/${id}/events`, {
@@ -276,10 +288,10 @@ export function createEncounterEvent(
 
 export function updateEncounterStatus(
   email: string,
-  id: number,
+  id: number | string,
   status: string
 ): Promise<Encounter> {
-  return request(`/encounters/${id}/status`, {
+  return request(`/encounters/${encodeURIComponent(String(id))}/status`, {
     email,
     method: "POST",
     body: JSON.stringify({ status }),
@@ -920,3 +932,30 @@ export const MISSING_FLAG_LABELS: Record<string, string> = {
   plan_missing: "Plan",
   follow_up_interval_missing: "Follow-up interval",
 };
+
+// ---------- Encounter source-of-truth helpers (phase 20) ----------
+
+/** True when this encounter is owned by ChartNav's native DB. */
+export function encounterIsNative(enc: Encounter | null | undefined): boolean {
+  if (!enc) return false;
+  // `_source` not set → assume native (backward compat with older
+  // responses that haven't been migrated to the tag yet).
+  const src = (enc as any)._source;
+  return src === undefined || src === "chartnav";
+}
+
+/** Short, operator-facing label for where this encounter lives. */
+export function encounterSourceLabel(enc: Encounter | null | undefined): string {
+  const src = (enc as any)?._source;
+  switch (src) {
+    case "chartnav":
+    case undefined:
+      return "ChartNav (native)";
+    case "fhir":
+      return "External (FHIR)";
+    case "stub":
+      return "External (stub)";
+    default:
+      return `External (${src})`;
+  }
+}

@@ -27,6 +27,7 @@ from app.integrations.base import (
     AdapterError,
     AdapterInfo,
     AdapterNotSupported,
+    EncounterListResult,
     SourceOfTruth,
 )
 
@@ -110,19 +111,70 @@ class NativeChartNavAdapter:
         return [{**dict(r), "source": "native"} for r in rows]
 
     # --- Encounters -------------------------------------------------
+    def list_encounters(
+        self,
+        *,
+        organization_id: int,
+        location_id: int | None = None,
+        status: str | None = None,
+        provider_name: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> EncounterListResult:
+        clauses = ["organization_id = :org"]
+        params: dict[str, Any] = {"org": organization_id}
+        if location_id is not None:
+            clauses.append("location_id = :loc")
+            params["loc"] = location_id
+        if status is not None:
+            clauses.append("status = :status")
+            params["status"] = status
+        if provider_name is not None:
+            clauses.append("provider_name = :pname")
+            params["pname"] = provider_name
+        where = " WHERE " + " AND ".join(clauses)
+
+        with engine.connect() as conn:
+            total_row = conn.execute(
+                sa.text(f"SELECT COUNT(*) AS n FROM encounters{where}"),
+                params,
+            ).mappings().first()
+            rows = conn.execute(
+                sa.text(
+                    "SELECT id, organization_id, location_id, "
+                    "patient_identifier, patient_name, provider_name, "
+                    "status, patient_id, provider_id, "
+                    "scheduled_at, started_at, completed_at, created_at "
+                    f"FROM encounters{where} "
+                    "ORDER BY id DESC LIMIT :limit OFFSET :offset"
+                ),
+                {**params, "limit": int(limit), "offset": int(offset)},
+            ).mappings().all()
+        items = [
+            {**dict(r), "_source": "chartnav"} for r in rows
+        ]
+        return EncounterListResult(
+            items=items,
+            total=int(total_row["n"]) if total_row else 0,
+            limit=int(limit),
+            offset=int(offset),
+        )
+
     def fetch_encounter(self, encounter_id: str) -> dict[str, Any]:
         with engine.connect() as conn:
             row = conn.execute(
                 sa.text(
                     "SELECT id, organization_id, location_id, "
-                    "patient_identifier, provider_name, status "
+                    "patient_identifier, patient_name, provider_name, "
+                    "status, patient_id, provider_id, "
+                    "scheduled_at, started_at, completed_at, created_at "
                     "FROM encounters WHERE id = :id"
                 ),
                 {"id": int(encounter_id)},
             ).mappings().first()
         if row is None:
             raise AdapterError("encounter_not_found", f"id={encounter_id}")
-        return dict(row)
+        return {**dict(row), "_source": "chartnav"}
 
     def update_encounter_status(
         self, encounter_id: str, new_status: str, *, changed_by: str

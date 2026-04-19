@@ -283,6 +283,27 @@ triggers a `.txt` download named `chartnav-note-<encounter>-v<n>.txt`.
 Reviewer role: Sign button is hidden and a small subtle-note makes
 the RBAC reason explicit.
 
+## Encounter source-of-truth UI (phase 20)
+
+- `Encounter` type now supports string IDs + a `_source` tag so the
+  frontend can distinguish native from external encounters everywhere.
+- Encounter detail header renders a **source chip** (`ChartNav (native)`
+  vs `External (FHIR)`/`External (stub)`/`External (<vendor>)`).
+  Teal soft on native, info-blue on external.
+- **External-EHR banner**: when `_source !== "chartnav"`, a
+  `banner--info` explains that the external EHR owns the row.
+  Status transitions are suppressed (the backend would return 409
+  `encounter_write_unsupported` anyway); `NoteWorkspace` is replaced
+  with a honest subtle-note clarifying that note drafting is
+  ChartNav-native today.
+- Add-event composer remains active on external encounters — those
+  events live in ChartNav's own `workflow_events` table.
+- `getEncounter` / `getEncounterEvents` / `updateEncounterStatus` /
+  `createEncounterEvent` accept `number | string` so FHIR vendor ids
+  round-trip cleanly.
+- Helpers `encounterIsNative(enc)` and `encounterSourceLabel(enc)`
+  are the single public surface for source-of-truth rendering.
+
 ## What this phase explicitly does NOT do
 
 - No real login flow — `X-User-Email` is still dev transport.

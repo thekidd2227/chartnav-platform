@@ -65,6 +65,24 @@ make docker-build
 - `make verify` (SQLite): 28 pytest + 9 smoke — all green
 - `scripts/pg_verify.sh`: migrations + seed (x2) + smoke + status transition + event write — **PASS**
 
+## Backend coverage (phase 20)
+
+- **185 pytest.** New `tests/test_integrated_encounters.py` (+11):
+  standalone list/detail carry `_source: "chartnav"`; integrated
+  readthrough + stub dispatches list/detail to the adapter and
+  returns stub rows; readthrough refuses `POST /encounters` and
+  `POST /encounters/{id}/status` with 409
+  `encounter_write_unsupported`; workflow events still writable;
+  writethrough + stub allows status writes (stub records in-process);
+  writethrough + fhir refuses with 501 `adapter_write_not_supported`;
+  FHIR `list_encounters` normalizes Bundle entries through the
+  status mapping and fixture transport; `/encounters` still requires
+  auth. `tests/test_fhir_adapter.py` existing encounter test
+  updated for the new normalized shape.
+- Frontend: **44 Vitest** (+2) — native chip renders, external
+  encounter hides transitions + workspace + shows SoT banner.
+- Playwright: 17 workflow+a11y unchanged. Visual baselines refreshed.
+
 ## Backend coverage (phase 19)
 
 - **174 pytest.** New `tests/test_transcript_to_note.py` (+19):

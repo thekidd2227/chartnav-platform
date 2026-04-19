@@ -15,6 +15,8 @@ import {
   canCreateEvent,
   createEncounter,
   createEncounterEvent,
+  encounterIsNative,
+  encounterSourceLabel,
   getEncounter,
   getEncounterEvents,
   getMe,
@@ -44,7 +46,7 @@ export default function App() {
   const [listError, setListError] = useState<string | null>(null);
   const [listLoading, setListLoading] = useState(false);
 
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedId, setSelectedId] = useState<number | string | null>(null);
   const [encounter, setEncounter] = useState<Encounter | null>(null);
   const [events, setEvents] = useState<WorkflowEvent[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -99,7 +101,7 @@ export default function App() {
   }, [identity, filters, selectedId, offset]);
 
   const refreshDetail = useCallback(
-    async (id: number | null) => {
+    async (id: number | string | null) => {
       if (id == null) {
         setEncounter(null);
         setEvents([]);
@@ -535,8 +537,8 @@ function EncounterList({
   rows: Encounter[];
   loading: boolean;
   error: string | null;
-  selectedId: number | null;
-  onSelect: (id: number) => void;
+  selectedId: number | string | null;
+  onSelect: (id: number | string) => void;
 }) {
   if (loading && rows.length === 0)
     return (
@@ -623,7 +625,12 @@ function EncounterDetail({
   if (!encounter) return null;
 
   const role: Role | null = me?.role ?? null;
-  const nextStatuses = role ? allowedNextStatuses(role, encounter.status) : [];
+  const nativeEncounter = encounterIsNative(encounter);
+  // Status transitions are only meaningful when ChartNav owns the
+  // row. Integrated-mode encounters live in the external EHR; the
+  // backend returns `encounter_write_unsupported` when called.
+  const nextStatuses =
+    role && nativeEncounter ? allowedNextStatuses(role, encounter.status) : [];
   const eventAllowed = role ? canCreateEvent(role) : false;
 
   return (
@@ -637,10 +644,36 @@ function EncounterDetail({
             {encounter.patient_identifier} · {encounter.provider_name}
           </div>
         </div>
-        <span className="status-pill" data-status={encounter.status} data-testid="detail-status">
-          {encounter.status.replace(/_/g, " ")}
-        </span>
+        <div className="detail__head-right">
+          <span
+            className="status-pill"
+            data-status={encounter.status}
+            data-testid="detail-status"
+          >
+            {encounter.status.replace(/_/g, " ")}
+          </span>
+          <span
+            className="source-chip"
+            data-testid="detail-source-chip"
+            data-source={encounter._source ?? "chartnav"}
+          >
+            {encounterSourceLabel(encounter)}
+          </span>
+        </div>
       </div>
+
+      {!nativeEncounter && (
+        <div
+          className="banner banner--info"
+          data-testid="external-encounter-banner"
+          role="note"
+        >
+          <strong>This encounter lives in the external EHR.</strong>{" "}
+          Status transitions and encounter-level edits are disabled in this
+          mode. ChartNav's workflow events, transcript ingestion, and note
+          drafting remain available — those are ChartNav-native.
+        </div>
+      )}
 
       <dl className="detail__facts">
         <div><dt>Organization</dt><dd>#{encounter.organization_id}</dd></div>
@@ -683,7 +716,7 @@ function EncounterDetail({
         )}
       </section>
 
-      {me && (
+      {me && nativeEncounter && typeof encounter.id === "number" && (
         <section className="section">
           <NoteWorkspace
             identity={identity}
@@ -694,6 +727,15 @@ function EncounterDetail({
             }
             providerDisplay={encounter.provider_name}
           />
+        </section>
+      )}
+      {me && !nativeEncounter && (
+        <section className="section" data-testid="note-workspace-external-note">
+          <div className="subtle-note">
+            Note drafting is available on ChartNav-native encounters today.
+            For externally-sourced encounters, ingest via the workflow
+            once the encounter is mirrored into ChartNav.
+          </div>
         </section>
       )}
 

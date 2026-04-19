@@ -36,6 +36,21 @@ Base URL (local dev): `http://127.0.0.1:8000`. All error bodies use
 Encounter responses now also include `patient_id` + `provider_id`
 nullable FKs pointing at the rows above.
 
+## Encounter write gating per platform mode (phase 20)
+
+| Route                              | `standalone`          | `integrated_readthrough` | `integrated_writethrough` |
+|------------------------------------|-----------------------|---------------------------|----------------------------|
+| `GET /encounters`                  | native adapter (SQL)  | adapter dispatch          | adapter dispatch           |
+| `GET /encounters/{id}`             | native adapter        | adapter dispatch          | adapter dispatch           |
+| `POST /encounters`                 | allowed               | **409 `encounter_write_unsupported`** | **409 `encounter_write_unsupported`** |
+| `POST /encounters/{id}/status`     | native state machine  | **409 `encounter_write_unsupported`** | adapter dispatch; **501 `adapter_write_not_supported`** if adapter raises `AdapterNotSupported` |
+| `POST /encounters/{id}/events`     | allowed               | allowed (ChartNav-native) | allowed                    |
+| `POST /encounters/{id}/inputs`     | allowed               | allowed                   | allowed                    |
+| `POST /encounters/{id}/notes/generate` | allowed           | allowed (native-only for now; see `31-adapter-driven-encounters.md`) | allowed |
+
+Every encounter row now carries `_source` (`chartnav` in standalone,
+adapter key in integrated modes) and `_external_ref` where applicable.
+
 ## Transcript → note workflow (🔒, org-scoped) — phase 19
 
 | Method | Path                                    | Role | Notes |

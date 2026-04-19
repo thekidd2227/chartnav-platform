@@ -39,6 +39,15 @@ class SourceOfTruth(str, Enum):
 
 
 @dataclass(frozen=True)
+class EncounterListResult:
+    """Paged encounter list returned by `list_encounters`."""
+    items: list[dict[str, Any]]
+    total: int
+    limit: int
+    offset: int
+
+
+@dataclass(frozen=True)
 class AdapterInfo:
     """Metadata an adapter exposes about itself.
 
@@ -81,6 +90,27 @@ class ClinicalSystemAdapter(Protocol):
     ) -> list[dict[str, Any]]: ...
 
     # --- Encounters -------------------------------------------------
+    def list_encounters(
+        self,
+        *,
+        organization_id: int,
+        location_id: int | None = None,
+        status: str | None = None,
+        provider_name: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> "EncounterListResult":
+        """Org-scoped encounter list.
+
+        Returns a paged result object the HTTP layer can emit as
+        `X-Total-Count`/`X-Limit`/`X-Offset` headers. Every row is in
+        ChartNav's internal encounter shape (`id`, `status`,
+        `provider_name`, `patient_identifier`, `patient_name`, ...) plus
+        a `_source` tag naming where the row came from (`chartnav` or
+        the vendor key, e.g. `fhir`).
+        """
+        ...
+
     def fetch_encounter(self, encounter_id: str) -> dict[str, Any]: ...
     def update_encounter_status(
         self, encounter_id: str, new_status: str, *, changed_by: str

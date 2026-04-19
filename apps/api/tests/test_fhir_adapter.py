@@ -207,10 +207,11 @@ def test_fhir_fetch_encounter_maps_status():
         transport=transport,
     )
     enc = adapter.fetch_encounter("enc-99")
-    assert enc["status"] == "in_progress"      # ChartNav status
-    assert enc["fhir_status"] == "in-progress"  # original
-    assert enc["patient_id"] == "pt-7"
+    assert enc["status"] == "in_progress"       # ChartNav status
+    assert enc["_fhir_status"] == "in-progress"  # original
+    assert enc["patient_identifier"] == "pt-7"  # phase-20 shape alignment
     assert enc["provider_name"] == "Dr. Carter"
+    assert enc["_source"] == "fhir"
 
 
 def test_fhir_bearer_auth_adds_header():

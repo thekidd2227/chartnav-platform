@@ -39,6 +39,14 @@
 Adds "admin can issue an invitation and download audit CSV" on top of
 the 11 scenarios shipped through phase 13.
 
+## Phase-20 additions
+
+- **Adapter-driven encounter reads**: `/encounters` and `/encounters/{id}` dispatch through `resolve_adapter()`; standalone uses native (same SQL), integrated uses stub/FHIR/vendor. Rows tagged `_source` end-to-end.
+- **FHIR encounter list/normalization**: `GET /Encounter?_count=&status=<mapped>` with ChartNav→FHIR status translation.
+- **Integrated write gating**: `POST /encounters` refused in both integrated modes (409 `encounter_write_unsupported`); `POST /encounters/{id}/status` refused in readthrough, adapter-dispatched in writethrough (FHIR raises `AdapterNotSupported` → 501 `adapter_write_not_supported`).
+- **Frontend SoT UI**: source chip + SoT banner + suppressed transitions + suppressed NoteWorkspace on external encounters; helpers `encounterIsNative` and `encounterSourceLabel`.
+- **185 pytest** (+11), **44 Vitest** (+2), 17 Playwright, 4 visual (local, refreshed).
+
 ## Phase-19 additions
 
 - **Transcript ingestion**: `encounter_inputs` table + `POST/GET /encounters/{id}/inputs`. Supports `audio_upload` (queued → future STT), `text_paste`, `manual_entry`, `imported_transcript`.
@@ -86,7 +94,10 @@ the 11 scenarios shipped through phase 13.
 0. **No audio STT worker** — `audio_upload` inputs stay `queued` forever. Future work: a background worker that fills `transcript_text` and flips processing_status.
 0. **No EHR write-back for signed notes** — export is download + clipboard only. FHIR `DocumentReference` writes remain `AdapterNotSupported`; vendor adapters layer real push.
 0. **No PDF or HL7 export** — plain text only. Deliberate: honest paste-into-EHR, not a vendor-format we don't own.
-0. **Encounter/status routes still bypass the adapter path** in integrated modes — HTTP handlers hit the native DB directly rather than routing through `resolve_adapter()`. Standalone this is a nop (native adapter wraps the same DB); integrated_* needs the handler-level adapter dispatch + translation work in a follow-up phase so FHIR reads can actually surface through `/encounters`.
+0. **No SMART-on-FHIR auth** on the FHIR adapter — `auth_type=bearer` takes a pre-provisioned token. Full SMART launch flow is future work.
+0. **No vendor-specific FHIR writer** — generic adapter refuses with `AdapterNotSupported`; 501 surfaces honestly. Epic / Cerner / Athena writers plug in via the registry.
+0. **No integrated-mode note drafting** — `NoteWorkspace` is suppressed on external encounters today. Follow-up: mirror external encounters into native `encounters` via `external_ref` so notes can be drafted against them.
+0. **~~Encounter/status routes still bypass the adapter path~~** in integrated modes — HTTP handlers hit the native DB directly rather than routing through `resolve_adapter()`. Standalone this is a nop (native adapter wraps the same DB); integrated_* needs the handler-level adapter dispatch + translation work in a follow-up phase so FHIR reads can actually surface through `/encounters`.
 0. **No vendor-specific FHIR adapter yet** — generic `FHIRAdapter` handles the common case. Epic/Cerner/Athena/Nextech SMART-on-FHIR auth + vendor quirks remain future work. Start with SMART-on-FHIR handshake + Epic sandbox.
 0. **FHIR writes are intentionally unsupported** — `update_encounter_status` and `write_note` raise `AdapterNotSupported`. `DocumentReference` + Binary upload is a real project and belongs in a vendor adapter.
 0. **No patient chart UI** — Patients tab lists rows and supports create. There's no detail view, encounter-by-patient view, or scheduling surface. Product decision, not a technical one.

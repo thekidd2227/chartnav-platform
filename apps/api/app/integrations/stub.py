@@ -24,6 +24,7 @@ from app.integrations.base import (
     AdapterError,
     AdapterInfo,
     AdapterNotSupported,
+    EncounterListResult,
     SourceOfTruth,
 )
 
@@ -96,12 +97,86 @@ class StubClinicalSystemAdapter:
         ]
 
     # --- Encounters -------------------------------------------------
+    def list_encounters(
+        self,
+        *,
+        organization_id: int,
+        location_id: int | None = None,
+        status: str | None = None,
+        provider_name: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> EncounterListResult:
+        """Return two canned "external" encounters.
+
+        Deterministic so integrated_readthrough mode can be exercised
+        end-to-end without a real FHIR server. The rows advertise
+        `_source: "stub"` so the UI can render a source-of-truth
+        banner correctly.
+        """
+        canned = [
+            {
+                "id": 9001,
+                "organization_id": organization_id,
+                "location_id": 1,
+                "patient_identifier": "EXT-1001",
+                "patient_name": "Stub Patient A",
+                "provider_name": "Stub Provider",
+                "status": "in_progress",
+                "patient_id": None,
+                "provider_id": None,
+                "scheduled_at": None,
+                "started_at": None,
+                "completed_at": None,
+                "created_at": None,
+                "_source": "stub",
+                "_external_ref": "ENC-A",
+            },
+            {
+                "id": 9002,
+                "organization_id": organization_id,
+                "location_id": 1,
+                "patient_identifier": "EXT-1002",
+                "patient_name": "Stub Patient B",
+                "provider_name": "Stub Provider",
+                "status": "scheduled",
+                "patient_id": None,
+                "provider_id": None,
+                "scheduled_at": None,
+                "started_at": None,
+                "completed_at": None,
+                "created_at": None,
+                "_source": "stub",
+                "_external_ref": "ENC-B",
+            },
+        ]
+        if status is not None:
+            canned = [r for r in canned if r["status"] == status]
+        if provider_name is not None:
+            canned = [r for r in canned if r["provider_name"] == provider_name]
+        total = len(canned)
+        paged = canned[offset : offset + limit]
+        return EncounterListResult(
+            items=paged, total=total, limit=limit, offset=offset
+        )
+
     def fetch_encounter(self, encounter_id: str) -> dict[str, Any]:
         return {
             "id": encounter_id,
-            "source": "stub",
-            "status": "in_progress",
+            "organization_id": None,
+            "location_id": 1,
+            "patient_identifier": f"EXT-{encounter_id}",
+            "patient_name": "Stub Patient",
             "provider_name": "Stub Provider",
+            "status": "in_progress",
+            "patient_id": None,
+            "provider_id": None,
+            "scheduled_at": None,
+            "started_at": None,
+            "completed_at": None,
+            "created_at": None,
+            "_source": "stub",
+            "_external_ref": str(encounter_id),
         }
 
     def update_encounter_status(

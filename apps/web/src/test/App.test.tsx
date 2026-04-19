@@ -403,6 +403,48 @@ describe("ChartNav frontend", () => {
     });
   });
 
+  it("native encounter detail renders a ChartNav source chip and no external banner", async () => {
+    const user = userEvent.setup();
+    await waitForAdminLoaded();
+    await user.click(await screen.findByTestId("enc-row-1"));
+    const chip = await screen.findByTestId("detail-source-chip");
+    expect(chip).toHaveAttribute("data-source", "chartnav");
+    expect(chip).toHaveTextContent(/ChartNav \(native\)/i);
+    expect(
+      screen.queryByTestId("external-encounter-banner")
+    ).not.toBeInTheDocument();
+    // Native → transitions visible.
+    expect(screen.getByTestId("transitions")).toBeInTheDocument();
+  });
+
+  it("externally sourced encounter hides transitions and shows the SoT banner", async () => {
+    // Swap the selected encounter to an integrated row.
+    const external: api.Encounter = {
+      ...ORG1_ENCOUNTERS[0],
+      _source: "fhir",
+      _external_ref: "ENC-A",
+    };
+    (api.getEncounter as any).mockResolvedValueOnce(external);
+    const user = userEvent.setup();
+    await waitForAdminLoaded();
+    await user.click(await screen.findByTestId("enc-row-1"));
+    await screen.findByTestId("encounter-detail");
+    const chip = await screen.findByTestId("detail-source-chip");
+    expect(chip).toHaveAttribute("data-source", "fhir");
+    expect(chip).toHaveTextContent(/External \(FHIR\)/i);
+    expect(
+      await screen.findByTestId("external-encounter-banner")
+    ).toHaveTextContent(/external EHR/i);
+    // External → transitions list + NoteWorkspace both suppressed.
+    expect(screen.queryByTestId("transitions")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("note-workspace")
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("note-workspace-external-note")
+    ).toHaveTextContent(/ChartNav-native/i);
+  });
+
   it("performs a status transition and refreshes detail + events", async () => {
     const updated: api.Encounter = { ...ORG1_ENCOUNTERS[0], status: "draft_ready" };
     (api.updateEncounterStatus as any).mockResolvedValueOnce(updated);

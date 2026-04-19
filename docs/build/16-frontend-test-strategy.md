@@ -172,6 +172,19 @@ two suites never cross-contaminate.
 - `App.test.tsx` extends mocks so the workspace mounting inside
   `EncounterDetail` doesn't fetch-miss during App-level tests.
 
+## Encounter source-of-truth tests (phase 20)
+
+- **+2** in `src/test/App.test.tsx`:
+  - Native encounter detail renders `ChartNav (native)` chip, no
+    external banner, transitions visible.
+  - Externally-sourced encounter (`_source: "fhir"`) hides
+    transitions, hides `NoteWorkspace`, shows the SoT banner,
+    renders the `External (FHIR)` chip, surfaces the native-only
+    note-drafting subtle-note.
+- `api.ts` helpers `encounterIsNative` / `encounterSourceLabel`
+  exercised indirectly; add direct unit tests when more code
+  consumes them.
+
 ## Gaps not yet covered
 - Visual regression not in CI (documented; OS-specific baselines).
 - No keyboard-only / screen-reader manual QA pass beyond axe's
