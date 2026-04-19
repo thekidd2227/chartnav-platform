@@ -26,6 +26,7 @@ from app.integrations.base import (
     AdapterNotSupported,
     EncounterListResult,
     SourceOfTruth,
+    TransmitResult,
 )
 
 
@@ -47,6 +48,7 @@ def _info(writes_allowed: bool) -> AdapterInfo:
         supports_encounter_read=True,
         supports_encounter_write=writes_allowed,
         supports_document_write=writes_allowed,
+        supports_document_transmit=writes_allowed,
         source_of_truth={
             "organization": SourceOfTruth.MIRRORED,
             "location": SourceOfTruth.MIRRORED,
@@ -222,6 +224,42 @@ class StubClinicalSystemAdapter:
             "id": f"stub-note-{len(self.recorded_writes)}",
             "encounter_id": encounter_id,
         }
+
+    # --- Signed-artifact transmission (phase 26) -------------------
+    def transmit_artifact(
+        self,
+        *,
+        artifact: dict[str, Any],
+        document_reference: dict[str, Any],
+        note_version_id: int,
+        encounter_external_ref: str | None,
+    ) -> TransmitResult:
+        if not self._writes_allowed:
+            raise AdapterNotSupported(
+                "stub adapter in read-through mode cannot transmit "
+                "documents; switch to integrated_writethrough or wire "
+                "a vendor adapter"
+            )
+        # Record the transmission so tests + UI debugging can inspect
+        # exactly what would have gone over the wire. We never claim
+        # this reached a real external system.
+        record = {
+            "op": "transmit_artifact",
+            "note_version_id": note_version_id,
+            "encounter_external_ref": encounter_external_ref,
+            "document_reference_id": document_reference.get("id"),
+            "artifact_hash": (
+                (artifact.get("signature") or {}).get("content_hash_sha256")
+            ),
+        }
+        self.recorded_writes.append(record)
+        remote_id = f"stub-docref-{len(self.recorded_writes)}"
+        return TransmitResult(
+            status="succeeded",
+            response_code=None,
+            response_snippet="stub adapter: not transmitted externally",
+            remote_id=remote_id,
+        )
 
     # --- Reference data ---------------------------------------------
     def sync_reference_data(self) -> dict[str, int]:

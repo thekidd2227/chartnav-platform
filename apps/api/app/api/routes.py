@@ -337,6 +337,7 @@ def platform_info(caller: Caller = Depends(require_caller)) -> dict:
                 "encounter_read": info.supports_encounter_read,
                 "encounter_write": info.supports_encounter_write,
                 "document_write": info.supports_document_write,
+                "document_transmit": info.supports_document_transmit,
             },
             "source_of_truth": {
                 k: v.value for k, v in info.source_of_truth.items()
@@ -2346,6 +2347,114 @@ def get_note_artifact(
     if isinstance(body, str):
         return Response(content=body, media_type=mime, headers=extra_headers)
     return JSONResponse(content=body, media_type=mime, headers=extra_headers)
+
+
+# ===========================================================================
+# Signed-note transmission (phase 26)
+# ===========================================================================
+#
+# POST /note-versions/{id}/transmit          — initiate a transmission
+# GET  /note-versions/{id}/transmissions     — list attempts for a note
+#
+# This is the **write path**. It reuses the phase-25 artifact builder
+# for the payload, routes to the adapter's `transmit_artifact` method,
+# and persists the outcome (success OR failure) into
+# `note_transmissions`. A failed remote call is a normal business
+# event, not an exception — the UI renders it from the same row shape.
+#
+# Gating is strict:
+# - caller role: admin | clinician (reviewers can read the history
+#   but cannot initiate transmissions)
+# - platform mode: `integrated_writethrough` only
+# - note: signed (or exported); unsigned → 409
+# - adapter: must advertise `supports_document_transmit`
+# - idempotency: a succeeded transmission blocks further attempts
+#   unless the caller passes `force=true`
+
+
+class NoteTransmitBody(BaseModel):
+    force: bool = False
+
+
+def _load_note_transmission_for_caller(
+    transmission: dict[str, Any], caller: Caller
+) -> dict[str, Any]:
+    """Apply the same cross-org → 404 mask as other note-derived rows."""
+    if transmission.get("organization_id") != caller.organization_id:
+        raise _err(
+            "transmission_not_found",
+            "no such transmission",
+            404,
+        )
+    return transmission
+
+
+@router.post("/note-versions/{note_id}/transmit", status_code=status.HTTP_200_OK)
+def transmit_note_version(
+    note_id: int,
+    payload: NoteTransmitBody,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    from app.services.note_transmit import (
+        RunTransmissionInput,
+        TransmissionError,
+        run_transmission,
+    )
+
+    # Pre-check: confirm the note is visible to this caller at all.
+    # Reuses the existing cross-org → 404 mask so a 403 on the role
+    # check never leaks existence of another org's note.
+    _load_note_for_caller(note_id, caller)
+
+    try:
+        row = run_transmission(
+            RunTransmissionInput(
+                note_version_id=note_id,
+                caller_email=caller.email,
+                caller_user_id=caller.user_id,
+                caller_organization_id=caller.organization_id,
+                caller_role=caller.role,
+                force=payload.force,
+            )
+        )
+    except TransmissionError as e:
+        raise _err(e.error_code, e.reason, e.status_code)
+
+    from app import audit as _audit
+    _audit.record(
+        event_type="note_version_transmitted",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path=f"/note-versions/{note_id}/transmit",
+        method="POST",
+        detail=(
+            f"note_id={note_id} transmission_id={row.get('id')} "
+            f"adapter={row.get('adapter_key')} "
+            f"status={row.get('transport_status')} "
+            f"attempt={row.get('attempt_number')}"
+        ),
+    )
+    return row
+
+
+@router.get("/note-versions/{note_id}/transmissions")
+def list_note_transmissions(
+    note_id: int,
+    caller: Caller = Depends(require_caller),
+) -> list[dict]:
+    # Reuse the note-level cross-org mask — if the note itself is not
+    # visible to this caller, neither are its transmissions.
+    _load_note_for_caller(note_id, caller)
+
+    from app.services.note_transmit import list_transmissions_for_note
+
+    rows = list_transmissions_for_note(
+        note_version_id=note_id,
+        organization_id=caller.organization_id,
+    )
+    return rows
 
 
 # ===========================================================================

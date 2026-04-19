@@ -29,6 +29,7 @@ from app.integrations.base import (
     AdapterNotSupported,
     EncounterListResult,
     SourceOfTruth,
+    TransmitResult,
 )
 
 
@@ -45,6 +46,12 @@ _INFO = AdapterInfo(
     supports_encounter_read=True,
     supports_encounter_write=True,
     supports_document_write=True,  # stored as workflow_events today
+    # Native adapter deliberately does not transmit — ChartNav IS the
+    # system of record in standalone mode. Transmission of native
+    # notes to an external system requires either switching to
+    # integrated_writethrough with a vendor adapter, or issuing the
+    # phase-25 artifact manually and handing it to an external tool.
+    supports_document_transmit=False,
     source_of_truth={
         "organization": SourceOfTruth.CHARTNAV,
         "location": SourceOfTruth.CHARTNAV,
@@ -242,6 +249,26 @@ class NativeChartNavAdapter:
                 },
             ).mappings().first()
         return {"id": row["id"], "encounter_id": encounter_id}
+
+    # --- Signed-artifact transmission (phase 26) -------------------
+    def transmit_artifact(
+        self,
+        *,
+        artifact: dict[str, Any],
+        document_reference: dict[str, Any],
+        note_version_id: int,
+        encounter_external_ref: str | None,
+    ) -> TransmitResult:
+        # Honest: native is the system of record; transmission to a
+        # non-existent external system is meaningless. Callers must
+        # switch to integrated_writethrough with a vendor/FHIR adapter
+        # to use the write-path.
+        raise AdapterNotSupported(
+            "native adapter does not transmit; ChartNav is already the "
+            "system of record in standalone mode. Switch to "
+            "integrated_writethrough with a FHIR or vendor adapter to "
+            "transmit signed artifacts."
+        )
 
     # --- Reference data ---------------------------------------------
     def sync_reference_data(self) -> dict[str, int]:

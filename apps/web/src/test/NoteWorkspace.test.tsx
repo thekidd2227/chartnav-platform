@@ -22,6 +22,12 @@ vi.mock("../api", async () => {
     // anchor-click to actually download; mocking `downloadNoteArtifact`
     // means the test never touches jsdom's blob/anchor plumbing.
     downloadNoteArtifact: vi.fn(),
+    // Phase 26 — signed-note transmission. `getPlatform` gates the
+    // Transmit button's visibility; `transmitNoteVersion` +
+    // `listNoteTransmissions` drive the action + history pane.
+    getPlatform: vi.fn(),
+    transmitNoteVersion: vi.fn(),
+    listNoteTransmissions: vi.fn(),
   };
 });
 
@@ -131,6 +137,27 @@ beforeEach(() => {
       exported_at: "2026-04-18 20:11:00",
     })
   );
+  // Phase 26 defaults — standalone mode, no transmit. Individual tests
+  // override to integrated_writethrough to exercise the Transmit surface.
+  (api.getPlatform as any).mockResolvedValue({
+    platform_mode: "standalone",
+    integration_adapter: "native",
+    adapter: {
+      key: "native",
+      display_name: "ChartNav native",
+      description: "",
+      supports: {
+        patient_read: true,
+        patient_write: true,
+        encounter_read: true,
+        encounter_write: true,
+        document_write: true,
+        document_transmit: false,
+      },
+      source_of_truth: {},
+    },
+  });
+  (api.listNoteTransmissions as any).mockResolvedValue([]);
   (api.createEncounterInput as any).mockResolvedValue({});
 });
 
@@ -663,6 +690,147 @@ describe("NoteWorkspace", () => {
     expect(
       screen.queryByTestId("note-artifact-actions")
     ).not.toBeInTheDocument();
+  });
+
+  // -------------------------------------------------------------------
+  // Phase 26 — signed-note transmission
+  // -------------------------------------------------------------------
+
+  const signedSetup = () => {
+    (api.listEncounterNotes as any).mockResolvedValue([
+      baseNote({ draft_status: "signed", signed_at: "2026-04-18 20:10:00" }),
+    ]);
+    (api.getNoteVersion as any).mockResolvedValue({
+      note: baseNote({
+        draft_status: "signed",
+        signed_at: "2026-04-18 20:10:00",
+      }),
+      findings: FINDINGS,
+    });
+  };
+
+  it("hides Transmit when the adapter does not support document_transmit", async () => {
+    signedSetup();
+    // Default getPlatform mock has document_transmit=false.
+    renderWorkspace();
+    await screen.findByTestId("note-artifact-actions");
+    expect(screen.queryByTestId("note-transmit")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("note-transmissions")
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows Transmit when the adapter supports document_transmit", async () => {
+    signedSetup();
+    (api.getPlatform as any).mockResolvedValue({
+      platform_mode: "integrated_writethrough",
+      integration_adapter: "fhir",
+      adapter: {
+        key: "fhir",
+        display_name: "FHIR R4",
+        description: "",
+        supports: {
+          patient_read: true,
+          patient_write: false,
+          encounter_read: true,
+          encounter_write: false,
+          document_write: false,
+          document_transmit: true,
+        },
+        source_of_truth: {},
+      },
+    });
+    renderWorkspace();
+    const btn = await screen.findByTestId("note-transmit");
+    expect(btn).toHaveTextContent(/transmit to ehr/i);
+  });
+
+  it("click Transmit dispatches transmitNoteVersion and refreshes history", async () => {
+    signedSetup();
+    (api.getPlatform as any).mockResolvedValue({
+      platform_mode: "integrated_writethrough",
+      integration_adapter: "fhir",
+      adapter: {
+        key: "fhir",
+        display_name: "FHIR R4",
+        description: "",
+        supports: {
+          patient_read: true,
+          patient_write: false,
+          encounter_read: true,
+          encounter_write: false,
+          document_write: false,
+          document_transmit: true,
+        },
+        source_of_truth: {},
+      },
+    });
+    (api.transmitNoteVersion as any).mockResolvedValue({
+      id: 500,
+      note_version_id: 100,
+      encounter_id: 1,
+      organization_id: 1,
+      adapter_key: "fhir",
+      target_system: "https://fhir.test/r4",
+      transport_status: "succeeded",
+      request_body_hash: "abc",
+      response_code: 201,
+      response_snippet: "{}",
+      remote_id: "docref-xyz",
+      last_error_code: null,
+      last_error: null,
+      attempt_number: 1,
+      attempted_at: "2026-04-19 08:30:00",
+      completed_at: "2026-04-19 08:30:01",
+      created_by_user_id: 2,
+      created_at: "2026-04-19 08:30:00",
+      updated_at: "2026-04-19 08:30:01",
+    });
+    (api.listNoteTransmissions as any)
+      .mockResolvedValueOnce([]) // initial mount
+      .mockResolvedValue([
+        {
+          id: 500,
+          note_version_id: 100,
+          encounter_id: 1,
+          organization_id: 1,
+          adapter_key: "fhir",
+          target_system: "https://fhir.test/r4",
+          transport_status: "succeeded",
+          request_body_hash: "abc",
+          response_code: 201,
+          response_snippet: "{}",
+          remote_id: "docref-xyz",
+          last_error_code: null,
+          last_error: null,
+          attempt_number: 1,
+          attempted_at: null,
+          completed_at: null,
+          created_by_user_id: 2,
+          created_at: "2026-04-19 08:30:00",
+          updated_at: "2026-04-19 08:30:01",
+        },
+      ]);
+
+    const user = userEvent.setup();
+    renderWorkspace();
+    const btn = await screen.findByTestId("note-transmit");
+    await user.click(btn);
+    await waitFor(() =>
+      expect(api.transmitNoteVersion).toHaveBeenCalledWith(
+        CLIN.email,
+        100,
+        { force: false }
+      )
+    );
+    // History pane renders the new row.
+    const history = await screen.findByTestId("note-transmissions");
+    expect(within(history).getByTestId("note-transmission-500")).toHaveTextContent(
+      /succeeded/
+    );
+    expect(
+      within(history).getByTestId("note-transmission-500")
+    ).toHaveTextContent(/docref-xyz/);
   });
 
   it("click Download FHIR dispatches downloadNoteArtifact with the right format", async () => {

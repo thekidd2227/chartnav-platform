@@ -49,6 +49,7 @@ from app.integrations.base import (
     AdapterNotSupported,
     EncounterListResult,
     SourceOfTruth,
+    TransmitResult,
 )
 
 
@@ -64,17 +65,23 @@ _INFO_BASE = dict(
     key="fhir",
     display_name="FHIR R4",
     description=(
-        "Read-through FHIR R4 adapter. Normalizes Patient, "
-        "Practitioner, and Encounter resources into ChartNav's "
-        "internal shape. Writes are intentionally not supported by "
-        "this generic adapter — layer a vendor-specific adapter on "
-        "top when you need push semantics."
+        "Read-through FHIR R4 adapter with generic DocumentReference "
+        "transmission. Normalizes Patient, Practitioner, and Encounter "
+        "resources into ChartNav's internal shape. The transmission "
+        "path POSTs a packaged DocumentReference to the FHIR server's "
+        "`/DocumentReference` endpoint — servers that accept R4 writes "
+        "(HAPI, Aidbox, Medplum, etc.) will persist it; vendor-specific "
+        "EHRs typically require a specialised adapter on top that "
+        "handles auth, Encounter linkage rules, and status constraints."
     ),
     supports_patient_read=True,
     supports_patient_write=False,
     supports_encounter_read=True,
     supports_encounter_write=False,
+    # `write_note` (free-text seam) remains unsupported; the typed
+    # artifact transmission path is the honest write-path today.
     supports_document_write=False,
+    supports_document_transmit=True,
     source_of_truth={
         "organization": SourceOfTruth.MIRRORED,
         "location": SourceOfTruth.MIRRORED,
@@ -85,6 +92,49 @@ _INFO_BASE = dict(
         "document": SourceOfTruth.EXTERNAL,
     },
 )
+
+
+# ---------------------------------------------------------------------------
+# Write transport (phase 26)
+# ---------------------------------------------------------------------------
+#
+# Tests inject `write_transport=` so they never hit the network. Production
+# uses `_default_write_transport` (urllib) which returns a 3-tuple of
+# (status_code, body_text, location_header).
+#
+# Deliberately keeps the write transport separate from the GET transport
+# so existing read-path tests and their fixture types don't need to grow
+# a method discriminator.
+
+WriteTransport = Callable[
+    [str, bytes, dict[str, str]], "tuple[int, str, Optional[str]]"
+]
+
+
+def _default_write_transport(
+    url: str, body: bytes, headers: dict[str, str]
+) -> "tuple[int, str, Optional[str]]":
+    req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            text = resp.read().decode("utf-8", errors="replace")
+            return resp.status, text, resp.headers.get("Location")
+    except urllib.error.HTTPError as e:
+        # Return the error status + body instead of raising; the service
+        # layer persists both success and failure into note_transmissions
+        # and expects a TransmitResult, not an exception, for HTTP-level
+        # failures. Transport-level failures (DNS, timeout) still raise
+        # via URLError below.
+        try:
+            text = e.read().decode("utf-8", errors="replace")
+        except Exception:
+            text = f"(no body; {e.reason})"
+        return int(e.code), text, None
+    except urllib.error.URLError as e:
+        raise AdapterError(
+            "fhir_transport_error",
+            f"could not reach FHIR server at {url}: {e.reason}",
+        ) from e
 
 
 # ---------------------------------------------------------------------------
@@ -224,11 +274,13 @@ class FHIRAdapter:
         auth_type: Optional[str] = None,
         bearer_token: Optional[str] = None,
         transport: Optional[Transport] = None,
+        write_transport: Optional[WriteTransport] = None,
     ) -> None:
         self._base_url = (base_url or os.environ.get("CHARTNAV_FHIR_BASE_URL") or "").rstrip("/")
         self._auth_type = (auth_type or os.environ.get("CHARTNAV_FHIR_AUTH_TYPE") or "none").lower()
         self._bearer_token = bearer_token or os.environ.get("CHARTNAV_FHIR_BEARER_TOKEN")
         self._transport: Transport = transport or _default_transport
+        self._write_transport: WriteTransport = write_transport or _default_write_transport
 
         if not self._base_url:
             raise AdapterError(
@@ -386,9 +438,101 @@ class FHIRAdapter:
         body: str,
         note_type: str = "progress",
     ) -> dict[str, Any]:
+        # The typed transmit_artifact path replaces this seam. Keeping
+        # write_note explicit and unsupported avoids accidental callers
+        # falling through to a free-text write that skips the phase-25
+        # provenance packaging.
         raise AdapterNotSupported(
-            "FHIR adapter does not implement DocumentReference writes; "
-            "use a vendor-specific adapter."
+            "FHIR adapter does not implement free-text write_note; "
+            "route signed notes through transmit_artifact which "
+            "delivers a full DocumentReference with provenance."
+        )
+
+    def transmit_artifact(
+        self,
+        *,
+        artifact: dict[str, Any],
+        document_reference: dict[str, Any],
+        note_version_id: int,
+        encounter_external_ref: str | None,
+    ) -> TransmitResult:
+        """POST a signed-note DocumentReference to the FHIR server.
+
+        Generic R4 behaviour: any server that accepts POST to
+        `/DocumentReference` will persist the resource. Vendor EHRs
+        with stricter rules (Encounter linkage, status vocab, auth
+        scopes) should layer a vendor-specific adapter on top — its
+        `transmit_artifact` can re-shape the resource before calling
+        through to this one, or override transport entirely.
+
+        Does NOT raise on HTTP-level failure (4xx / 5xx): those are
+        persisted as `failed` `TransmitResult`s so the delivery log
+        reflects exactly what the remote system said. Transport-level
+        failures (DNS, timeout, bad URL) propagate as AdapterError so
+        the service layer can decide between retry and surface-to-UI.
+        """
+        if document_reference.get("resourceType") != "DocumentReference":
+            raise AdapterError(
+                "invalid_argument",
+                "document_reference must be a FHIR DocumentReference",
+            )
+        body = json.dumps(document_reference, separators=(",", ":")).encode("utf-8")
+        headers = {
+            "Accept": "application/fhir+json",
+            "Content-Type": "application/fhir+json",
+            # Carry the ChartNav provenance in a custom header so the
+            # remote system can correlate even if it drops the
+            # resource-level identifier.
+            "X-ChartNav-Note-Version-Id": str(note_version_id),
+            "X-ChartNav-Artifact-Hash": (
+                (artifact.get("signature") or {}).get("content_hash_sha256")
+                or ""
+            ),
+        }
+        if self._auth_type == "bearer" and self._bearer_token:
+            headers["Authorization"] = f"Bearer {self._bearer_token}"
+        url = f"{self._base_url}/DocumentReference"
+
+        status_code, response_text, location_header = self._write_transport(
+            url, body, headers
+        )
+        snippet = response_text[:1024] if response_text else None
+
+        remote_id: str | None = None
+        if location_header:
+            # Location: <base>/DocumentReference/123/_history/1 → grab the id.
+            parts = [p for p in location_header.split("/") if p]
+            if "DocumentReference" in parts:
+                i = parts.index("DocumentReference")
+                if i + 1 < len(parts):
+                    remote_id = parts[i + 1]
+        if remote_id is None and response_text:
+            # Some servers return the created resource JSON without a
+            # Location header; pluck `.id` if present.
+            try:
+                parsed = json.loads(response_text)
+                if isinstance(parsed, dict) and parsed.get("id"):
+                    remote_id = str(parsed["id"])
+            except (json.JSONDecodeError, ValueError):
+                pass
+
+        if 200 <= status_code < 300:
+            return TransmitResult(
+                status="succeeded",
+                response_code=status_code,
+                response_snippet=snippet,
+                remote_id=remote_id,
+            )
+        return TransmitResult(
+            status="failed",
+            response_code=status_code,
+            response_snippet=snippet,
+            remote_id=remote_id,
+            error_code="fhir_transmit_http_error",
+            error_reason=(
+                f"FHIR server returned HTTP {status_code} on POST "
+                f"/DocumentReference"
+            ),
         )
 
     # ---------- reference sync ----------

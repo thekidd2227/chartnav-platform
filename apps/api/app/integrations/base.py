@@ -62,7 +62,47 @@ class AdapterInfo:
     supports_encounter_read: bool
     supports_encounter_write: bool
     supports_document_write: bool
-    source_of_truth: dict[str, SourceOfTruth]
+    # Phase 26 — write-path groundwork for signed notes.
+    # `supports_document_transmit` means the adapter can accept a
+    # fully-packaged FHIR DocumentReference (from
+    # `app.services.note_artifact.render_fhir_document_reference`) and
+    # deliver it to a real external system. This is orthogonal to the
+    # older `supports_document_write` (which was the free-text
+    # `write_note(body=...)` seam). New vendor adapters should
+    # implement `transmit_artifact` rather than `write_note`.
+    supports_document_transmit: bool = False
+    source_of_truth: dict[str, SourceOfTruth] = None  # type: ignore[assignment]
+
+
+@dataclass(frozen=True)
+class TransmitResult:
+    """Outcome of a single artifact-transmission attempt.
+
+    Adapters return this from `transmit_artifact`. The service layer
+    persists it into `note_transmissions` unchanged so the audit trail
+    reflects exactly what the adapter saw. Not an exception path — a
+    failed transmission is a normal, persisted business outcome.
+
+    Fields:
+    - ``status``: ``succeeded`` | ``failed`` | ``unsupported``.
+      ``unsupported`` is allowed only when the adapter declined to
+      attempt (e.g. a read-only adapter); prefer raising
+      `AdapterNotSupported` at the protocol boundary when possible.
+    - ``response_code``: HTTP status if the adapter is HTTP-based.
+    - ``response_snippet``: up to 1024 chars of the response body for
+      the audit trail. Adapters should truncate themselves; the
+      service layer also truncates defensively.
+    - ``remote_id``: whatever id the remote system echoed back. FHIR
+      adapters surface `Location:` header or the resource's `id`.
+    - ``error_code`` / ``error_reason``: populated on ``failed``.
+    """
+
+    status: str
+    response_code: int | None = None
+    response_snippet: str | None = None
+    remote_id: str | None = None
+    error_code: str | None = None
+    error_reason: str | None = None
 
 
 @runtime_checkable
@@ -125,6 +165,40 @@ class ClinicalSystemAdapter(Protocol):
         body: str,
         note_type: str = "progress",
     ) -> dict[str, Any]: ...
+
+    # --- Signed-artifact transmission (phase 26) --------------------
+    def transmit_artifact(
+        self,
+        *,
+        artifact: dict[str, Any],
+        document_reference: dict[str, Any],
+        note_version_id: int,
+        encounter_external_ref: str | None,
+    ) -> "TransmitResult":
+        """Hand a signed-note DocumentReference to the external system.
+
+        Contract:
+        - ``artifact`` is the canonical ChartNav envelope from phase 25
+          (``chartnav.v1.json`` shape). Adapters that don't need the
+          envelope can ignore it; provenance-aware adapters surface
+          the content hash when logging.
+        - ``document_reference`` is the FHIR R4 DocumentReference
+          resource built by
+          ``app.services.note_artifact.render_fhir_document_reference``.
+          Vendor adapters that speak a different wire format MUST
+          translate it themselves — this method does not re-serialize.
+        - ``note_version_id`` is ChartNav's internal id; pass it
+          through as metadata so the remote system can tie back.
+        - ``encounter_external_ref`` is the remote encounter id if
+          the encounter was externally sourced; ``None`` for native
+          encounters. Vendor-specific adapters decide whether to
+          accept transmission without one.
+
+        Adapters that cannot transmit raise ``AdapterNotSupported``.
+        Adapters that attempted and failed return a ``TransmitResult``
+        with ``status='failed'`` and populated ``error_*`` fields.
+        """
+        ...
 
     # --- Provider / location references -----------------------------
     def sync_reference_data(self) -> dict[str, int]:

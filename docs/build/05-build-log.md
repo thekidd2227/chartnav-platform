@@ -4,6 +4,110 @@ Reverse-chronological.
 
 ---
 
+## 2026-04-19 — Phase 26: FHIR transport / write-path groundwork
+
+Builds the honest write-path on top of phase 25's packaging. No vendor
+delivery faked; no SMART-on-FHIR theatre. The adapter protocol grows
+one typed method, three adapters answer honestly (native refuses,
+stub records, generic FHIR R4 POSTs the DocumentReference), and every
+attempt is logged append-only with hash provenance.
+
+### Changes
+- **Migration `e1f2a3041502`** — new `note_transmissions` table. One
+  row per attempt; monotonic `attempt_number` per note-version;
+  unique `(note_version_id, attempt_number)`. Columns capture adapter
+  key, target system, `transport_status`, `request_body_hash`
+  (matches phase-25 content hash), HTTP response code + snippet,
+  remote id, error code/reason, attempt + completion timestamps,
+  creator user id, denormalized `encounter_id` + `organization_id`
+  for fast scoping.
+- **Adapter protocol** — `ClinicalSystemAdapter.transmit_artifact`
+  added. Takes the canonical ChartNav artifact **and** the FHIR
+  DocumentReference (phase 25 builds both). Returns a typed
+  `TransmitResult` — never raises on HTTP-level failure. New
+  capability `AdapterInfo.supports_document_transmit`.
+- **FHIR adapter** — implements `transmit_artifact` generically.
+  POSTs JSON to `{base_url}/DocumentReference`, Bearer auth when
+  configured, carries custom provenance headers
+  (`X-ChartNav-Note-Version-Id`, `X-ChartNav-Artifact-Hash`). Parses
+  `Location:` header or response `.id` for remote id. 4xx/5xx land
+  as `TransmitResult(status="failed", ...)` rather than exceptions.
+  Transport errors (DNS/timeout) still raise `AdapterError`.
+  Injected `write_transport` for tests.
+- **Stub adapter** — `transmit_artifact` succeeds in writethrough
+  (records into `self.recorded_writes`, returns synthetic remote id);
+  refuses in readthrough.
+- **Native adapter** — `transmit_artifact` raises `AdapterNotSupported`
+  with a clear reason; native is already the system of record.
+- **Service `app/services/note_transmit.py`** — mode + role + signed
+  + adapter-capability + idempotency gating. Persists a
+  `dispatching` row before calling the adapter so crashes mid-call
+  still leave a trace. Updates the row with the `TransmitResult`.
+  `force=true` in the body allows a re-transmission after a prior
+  success.
+- **Routes** —
+  - `POST /note-versions/{id}/transmit` (admin/clinician only,
+    integrated_writethrough only, signed notes only)
+  - `GET  /note-versions/{id}/transmissions` (cross-org masked via
+    shared note-load helper)
+  - `/platform` response grows `adapter.supports.document_transmit`.
+- **Frontend** — `api.ts`: `NoteTransmission` type,
+  `transmitNoteVersion`, `listNoteTransmissions`, new
+  `document_transmit` flag on `PlatformInfo`. NoteWorkspace renders
+  **Transmit to EHR** (flips to **Re-transmit** after success) only
+  when the adapter advertises the capability; a transmission-history
+  pane renders attempt rows with status, HTTP code, remote id,
+  error code.
+
+### Tests
+- Backend +11 (`tests/test_note_transmit.py`): standalone refuses,
+  readthrough stub refuses, writethrough stub success + persisted row
+  + audit event, writethrough FHIR success via injected transport,
+  FHIR 400 persisted as failed, unsigned refused, cross-org 404,
+  reviewer role 403, double without force → 409 already_transmitted,
+  double with force → new attempt (attempt_number increments), GET
+  cross-org masked.
+  Full backend suite: **251 passed** (240 + 11).
+- Frontend +3 (`NoteWorkspace.test.tsx`): Transmit hidden when
+  `document_transmit=false`, visible when true, click dispatches
+  `transmitNoteVersion` + refreshes history pane.
+  Full vitest suite: **64 passed** (22 + 20 + 22).
+- Typecheck clean. Vite build 218 kB JS / 18.9 kB CSS.
+
+### Emitted audit event
+- `note_version_transmitted` — detail string carries note_id,
+  transmission_id, adapter key, transport_status, attempt_number.
+
+### Docs
+- New `docs/build/37-fhir-write-path-groundwork.md` — adapter
+  protocol growth, gating matrix, trust-tier preservation through
+  the wire path, what this phase deliberately did not do.
+- Updated `docs/build/16-frontend-test-strategy.md`.
+
+### Files touched
+- `apps/api/alembic/versions/e1f2a3041502_note_transmissions_table.py`
+- `apps/api/app/integrations/base.py`
+- `apps/api/app/integrations/fhir.py`
+- `apps/api/app/integrations/stub.py`
+- `apps/api/app/integrations/native.py`
+- `apps/api/app/services/note_transmit.py` (new)
+- `apps/api/app/api/routes.py`
+- `apps/api/tests/test_note_transmit.py` (new)
+- `apps/web/src/api.ts`
+- `apps/web/src/NoteWorkspace.tsx`
+- `apps/web/src/test/NoteWorkspace.test.tsx`
+- `docs/build/05-build-log.md`,
+  `16-frontend-test-strategy.md`,
+  `37-fhir-write-path-groundwork.md` (new)
+
+### Files intentionally avoided
+- Public marketing site (separate lane).
+- `docs/diagrams/*` — the wire shape is a flat POST, no new diagram.
+- Playwright — deferred; the feature depends on platform_mode env
+  wiring in the e2e backend that isn't configured for writethrough.
+
+---
+
 ## 2026-04-19 — Phase 25: signed-note artifact + export interoperability groundwork
 
 Exports the first **packaged, provenance-bearing** representation of a

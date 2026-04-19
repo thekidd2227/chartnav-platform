@@ -227,6 +227,10 @@ export interface PlatformInfo {
       encounter_read: boolean;
       encounter_write: boolean;
       document_write: boolean;
+      /** Phase 26: adapter accepts a packaged FHIR DocumentReference
+       *  via the `transmit_artifact` write-path. Reviewers use this
+       *  flag to decide whether to render the Transmit button. */
+      document_transmit?: boolean;
     };
     source_of_truth: Record<string, SourceOfTruth>;
   };
@@ -1042,6 +1046,60 @@ export async function fetchNoteArtifactRaw(
   }
   const body = contentType.includes("json") && text ? JSON.parse(text) : text;
   return { body, contentType, variant };
+}
+
+// ---------- Signed-note transmission (phase 26) --------------------------
+
+export interface NoteTransmission {
+  id: number;
+  note_version_id: number;
+  encounter_id: number;
+  organization_id: number;
+  adapter_key: string;
+  target_system: string | null;
+  transport_status:
+    | "queued"
+    | "dispatching"
+    | "succeeded"
+    | "failed"
+    | "unsupported";
+  request_body_hash: string | null;
+  response_code: number | null;
+  response_snippet: string | null;
+  remote_id: string | null;
+  last_error_code: string | null;
+  last_error: string | null;
+  attempt_number: number;
+  attempted_at: string | null;
+  completed_at: string | null;
+  created_by_user_id: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Initiate a transmission of a signed note artifact to the active
+ *  adapter. Returns the persisted attempt row. Failures (remote 4xx/5xx,
+ *  adapter unsupported) come back as a row with `transport_status="failed"`
+ *  or `"unsupported"` — they are NOT exceptions. Only an HTTP 4xx from
+ *  ChartNav's own gating (mode, role, already_transmitted, …) throws. */
+export function transmitNoteVersion(
+  email: string,
+  noteId: number,
+  opts: { force?: boolean } = {}
+): Promise<NoteTransmission> {
+  return request(`/note-versions/${noteId}/transmit`, {
+    email,
+    method: "POST",
+    body: JSON.stringify({ force: !!opts.force }),
+  });
+}
+
+/** List all transmission attempts for a note, newest first. */
+export function listNoteTransmissions(
+  email: string,
+  noteId: number
+): Promise<NoteTransmission[]> {
+  return request(`/note-versions/${noteId}/transmissions`, { email });
 }
 
 /** Trigger a browser download for the chosen artifact format. The file

@@ -27,10 +27,14 @@ import {
   MISSING_FLAG_LABELS,
   NoteVersion,
   ArtifactFormat,
+  NoteTransmission,
   createEncounterInput,
   downloadNoteArtifact,
   exportNoteVersion,
   generateNoteVersion,
+  getPlatform,
+  listNoteTransmissions,
+  transmitNoteVersion,
   getNoteVersion,
   listEncounterInputs,
   listEncounterNotes,
@@ -79,6 +83,12 @@ export function NoteWorkspace({
   const [flash, setFlash] = useState<Flash | null>(null);
   const [editBody, setEditBody] = useState<string | null>(null);
   const [newTranscript, setNewTranscript] = useState("");
+  // Phase 26 — signed-note transmission surface. The transmit button
+  // only renders when the backend advertises `document_transmit: true`
+  // via `GET /platform`. We fetch once per mount; platform config
+  // doesn't change at runtime.
+  const [transmitSupported, setTransmitSupported] = useState(false);
+  const [transmissions, setTransmissions] = useState<NoteTransmission[]>([]);
 
   const canSign = me.role === "admin" || me.role === "clinician";
   const canEdit = canSign; // same set today
@@ -141,6 +151,42 @@ export function NoteWorkspace({
   useEffect(() => {
     loadActive();
   }, [loadActive]);
+
+  // One-shot: is the deployment in a mode + adapter that supports
+  // signed-note transmission? The Transmit button + history pane hinge
+  // on this. A platform fetch failure (offline / 403) just hides the
+  // row — we never show a button that will 100% 409.
+  useEffect(() => {
+    let cancelled = false;
+    getPlatform(identity)
+      .then((p) => {
+        if (cancelled) return;
+        setTransmitSupported(!!p.adapter?.supports?.document_transmit);
+      })
+      .catch(() => {
+        if (!cancelled) setTransmitSupported(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [identity]);
+
+  // Transmission history for the active signed note.
+  const loadTransmissions = useCallback(async () => {
+    if (!activeNoteId || !noteSigned || !transmitSupported) {
+      setTransmissions([]);
+      return;
+    }
+    try {
+      setTransmissions(await listNoteTransmissions(identity, activeNoteId));
+    } catch {
+      setTransmissions([]);
+    }
+  }, [identity, activeNoteId, noteSigned, transmitSupported]);
+
+  useEffect(() => {
+    loadTransmissions();
+  }, [loadTransmissions]);
 
   // ---- actions ----------------------------------------------------
 
@@ -673,6 +719,47 @@ export function NoteWorkspace({
                   Copy to clipboard
                 </button>
               )}
+              {noteSigned && activeNote && transmitSupported && canSign && (
+                <button
+                  className="btn btn--primary"
+                  onClick={async () => {
+                    setLoading(true);
+                    try {
+                      const row = await transmitNoteVersion(
+                        identity,
+                        activeNote.id,
+                        { force: transmissions.some((t) => t.transport_status === "succeeded") }
+                      );
+                      if (row.transport_status === "succeeded") {
+                        showFlash(
+                          "ok",
+                          `Transmitted to ${row.adapter_key}` +
+                            (row.remote_id ? ` (remote id ${row.remote_id})` : "")
+                        );
+                      } else {
+                        showFlash(
+                          "error",
+                          `Transmit ${row.transport_status}: ${
+                            row.last_error || row.last_error_code || "no detail"
+                          }`
+                        );
+                      }
+                      await loadTransmissions();
+                    } catch (err: any) {
+                      showFlash("error", friendly(err));
+                    } finally {
+                      setLoading(false);
+                    }
+                  }}
+                  disabled={loading}
+                  data-testid="note-transmit"
+                  title="Hand the signed DocumentReference to the active adapter"
+                >
+                  {transmissions.some((t) => t.transport_status === "succeeded")
+                    ? "Re-transmit"
+                    : "Transmit to EHR"}
+                </button>
+              )}
               {noteSigned && activeNote && (
                 <div
                   className="workspace__artifact-actions"
@@ -734,6 +821,29 @@ export function NoteWorkspace({
           <p className="empty">
             No note yet. Generate a draft to start the review workflow.
           </p>
+        )}
+        {noteSigned && transmitSupported && transmissions.length > 0 && (
+          <div
+            className="workspace__transmissions subtle-note"
+            data-testid="note-transmissions"
+          >
+            <strong>Transmission history:</strong>
+            <ul>
+              {transmissions.map((t) => (
+                <li key={t.id} data-testid={`note-transmission-${t.id}`}>
+                  attempt {t.attempt_number} · {t.adapter_key} ·{" "}
+                  <span
+                    className={`tx-status tx-status--${t.transport_status}`}
+                  >
+                    {t.transport_status}
+                  </span>
+                  {t.response_code != null && ` · HTTP ${t.response_code}`}
+                  {t.remote_id && ` · remote id ${t.remote_id}`}
+                  {t.last_error_code && ` · ${t.last_error_code}`}
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
         {notes.length > 1 && (
           <div

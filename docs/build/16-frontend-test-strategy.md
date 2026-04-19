@@ -206,6 +206,25 @@ two suites never cross-contaminate.
     disabled until a `completed` input exists.
   - Generate is enabled when a `completed` input is present.
 
+## Signed-note transmission (phase 26)
+
+- **+3** in `src/test/NoteWorkspace.test.tsx`:
+  - `getPlatform` returns `document_transmit=false` → no Transmit
+    button, no transmission-history pane.
+  - `getPlatform` returns `document_transmit=true` → Transmit button
+    renders with label "Transmit to EHR"; flips to "Re-transmit"
+    after a prior success.
+  - Click Transmit → `transmitNoteVersion(email, id, {force: false})`
+    dispatched, then `listNoteTransmissions` re-fetched and the new
+    row renders in `note-transmissions` with its status chip,
+    HTTP code, remote id, and error code (if any).
+- New mocks in the NoteWorkspace test harness: `getPlatform`,
+  `transmitNoteVersion`, `listNoteTransmissions`. Default mock
+  returns a standalone / `document_transmit=false` shape so the
+  Transmit surface stays hidden in every pre-phase-26 scenario.
+- Vitest suite total: **64 tests** (NoteWorkspace 25, App 19,
+  AdminPanel 20), full run ~9s.
+
 ## Signed-note artifact export (phase 25)
 
 - **+3** in `src/test/NoteWorkspace.test.tsx`:
