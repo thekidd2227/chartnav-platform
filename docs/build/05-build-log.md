@@ -4,6 +4,88 @@ Reverse-chronological.
 
 ---
 
+## 2026-04-19 — Phase 28: quick-comment favorites + cursor insertion + usage audit
+
+Production-readying pass on the phase-27 doctor quick-comment pad.
+Adds three things on a narrow surface: favorites/pinning across
+preloaded + custom comments, cursor-position splice instead of
+end-append, and a PHI-minimising usage-audit signal. Plus one
+focused Playwright scenario that exercises the full cross-stack
+wedge.
+
+### Changes
+- **Migration e1f2a3041504** — `clinician_quick_comment_favorites`
+  table (per-user, org-scoped; exactly one of `preloaded_ref` or
+  `custom_comment_id` per row via CHECK constraint; unique per user
+  per ref).
+- **Routes** — `GET/POST/DELETE /me/quick-comments/favorites`
+  (idempotent POST upsert, DELETE via query params) and
+  `POST /me/quick-comments/used` (202-acknowledged usage audit).
+  Audit events: `clinician_quick_comment_favorited`,
+  `_unfavorited`, `_used`. Phase-27 PATCH + DELETE paths
+  constrained to `{comment_id:int}` so `/favorites` literal can't
+  collide.
+- **Frontend — api.ts** — `ClinicianQuickCommentFavorite` type,
+  `listMyQuickCommentFavorites`, `favoriteQuickComment`,
+  `unfavoriteQuickComment`, `recordQuickCommentUsage` (error-swallowing).
+- **Frontend — NoteWorkspace** — draft textarea `ref` wired; star
+  toggle on every preloaded + custom row; Favorites strip rendered
+  above the main library when at least one pin resolves; cursor-
+  aware `insertQuickComment(body, ref)` that splices at
+  `selectionStart`/`selectionEnd` with sane newline handling and
+  post-insert caret restore; fires `recordQuickCommentUsage`
+  fire-and-forget.
+- **Styles** — favorites strip + star button primitives.
+
+### Tests
+- Backend +16 (`test_quick_comment_favorites.py`): happy paths for
+  preloaded + custom favorites, idempotency, validation (both/neither
+  ref → 400), cross-user custom → 404, soft-deleted custom → 409,
+  list scoping, unfavorite idempotence, reviewer 403 on all four,
+  audit event shape for favorites + usage, PHI invariant (body not
+  in audit detail), surface isolation (no leakage to encounter
+  endpoints).
+  Full backend suite: **279 passed** (263 + 16).
+- Frontend +8 (`NoteWorkspace.test.tsx`): preloaded star dispatch,
+  favorites strip renders pinned preloaded + `aria-pressed=true`,
+  favorites strip surfaces a pinned custom comment, reviewer view
+  hides strip and skips API fetch, cursor-position splice at mid-text
+  caret, append fallback when no selection, usage audit POST shape
+  for preloaded + custom with no body key.
+  Full vitest suite: **81 passed** (19 + 20 + 42).
+- Playwright +1 (`tests/e2e/quick-comments.spec.ts`): identity-select
+  → open encounter → ingest transcript → generate draft → click
+  preloaded pick → assert text in draft. Server log confirms
+  `POST /me/quick-comments/used status=202` during the run.
+- Typecheck clean. Vite build 231.84 kB JS / 21.10 kB CSS
+  (gzip 68 kB / 4.35 kB).
+
+### Docs
+- New `docs/build/39-quick-comment-hardening.md`.
+- Updated `docs/build/16-frontend-test-strategy.md`.
+
+### Files touched
+- `apps/api/alembic/versions/e1f2a3041504_quick_comment_favorites.py`
+- `apps/api/app/api/routes.py`
+- `apps/api/tests/test_quick_comment_favorites.py`
+- `apps/web/src/api.ts`
+- `apps/web/src/NoteWorkspace.tsx`
+- `apps/web/src/styles.css`
+- `apps/web/src/test/NoteWorkspace.test.tsx`
+- `apps/web/tests/e2e/quick-comments.spec.ts`
+- `docs/build/05-build-log.md`,
+  `16-frontend-test-strategy.md`,
+  `39-quick-comment-hardening.md` (new)
+
+### Files intentionally avoided
+- Marketing site.
+- `note_versions` / `encounter_inputs` / `extracted_findings` —
+  favorites + usage remain orthogonal to the transcript/findings
+  trust tiers.
+- No new platform abstractions; no vendor-specific code paths.
+
+---
+
 ## 2026-04-19 — Phase 27: clinician quick-comment pad (doctor-only)
 
 Doctor-only clipboard surface. 50 preloaded ophthalmology picks

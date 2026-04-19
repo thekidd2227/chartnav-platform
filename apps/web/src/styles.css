@@ -1084,3 +1084,30 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
   gap: 8px;
   margin-top: 14px;
 }
+
+/* ---- Phase 28 — favorites strip + star toggle ---- */
+.workspace__qc-favorites {
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  background: linear-gradient(180deg, #FFFBEB, #FEF3C7 120%);
+  border: 1px solid #FDE68A;
+  border-radius: var(--cn-radius-sm, 6px);
+}
+.workspace__qc-favorites .workspace__qc-group-title {
+  color: #92400E;
+}
+.workspace__qc-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+.btn--qc-star {
+  padding: 6px 8px;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--cn-muted, #64748B);
+  flex-shrink: 0;
+}
+.btn--qc-star--on {
+  color: #B45309;
+}

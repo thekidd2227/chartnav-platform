@@ -206,6 +206,34 @@ two suites never cross-contaminate.
     disabled until a `completed` input exists.
   - Generate is enabled when a `completed` input is present.
 
+## Quick-comment favorites + cursor insertion + usage audit (phase 28)
+
+- **+8** in `src/test/NoteWorkspace.test.tsx`:
+  - click preloaded star → dispatches `favoriteQuickComment`
+    + `listMyQuickCommentFavorites` refresh.
+  - Favorites strip renders above the main library when at least
+    one favorite resolves; pinned preloaded row reports
+    `aria-pressed="true"`.
+  - Favorites strip surfaces a pinned custom comment with the
+    expected test-id.
+  - Reviewer: strip hidden AND no favorites API fetch fires.
+  - Cursor-position insertion: setting
+    `selectionStart`/`selectionEnd` mid-text and clicking a preloaded
+    pick splices the body at the caret (not end-append).
+  - Fallback: no selection state → append at end (historical
+    behaviour preserved).
+  - Usage audit POST fires with `preloaded_ref` for preloaded clicks;
+    payload has no `body` key (PHI invariant).
+  - Usage audit POST fires with `custom_comment_id` for custom
+    clicks; payload has no `body` key.
+- New mocks: `listMyQuickCommentFavorites`, `favoriteQuickComment`,
+  `unfavoriteQuickComment`, `recordQuickCommentUsage`. Default mock
+  returns empty favorites + resolved usage audit.
+- Vitest suite total: **81 tests** (NoteWorkspace 42, App 19,
+  AdminPanel 20). Playwright +1 (`quick-comments.spec.ts`) runs
+  the full cross-stack wedge and observes
+  `POST /me/quick-comments/used status=202` in the backend log.
+
 ## Clinician quick-comment pad (phase 27)
 
 - **+9** in `src/test/NoteWorkspace.test.tsx`:

@@ -1339,3 +1339,79 @@ export function deleteMyQuickComment(
     method: "DELETE",
   });
 }
+
+// ---------- Quick-comment favorites + usage audit (phase 28) -------------
+
+export interface ClinicianQuickCommentFavorite {
+  id: number;
+  organization_id: number;
+  user_id: number;
+  /** Stable preloaded-pack id (e.g. "sx-01"). Null for custom favorites. */
+  preloaded_ref: string | null;
+  /** FK into clinician_quick_comments. Null for preloaded favorites. */
+  custom_comment_id: number | null;
+  created_at: string;
+}
+
+export function listMyQuickCommentFavorites(
+  email: string
+): Promise<ClinicianQuickCommentFavorite[]> {
+  return request("/me/quick-comments/favorites", { email });
+}
+
+/** Idempotent: re-firing with the same ref returns the existing row. */
+export function favoriteQuickComment(
+  email: string,
+  ref: { preloaded_ref: string } | { custom_comment_id: number }
+): Promise<ClinicianQuickCommentFavorite> {
+  return request("/me/quick-comments/favorites", {
+    email,
+    method: "POST",
+    body: JSON.stringify(ref),
+  });
+}
+
+export function unfavoriteQuickComment(
+  email: string,
+  ref: { preloaded_ref: string } | { custom_comment_id: number }
+): Promise<{ removed: number }> {
+  const qs =
+    "preloaded_ref" in ref
+      ? `?preloaded_ref=${encodeURIComponent(ref.preloaded_ref)}`
+      : `?custom_comment_id=${ref.custom_comment_id}`;
+  return request(`/me/quick-comments/favorites${qs}`, {
+    email,
+    method: "DELETE",
+  });
+}
+
+/** Best-effort usage audit: records that a doctor inserted a quick
+ *  comment. Fails silently if the backend is offline — a missing
+ *  audit event should never block the clinician's workflow. */
+export async function recordQuickCommentUsage(
+  email: string,
+  payload:
+    | {
+        preloaded_ref: string;
+        note_version_id?: number | null;
+        encounter_id?: number | null;
+      }
+    | {
+        custom_comment_id: number;
+        note_version_id?: number | null;
+        encounter_id?: number | null;
+      }
+): Promise<{ recorded: boolean; kind: "preloaded" | "custom" } | null> {
+  try {
+    return await request<{ recorded: boolean; kind: "preloaded" | "custom" }>(
+      "/me/quick-comments/used",
+      {
+        email,
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+  } catch {
+    return null;
+  }
+}

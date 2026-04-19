@@ -18,10 +18,11 @@
  * refuses edits once the note is signed.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiError,
   ClinicianQuickComment,
+  ClinicianQuickCommentFavorite,
   EncounterInput,
   ExtractedFindings,
   Me,
@@ -34,11 +35,15 @@ import {
   deleteMyQuickComment,
   downloadNoteArtifact,
   exportNoteVersion,
+  favoriteQuickComment,
   generateNoteVersion,
   getPlatform,
   listMyQuickComments,
+  listMyQuickCommentFavorites,
   listNoteTransmissions,
+  recordQuickCommentUsage,
   transmitNoteVersion,
+  unfavoriteQuickComment,
   updateMyQuickComment,
   getNoteVersion,
   listEncounterInputs,
@@ -110,6 +115,14 @@ export function NoteWorkspace({
   const [qcModalOpen, setQcModalOpen] = useState(false);
   const [qcDraft, setQcDraft] = useState("");
   const [qcEditingId, setQcEditingId] = useState<number | null>(null);
+
+  // Phase 28 — favorites + cursor-insertion. The textarea ref lets the
+  // click handler splice at selectionStart rather than always
+  // appending to the end.
+  const [favorites, setFavorites] = useState<
+    ClinicianQuickCommentFavorite[]
+  >([]);
+  const draftTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const canSign = me.role === "admin" || me.role === "clinician";
   const canEdit = canSign; // same set today
@@ -233,6 +246,41 @@ export function NoteWorkspace({
     loadCustomComments();
   }, [loadCustomComments]);
 
+  const loadFavorites = useCallback(async () => {
+    if (!canUseQuickComments) {
+      setFavorites([]);
+      return;
+    }
+    try {
+      setFavorites(await listMyQuickCommentFavorites(identity));
+    } catch {
+      setFavorites([]);
+    }
+  }, [identity, canUseQuickComments]);
+
+  useEffect(() => {
+    loadFavorites();
+  }, [loadFavorites]);
+
+  const favoritePreloadedSet = useMemo(
+    () =>
+      new Set(
+        favorites
+          .map((f) => f.preloaded_ref)
+          .filter((r): r is string => typeof r === "string" && r.length > 0)
+      ),
+    [favorites]
+  );
+  const favoriteCustomSet = useMemo(
+    () =>
+      new Set(
+        favorites
+          .map((f) => f.custom_comment_id)
+          .filter((v): v is number => typeof v === "number")
+      ),
+    [favorites]
+  );
+
   const filteredPreloaded = useMemo(() => {
     const q = qcSearch.trim().toLowerCase();
     if (!q) return PRELOADED_QUICK_COMMENTS;
@@ -247,11 +295,31 @@ export function NoteWorkspace({
     return customComments.filter((c) => c.body.toLowerCase().includes(q));
   }, [qcSearch, customComments]);
 
-  /** Append a quick-comment body into the draft textarea. Only fires
-   *  when the note is editable — signed/exported notes silently no-op
-   *  so a stray click never mutates an attested record. */
+  /** Insert a quick-comment body into the draft textarea.
+   *
+   *  Phase 28 cursor-aware behaviour:
+   *  - If the draft textarea is mounted and has a valid selection
+   *    range, splice the body at the current caret (or over the
+   *    selection if non-empty), using a single React state update so
+   *    the browser's undo stack stays coherent.
+   *  - If the ref or selection state is unavailable (textarea not
+   *    mounted, just read-only view etc.), fall back to the old
+   *    append-at-end behaviour.
+   *  - Never mutates a signed / exported note — the buttons are
+   *    disabled for that state, but we guard here too.
+   *
+   *  Also fires a best-effort usage-audit POST so ops can answer
+   *  "which picks do clinicians actually reach for?". Failure is
+   *  swallowed by `recordQuickCommentUsage`; we never block the
+   *  clinician on telemetry.
+   */
   const insertQuickComment = useCallback(
-    (body: string) => {
+    (
+      body: string,
+      ref:
+        | { kind: "preloaded"; preloaded_ref: string }
+        | { kind: "custom"; custom_comment_id: number }
+    ) => {
       if (!canEdit || noteSigned || !activeNote) {
         showFlash(
           "error",
@@ -259,14 +327,122 @@ export function NoteWorkspace({
         );
         return;
       }
-      setEditBody((current) => {
-        const base = current ?? "";
-        const sep = base.endsWith("\n\n") ? "" : base.endsWith("\n") ? "\n" : "\n\n";
-        return `${base}${sep}${body}\n`;
-      });
+
+      const textarea = draftTextareaRef.current;
+      const current = editBody ?? "";
+      let next: string;
+      let caretAfter: number | null = null;
+
+      // Newline-sane splice: insert a leading newline only if the
+      // character immediately before the caret isn't already a
+      // newline, and always finish with one trailing newline so the
+      // next insertion lands on its own row.
+      const padded = (before: string, phrase: string, after: string) => {
+        const leading = before.length === 0 || before.endsWith("\n") ? "" : "\n";
+        const trailing = after.startsWith("\n") || after.length === 0 ? "" : "\n";
+        return {
+          text: `${before}${leading}${phrase}${trailing}${after}`,
+          caret: before.length + leading.length + phrase.length + trailing.length,
+        };
+      };
+
+      const hasValidSelection =
+        textarea !== null &&
+        typeof textarea.selectionStart === "number" &&
+        typeof textarea.selectionEnd === "number" &&
+        textarea.selectionStart >= 0 &&
+        textarea.selectionEnd >= textarea.selectionStart &&
+        textarea.selectionEnd <= current.length;
+
+      if (hasValidSelection && textarea) {
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const before = current.slice(0, start);
+        const after = current.slice(end);
+        const spliced = padded(before, body, after);
+        next = spliced.text;
+        caretAfter = spliced.caret;
+      } else {
+        // Fallback: append at end, preserving historical behaviour.
+        const spliced = padded(current, body, "");
+        next = spliced.text;
+        caretAfter = spliced.caret;
+      }
+
+      setEditBody(next);
+
+      // Restore caret after React re-renders the textarea.
+      if (textarea !== null && caretAfter !== null) {
+        const place = caretAfter;
+        requestAnimationFrame(() => {
+          try {
+            textarea.focus();
+            textarea.setSelectionRange(place, place);
+          } catch {
+            /* jsdom / detached DOM tolerant */
+          }
+        });
+      }
+
       showFlash("ok", "Inserted quick comment into draft.");
+
+      // Fire-and-forget usage audit. Never block the clinician on it.
+      recordQuickCommentUsage(
+        identity,
+        ref.kind === "preloaded"
+          ? {
+              preloaded_ref: ref.preloaded_ref,
+              note_version_id: activeNote?.id ?? null,
+              encounter_id: encounterId,
+            }
+          : {
+              custom_comment_id: ref.custom_comment_id,
+              note_version_id: activeNote?.id ?? null,
+              encounter_id: encounterId,
+            }
+      );
     },
-    [canEdit, noteSigned, activeNote, showFlash]
+    [
+      canEdit,
+      noteSigned,
+      activeNote,
+      editBody,
+      identity,
+      encounterId,
+      showFlash,
+    ]
+  );
+
+  const togglePreloadedFavorite = useCallback(
+    async (preloadedRef: string) => {
+      try {
+        if (favoritePreloadedSet.has(preloadedRef)) {
+          await unfavoriteQuickComment(identity, { preloaded_ref: preloadedRef });
+        } else {
+          await favoriteQuickComment(identity, { preloaded_ref: preloadedRef });
+        }
+        await loadFavorites();
+      } catch (e) {
+        showFlash("error", friendly(e));
+      }
+    },
+    [identity, favoritePreloadedSet, loadFavorites, showFlash]
+  );
+
+  const toggleCustomFavorite = useCallback(
+    async (customId: number) => {
+      try {
+        if (favoriteCustomSet.has(customId)) {
+          await unfavoriteQuickComment(identity, { custom_comment_id: customId });
+        } else {
+          await favoriteQuickComment(identity, { custom_comment_id: customId });
+        }
+        await loadFavorites();
+      } catch (e) {
+        showFlash("error", friendly(e));
+      }
+    },
+    [identity, favoriteCustomSet, loadFavorites, showFlash]
   );
 
   const openQcModal = (comment?: ClinicianQuickComment) => {
@@ -787,6 +963,7 @@ export function NoteWorkspace({
             </div>
             {canEdit && !noteSigned ? (
               <textarea
+                ref={draftTextareaRef}
                 className="workspace__draft"
                 value={editBody ?? ""}
                 onChange={(e) => setEditBody(e.target.value)}
@@ -1051,7 +1228,77 @@ export function NoteWorkspace({
             </button>
           </div>
 
-          {/* Preloaded pack, grouped by category. */}
+          {/* Favorites strip — surfaces the doctor's pinned picks
+              (preloaded or custom) above the main library so the
+              phrases they actually use every day are one click away.
+              Rendered ONLY when there's at least one favorite that
+              resolves (a favorited custom comment that's been
+              soft-deleted is filtered out). */}
+          {(() => {
+            const q = qcSearch.trim().toLowerCase();
+            const favRows: {
+              key: string;
+              body: string;
+              testid: string;
+              ref:
+                | { kind: "preloaded"; preloaded_ref: string }
+                | { kind: "custom"; custom_comment_id: number };
+            }[] = [];
+            for (const f of favorites) {
+              if (f.preloaded_ref) {
+                const pre = PRELOADED_QUICK_COMMENTS.find(
+                  (c) => c.id === f.preloaded_ref
+                );
+                if (!pre) continue;
+                if (q && !pre.body.toLowerCase().includes(q)) continue;
+                favRows.push({
+                  key: `pre-${pre.id}`,
+                  body: pre.body,
+                  testid: `quick-comment-favorite-preloaded-${pre.id}`,
+                  ref: { kind: "preloaded", preloaded_ref: pre.id },
+                });
+              } else if (f.custom_comment_id != null) {
+                const custom = customComments.find(
+                  (c) => c.id === f.custom_comment_id
+                );
+                if (!custom) continue;
+                if (q && !custom.body.toLowerCase().includes(q)) continue;
+                favRows.push({
+                  key: `custom-${custom.id}`,
+                  body: custom.body,
+                  testid: `quick-comment-favorite-custom-${custom.id}`,
+                  ref: { kind: "custom", custom_comment_id: custom.id },
+                });
+              }
+            }
+            if (favRows.length === 0) return null;
+            return (
+              <div
+                className="workspace__qc-favorites"
+                data-testid="quick-comments-favorites"
+              >
+                <div className="workspace__qc-group-title">★ Favorites</div>
+                <ul className="workspace__qc-list">
+                  {favRows.map((row) => (
+                    <li key={row.key}>
+                      <button
+                        className="btn btn--muted btn--qc"
+                        onClick={() => insertQuickComment(row.body, row.ref)}
+                        data-testid={row.testid}
+                        disabled={!canEdit || noteSigned || !activeNote}
+                        title="Click to insert pinned comment"
+                      >
+                        {row.body}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })()}
+
+          {/* Preloaded pack, grouped by category. Each item has a
+              star toggle to pin/unpin into the Favorites strip. */}
           <div
             className="workspace__qc-preloaded"
             data-testid="quick-comments-preloaded"
@@ -1069,25 +1316,50 @@ export function NoteWorkspace({
                 >
                   <div className="workspace__qc-group-title">{cat}</div>
                   <ul className="workspace__qc-list">
-                    {items.map((c) => (
-                      <li key={c.id}>
-                        <button
-                          className="btn btn--muted btn--qc"
-                          onClick={() => insertQuickComment(c.body)}
-                          data-testid={`quick-comment-${c.id}`}
-                          disabled={!canEdit || noteSigned || !activeNote}
-                          title={
-                            !activeNote
-                              ? "Generate a draft first"
-                              : noteSigned
-                                ? "Note is signed — cannot insert"
-                                : "Click to insert into draft"
-                          }
-                        >
-                          {c.body}
-                        </button>
-                      </li>
-                    ))}
+                    {items.map((c) => {
+                      const isFav = favoritePreloadedSet.has(c.id);
+                      return (
+                        <li key={c.id} className="workspace__qc-row">
+                          <button
+                            className="btn btn--muted btn--qc"
+                            onClick={() =>
+                              insertQuickComment(c.body, {
+                                kind: "preloaded",
+                                preloaded_ref: c.id,
+                              })
+                            }
+                            data-testid={`quick-comment-${c.id}`}
+                            disabled={!canEdit || noteSigned || !activeNote}
+                            title={
+                              !activeNote
+                                ? "Generate a draft first"
+                                : noteSigned
+                                  ? "Note is signed — cannot insert"
+                                  : "Click to insert into draft"
+                            }
+                          >
+                            {c.body}
+                          </button>
+                          <button
+                            className={
+                              "btn btn--ghost btn--qc-star" +
+                              (isFav ? " btn--qc-star--on" : "")
+                            }
+                            onClick={() => togglePreloadedFavorite(c.id)}
+                            data-testid={`quick-comment-star-${c.id}`}
+                            aria-pressed={isFav}
+                            aria-label={
+                              isFav
+                                ? `Unpin ${c.body}`
+                                : `Pin ${c.body}`
+                            }
+                            title={isFav ? "Unpin from Favorites" : "Pin to Favorites"}
+                          >
+                            {isFav ? "★" : "☆"}
+                          </button>
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
               );
@@ -1114,40 +1386,63 @@ export function NoteWorkspace({
               </p>
             ) : (
               <ul className="workspace__qc-list">
-                {filteredCustom.map((c) => (
-                  <li
-                    key={c.id}
-                    className="workspace__qc-custom-row"
-                    data-testid={`quick-comment-custom-${c.id}`}
-                  >
-                    <button
-                      className="btn btn--muted btn--qc"
-                      onClick={() => insertQuickComment(c.body)}
-                      disabled={!canEdit || noteSigned || !activeNote}
-                      title="Click to insert your custom comment"
+                {filteredCustom.map((c) => {
+                  const isFav = favoriteCustomSet.has(c.id);
+                  return (
+                    <li
+                      key={c.id}
+                      className="workspace__qc-custom-row"
+                      data-testid={`quick-comment-custom-${c.id}`}
                     >
-                      {c.body}
-                    </button>
-                    <span className="workspace__qc-custom-actions">
                       <button
-                        className="btn btn--ghost"
-                        onClick={() => openQcModal(c)}
-                        data-testid={`quick-comment-custom-edit-${c.id}`}
-                        title="Edit"
+                        className="btn btn--muted btn--qc"
+                        onClick={() =>
+                          insertQuickComment(c.body, {
+                            kind: "custom",
+                            custom_comment_id: c.id,
+                          })
+                        }
+                        disabled={!canEdit || noteSigned || !activeNote}
+                        title="Click to insert your custom comment"
                       >
-                        Edit
+                        {c.body}
                       </button>
-                      <button
-                        className="btn btn--ghost"
-                        onClick={() => deleteCustomComment(c.id)}
-                        data-testid={`quick-comment-custom-delete-${c.id}`}
-                        title="Delete"
-                      >
-                        Delete
-                      </button>
-                    </span>
-                  </li>
-                ))}
+                      <span className="workspace__qc-custom-actions">
+                        <button
+                          className={
+                            "btn btn--ghost btn--qc-star" +
+                            (isFav ? " btn--qc-star--on" : "")
+                          }
+                          onClick={() => toggleCustomFavorite(c.id)}
+                          data-testid={`quick-comment-custom-star-${c.id}`}
+                          aria-pressed={isFav}
+                          aria-label={
+                            isFav ? "Unpin custom comment" : "Pin custom comment"
+                          }
+                          title={isFav ? "Unpin from Favorites" : "Pin to Favorites"}
+                        >
+                          {isFav ? "★" : "☆"}
+                        </button>
+                        <button
+                          className="btn btn--ghost"
+                          onClick={() => openQcModal(c)}
+                          data-testid={`quick-comment-custom-edit-${c.id}`}
+                          title="Edit"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="btn btn--ghost"
+                          onClick={() => deleteCustomComment(c.id)}
+                          data-testid={`quick-comment-custom-delete-${c.id}`}
+                          title="Delete"
+                        >
+                          Delete
+                        </button>
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>

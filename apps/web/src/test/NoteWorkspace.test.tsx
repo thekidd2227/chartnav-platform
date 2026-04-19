@@ -33,6 +33,11 @@ vi.mock("../api", async () => {
     createMyQuickComment: vi.fn(),
     updateMyQuickComment: vi.fn(),
     deleteMyQuickComment: vi.fn(),
+    // Phase 28 — favorites + usage audit.
+    listMyQuickCommentFavorites: vi.fn(),
+    favoriteQuickComment: vi.fn(),
+    unfavoriteQuickComment: vi.fn(),
+    recordQuickCommentUsage: vi.fn(),
   };
 });
 
@@ -195,6 +200,23 @@ beforeEach(() => {
     is_active: false,
     created_at: "2026-04-19 09:00:00",
     updated_at: "2026-04-19 09:00:02",
+  });
+  // Phase 28 defaults — no favorites, usage audit swallowed silently.
+  (api.listMyQuickCommentFavorites as any).mockResolvedValue([]);
+  (api.favoriteQuickComment as any).mockImplementation(
+    async (_e: string, ref: any) => ({
+      id: 1,
+      organization_id: 1,
+      user_id: 2,
+      preloaded_ref: ref.preloaded_ref ?? null,
+      custom_comment_id: ref.custom_comment_id ?? null,
+      created_at: "2026-04-19 10:00:00",
+    })
+  );
+  (api.unfavoriteQuickComment as any).mockResolvedValue({ removed: 1 });
+  (api.recordQuickCommentUsage as any).mockResolvedValue({
+    recorded: true,
+    kind: "preloaded",
   });
   (api.createEncounterInput as any).mockResolvedValue({});
 });
@@ -1106,5 +1128,208 @@ describe("NoteWorkspace", () => {
     ).toHaveTextContent(
       /clinician quick-picks, not transcript findings or ai-generated/i
     );
+  });
+
+  // -------------------------------------------------------------------
+  // Phase 28 — favorites / pinning
+  // -------------------------------------------------------------------
+
+  it("preloaded star toggle calls favorite + refreshes favorites list", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await screen.findByTestId("quick-comments-panel");
+    // No favorites at mount → strip absent.
+    expect(
+      screen.queryByTestId("quick-comments-favorites")
+    ).not.toBeInTheDocument();
+    // Click the star next to a preloaded comment.
+    await user.click(screen.getByTestId("quick-comment-star-sx-04"));
+    await waitFor(() =>
+      expect(api.favoriteQuickComment).toHaveBeenCalledWith(CLIN.email, {
+        preloaded_ref: "sx-04",
+      })
+    );
+    expect(api.listMyQuickCommentFavorites).toHaveBeenCalled();
+  });
+
+  it("favorites strip renders above the library when a pin exists", async () => {
+    (api.listMyQuickCommentFavorites as any).mockResolvedValue([
+      {
+        id: 1,
+        organization_id: 1,
+        user_id: 2,
+        preloaded_ref: "post-44",
+        custom_comment_id: null,
+        created_at: "x",
+      },
+    ]);
+    renderWorkspace();
+    const strip = await screen.findByTestId("quick-comments-favorites");
+    expect(strip).toHaveTextContent(/Macula flat and dry/);
+    const btn = within(strip).getByTestId(
+      "quick-comment-favorite-preloaded-post-44"
+    );
+    expect(btn).toBeInTheDocument();
+    // Star on the preloaded row should render as pinned.
+    expect(screen.getByTestId("quick-comment-star-post-44")).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+  });
+
+  it("custom favorite strip surfaces a pinned custom comment", async () => {
+    (api.listMyQuickComments as any).mockResolvedValue([
+      {
+        id: 77,
+        organization_id: 1,
+        user_id: 2,
+        body: "Recommended punctal plugs.",
+        is_active: true,
+        created_at: "x",
+        updated_at: "x",
+      },
+    ]);
+    (api.listMyQuickCommentFavorites as any).mockResolvedValue([
+      {
+        id: 2,
+        organization_id: 1,
+        user_id: 2,
+        preloaded_ref: null,
+        custom_comment_id: 77,
+        created_at: "x",
+      },
+    ]);
+    renderWorkspace();
+    const strip = await screen.findByTestId("quick-comments-favorites");
+    expect(
+      within(strip).getByTestId("quick-comment-favorite-custom-77")
+    ).toHaveTextContent(/Recommended punctal plugs/);
+  });
+
+  it("favorites panel is NOT rendered for reviewers", async () => {
+    (api.listMyQuickCommentFavorites as any).mockResolvedValue([
+      {
+        id: 1,
+        organization_id: 1,
+        user_id: 2,
+        preloaded_ref: "post-44",
+        custom_comment_id: null,
+        created_at: "x",
+      },
+    ]);
+    render(
+      <NoteWorkspace
+        identity="rev@chartnav.local"
+        me={REV}
+        encounterId={1}
+        patientDisplay="Test"
+        providerDisplay="Dr T"
+      />
+    );
+    await screen.findByTestId("workspace-tier-transcript");
+    expect(
+      screen.queryByTestId("quick-comments-favorites")
+    ).not.toBeInTheDocument();
+    expect(api.listMyQuickCommentFavorites).not.toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------
+  // Phase 28 — cursor-position insertion
+  // -------------------------------------------------------------------
+
+  it("inserts at the cursor position, not the end, when there's a selection", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    const textarea = (await screen.findByTestId(
+      "note-draft-textarea"
+    )) as HTMLTextAreaElement;
+    // Seed a known draft body with a well-known insertion point.
+    await user.clear(textarea);
+    await user.type(textarea, "BEFORE|AFTER");
+    // Place caret at the `|` — index 6.
+    textarea.focus();
+    textarea.setSelectionRange(6, 6);
+
+    await user.click(screen.getByTestId("quick-comment-sx-01"));
+
+    await waitFor(() => {
+      const v = textarea.value;
+      expect(v.startsWith("BEFORE")).toBe(true);
+      expect(v).toContain("Vision stable since last visit.");
+      // The inserted phrase must appear BEFORE the "|AFTER" tail,
+      // proving it was spliced at the caret rather than appended.
+      const phraseIdx = v.indexOf("Vision stable since last visit.");
+      const afterIdx = v.indexOf("|AFTER");
+      expect(phraseIdx).toBeGreaterThan(-1);
+      expect(afterIdx).toBeGreaterThan(phraseIdx);
+    });
+  });
+
+  it("appends at end when the textarea has no selection state", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    const textarea = (await screen.findByTestId(
+      "note-draft-textarea"
+    )) as HTMLTextAreaElement;
+    // Push caret to the end and blur so no active selection exists.
+    await user.click(textarea);
+    const len = textarea.value.length;
+    textarea.setSelectionRange(len, len);
+    textarea.blur();
+
+    await user.click(screen.getByTestId("quick-comment-plan-50"));
+    await waitFor(() =>
+      expect(textarea.value).toContain(
+        "Follow-up interval reviewed and agreed upon."
+      )
+    );
+    // Appended at the end of whatever was there.
+    expect(textarea.value.trim().endsWith("agreed upon.")).toBe(true);
+  });
+
+  // -------------------------------------------------------------------
+  // Phase 28 — usage audit
+  // -------------------------------------------------------------------
+
+  it("click preloaded fires recordQuickCommentUsage with preloaded_ref", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await screen.findByTestId("quick-comments-panel");
+    await user.click(screen.getByTestId("quick-comment-vf-24"));
+    await waitFor(() =>
+      expect(api.recordQuickCommentUsage).toHaveBeenCalledWith(
+        CLIN.email,
+        expect.objectContaining({ preloaded_ref: "vf-24" })
+      )
+    );
+    // PHI invariant: the payload must NOT carry the comment body.
+    const call = (api.recordQuickCommentUsage as any).mock.calls.at(-1);
+    expect(call?.[1]).not.toHaveProperty("body");
+  });
+
+  it("click custom fires recordQuickCommentUsage with custom_comment_id", async () => {
+    (api.listMyQuickComments as any).mockResolvedValue([
+      {
+        id: 55,
+        organization_id: 1,
+        user_id: 2,
+        body: "Discussed lens options.",
+        is_active: true,
+        created_at: "x",
+        updated_at: "x",
+      },
+    ]);
+    const user = userEvent.setup();
+    renderWorkspace();
+    const row = await screen.findByTestId("quick-comment-custom-55");
+    await user.click(within(row).getByRole("button", { name: /discussed lens/i }));
+    await waitFor(() =>
+      expect(api.recordQuickCommentUsage).toHaveBeenCalledWith(
+        CLIN.email,
+        expect.objectContaining({ custom_comment_id: 55 })
+      )
+    );
+    const call = (api.recordQuickCommentUsage as any).mock.calls.at(-1);
+    expect(call?.[1]).not.toHaveProperty("body");
   });
 });

@@ -2808,7 +2808,7 @@ def create_my_quick_comment(
     return _load_quick_comment_for_caller(int(new_id), caller)
 
 
-@router.patch("/me/quick-comments/{comment_id}")
+@router.patch("/me/quick-comments/{comment_id:int}")
 def update_my_quick_comment(
     comment_id: int,
     payload: QuickCommentPatchBody,
@@ -2867,7 +2867,7 @@ def update_my_quick_comment(
     return _load_quick_comment_for_caller(comment_id, caller)
 
 
-@router.delete("/me/quick-comments/{comment_id}")
+@router.delete("/me/quick-comments/{comment_id:int}")
 def delete_my_quick_comment(
     comment_id: int,
     caller: Caller = Depends(require_caller),
@@ -2903,3 +2903,290 @@ def delete_my_quick_comment(
     )
 
     return _load_quick_comment_for_caller(comment_id, caller)
+
+
+# ===========================================================================
+# Quick-comment favorites + usage audit (phase 28)
+# ===========================================================================
+#
+# Favorites
+# ---------
+# A per-user bag of pins. Each row references exactly one of:
+# - a preloaded comment by its stable string id (e.g. "sx-01"), OR
+# - a doctor's custom comment by its DB id.
+#
+# POST is idempotent (409-free upsert) so the UI can call "favorite"
+# without tracking state. DELETE is body-based (same shape as POST)
+# so the UI doesn't need to carry the favorite row id.
+#
+# Usage audit
+# -----------
+# A thin, honest "which quick comments do doctors actually reach for"
+# signal. Emits a single audit event `clinician_quick_comment_used`
+# per insertion; the detail string carries the ref identifier + the
+# optional note_version_id so a reviewer can correlate without the
+# audit log ever storing the comment body (PHI-minimising).
+
+
+QC_FAV_COLUMNS = (
+    "id, organization_id, user_id, preloaded_ref, custom_comment_id, "
+    "created_at"
+)
+
+
+class QuickCommentFavoriteBody(BaseModel):
+    preloaded_ref: Optional[str] = Field(
+        None, min_length=1, max_length=64,
+    )
+    custom_comment_id: Optional[int] = None
+
+
+class QuickCommentUsageBody(BaseModel):
+    preloaded_ref: Optional[str] = Field(
+        None, min_length=1, max_length=64,
+    )
+    custom_comment_id: Optional[int] = None
+    note_version_id: Optional[int] = None
+    encounter_id: Optional[int] = None
+
+
+def _validate_exactly_one_ref(
+    preloaded_ref: Optional[str],
+    custom_comment_id: Optional[int],
+) -> None:
+    has_pre = bool(preloaded_ref and preloaded_ref.strip())
+    has_custom = custom_comment_id is not None
+    if has_pre == has_custom:
+        # Either both empty or both populated — neither is valid.
+        raise _err(
+            "quick_comment_ref_required",
+            "exactly one of preloaded_ref or custom_comment_id must be set",
+            400,
+        )
+
+
+def _assert_custom_owned_by_caller(
+    custom_comment_id: int, caller: Caller
+) -> None:
+    row = fetch_one(
+        "SELECT organization_id, user_id, is_active "
+        "FROM clinician_quick_comments WHERE id = :id",
+        {"id": custom_comment_id},
+    )
+    if row is None:
+        raise _err("quick_comment_not_found", "no such quick comment", 404)
+    if (
+        row["organization_id"] != caller.organization_id
+        or row["user_id"] != caller.user_id
+    ):
+        # Mask cross-user + cross-org behind a 404 — same pattern as
+        # the create/patch route for quick comments themselves.
+        raise _err("quick_comment_not_found", "no such quick comment", 404)
+    if not row["is_active"]:
+        raise _err(
+            "quick_comment_inactive",
+            "cannot favorite a soft-deleted comment",
+            409,
+        )
+
+
+@router.get("/me/quick-comments/favorites")
+def list_my_quick_comment_favorites(
+    caller: Caller = Depends(require_caller),
+) -> list[dict]:
+    _require_quick_comment_role(caller)
+    rows = fetch_all(
+        f"SELECT {QC_FAV_COLUMNS} FROM clinician_quick_comment_favorites "
+        "WHERE organization_id = :org AND user_id = :uid "
+        "ORDER BY created_at ASC, id ASC",
+        {"org": caller.organization_id, "uid": caller.user_id},
+    )
+    return [dict(r) for r in rows]
+
+
+@router.post(
+    "/me/quick-comments/favorites", status_code=status.HTTP_201_CREATED,
+)
+def favorite_quick_comment(
+    payload: QuickCommentFavoriteBody,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    _require_quick_comment_role(caller)
+    _validate_exactly_one_ref(payload.preloaded_ref, payload.custom_comment_id)
+
+    if payload.custom_comment_id is not None:
+        _assert_custom_owned_by_caller(payload.custom_comment_id, caller)
+
+    # Idempotent upsert: if the row already exists, return it instead
+    # of 409-ing. Keeps the UI simple — a star button just re-fires
+    # POST on every click.
+    existing = fetch_one(
+        f"SELECT {QC_FAV_COLUMNS} FROM clinician_quick_comment_favorites "
+        "WHERE user_id = :uid AND organization_id = :org AND ("
+        "  (preloaded_ref IS NOT NULL AND preloaded_ref = :pre) OR "
+        "  (custom_comment_id IS NOT NULL AND custom_comment_id = :cid)"
+        ")",
+        {
+            "org": caller.organization_id,
+            "uid": caller.user_id,
+            "pre": payload.preloaded_ref,
+            "cid": payload.custom_comment_id,
+        },
+    )
+    if existing is not None:
+        return dict(existing)
+
+    with transaction() as conn:
+        new_id = conn.execute(
+            text(
+                "INSERT INTO clinician_quick_comment_favorites "
+                "(organization_id, user_id, preloaded_ref, custom_comment_id) "
+                "VALUES (:org, :uid, :pre, :cid) RETURNING id"
+            ),
+            {
+                "org": caller.organization_id,
+                "uid": caller.user_id,
+                "pre": (payload.preloaded_ref or "").strip() or None,
+                "cid": payload.custom_comment_id,
+            },
+        ).mappings().first()["id"]
+
+    from app import audit as _audit
+    _audit.record(
+        event_type="clinician_quick_comment_favorited",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path="/me/quick-comments/favorites",
+        method="POST",
+        detail=(
+            f"favorite_id={new_id} "
+            + (
+                f"preloaded_ref={payload.preloaded_ref}"
+                if payload.preloaded_ref
+                else f"custom_comment_id={payload.custom_comment_id}"
+            )
+        ),
+    )
+
+    row = fetch_one(
+        f"SELECT {QC_FAV_COLUMNS} FROM clinician_quick_comment_favorites "
+        "WHERE id = :id",
+        {"id": int(new_id)},
+    )
+    return dict(row)
+
+
+@router.delete("/me/quick-comments/favorites")
+def unfavorite_quick_comment(
+    preloaded_ref: Optional[str] = Query(
+        None, min_length=1, max_length=64,
+        description="preloaded favorite to remove",
+    ),
+    custom_comment_id: Optional[int] = Query(
+        None, description="custom comment id to unfavorite",
+    ),
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    # DELETE takes query params rather than a JSON body so that every
+    # HTTP client (including proxies + TestClient's `.delete()`)
+    # transports the input reliably — some layers strip DELETE bodies.
+    _require_quick_comment_role(caller)
+    _validate_exactly_one_ref(preloaded_ref, custom_comment_id)
+
+    with transaction() as conn:
+        result = conn.execute(
+            text(
+                "DELETE FROM clinician_quick_comment_favorites "
+                "WHERE user_id = :uid AND organization_id = :org AND ("
+                "  (preloaded_ref IS NOT NULL AND preloaded_ref = :pre) OR "
+                "  (custom_comment_id IS NOT NULL AND custom_comment_id = :cid)"
+                ")"
+            ),
+            {
+                "org": caller.organization_id,
+                "uid": caller.user_id,
+                "pre": preloaded_ref,
+                "cid": custom_comment_id,
+            },
+        )
+        removed = result.rowcount if result.rowcount is not None else 0
+
+    if removed > 0:
+        from app import audit as _audit
+        _audit.record(
+            event_type="clinician_quick_comment_unfavorited",
+            request_id=None,
+            actor_email=caller.email,
+            actor_user_id=caller.user_id,
+            organization_id=caller.organization_id,
+            path="/me/quick-comments/favorites",
+            method="DELETE",
+            detail=(
+                f"preloaded_ref={preloaded_ref}"
+                if preloaded_ref
+                else f"custom_comment_id={custom_comment_id}"
+            ),
+        )
+
+    return {"removed": int(removed)}
+
+
+@router.post(
+    "/me/quick-comments/used", status_code=status.HTTP_202_ACCEPTED,
+)
+def record_quick_comment_use(
+    payload: QuickCommentUsageBody,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Record that a clinician just inserted a quick comment.
+
+    Deliberately a thin audit signal, not a new table. The existing
+    audit pipeline captures user, org, path, method, timestamp,
+    request_id — we only need to add *which* comment (the ref) and
+    optional note context (`note_version_id`, `encounter_id`).
+
+    PHI minimisation: the comment body is NEVER sent over the wire to
+    this endpoint — only the ref identifier. Downstream analytics
+    can join the ref back to the body (which the comment-author
+    sees on their own pad) without the audit log duplicating content.
+
+    Returns 202 Accepted: the event is informational. The draft has
+    already been mutated client-side; this call is a best-effort
+    telemetry signal, and failures should never block the clinician.
+    """
+    _require_quick_comment_role(caller)
+    _validate_exactly_one_ref(payload.preloaded_ref, payload.custom_comment_id)
+
+    if payload.custom_comment_id is not None:
+        # Still mask cross-user + cross-org behind 404 so the audit
+        # event can't be abused to test for existence of another
+        # user's custom comments.
+        _assert_custom_owned_by_caller(payload.custom_comment_id, caller)
+
+    kind = "preloaded" if payload.preloaded_ref else "custom"
+    ref_detail = (
+        f"preloaded_ref={payload.preloaded_ref}"
+        if payload.preloaded_ref
+        else f"custom_comment_id={payload.custom_comment_id}"
+    )
+    ctx_parts: list[str] = []
+    if payload.note_version_id is not None:
+        ctx_parts.append(f"note_version_id={payload.note_version_id}")
+    if payload.encounter_id is not None:
+        ctx_parts.append(f"encounter_id={payload.encounter_id}")
+    ctx = (" " + " ".join(ctx_parts)) if ctx_parts else ""
+
+    from app import audit as _audit
+    _audit.record(
+        event_type="clinician_quick_comment_used",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path="/me/quick-comments/used",
+        method="POST",
+        detail=f"kind={kind} {ref_detail}{ctx}",
+    )
+    return {"recorded": True, "kind": kind}
