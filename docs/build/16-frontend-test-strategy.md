@@ -157,6 +157,21 @@ two suites never cross-contaminate.
 - Mocks extended: `listPatients`, `createPatient`, `listProviders`,
   `createProvider`.
 
+## NoteWorkspace tests (phase 19)
+
+- **+8 tests** in `src/test/NoteWorkspace.test.tsx`.
+- Covers: three-tier render (transcript/findings/draft), findings
+  block + confidence indicator + `data-confidence` attribute,
+  missing-data flags banner, provider edit flips generated-by
+  label to `provider (edited)`, submit-for-review + sign chain,
+  reviewer role hides Sign button + renders `note-sign-disabled-note`,
+  export switches draft to read-only, paste-to-generate happy path.
+- Mocks extend the test harness with the full phase-19 api surface
+  (`listEncounterInputs`, `generateNoteVersion`, `patchNoteVersion`,
+  `signNoteVersion`, `exportNoteVersion`, etc.).
+- `App.test.tsx` extends mocks so the workspace mounting inside
+  `EncounterDetail` doesn't fetch-miss during App-level tests.
+
 ## Gaps not yet covered
 - Visual regression not in CI (documented; OS-specific baselines).
 - No keyboard-only / screen-reader manual QA pass beyond axe's

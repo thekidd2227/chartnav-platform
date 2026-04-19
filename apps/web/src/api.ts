@@ -736,3 +736,187 @@ export function createProvider(
     body: JSON.stringify(body),
   });
 }
+
+// ---------- Transcript ingestion + note drafting (phase 19) ----------
+
+export type InputType =
+  | "audio_upload"
+  | "text_paste"
+  | "manual_entry"
+  | "imported_transcript";
+
+export type InputProcessingStatus =
+  | "queued"
+  | "processing"
+  | "completed"
+  | "failed"
+  | "needs_review";
+
+export type NoteDraftStatus =
+  | "draft"
+  | "provider_review"
+  | "revised"
+  | "signed"
+  | "exported";
+
+export type NoteFormat = "soap" | "assessment_plan" | "consult_note" | "freeform";
+
+export interface EncounterInput {
+  id: number;
+  encounter_id: number;
+  input_type: InputType;
+  processing_status: InputProcessingStatus;
+  transcript_text: string | null;
+  confidence_summary: string | null;
+  source_metadata: string | null;
+  created_by_user_id: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ExtractedFindings {
+  id: number;
+  encounter_id: number;
+  input_id: number | null;
+  chief_complaint: string | null;
+  hpi_summary: string | null;
+  visual_acuity_od: string | null;
+  visual_acuity_os: string | null;
+  iop_od: string | null;
+  iop_os: string | null;
+  structured_json: {
+    diagnoses?: string[];
+    medications?: string[];
+    imaging?: string[];
+    assessment?: string | null;
+    plan?: string | null;
+    follow_up_interval?: string | null;
+    [key: string]: unknown;
+  };
+  extraction_confidence: "high" | "medium" | "low" | null;
+  created_at: string;
+}
+
+export interface NoteVersion {
+  id: number;
+  encounter_id: number;
+  version_number: number;
+  draft_status: NoteDraftStatus;
+  note_format: NoteFormat;
+  note_text: string;
+  source_input_id: number | null;
+  extracted_findings_id: number | null;
+  generated_by: "system" | "manual";
+  provider_review_required: number | boolean;
+  missing_data_flags: string[];
+  signed_at: string | null;
+  signed_by_user_id: number | null;
+  exported_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NoteWithFindings {
+  note: NoteVersion;
+  findings: ExtractedFindings | null;
+}
+
+export function createEncounterInput(
+  email: string,
+  encounterId: number,
+  body: {
+    input_type: InputType;
+    transcript_text?: string | null;
+    processing_status?: InputProcessingStatus | null;
+    confidence_summary?: string | null;
+    source_metadata?: Record<string, unknown> | null;
+  }
+): Promise<EncounterInput> {
+  return request(`/encounters/${encounterId}/inputs`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function listEncounterInputs(
+  email: string,
+  encounterId: number
+): Promise<EncounterInput[]> {
+  return request(`/encounters/${encounterId}/inputs`, { email });
+}
+
+export function generateNoteVersion(
+  email: string,
+  encounterId: number,
+  body: { input_id?: number; note_format?: NoteFormat } = {}
+): Promise<NoteWithFindings> {
+  return request(`/encounters/${encounterId}/notes/generate`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function listEncounterNotes(
+  email: string,
+  encounterId: number
+): Promise<NoteVersion[]> {
+  return request(`/encounters/${encounterId}/notes`, { email });
+}
+
+export function getNoteVersion(
+  email: string,
+  noteId: number
+): Promise<NoteWithFindings> {
+  return request(`/note-versions/${noteId}`, { email });
+}
+
+export function patchNoteVersion(
+  email: string,
+  noteId: number,
+  body: {
+    note_text?: string;
+    draft_status?: NoteDraftStatus;
+    note_format?: NoteFormat;
+  }
+): Promise<NoteVersion> {
+  return request(`/note-versions/${noteId}`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export function submitNoteForReview(
+  email: string,
+  noteId: number
+): Promise<NoteVersion> {
+  return request(`/note-versions/${noteId}/submit-for-review`, {
+    email,
+    method: "POST",
+  });
+}
+
+export function signNoteVersion(
+  email: string,
+  noteId: number
+): Promise<NoteVersion> {
+  return request(`/note-versions/${noteId}/sign`, { email, method: "POST" });
+}
+
+export function exportNoteVersion(
+  email: string,
+  noteId: number
+): Promise<NoteVersion> {
+  return request(`/note-versions/${noteId}/export`, { email, method: "POST" });
+}
+
+export const MISSING_FLAG_LABELS: Record<string, string> = {
+  chief_complaint_missing: "Chief complaint",
+  visual_acuity_missing: "Visual acuity",
+  iop_missing: "Intraocular pressure",
+  diagnosis_missing: "Diagnosis",
+  plan_missing: "Plan",
+  follow_up_interval_missing: "Follow-up interval",
+};

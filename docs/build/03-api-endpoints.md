@@ -36,6 +36,30 @@ Base URL (local dev): `http://127.0.0.1:8000`. All error bodies use
 Encounter responses now also include `patient_id` + `provider_id`
 nullable FKs pointing at the rows above.
 
+## Transcript → note workflow (🔒, org-scoped) — phase 19
+
+| Method | Path                                    | Role | Notes |
+|--------|-----------------------------------------|------|-------|
+| `POST` | `/encounters/{id}/inputs`               | admin + clinician | `input_type`, optional `transcript_text` (required for text_paste / manual_entry / imported_transcript); text inputs default `processing_status=completed`; audio uploads default `queued`. |
+| `GET`  | `/encounters/{id}/inputs`               | any authed | List DESC by id. |
+| `POST` | `/encounters/{id}/notes/generate`       | admin + clinician | Creates `extracted_findings` + `note_versions` v+1. Defaults to most recent `completed` input; returns `{note, findings}`. |
+| `GET`  | `/encounters/{id}/notes`                | any authed | Versions DESC. |
+| `GET`  | `/note-versions/{id}`                   | any authed | Returns `{note, findings}`. |
+| `PATCH`| `/note-versions/{id}`                   | admin + clinician | Edits narrative; auto-flips to `revised` + `generated_by=manual`. Signed/exported → 409 `note_immutable`. |
+| `POST` | `/note-versions/{id}/submit-for-review` | admin + clinician | `draft` / `revised` → `provider_review`. |
+| `POST` | `/note-versions/{id}/sign`              | admin + clinician only | Stamps `signed_at` + `signed_by_user_id`. Reviewer → 403 `role_cannot_sign`. |
+| `POST` | `/note-versions/{id}/export`            | admin + clinician | `signed` → `exported`; stamps `exported_at`. Pre-sign → 409 `note_not_signed`. |
+
+Emits audit events: `encounter_input_created`,
+`note_version_generated`, `note_version_submitted`,
+`note_version_signed`, `note_version_exported`.
+
+New error codes: `invalid_input_type`, `transcript_required`,
+`invalid_processing_status`, `input_not_found`, `input_not_ready`,
+`no_completed_input`, `invalid_note_format`, `invalid_note_status`,
+`invalid_note_transition`, `note_immutable`, `role_cannot_sign`,
+`note_already_signed`, `note_not_signed`, `note_not_found`.
+
 ## Encounters (🔒, org-scoped + RBAC)
 
 ### GET `/encounters`

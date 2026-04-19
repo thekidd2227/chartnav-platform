@@ -4,6 +4,108 @@ Reverse-chronological.
 
 ---
 
+## 2026-04-18 — Phase 19: transcript → findings → note draft → signoff
+
+### Step 1 — Migration `a7b8c9d0e1f2`
+- `encounter_inputs` (input_type, processing_status,
+  transcript_text, confidence_summary, source_metadata JSON,
+  created_by_user_id, timestamps, FK to `encounters`).
+- `extracted_findings` (CC, HPI, OD/OS VA + IOP, structured_json
+  blob, extraction_confidence, FK to input + encounter).
+- `note_versions` (version_number unique per encounter,
+  draft_status, note_format, note_text, source_input_id,
+  extracted_findings_id, generated_by, provider_review_required,
+  missing_data_flags JSON array, signed_at + signed_by_user_id,
+  exported_at, timestamps).
+- Booleans use `sa.text("true")` for Postgres parity.
+
+### Step 2 — Note-generator seam
+- New `apps/api/app/services/note_generator.py` + `services/__init__.py`.
+- `generate_draft(transcript_text, patient_display, provider_display)`
+  returns `GenerationResult(findings, note_text, missing_flags)`.
+- Shipped body is a deterministic regex extractor + SOAP template
+  (no LLM dependency, tests stable). A real model plugs into
+  `_run_generator`; the output contract is locked. Never fabricates
+  values the transcript does not contain — emits `<missing —
+  provider to verify>` placeholders + a missing-flag code instead.
+
+### Step 3 — HTTP surface
+- New endpoints:
+  - `POST /encounters/{id}/inputs`
+  - `GET  /encounters/{id}/inputs`
+  - `POST /encounters/{id}/notes/generate`
+  - `GET  /encounters/{id}/notes`
+  - `GET  /note-versions/{id}`
+  - `PATCH /note-versions/{id}`
+  - `POST /note-versions/{id}/submit-for-review`
+  - `POST /note-versions/{id}/sign`
+  - `POST /note-versions/{id}/export`
+- Transitions + role rules enforced at the API layer. Signed notes
+  are immutable (PATCH → 409 `note_immutable`). Only
+  admin/clinician can sign. Export requires signed state. Audit
+  events emitted on every meaningful action.
+
+### Step 4 — Provider review UI
+- New `apps/web/src/NoteWorkspace.tsx` — three-tier trust layout:
+  transcript input · extracted findings (with confidence + missing
+  flags) · note draft (editable → submit → sign → export).
+- Provider-edit of the draft text auto-flips status to `revised`
+  and `generated_by=manual` so the UI can always tell generator
+  output from provider-edited content.
+- Reviewer role sees a read-only note and an explicit disabled-sign
+  subtle-note; admins + clinicians get full workflow.
+- Version picker surfaces below the draft once v2+ exists.
+- Signed notes → Export button stamps `exported_at` and downloads
+  `chartnav-note-<encounter>-v<n>.txt`; Copy-to-clipboard button
+  available post-sign.
+- Trust breadcrumb at the top of the workspace spells out
+  `transcript → extracted facts → AI draft → provider signed`.
+
+### Step 5 — api.ts
+- New types: `InputType`, `InputProcessingStatus`, `NoteDraftStatus`,
+  `NoteFormat`, `EncounterInput`, `ExtractedFindings`, `NoteVersion`,
+  `NoteWithFindings`.
+- New functions: `createEncounterInput`, `listEncounterInputs`,
+  `generateNoteVersion`, `listEncounterNotes`, `getNoteVersion`,
+  `patchNoteVersion`, `submitNoteForReview`, `signNoteVersion`,
+  `exportNoteVersion`.
+- `MISSING_FLAG_LABELS` constant maps flag codes to human labels.
+
+### Step 6 — Tests
+- **Backend**: 174/174 pytest. New `tests/test_transcript_to_note.py`
+  (+19) covers ingest defaults, RBAC, generation + versioning
+  preservation, missing-flag emission, provider edit → revised,
+  submit-for-review, sign (RBAC + metadata), signed-immutable,
+  export-only-from-signed, cross-org 404, audit-event trail.
+- **Frontend**: 42/42 Vitest. New
+  `src/test/NoteWorkspace.test.tsx` (+8): three tiers render
+  distinctly, findings + confidence + missing-flags visible,
+  provider edit flips generated-by label, submit→sign path,
+  reviewer sees no Sign button + disabled-note, export downloads +
+  switches to read-only, paste+generate happy path.
+- **E2E**: Playwright 17 workflow + a11y still green. Visual
+  baselines refreshed for the new workspace tiers (4/4 local).
+
+### Step 7 — Docs
+- New `docs/build/30-transcript-to-note.md` — full phase reference
+  (trust model, data model, generator seam, HTTP surface, UI
+  layout, export, verification matrix, explicit non-goals).
+- Updated `01-current-state`, `03-api-endpoints`, `04-data-model`,
+  `05-build-log` (this entry), `06-known-gaps`, `08-test-strategy`,
+  `09-ci-and-deploy-hardening`, `15-frontend-integration`,
+  `16-frontend-test-strategy`, `26-platform-mode-and-interoperability`
+  (export/handoff semantics), `02-workflow-state-machine` (note
+  state machine), ER diagram, system-architecture + api-data-flow.
+- `scripts/build_docs.py` picks up section 30; executive summary
+  extended. Final HTML + PDF regenerated.
+
+### Step 8 — Hygiene
+- Dev DB reset to pristine seeded state before commit.
+- Visual baselines refreshed (`*-chromium-darwin.png`).
+- No new runtime deps (generator uses stdlib only).
+
+---
+
 ## 2026-04-18 — Phase 18: native clinical layer + FHIR adapter
 
 ### Step 1 — Migration `f6a7b8c9d0e1`

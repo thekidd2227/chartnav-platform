@@ -1558,3 +1558,597 @@ def create_provider(
         {"id": new_id},
     )
     return row
+
+
+# ===========================================================================
+# Transcript ingestion + note drafting + signoff (phase 19)
+# ===========================================================================
+#
+# The ChartNav wedge: operator feeds an encounter's input (paste, audio
+# metadata, manual notes, or an imported transcript), a generator
+# produces extracted findings + a draft note, a provider reviews and
+# signs. Export is a separate state so the UI can distinguish "signed"
+# from "handed off."
+#
+# Trust model — enforced in both data model + UI:
+#   1. encounter_inputs  = raw transcript-derived source of truth
+#   2. extracted_findings = structured facts the generator saw
+#   3. note_versions     = narrative drafts; only the signed version is
+#                          authoritative; edits create new versions.
+# Each tier is a separate table so the three stages stay distinguishable
+# at audit time.
+
+import json as _json  # namespaced to avoid clobbering existing `json` import
+
+from app.services.note_generator import generate_draft
+
+INPUT_TYPES = {"audio_upload", "text_paste", "manual_entry", "imported_transcript"}
+INPUT_STATUSES = {"queued", "processing", "completed", "failed", "needs_review"}
+
+NOTE_STATUSES = {"draft", "provider_review", "revised", "signed", "exported"}
+NOTE_FORMATS = {"soap", "assessment_plan", "consult_note", "freeform"}
+
+# Allowed forward transitions on note_versions.draft_status.
+# Regeneration intentionally bypasses this table by creating a NEW row.
+NOTE_TRANSITIONS: dict[str, set[str]] = {
+    "draft": {"provider_review", "revised", "signed"},
+    "provider_review": {"revised", "signed", "draft"},
+    "revised": {"provider_review", "signed"},
+    "signed": {"exported"},
+    "exported": set(),
+}
+
+
+INPUT_COLUMNS = (
+    "id, encounter_id, input_type, processing_status, transcript_text, "
+    "confidence_summary, source_metadata, created_by_user_id, "
+    "created_at, updated_at"
+)
+FINDINGS_COLUMNS = (
+    "id, encounter_id, input_id, chief_complaint, hpi_summary, "
+    "visual_acuity_od, visual_acuity_os, iop_od, iop_os, "
+    "structured_json, extraction_confidence, created_at"
+)
+NOTE_COLUMNS = (
+    "id, encounter_id, version_number, draft_status, note_format, "
+    "note_text, source_input_id, extracted_findings_id, generated_by, "
+    "provider_review_required, missing_data_flags, signed_at, "
+    "signed_by_user_id, exported_at, created_at, updated_at"
+)
+
+
+def _findings_row_to_dict(row: dict) -> dict:
+    d = dict(row)
+    try:
+        d["structured_json"] = _json.loads(d.get("structured_json") or "{}")
+    except Exception:
+        d["structured_json"] = {}
+    return d
+
+
+def _note_row_to_dict(row: dict) -> dict:
+    d = dict(row)
+    raw = d.get("missing_data_flags")
+    try:
+        d["missing_data_flags"] = _json.loads(raw) if raw else []
+    except Exception:
+        d["missing_data_flags"] = []
+    return d
+
+
+def _assert_note_transition(current: str, target: str) -> None:
+    if current == target:
+        return
+    allowed = NOTE_TRANSITIONS.get(current, set())
+    if target not in allowed:
+        raise _err(
+            "invalid_note_transition",
+            f"cannot move note from {current!r} to {target!r}",
+            400,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Encounter inputs
+# ---------------------------------------------------------------------------
+
+class EncounterInputCreate(BaseModel):
+    input_type: str = Field(..., description="one of INPUT_TYPES")
+    transcript_text: Optional[str] = None
+    processing_status: Optional[str] = Field(default=None)
+    confidence_summary: Optional[str] = Field(default=None, max_length=32)
+    source_metadata: Optional[dict[str, Any]] = None
+
+
+@router.post(
+    "/encounters/{encounter_id}/inputs",
+    status_code=status.HTTP_201_CREATED,
+)
+def create_encounter_input(
+    encounter_id: int,
+    payload: EncounterInputCreate,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    # Same RBAC as event-creation — clinicians + admins can ingest;
+    # reviewers are read-only.
+    require_create_event(caller)
+    _load_encounter_for_caller(encounter_id, caller)  # 404 if cross-org
+
+    if payload.input_type not in INPUT_TYPES:
+        raise _err(
+            "invalid_input_type",
+            f"input_type must be one of {sorted(INPUT_TYPES)}",
+            400,
+        )
+    requested_status = payload.processing_status or _default_status(payload)
+    if requested_status not in INPUT_STATUSES:
+        raise _err(
+            "invalid_processing_status",
+            f"processing_status must be one of {sorted(INPUT_STATUSES)}",
+            400,
+        )
+    if payload.input_type in {"text_paste", "manual_entry", "imported_transcript"}:
+        if not (payload.transcript_text or "").strip():
+            raise _err(
+                "transcript_required",
+                f"input_type={payload.input_type!r} requires transcript_text",
+                400,
+            )
+
+    with transaction() as conn:
+        new_id = insert_returning_id(
+            conn,
+            "encounter_inputs",
+            {
+                "encounter_id": encounter_id,
+                "input_type": payload.input_type,
+                "processing_status": requested_status,
+                "transcript_text": payload.transcript_text,
+                "confidence_summary": payload.confidence_summary,
+                "source_metadata": (
+                    _json.dumps(payload.source_metadata, sort_keys=True)
+                    if payload.source_metadata is not None
+                    else None
+                ),
+                "created_by_user_id": caller.user_id,
+            },
+        )
+
+    from app import audit as _audit
+    _audit.record(
+        event_type="encounter_input_created",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path=f"/encounters/{encounter_id}/inputs",
+        method="POST",
+        detail=f"input_type={payload.input_type}",
+    )
+
+    row = fetch_one(
+        f"SELECT {INPUT_COLUMNS} FROM encounter_inputs WHERE id = :id",
+        {"id": new_id},
+    )
+    return row
+
+
+def _default_status(payload: "EncounterInputCreate") -> str:
+    # Text-paste and manual entry are "completed" on arrival because the
+    # transcript_text is already present. Audio uploads start "queued"
+    # so a future STT worker can flip them through processing -> completed.
+    if payload.input_type in {"text_paste", "manual_entry", "imported_transcript"}:
+        return "completed"
+    return "queued"
+
+
+@router.get("/encounters/{encounter_id}/inputs")
+def list_encounter_inputs(
+    encounter_id: int,
+    caller: Caller = Depends(require_caller),
+) -> list[dict]:
+    _load_encounter_for_caller(encounter_id, caller)
+    return fetch_all(
+        f"SELECT {INPUT_COLUMNS} FROM encounter_inputs "
+        "WHERE encounter_id = :eid ORDER BY id DESC",
+        {"eid": encounter_id},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Note generation / listing / read / patch / review / sign / export
+# ---------------------------------------------------------------------------
+
+class NoteGenerateBody(BaseModel):
+    input_id: Optional[int] = Field(
+        default=None,
+        description="Specific encounter_input to source from. Defaults "
+        "to the most recent completed input on the encounter.",
+    )
+    note_format: Optional[str] = Field(default="soap")
+
+
+class NotePatchBody(BaseModel):
+    note_text: Optional[str] = None
+    draft_status: Optional[str] = None
+    note_format: Optional[str] = None
+
+
+class NoteSubmitBody(BaseModel):
+    pass
+
+
+class NoteSignBody(BaseModel):
+    pass
+
+
+def _load_note_for_caller(note_id: int, caller: Caller) -> dict:
+    row = fetch_one(
+        f"SELECT {NOTE_COLUMNS}, "
+        "(SELECT organization_id FROM encounters WHERE id = note_versions.encounter_id) AS _org "
+        f"FROM note_versions WHERE id = :id",
+        {"id": note_id},
+    )
+    if row is None or row["_org"] is None:
+        raise _err("note_not_found", "no such note version", 404)
+    if row["_org"] != caller.organization_id:
+        # Same semantics as encounter not-found: cross-org = 404.
+        raise _err("note_not_found", "no such note version", 404)
+    row = dict(row)
+    row.pop("_org", None)
+    return _note_row_to_dict(row)
+
+
+@router.post(
+    "/encounters/{encounter_id}/notes/generate",
+    status_code=status.HTTP_201_CREATED,
+)
+def generate_note(
+    encounter_id: int,
+    payload: NoteGenerateBody,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    require_create_event(caller)  # admin + clinician only
+    enc = _load_encounter_for_caller(encounter_id, caller)
+
+    fmt = payload.note_format or "soap"
+    if fmt not in NOTE_FORMATS:
+        raise _err(
+            "invalid_note_format",
+            f"note_format must be one of {sorted(NOTE_FORMATS)}",
+            400,
+        )
+
+    # Resolve the source input.
+    if payload.input_id is not None:
+        input_row = fetch_one(
+            f"SELECT {INPUT_COLUMNS} FROM encounter_inputs "
+            "WHERE id = :id AND encounter_id = :eid",
+            {"id": payload.input_id, "eid": encounter_id},
+        )
+        if input_row is None:
+            raise _err("input_not_found", "no such encounter input", 404)
+    else:
+        input_row = fetch_one(
+            f"SELECT {INPUT_COLUMNS} FROM encounter_inputs "
+            "WHERE encounter_id = :eid AND processing_status = 'completed' "
+            "ORDER BY id DESC LIMIT 1",
+            {"eid": encounter_id},
+        )
+        if input_row is None:
+            raise _err(
+                "no_completed_input",
+                "encounter has no completed input to generate from; "
+                "POST /encounters/{id}/inputs first",
+                409,
+            )
+
+    if input_row["processing_status"] != "completed":
+        raise _err(
+            "input_not_ready",
+            f"input is {input_row['processing_status']!r}, expected "
+            "'completed' before generation",
+            409,
+        )
+
+    # Generate.
+    result = generate_draft(
+        transcript_text=input_row.get("transcript_text") or "",
+        patient_display=(
+            enc.get("patient_name") or enc.get("patient_identifier") or "<patient>"
+        ),
+        provider_display=enc.get("provider_name") or "<provider>",
+    )
+
+    with transaction() as conn:
+        findings_id = insert_returning_id(
+            conn,
+            "extracted_findings",
+            {
+                "encounter_id": encounter_id,
+                "input_id": input_row["id"],
+                "chief_complaint": result.findings.get("chief_complaint"),
+                "hpi_summary": result.findings.get("hpi_summary"),
+                "visual_acuity_od": result.findings.get("visual_acuity_od"),
+                "visual_acuity_os": result.findings.get("visual_acuity_os"),
+                "iop_od": result.findings.get("iop_od"),
+                "iop_os": result.findings.get("iop_os"),
+                "structured_json": _json.dumps(
+                    result.findings.get("structured_json", {}), sort_keys=True
+                ),
+                "extraction_confidence": result.findings.get("extraction_confidence"),
+            },
+        )
+
+        # version_number: max(existing)+1 for this encounter.
+        max_row = conn.execute(
+            text(
+                "SELECT COALESCE(MAX(version_number), 0) AS n "
+                "FROM note_versions WHERE encounter_id = :eid"
+            ),
+            {"eid": encounter_id},
+        ).mappings().first()
+        next_version = int(max_row["n"]) + 1 if max_row else 1
+
+        new_note_id = insert_returning_id(
+            conn,
+            "note_versions",
+            {
+                "encounter_id": encounter_id,
+                "version_number": next_version,
+                "draft_status": "draft",
+                "note_format": fmt,
+                "note_text": result.note_text,
+                "source_input_id": input_row["id"],
+                "extracted_findings_id": findings_id,
+                "generated_by": "system",
+                "provider_review_required": True,
+                "missing_data_flags": _json.dumps(result.missing_flags),
+            },
+        )
+
+    from app import audit as _audit
+    _audit.record(
+        event_type="note_version_generated",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path=f"/encounters/{encounter_id}/notes/generate",
+        method="POST",
+        detail=(
+            f"note_id={new_note_id} version={next_version} "
+            f"input_id={input_row['id']} flags={len(result.missing_flags)}"
+        ),
+    )
+
+    note_row = fetch_one(
+        f"SELECT {NOTE_COLUMNS} FROM note_versions WHERE id = :id",
+        {"id": new_note_id},
+    )
+    findings_row = fetch_one(
+        f"SELECT {FINDINGS_COLUMNS} FROM extracted_findings WHERE id = :id",
+        {"id": findings_id},
+    )
+    return {
+        "note": _note_row_to_dict(note_row),
+        "findings": _findings_row_to_dict(findings_row),
+    }
+
+
+@router.get("/encounters/{encounter_id}/notes")
+def list_encounter_notes(
+    encounter_id: int,
+    caller: Caller = Depends(require_caller),
+) -> list[dict]:
+    _load_encounter_for_caller(encounter_id, caller)
+    rows = fetch_all(
+        f"SELECT {NOTE_COLUMNS} FROM note_versions "
+        "WHERE encounter_id = :eid ORDER BY version_number DESC",
+        {"eid": encounter_id},
+    )
+    return [_note_row_to_dict(r) for r in rows]
+
+
+@router.get("/note-versions/{note_id}")
+def get_note_version(
+    note_id: int,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    note = _load_note_for_caller(note_id, caller)
+    findings = None
+    if note.get("extracted_findings_id"):
+        row = fetch_one(
+            f"SELECT {FINDINGS_COLUMNS} FROM extracted_findings WHERE id = :id",
+            {"id": note["extracted_findings_id"]},
+        )
+        if row:
+            findings = _findings_row_to_dict(row)
+    return {"note": note, "findings": findings}
+
+
+@router.patch("/note-versions/{note_id}")
+def patch_note_version(
+    note_id: int,
+    payload: NotePatchBody,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    require_create_event(caller)
+    note = _load_note_for_caller(note_id, caller)
+
+    if note["draft_status"] in {"signed", "exported"}:
+        raise _err(
+            "note_immutable",
+            f"note is {note['draft_status']!r} and cannot be edited; "
+            "regenerate or start a revision",
+            409,
+        )
+
+    updates: dict[str, Any] = {"updated_at": text("CURRENT_TIMESTAMP")}  # type: ignore[dict-item]
+    set_parts: list[str] = ["updated_at = CURRENT_TIMESTAMP"]
+    params: dict[str, Any] = {"id": note_id}
+
+    if payload.note_text is not None:
+        set_parts.append("note_text = :text")
+        params["text"] = payload.note_text
+        # Any provider edit promotes "draft" → "revised" implicitly, so
+        # the UI can distinguish generator output from provider-edited.
+        if note["draft_status"] == "draft":
+            set_parts.append("draft_status = 'revised'")
+            set_parts.append("generated_by = 'manual'")
+
+    if payload.note_format is not None:
+        if payload.note_format not in NOTE_FORMATS:
+            raise _err(
+                "invalid_note_format",
+                f"note_format must be one of {sorted(NOTE_FORMATS)}",
+                400,
+            )
+        set_parts.append("note_format = :fmt")
+        params["fmt"] = payload.note_format
+
+    if payload.draft_status is not None:
+        if payload.draft_status not in NOTE_STATUSES:
+            raise _err(
+                "invalid_note_status",
+                f"draft_status must be one of {sorted(NOTE_STATUSES)}",
+                400,
+            )
+        _assert_note_transition(note["draft_status"], payload.draft_status)
+        set_parts.append("draft_status = :ds")
+        params["ds"] = payload.draft_status
+
+    with transaction() as conn:
+        conn.execute(
+            text(
+                f"UPDATE note_versions SET {', '.join(set_parts)} "
+                "WHERE id = :id"
+            ),
+            params,
+        )
+
+    updated = _load_note_for_caller(note_id, caller)
+    return updated
+
+
+@router.post("/note-versions/{note_id}/submit-for-review")
+def submit_note_for_review(
+    note_id: int,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    require_create_event(caller)
+    note = _load_note_for_caller(note_id, caller)
+    _assert_note_transition(note["draft_status"], "provider_review")
+    with transaction() as conn:
+        conn.execute(
+            text(
+                "UPDATE note_versions SET draft_status = 'provider_review', "
+                "updated_at = CURRENT_TIMESTAMP WHERE id = :id"
+            ),
+            {"id": note_id},
+        )
+
+    from app import audit as _audit
+    _audit.record(
+        event_type="note_version_submitted",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path=f"/note-versions/{note_id}/submit-for-review",
+        method="POST",
+        detail=f"note_id={note_id}",
+    )
+    return _load_note_for_caller(note_id, caller)
+
+
+@router.post("/note-versions/{note_id}/sign")
+def sign_note(
+    note_id: int,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    # Only admin + clinician can sign — reviewers can read notes but
+    # cannot legally attest to the content.
+    if caller.role not in {"admin", "clinician"}:
+        raise _err(
+            "role_cannot_sign",
+            "only admin or clinician may sign a note version",
+            403,
+        )
+    note = _load_note_for_caller(note_id, caller)
+    if note["draft_status"] == "signed":
+        raise _err("note_already_signed", "note is already signed", 409)
+    if note["draft_status"] not in {"draft", "provider_review", "revised"}:
+        raise _err(
+            "invalid_note_transition",
+            f"cannot sign from {note['draft_status']!r}",
+            400,
+        )
+
+    with transaction() as conn:
+        conn.execute(
+            text(
+                "UPDATE note_versions SET "
+                "draft_status = 'signed', "
+                "signed_at = CURRENT_TIMESTAMP, "
+                "signed_by_user_id = :uid, "
+                "updated_at = CURRENT_TIMESTAMP "
+                "WHERE id = :id"
+            ),
+            {"id": note_id, "uid": caller.user_id},
+        )
+
+    from app import audit as _audit
+    _audit.record(
+        event_type="note_version_signed",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path=f"/note-versions/{note_id}/sign",
+        method="POST",
+        detail=f"note_id={note_id} version={note['version_number']}",
+    )
+    return _load_note_for_caller(note_id, caller)
+
+
+@router.post("/note-versions/{note_id}/export")
+def export_note(
+    note_id: int,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Mark a signed note as handed off (copy/download/paste etc.).
+
+    Export is a separate state from sign: the provider may sign at
+    11:07 and hand off to the EHR at 11:30, and we want both timestamps.
+    """
+    require_create_event(caller)
+    note = _load_note_for_caller(note_id, caller)
+    if note["draft_status"] != "signed":
+        raise _err(
+            "note_not_signed",
+            "only signed notes can be exported",
+            409,
+        )
+    with transaction() as conn:
+        conn.execute(
+            text(
+                "UPDATE note_versions SET draft_status = 'exported', "
+                "exported_at = CURRENT_TIMESTAMP, "
+                "updated_at = CURRENT_TIMESTAMP WHERE id = :id"
+            ),
+            {"id": note_id},
+        )
+
+    from app import audit as _audit
+    _audit.record(
+        event_type="note_version_exported",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path=f"/note-versions/{note_id}/export",
+        method="POST",
+        detail=f"note_id={note_id}",
+    )
+    return _load_note_for_caller(note_id, caller)

@@ -18,6 +18,17 @@ vi.mock("../api", async () => {
     updateEncounterStatus: vi.fn(),
     listLocations: vi.fn(),
     createEncounter: vi.fn(),
+    // Phase-19 workspace endpoints — keep App-level tests from
+    // blowing up on NoteWorkspace mounting inside the detail pane.
+    listEncounterInputs: vi.fn().mockResolvedValue([]),
+    listEncounterNotes: vi.fn().mockResolvedValue([]),
+    getNoteVersion: vi.fn().mockResolvedValue({ note: null, findings: null }),
+    createEncounterInput: vi.fn(),
+    generateNoteVersion: vi.fn(),
+    patchNoteVersion: vi.fn(),
+    submitNoteForReview: vi.fn(),
+    signNoteVersion: vi.fn(),
+    exportNoteVersion: vi.fn(),
   };
 });
 

@@ -741,3 +741,159 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
   font-size: 12.5px;
   color: var(--cn-muted);
 }
+
+/* ============================================================
+   Note workspace (phase 19)
+   ------------------------------------------------------------
+   Three vertical tiers for transcript → findings → draft +
+   signoff. Visually distinct so the trust model stays legible.
+   ============================================================ */
+
+.workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 18px;
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-lg);
+  background: var(--cn-surface);
+  box-shadow: var(--cn-shadow-sm);
+}
+.workspace__header h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--cn-muted);
+  font-weight: 600;
+}
+.workspace__meta { margin: 0 0 6px; }
+.workspace__trust {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 0;
+  font-size: 11.5px;
+}
+.workspace__trust-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: var(--cn-radius-pill);
+  font-weight: 600;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border: 1px solid var(--cn-line);
+  background: var(--cn-surface-alt);
+}
+.workspace__trust-pill--transcript {
+  background: #F3F4F6;
+  color: #374151;
+  border-color: #E5E7EB;
+}
+.workspace__trust-pill--findings {
+  background: var(--cn-info-tint);
+  color: var(--cn-info);
+  border-color: #BFDBFE;
+}
+.workspace__trust-pill--draft {
+  background: var(--cn-primary-tint);
+  color: var(--cn-primary-active);
+  border-color: rgba(11, 110, 121, 0.25);
+}
+.workspace__trust-pill--signed {
+  background: var(--cn-success-tint);
+  color: var(--cn-success);
+  border-color: rgba(21, 128, 61, 0.3);
+}
+.workspace__trust-arrow {
+  color: var(--cn-dim);
+}
+
+.workspace__tier {
+  border: 1px solid var(--cn-line);
+  border-left-width: 3px;
+  border-radius: var(--cn-radius-md);
+  padding: 14px 16px;
+  background: var(--cn-surface-alt);
+}
+.workspace__tier h4 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--cn-fg);
+  font-weight: 600;
+}
+.workspace__tier--transcript {
+  border-left-color: #9CA3AF;
+}
+.workspace__tier--findings {
+  border-left-color: var(--cn-info);
+}
+.workspace__tier--draft {
+  border-left-color: var(--cn-primary);
+}
+.workspace__tier-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.workspace__transcript {
+  white-space: pre-wrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  padding: 10px 12px;
+  background: var(--cn-surface);
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-sm);
+  margin: 6px 0 0;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.workspace__draft {
+  width: 100%;
+  min-height: 360px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  padding: 12px 14px;
+  border: 1px solid var(--cn-line-strong);
+  border-radius: var(--cn-radius-md);
+  background: var(--cn-surface);
+  color: var(--cn-fg);
+  resize: vertical;
+  margin-top: 8px;
+}
+.workspace__draft--readonly {
+  white-space: pre-wrap;
+  min-height: auto;
+  background: var(--cn-surface-alt);
+}
+
+.workspace__versions {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.workspace__versions .btn { padding: 3px 9px; font-size: 12px; }
+
+[data-testid="findings-confidence"][data-confidence="low"] {
+  color: var(--cn-warning);
+  font-weight: 600;
+}
+[data-testid="findings-confidence"][data-confidence="medium"] {
+  color: var(--cn-info);
+  font-weight: 600;
+}
+[data-testid="findings-confidence"][data-confidence="high"] {
+  color: var(--cn-success);
+  font-weight: 600;
+}

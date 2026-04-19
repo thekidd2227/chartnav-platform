@@ -256,6 +256,33 @@ surface, filters. Details in `17-e2e-and-release.md`. Command:
 - Both panes wire into the existing admin-banner error flow — any
   `ApiError` lands in the shared banner.
 
+## Note workspace (phase 19)
+
+The encounter detail pane now mounts `NoteWorkspace` (new
+`apps/web/src/NoteWorkspace.tsx`) above the existing timeline. Three
+visually distinct tiers make the trust model legible at a glance:
+
+1. **Transcript input** — chip-list of `encounter_inputs` with
+   processing-status pills; paste-and-ingest textarea + **Generate
+   draft** button for admins and clinicians.
+2. **Extracted findings** — read-only definition list (CC · HPI ·
+   VA OD/OS · IOP OD/OS · diagnoses · plan · follow-up) plus a
+   color-coded **extraction confidence** indicator (green high /
+   blue medium / amber low) and a missing-data checklist banner
+   naming every item the provider must verify before signing.
+3. **Note draft** — editable textarea while the note is
+   `draft`/`provider_review`/`revised`; read-only `<pre>` once
+   `signed` or `exported`. Actions ordered left-to-right: Save
+   provider edit → Submit for review → Sign → Export / Copy.
+
+A trust breadcrumb at the top (`transcript → extracted facts → AI
+draft → provider signed`) reinforces the three-tier model. Status
+pills reuse the brand-aligned palette. Exporting a signed note
+triggers a `.txt` download named `chartnav-note-<encounter>-v<n>.txt`.
+
+Reviewer role: Sign button is hidden and a small subtle-note makes
+the RBAC reason explicit.
+
 ## What this phase explicitly does NOT do
 
 - No real login flow — `X-User-Email` is still dev transport.

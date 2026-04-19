@@ -11,6 +11,12 @@ erDiagram
   patients      ||--o{ encounters       : "subject of (nullable FK)"
   providers     ||--o{ encounters       : "primary provider (nullable FK)"
   encounters    ||--o{ workflow_events  : "emits"
+  encounters    ||--o{ encounter_inputs : "captures (phase 19)"
+  encounters    ||--o{ extracted_findings: "extracted for (phase 19)"
+  encounters    ||--o{ note_versions    : "drafts + signs (phase 19)"
+  encounter_inputs  ||--o{ extracted_findings : "source of"
+  encounter_inputs  ||--o{ note_versions      : "source of"
+  extracted_findings||--o{ note_versions      : "feeds"
 
   security_audit_events {
     int id PK
@@ -96,6 +102,50 @@ erDiagram
     string event_type
     text event_data
     datetime created_at
+  }
+  encounter_inputs {
+    int id PK
+    int encounter_id FK
+    string input_type "audio_upload | text_paste | manual_entry | imported_transcript"
+    string processing_status "queued | processing | completed | failed | needs_review"
+    text transcript_text "nullable"
+    string confidence_summary "nullable"
+    text source_metadata "JSON blob"
+    int created_by_user_id FK
+    datetime created_at
+    datetime updated_at
+  }
+  extracted_findings {
+    int id PK
+    int encounter_id FK
+    int input_id FK
+    text chief_complaint
+    text hpi_summary
+    string visual_acuity_od
+    string visual_acuity_os
+    string iop_od
+    string iop_os
+    text structured_json "JSON: diagnoses[], medications[], plan, follow_up_interval"
+    string extraction_confidence "high | medium | low"
+    datetime created_at
+  }
+  note_versions {
+    int id PK
+    int encounter_id FK
+    int version_number "unique per encounter"
+    string draft_status "draft | provider_review | revised | signed | exported"
+    string note_format "soap | assessment_plan | consult_note | freeform"
+    text note_text
+    int source_input_id FK
+    int extracted_findings_id FK
+    string generated_by "system | manual"
+    boolean provider_review_required
+    text missing_data_flags "JSON array"
+    datetime signed_at
+    int signed_by_user_id FK
+    datetime exported_at
+    datetime created_at
+    datetime updated_at
   }
 ```
 

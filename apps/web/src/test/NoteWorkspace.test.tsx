@@ -1,0 +1,281 @@
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("../api", async () => {
+  const actual = await vi.importActual<typeof import("../api")>("../api");
+  return {
+    ...actual,
+    listEncounterInputs: vi.fn(),
+    createEncounterInput: vi.fn(),
+    listEncounterNotes: vi.fn(),
+    generateNoteVersion: vi.fn(),
+    getNoteVersion: vi.fn(),
+    patchNoteVersion: vi.fn(),
+    submitNoteForReview: vi.fn(),
+    signNoteVersion: vi.fn(),
+    exportNoteVersion: vi.fn(),
+  };
+});
+
+import * as api from "../api";
+import { NoteWorkspace } from "../NoteWorkspace";
+
+const ADMIN: api.Me = {
+  user_id: 1,
+  email: "admin@chartnav.local",
+  full_name: "Admin",
+  role: "admin",
+  organization_id: 1,
+};
+const CLIN: api.Me = { ...ADMIN, user_id: 2, email: "clin@chartnav.local", role: "clinician" };
+const REV: api.Me = { ...ADMIN, user_id: 3, email: "rev@chartnav.local", role: "reviewer" };
+
+const FINDINGS: api.ExtractedFindings = {
+  id: 10,
+  encounter_id: 1,
+  input_id: 5,
+  chief_complaint: "blurry vision right eye",
+  hpi_summary: "3 weeks duration",
+  visual_acuity_od: "20/40",
+  visual_acuity_os: "20/20",
+  iop_od: "15",
+  iop_os: "17",
+  structured_json: {
+    diagnoses: ["posterior capsular opacification"],
+    medications: [],
+    imaging: [],
+    plan: "YAG capsulotomy",
+    follow_up_interval: "4 weeks",
+  },
+  extraction_confidence: "medium",
+  created_at: "2026-04-18 20:00:00",
+};
+
+function baseNote(overrides: Partial<api.NoteVersion> = {}): api.NoteVersion {
+  return {
+    id: 100,
+    encounter_id: 1,
+    version_number: 1,
+    draft_status: "draft",
+    note_format: "soap",
+    note_text: "SUBJECTIVE\nChief complaint: blurry vision.\n",
+    source_input_id: 5,
+    extracted_findings_id: 10,
+    generated_by: "system",
+    provider_review_required: 1,
+    missing_data_flags: ["iop_missing", "plan_missing"],
+    signed_at: null,
+    signed_by_user_id: null,
+    exported_at: null,
+    created_at: "2026-04-18 20:00:00",
+    updated_at: "2026-04-18 20:00:00",
+    ...overrides,
+  };
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  (api.listEncounterInputs as any).mockResolvedValue([
+    {
+      id: 5,
+      encounter_id: 1,
+      input_type: "text_paste",
+      processing_status: "completed",
+      transcript_text: "OD 20/40, OS 20/20.",
+      confidence_summary: null,
+      source_metadata: null,
+      created_by_user_id: 1,
+      created_at: "2026-04-18 20:00:00",
+      updated_at: "2026-04-18 20:00:00",
+    },
+  ]);
+  (api.listEncounterNotes as any).mockResolvedValue([baseNote()]);
+  (api.getNoteVersion as any).mockResolvedValue({
+    note: baseNote(),
+    findings: FINDINGS,
+  });
+  (api.generateNoteVersion as any).mockImplementation(async () => ({
+    note: baseNote({ version_number: 2, id: 101 }),
+    findings: FINDINGS,
+  }));
+  (api.patchNoteVersion as any).mockImplementation(async (_e, _id, body) =>
+    baseNote({
+      ...baseNote(),
+      draft_status: body.draft_status ?? "revised",
+      generated_by: body.note_text ? "manual" : "system",
+      note_text: body.note_text ?? baseNote().note_text,
+    })
+  );
+  (api.submitNoteForReview as any).mockResolvedValue(
+    baseNote({ draft_status: "provider_review" })
+  );
+  (api.signNoteVersion as any).mockResolvedValue(
+    baseNote({
+      draft_status: "signed",
+      signed_at: "2026-04-18 20:10:00",
+      signed_by_user_id: 2,
+    })
+  );
+  (api.exportNoteVersion as any).mockResolvedValue(
+    baseNote({
+      draft_status: "exported",
+      signed_at: "2026-04-18 20:10:00",
+      exported_at: "2026-04-18 20:11:00",
+    })
+  );
+  (api.createEncounterInput as any).mockResolvedValue({});
+});
+
+function renderWorkspace(me: api.Me = CLIN) {
+  return render(
+    <NoteWorkspace
+      identity={me.email}
+      me={me}
+      encounterId={1}
+      patientDisplay="Morgan Lee"
+      providerDisplay="Dr. Carter"
+    />
+  );
+}
+
+// ---------------------------------------------------------------------
+
+describe("NoteWorkspace", () => {
+  it("renders three distinct trust tiers (transcript, findings, draft)", async () => {
+    renderWorkspace();
+    await screen.findByTestId("workspace-tier-transcript");
+    await screen.findByTestId("workspace-tier-findings");
+    await screen.findByTestId("workspace-tier-draft");
+    expect(screen.getByTestId("workspace-tier-transcript")).toHaveTextContent(
+      /transcript input/i
+    );
+    expect(screen.getByTestId("workspace-tier-findings")).toHaveTextContent(
+      /extracted findings/i
+    );
+    expect(screen.getByTestId("workspace-tier-draft")).toHaveTextContent(
+      /note draft/i
+    );
+  });
+
+  it("renders extracted findings + visible confidence", async () => {
+    renderWorkspace();
+    const fb = await screen.findByTestId("findings-block");
+    expect(within(fb).getByTestId("findings-cc")).toHaveTextContent(
+      "blurry vision right eye"
+    );
+    expect(within(fb).getByTestId("findings-va")).toHaveTextContent(
+      "20/40 / 20/20"
+    );
+    expect(within(fb).getByTestId("findings-iop")).toHaveTextContent(
+      "15 / 17"
+    );
+    const confidence = within(fb).getByTestId("findings-confidence");
+    expect(confidence).toHaveTextContent("medium");
+    expect(confidence).toHaveAttribute("data-confidence", "medium");
+  });
+
+  it("shows missing-data flags as a provider-verify checklist", async () => {
+    renderWorkspace();
+    const banner = await screen.findByTestId("missing-flags-banner");
+    expect(banner).toHaveTextContent(/intraocular pressure/i);
+    expect(banner).toHaveTextContent(/plan/i);
+  });
+
+  it("provider edit flips generated-by to 'provider (edited)'", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    const textarea = await screen.findByTestId("note-draft-textarea");
+    await user.clear(textarea);
+    await user.type(textarea, "provider rewrote this line");
+    await user.click(screen.getByTestId("note-save-edit"));
+    await waitFor(() => {
+      expect(api.patchNoteVersion).toHaveBeenCalledWith(
+        CLIN.email,
+        100,
+        expect.objectContaining({ note_text: "provider rewrote this line" })
+      );
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("note-generated-by")).toHaveTextContent(
+        /provider \(edited\)/i
+      );
+    });
+  });
+
+  it("submits for review and then clinician can sign", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(await screen.findByTestId("note-submit-review"));
+    await waitFor(() =>
+      expect(api.submitNoteForReview).toHaveBeenCalledWith(CLIN.email, 100)
+    );
+
+    await user.click(screen.getByTestId("note-sign"));
+    await waitFor(() =>
+      expect(api.signNoteVersion).toHaveBeenCalledWith(CLIN.email, 100)
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("note-draft-status")).toHaveTextContent(
+        /signed/i
+      )
+    );
+  });
+
+  it("reviewer sees a disabled-sign note and no sign button", async () => {
+    renderWorkspace(REV);
+    await screen.findByTestId("note-draft-readonly");
+    expect(screen.queryByTestId("note-sign")).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("note-sign-disabled-note")
+    ).toHaveTextContent(/reviewer role cannot sign/i);
+  });
+
+  it("exports a signed note and switches the textarea to read-only", async () => {
+    (api.listEncounterNotes as any).mockResolvedValue([
+      baseNote({
+        draft_status: "signed",
+        signed_at: "2026-04-18 20:10:00",
+      }),
+    ]);
+    (api.getNoteVersion as any).mockResolvedValue({
+      note: baseNote({
+        draft_status: "signed",
+        signed_at: "2026-04-18 20:10:00",
+      }),
+      findings: FINDINGS,
+    });
+    const user = userEvent.setup();
+    renderWorkspace();
+    await screen.findByTestId("note-draft-readonly");
+    await user.click(screen.getByTestId("note-export"));
+    await waitFor(() =>
+      expect(api.exportNoteVersion).toHaveBeenCalledWith(CLIN.email, 100)
+    );
+  });
+
+  it("ingests a transcript paste and triggers a generate", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await screen.findByTestId("workspace-tier-transcript");
+    await user.type(
+      screen.getByTestId("transcript-ingest-textarea"),
+      "OD 20/40, OS 20/20."
+    );
+    await user.click(screen.getByTestId("transcript-ingest-submit"));
+    await waitFor(() =>
+      expect(api.createEncounterInput).toHaveBeenCalledWith(
+        CLIN.email,
+        1,
+        expect.objectContaining({
+          input_type: "text_paste",
+          transcript_text: "OD 20/40, OS 20/20.",
+        })
+      )
+    );
+    await user.click(screen.getByTestId("generate-draft"));
+    await waitFor(() =>
+      expect(api.generateNoteVersion).toHaveBeenCalled()
+    );
+  });
+});

@@ -65,6 +65,31 @@ make docker-build
 - `make verify` (SQLite): 28 pytest + 9 smoke — all green
 - `scripts/pg_verify.sh`: migrations + seed (x2) + smoke + status transition + event write — **PASS**
 
+## Backend coverage (phase 19)
+
+- **174 pytest.** New `tests/test_transcript_to_note.py` (+19):
+  - input creation defaults (text/audio); `transcript_required`
+    for text-type inputs; reviewer RBAC denial; cross-org 404.
+  - `POST /encounters/{id}/notes/generate` creates v1 + findings;
+    regeneration produces v2 and preserves v1; `no_completed_input`
+    when only queued inputs exist.
+  - missing-flag emission on a sparse transcript
+    (`iop_missing`, `visual_acuity_missing`, `plan_missing`).
+  - provider PATCH flips `generated_by=manual` +
+    `draft_status=revised`.
+  - submit-for-review → `provider_review`.
+  - sign: reviewer → 403 `role_cannot_sign`; clinician stamps
+    `signed_at` + `signed_by_user_id`; signed → immutable
+    (PATCH → 409 `note_immutable`).
+  - export requires signed state; stamps `exported_at`.
+  - `GET /note-versions/{id}` returns both note and findings.
+  - audit trail verifies `encounter_input_created`,
+    `note_version_generated`, `note_version_signed`,
+    `note_version_exported`.
+- Frontend: **42 Vitest** including +8 NoteWorkspace tests.
+- Playwright: 17 workflow+a11y unchanged. Visual baselines
+  refreshed (4 local) for the new workspace tiers.
+
 ## Backend coverage (phase 18)
 
 - **155 pytest.** New:

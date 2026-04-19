@@ -39,6 +39,16 @@
 Adds "admin can issue an invitation and download audit CSV" on top of
 the 11 scenarios shipped through phase 13.
 
+## Phase-19 additions
+
+- **Transcript ingestion**: `encounter_inputs` table + `POST/GET /encounters/{id}/inputs`. Supports `audio_upload` (queued → future STT), `text_paste`, `manual_entry`, `imported_transcript`.
+- **Extracted findings**: `extracted_findings` table — structured ophthalmology facts persisted separately from narrative. Confidence + missing-data flags feed the UI's provider-verify checklist.
+- **Note versioning**: `note_versions` table with status machine (`draft → provider_review → revised → signed → exported`), immutability after sign, version_number monotonic per encounter, audit trail on every action.
+- **Provider review UI**: three-tier `NoteWorkspace` (transcript → findings → draft + signoff) embedded in the encounter detail pane. Reviewer role cannot sign (UI + API).
+- **Generator seam**: `app/services/note_generator.py` — deterministic fake today, LLM slot locked at one function, output contract stable.
+- **Export/handoff**: text download + clipboard copy + `exported_at` stamp. No EHR write-back (honest: vendor adapters are future work).
+- **174 pytest** (+19), **42 Vitest** (+8), 17 Playwright workflow+a11y + 4 visual (local, refreshed).
+
 ## Phase-18 additions
 
 - **Native clinical layer**: `patients` + `providers` tables (migration `f6a7b8c9d0e1`); `encounters.patient_id` + `encounters.provider_id` nullable FKs; seed populates real rows and backfills legacy encounters.
@@ -72,6 +82,10 @@ the 11 scenarios shipped through phase 13.
 
 ## Real gaps (prioritized for next phase)
 
+0. **No real LLM wired into the note generator yet** — `app/services/note_generator.py` ships a deterministic regex + SOAP-template fake. The seam is a single function; output contract is locked. Next: swap for a real inference endpoint (or SMART-on-FHIR-aware model).
+0. **No audio STT worker** — `audio_upload` inputs stay `queued` forever. Future work: a background worker that fills `transcript_text` and flips processing_status.
+0. **No EHR write-back for signed notes** — export is download + clipboard only. FHIR `DocumentReference` writes remain `AdapterNotSupported`; vendor adapters layer real push.
+0. **No PDF or HL7 export** — plain text only. Deliberate: honest paste-into-EHR, not a vendor-format we don't own.
 0. **Encounter/status routes still bypass the adapter path** in integrated modes — HTTP handlers hit the native DB directly rather than routing through `resolve_adapter()`. Standalone this is a nop (native adapter wraps the same DB); integrated_* needs the handler-level adapter dispatch + translation work in a follow-up phase so FHIR reads can actually surface through `/encounters`.
 0. **No vendor-specific FHIR adapter yet** — generic `FHIRAdapter` handles the common case. Epic/Cerner/Athena/Nextech SMART-on-FHIR auth + vendor quirks remain future work. Start with SMART-on-FHIR handshake + Epic sandbox.
 0. **FHIR writes are intentionally unsupported** — `update_encounter_status` and `write_note` raise `AdapterNotSupported`. `DocumentReference` + Binary upload is a real project and belongs in a vendor adapter.

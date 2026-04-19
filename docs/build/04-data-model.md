@@ -165,6 +165,37 @@ preferred source of truth going forward; integrations can populate
 `external_ref` on the corresponding `patients`/`providers` row and
 the encounter FK for full lineage.
 
+### `encounter_inputs` / `extracted_findings` / `note_versions` (phase 19)
+
+Three org-scoped tables (via `encounters.organization_id`) that
+persist the transcript → findings → note-draft → signoff pipeline.
+
+| table | purpose | mutable after sign? |
+|-------|---------|:--:|
+| `encounter_inputs` | raw transcript / STT hand-off | ❌ (audit-preserving) |
+| `extracted_findings` | structured facts the generator saw | ❌ (re-generate = new row) |
+| `note_versions` | versioned narrative drafts; final signed note | ❌ once `signed` |
+
+Key columns (condensed — full shape in migration `a7b8c9d0e1f2`):
+
+- `encounter_inputs`: `input_type` {audio_upload · text_paste ·
+  manual_entry · imported_transcript}; `processing_status` {queued ·
+  processing · completed · failed · needs_review}; `transcript_text`
+  nullable; `source_metadata` JSON blob for vendor metadata.
+- `extracted_findings`: top-level `chief_complaint`, `hpi_summary`,
+  `visual_acuity_od/os`, `iop_od/os`, `extraction_confidence`;
+  `structured_json` for `diagnoses[]`, `medications[]`, `imaging[]`,
+  `assessment`, `plan`, `follow_up_interval`.
+- `note_versions`: `version_number` unique per encounter,
+  `draft_status` {draft · provider_review · revised · signed ·
+  exported}, `note_text`, `source_input_id` + `extracted_findings_id`
+  lineage, `generated_by` {system · manual}, `missing_data_flags`
+  JSON array, `signed_at` + `signed_by_user_id`, `exported_at`.
+
+Regeneration is **always** additive — a new `extracted_findings` row
+and a new `note_versions` row with `version_number + 1`. Old
+versions remain immutable for audit.
+
 ## Source of truth per platform mode (phase 16 + 18)
 
 | Object         | `standalone`     | `integrated_readthrough` (stub) | `integrated_writethrough` (stub) |

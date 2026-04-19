@@ -24,6 +24,7 @@ import {
   updateEncounterStatus,
 } from "./api";
 import { AdminPanel } from "./AdminPanel";
+import { NoteWorkspace } from "./NoteWorkspace";
 import { SEEDED_IDENTITIES, loadIdentity, saveIdentity } from "./identity";
 
 type Banner =
@@ -311,6 +312,7 @@ export default function App() {
               encounter={encounter}
               events={events}
               me={me}
+              identity={identity}
               onTransition={onTransition}
               onAddEvent={onAddEvent}
             />
@@ -595,6 +597,7 @@ function EncounterDetail({
   encounter,
   events,
   me,
+  identity,
   onTransition,
   onAddEvent,
 }: {
@@ -603,6 +606,7 @@ function EncounterDetail({
   encounter: Encounter | null;
   events: WorkflowEvent[];
   me: Me | null;
+  identity: string;
   onTransition: (status: string) => Promise<void> | void;
   onAddEvent: (type: string, data: string) => Promise<void> | void;
 }) {
@@ -678,6 +682,20 @@ function EncounterDetail({
           </div>
         )}
       </section>
+
+      {me && (
+        <section className="section">
+          <NoteWorkspace
+            identity={identity}
+            me={me}
+            encounterId={encounter.id}
+            patientDisplay={
+              encounter.patient_name ?? encounter.patient_identifier
+            }
+            providerDisplay={encounter.provider_name}
+          />
+        </section>
+      )}
 
       <section className="section">
         <h3>Timeline ({events.length})</h3>

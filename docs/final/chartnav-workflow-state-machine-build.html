@@ -36,10 +36,10 @@
 <body>
 <header class="cover">
   <h1>ChartNav — Consolidated Build</h1>
-  <div class="sub">Phases 1–18: spine → state machine → auth → RBAC → CI → production seam → Postgres → frontend → E2E → JWT + ops → staging → governance → control plane → invitations → enterprise quality &amp; compliance → platform mode &amp; interoperability → brand &amp; domain alignment → native clinical layer + FHIR<br>
+  <div class="sub">Phases 1–19: spine → state machine → auth → RBAC → CI → production seam → Postgres → frontend → E2E → JWT + ops → staging → governance → control plane → invitations → enterprise quality &amp; compliance → platform mode &amp; interoperability → brand &amp; domain alignment → native clinical layer + FHIR → transcript → findings → note draft → provider signoff<br>
   Repo: <code>thekidd2227/chartnav-platform</code></div>
 </header>
-<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth, org scoping, RBAC</a></li><li><a href="#sec-9">08 — Test strategy</a></li><li><a href="#sec-10">09 — CI & deploy hardening</a></li><li><a href="#sec-11">10 — Doc artifact pipeline</a></li><li><a href="#sec-12">11 — Production-auth seam</a></li><li><a href="#sec-13">12 — Runtime config</a></li><li><a href="#sec-14">13 — Deploy target</a></li><li><a href="#sec-15">14 — Postgres parity</a></li><li><a href="#sec-16">15 — Frontend integration</a></li><li><a href="#sec-17">16 — Frontend test strategy</a></li><li><a href="#sec-18">17 — E2E & release</a></li><li><a href="#sec-19">18 — Operational hardening</a></li><li><a href="#sec-20">19 — Staging deployment</a></li><li><a href="#sec-21">20 — Observability</a></li><li><a href="#sec-22">21 — Staging runbook</a></li><li><a href="#sec-23">22 — Admin governance</a></li><li><a href="#sec-24">23 — Operator control plane</a></li><li><a href="#sec-25">24 — Invitations & governance</a></li><li><a href="#sec-26">25 — Enterprise quality & compliance</a></li><li><a href="#sec-27">26 — Platform mode & interoperability</a></li><li><a href="#sec-28">27 — Adoption & implementation model</a></li><li><a href="#sec-29">28 — Brand & domain alignment</a></li><li><a href="#sec-30">29 — Native clinical layer & FHIR</a></li><li><a href="#sec-31">Diagram — System architecture</a></li><li><a href="#sec-32">Diagram — Encounter status machine</a></li><li><a href="#sec-33">Diagram — ER</a></li><li><a href="#sec-34">Diagram — API / data flow</a></li></ol></nav>
+<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth, org scoping, RBAC</a></li><li><a href="#sec-9">08 — Test strategy</a></li><li><a href="#sec-10">09 — CI & deploy hardening</a></li><li><a href="#sec-11">10 — Doc artifact pipeline</a></li><li><a href="#sec-12">11 — Production-auth seam</a></li><li><a href="#sec-13">12 — Runtime config</a></li><li><a href="#sec-14">13 — Deploy target</a></li><li><a href="#sec-15">14 — Postgres parity</a></li><li><a href="#sec-16">15 — Frontend integration</a></li><li><a href="#sec-17">16 — Frontend test strategy</a></li><li><a href="#sec-18">17 — E2E & release</a></li><li><a href="#sec-19">18 — Operational hardening</a></li><li><a href="#sec-20">19 — Staging deployment</a></li><li><a href="#sec-21">20 — Observability</a></li><li><a href="#sec-22">21 — Staging runbook</a></li><li><a href="#sec-23">22 — Admin governance</a></li><li><a href="#sec-24">23 — Operator control plane</a></li><li><a href="#sec-25">24 — Invitations & governance</a></li><li><a href="#sec-26">25 — Enterprise quality & compliance</a></li><li><a href="#sec-27">26 — Platform mode & interoperability</a></li><li><a href="#sec-28">27 — Adoption & implementation model</a></li><li><a href="#sec-29">28 — Brand & domain alignment</a></li><li><a href="#sec-30">29 — Native clinical layer & FHIR</a></li><li><a href="#sec-31">30 — Transcript → findings → note → signoff</a></li><li><a href="#sec-32">Diagram — System architecture</a></li><li><a href="#sec-33">Diagram — Encounter status machine</a></li><li><a href="#sec-34">Diagram — ER</a></li><li><a href="#sec-35">Diagram — API / data flow</a></li></ol></nav>
 <section id="sec-1"><h2>Executive summary</h2>
 <p>This document consolidates <strong>all</strong> ChartNav backend phases delivered to</p>
 <p>date.</p>
@@ -60,12 +60,14 @@
 <p><strong>Phase 15 — Enterprise quality + compliance.</strong> Five real enterprise-credibility guarantees land together. (1) <strong>Accessibility baseline</strong>: <code>@axe-core/playwright</code> over Chromium, 5 scans covering app shell + encounter list/detail + admin users/audit + invite accept; <code>serious</code>/<code>critical</code> findings are blocking; established fixes land <code>aria-label</code> on the event-type and inline role <code>&lt;select&gt;</code>s. (2) <strong>Visual regression baseline</strong>: 4 Playwright screenshots (encounter list, admin users, admin audit, invite accept) at 1280×820 with animations disabled and <code>maxDiffPixelRatio: 0.02</code>; macOS baselines committed for local dev; CI intentionally skips because Chromium renders differently on Linux (documented gap). (3) <strong>Admin list scaling</strong>: <code>GET /users</code> and <code>GET /locations</code> gain <code>limit</code>, <code>offset</code>, <code>q</code>, and (users) <code>role</code> query params with <code>X-Total-Count</code>/<code>X-Limit</code>/<code>X-Offset</code> headers; UI adds search + Prev/Next pager (25/page) on both tabs. (4) <strong>Feature-flag consumption</strong>: <code>organization.settings.feature_flags.audit_export</code> and <code>.bulk_import</code> now actually hide the <strong>Export CSV</strong> / <strong>Bulk import…</strong> buttons; defaults stay <code>true</code>; documented as a UX toggle, not a security control. (5) <strong>Release compliance signals</strong>: <code>scripts/sbom.py</code> captures project + git sha/tag/dirty + image tag + <code>pip list</code> + <code>npm list</code>; <code>scripts/release_build.sh</code> also emits <code>chartnav-api-&lt;v&gt;.digest.txt</code> via <code>docker image inspect</code>; both are attached to GitHub Releases and included in <code>MANIFEST.txt</code>. (6) <strong>Audit retention scaffolding</strong>: <code>apps/api/app/retention.py::prune_audit_events</code> + <code>scripts/audit_retention.py</code> CLI + <code>CHARTNAV_AUDIT_RETENTION_DAYS</code> env (default <code>0</code> = never); the app never silently prunes. Suites grow to <strong>118 pytest / 28 Vitest / 21 Playwright</strong> (12 workflow + 5 a11y + 4 visual-local).</p>
 <p><strong>Phase 16 — Platform mode &amp; interoperability.</strong> ChartNav is now explicitly two products in one — a standalone lightweight EMR/EHR <strong>and</strong> an integration-first overlay on top of an existing EHR/EMR. The shape is architectural, not a feature flag bolted on. Four real changes landed together: (1) <strong>Operating modes</strong>: <code>CHARTNAV_PLATFORM_MODE</code> ∈ {<code>standalone</code>, <code>integrated_readthrough</code>, <code>integrated_writethrough</code>}, validated at import time; <code>standalone</code> pins the adapter to <code>native</code>, <code>integrated_*</code> defaults to <code>stub</code>. (2) <strong>Adapter boundary</strong> — <code>app/integrations/base.py::ClinicalSystemAdapter</code> protocol (<code>fetch_patient</code>, <code>search_patients</code>, <code>fetch_encounter</code>, <code>update_encounter_status</code>, <code>write_note</code>, <code>sync_reference_data</code>, <code>info</code>), <code>AdapterError</code> / <code>AdapterNotSupported</code>, <code>SourceOfTruth</code> enum. Ships two honest implementations: <code>NativeChartNavAdapter</code> (persists to the ChartNav DB via the same SA Core surface the HTTP routes use, refuses patient ops until a native <code>patients</code> table lands), and <code>StubClinicalSystemAdapter</code> (canned reads, write-through records writes to an in-process list, read-through raises <code>AdapterNotSupported</code>). Vendor adapters plug into a mutable <code>_VENDOR_ADAPTERS</code> registry via <code>register_vendor_adapter(key, factory)</code> — no decorator magic, grep-able. (3) <strong>HTTP surface</strong> — <code>GET /platform</code> (any authenticated caller) returns mode + adapter key + display name + supports-* flags + source-of-truth map. No secret leakage (asserted). (4) <strong>Frontend awareness</strong> — <code>api.ts</code> gains <code>getPlatform</code> + types; <code>AdminPanel</code> fetches <code>/platform</code> on mount and renders a platform banner above the tabs on every admin view. CI fallout from phase 15 was repaired in the same commit window: migration <code>c3d4e5f6a7b8</code> switched from <code>sa.text(&quot;1&quot;)</code> (Postgres-incompatible BOOLEAN default) to <code>sa.text(&quot;true&quot;)</code>, and vitest was downgraded to <code>^3.2.4</code> + lockfile regenerated to fix <code>npm ci</code> on Linux/Node 20 (Vitest 4 had transitively pulled rolldown + Vite 8 + esbuild 0.28, leaving the lockfile incomplete for non-mac platforms). Suites grow to <strong>131 pytest</strong> / <strong>30 Vitest</strong> / 21 Playwright. <code>GET /platform</code> is the only new endpoint.</p>
 <p><strong>Phase 17 — Brand &amp; domain alignment.</strong> Two cuts. (1) <strong>Domain</strong>: <code>chartnav.ai</code> and <code>www.chartnav.ai</code> → <code>https://arcgsystems.com/chartnav/</code> via GoDaddy 301 forwarding (primary, executed in the GoDaddy UI per <code>arcg-live/docs/chartnav-ai-domain-runbook.md</code>) plus an in-repo host-based safety-net in <code>arcg-live/index.html</code> + <code>public/404.html</code> that redirects the visitor before React mounts. The <code>CNAME</code> stays <code>arcgsystems.com</code> — Pages&#x27; primary domain is preserved. (2) <strong>Brand-aligned product UI</strong>: <code>apps/web/src/styles.css</code> now consumes the ChartNav marketing site&#x27;s token set directly (<code>--cn-*</code>). Teal <code>#0B6E79</code> primary with hover/active/tint/soft scale, Inter typography (cv02/03/04/11 features), tightened shadow scale, AA-safe muted text (<code>#475569</code>), pill admin tabs, brand-teal focus rings. The app header renders <code>public/brand/chartnav-logo.svg</code> (the real wordmark with the pulse-cross mark, copied from <code>arcg-live/public/chartnav/brand/</code>), and the app shell gains a footer with a single subtle <strong>Powered by ARCG Systems</strong> attribution (11px uppercase, 0.12em letter-spacing, <code>data-testid=&quot;app-footer-arcg&quot;</code>, Vitest-asserted copy). Legacy token names stayed as aliases so zero component code needed to change. Visual baselines regenerated (<code>visual.spec.ts-snapshots/*-darwin.png</code>); axe-AA 5/5 still green. Suites: 131 pytest, <strong>31 Vitest</strong> (+1 footer), 17 Playwright workflow+a11y, 4 visual. No endpoints changed.</p>
-<p><strong>Phase 18 — Native clinical layer + FHIR adapter (this phase).</strong> ChartNav&#x27;s dual-mode architecture becomes real. (1) <strong>Native clinical ownership</strong> — Alembic migration <code>f6a7b8c9d0e1</code> adds <code>patients</code> (org-scoped, <code>patient_identifier</code> unique per org, <code>external_ref</code> for integration mirroring, DOB + sex-at-birth, <code>is_active</code>) and <code>providers</code> (org-scoped, <code>display_name</code>, 10-digit <code>npi</code> unique per org when non-null, <code>specialty</code>, <code>external_ref</code>, <code>is_active</code>). Two nullable FKs land on <code>encounters</code> (<code>patient_id</code>, <code>provider_id</code>); legacy text fields stay for display continuity. Seed populates real rows and backfills FKs on re-seed without duplicating. (2) <strong>New HTTP surface</strong> — <code>GET/POST /patients</code> (admin + clinician write) and <code>GET/POST /providers</code> (admin-only write) with pagination + search + <code>X-Total-Count</code> headers. Mode-gated: <code>integrated_readthrough</code> returns 409 <code>native_write_disabled_in_integrated_mode</code> on both POSTs so the UI renders a clear banner instead of silently succeeding. (3) <strong>First real external adapter</strong> — <code>FHIRAdapter</code> in <code>app/integrations/fhir.py</code> implements the <code>ClinicalSystemAdapter</code> protocol against generic FHIR R4. Handles <code>fetch_patient</code>, <code>search_patients</code>, <code>fetch_encounter</code> with normalization (MRN extraction, participant display, <code>Encounter.status</code> → ChartNav status mapping). Writes raise <code>AdapterNotSupported</code> honestly. Pluggable transport (fixture injection for tests; urllib by default — zero new runtime deps). Config: <code>CHARTNAV_FHIR_BASE_URL</code>, <code>CHARTNAV_FHIR_AUTH_TYPE</code>, <code>CHARTNAV_FHIR_BEARER_TOKEN</code> with import-time validation. Registered at <code>fhir</code> in the vendor registry. (4) <strong>Native adapter honesty</strong> — <code>NativeChartNavAdapter</code> now implements <code>fetch_patient</code> + <code>search_patients</code>; <code>supports_patient_read</code>/<code>supports_patient_write</code> flip to True; source-of-truth map updated. (5) <strong>Frontend</strong> — <code>api.ts</code> gains <code>Patient</code>/<code>Provider</code> types + CRUD functions; <code>AdminPanel</code> adds Patients + Providers tabs with mode-aware banners + form gating. Suites: <strong>155 pytest</strong> (+24), <strong>34 Vitest</strong> (+3), 17 Playwright + 4 visual (baselines refreshed).</p>
+<p><strong>Phase 18 — Native clinical layer + FHIR adapter.</strong> ChartNav&#x27;s dual-mode architecture becomes real. (1) <strong>Native clinical ownership</strong> — Alembic migration <code>f6a7b8c9d0e1</code> adds <code>patients</code> (org-scoped, <code>patient_identifier</code> unique per org, <code>external_ref</code> for integration mirroring, DOB + sex-at-birth, <code>is_active</code>) and <code>providers</code> (org-scoped, <code>display_name</code>, 10-digit <code>npi</code> unique per org when non-null, <code>specialty</code>, <code>external_ref</code>, <code>is_active</code>). Two nullable FKs land on <code>encounters</code> (<code>patient_id</code>, <code>provider_id</code>); legacy text fields stay for display continuity. Seed populates real rows and backfills FKs on re-seed without duplicating. (2) <strong>New HTTP surface</strong> — <code>GET/POST /patients</code> (admin + clinician write) and <code>GET/POST /providers</code> (admin-only write) with pagination + search + <code>X-Total-Count</code> headers. Mode-gated: <code>integrated_readthrough</code> returns 409 <code>native_write_disabled_in_integrated_mode</code> on both POSTs so the UI renders a clear banner instead of silently succeeding. (3) <strong>First real external adapter</strong> — <code>FHIRAdapter</code> in <code>app/integrations/fhir.py</code> implements the <code>ClinicalSystemAdapter</code> protocol against generic FHIR R4. Handles <code>fetch_patient</code>, <code>search_patients</code>, <code>fetch_encounter</code> with normalization (MRN extraction, participant display, <code>Encounter.status</code> → ChartNav status mapping). Writes raise <code>AdapterNotSupported</code> honestly. Pluggable transport (fixture injection for tests; urllib by default — zero new runtime deps). Config: <code>CHARTNAV_FHIR_BASE_URL</code>, <code>CHARTNAV_FHIR_AUTH_TYPE</code>, <code>CHARTNAV_FHIR_BEARER_TOKEN</code> with import-time validation. Registered at <code>fhir</code> in the vendor registry. (4) <strong>Native adapter honesty</strong> — <code>NativeChartNavAdapter</code> now implements <code>fetch_patient</code> + <code>search_patients</code>; <code>supports_patient_read</code>/<code>supports_patient_write</code> flip to True; source-of-truth map updated. (5) <strong>Frontend</strong> — <code>api.ts</code> gains <code>Patient</code>/<code>Provider</code> types + CRUD functions; <code>AdminPanel</code> adds Patients + Providers tabs with mode-aware banners + form gating. Suites: <strong>155 pytest</strong> (+24), <strong>34 Vitest</strong> (+3), 17 Playwright + 4 visual (baselines refreshed).</p>
+<table><thead><tr><th><strong>Phase 19 — Transcript → findings → note draft → provider signoff (this phase).</strong> The ChartNav wedge becomes real: ingest encounter input, extract structured ophthalmology facts, generate a draft, walk the provider through review/edit/sign/export. Alembic migration <code>a7b8c9d0e1f2</code> adds three org-scoped tables: <code>encounter_inputs</code> (audio upload metadata, pasted text, manual entry, imported transcript — input_type + processing_status + transcript_text + confidence_summary + source_metadata JSON), <code>extracted_findings</code> (CC, HPI, VA OD/OS, IOP OD/OS, extraction_confidence top-level + structured_json for diagnoses/medications/imaging/plan/follow-up), and <code>note_versions</code> (monotonic version_number per encounter, status machine <code>draft → provider_review → revised → signed → exported</code>, <code>generated_by</code> {system</th><th>manual}, missing_data_flags JSON array, signed_at + signed_by_user_id, exported_at). The <strong>trust model is enforced at both the data layer and the UI</strong>: three separate tables → three visually distinct tiers in <code>apps/web/src/NoteWorkspace.tsx</code> (transcript → extracted facts → AI draft → provider signed). Nine new endpoints (<code>POST/GET /encounters/{id}/inputs</code>, <code>POST /encounters/{id}/notes/generate</code>, <code>GET /encounters/{id}/notes</code>, <code>GET/PATCH /note-versions/{id}</code>, <code>POST /note-versions/{id}/submit-for-review</code>, <code>.../sign</code>, <code>.../export</code>); provider edit auto-flips to <code>revised</code> + <code>generated_by=manual</code>; signed/exported notes are immutable (<code>note_immutable</code> 409); reviewers cannot sign (<code>role_cannot_sign</code> 403); audit events recorded on every meaningful action. A dedicated service seam at <code>app/services/note_generator.py</code> is the <strong>one place</strong> a real LLM plugs in — today&#x27;s body is a deterministic regex extractor + SOAP template that never fabricates values the transcript doesn&#x27;t contain, emitting explicit missing-data flags instead. Export is a separate state (download <code>.txt</code> + clipboard copy), honest about not writing back to vendor EHRs. Suites grow to <strong>174 pytest</strong> (+19), <strong>42 Vitest</strong> (+8), 17 Playwright workflow+a11y + 4 visual (baselines refreshed for the new workspace). Zero new runtime deps.</th></tr></thead><tbody>
+</tbody></table>
 <p>Preserved untouched: <code>/health</code>, <code>/</code>, SQLite dev workflow, state machine + filtering surface, workflow_events model, existing endpoint contracts.</p>
 </section>
 <section id="sec-2"><h2>01 — Current state</h2>
 <h1>ChartNav — Current State</h1>
-<p><strong>As of:</strong> 2026-04-18 (phase: native clinical layer + FHIR adapter)</p>
+<p><strong>As of:</strong> 2026-04-18 (phase: transcript → note draft → provider signoff)</p>
 <h2>Repo layout (relevant)</h2>
 <pre class="code lang-"><code>
 chartnav-platform/
@@ -84,15 +86,18 @@ chartnav-platform/
 │   │   │   │   ├── native.py    # NativeChartNavAdapter (patient/provider ops, phase 18)
 │   │   │   │   ├── stub.py      # StubClinicalSystemAdapter
 │   │   │   │   └── fhir.py      # FHIRAdapter — FHIR R4 read-through (phase 18)
-│   │   │   └── api/routes.py    # + GET /platform + /patients + /providers (phase 18)
-│   │   ├── alembic/versions/    # 7 migrations through f6a7b8c9d0e1 (patients+providers)
-│   │   ├── tests/               # 155 pytest (+13 clinical + +11 FHIR)
+│   │   │   ├── services/        # domain service seam (phase 19)
+│   │   │   │   └── note_generator.py  # regex fake today; LLM slot in, shape locked
+│   │   │   └── api/routes.py    # + /inputs + /notes/generate + /note-versions/* (phase 19)
+│   │   ├── alembic/versions/    # 8 migrations through a7b8c9d0e1f2 (transcripts+findings+notes)
+│   │   ├── tests/               # 174 pytest (+19 transcript→note)
 │   │   └── Dockerfile · entrypoint.sh · .env.example
 │   └── web/
 │       ├── src/
 │       │   ├── App.tsx · AdminPanel.tsx · InviteAccept.tsx · api.ts
 │       │   ├── identity.ts · styles.css · main.tsx
-│       │   └── test/            # 31 Vitest (+1 brand footer)
+│       │   ├── NoteWorkspace.tsx  # 3-tier trust model UI (phase 19)
+│       │   └── test/            # 42 Vitest (+8 NoteWorkspace)
 │       ├── public/brand/        # ChartNav logo + mark + favicon SVGs (phase 17)
 │       └── tests/e2e/
 │           ├── workflow.spec.ts (12)
@@ -117,15 +122,16 @@ chartnav-platform/
 <li><strong>Platform mode</strong> (phase 16): <code>CHARTNAV_PLATFORM_MODE</code> ∈ {<code>standalone</code>, <code>integrated_readthrough</code>, <code>integrated_writethrough</code>}. Adapter boundary (<code>ClinicalSystemAdapter</code>) separates ChartNav core from any external EHR/EMR. Ships <code>NativeChartNavAdapter</code> (standalone) + <code>StubClinicalSystemAdapter</code> (integrated placeholder) + <strong><code>FHIRAdapter</code></strong> (phase 18). Vendor adapters plug in via <code>register_vendor_adapter</code>. Config fails loudly on misconfig. <code>GET /platform</code> surfaces mode + adapter + source-of-truth to the UI.</li>
 <li><strong>Native clinical layer</strong> (phase 18): <code>patients</code> and <code>providers</code> tables are org-scoped, soft-active, and carry <code>external_ref</code> for integrated-mode mirroring. <code>encounters.patient_id</code> + <code>encounters.provider_id</code> are nullable FKs so the legacy text fields (<code>patient_identifier</code>, <code>provider_name</code>) continue to render. Standalone mode persists and queries via the native adapter; <code>integrated_readthrough</code> refuses native writes with a clear error code.</li>
 <li><strong>FHIR adapter</strong> (phase 18): real R4 read-through over a pluggable transport. Normalizes Patient + Encounter resources into ChartNav&#x27;s internal shape (status mapping, participant display, MRN extraction, birthDate/gender passthrough). Write paths raise <code>AdapterNotSupported</code> honestly. Config: <code>CHARTNAV_FHIR_BASE_URL</code>, <code>CHARTNAV_FHIR_AUTH_TYPE</code>, <code>CHARTNAV_FHIR_BEARER_TOKEN</code>.</li>
+<li><strong>Transcript → note drafting → signoff</strong> (phase 19): three org-scoped tables (<code>encounter_inputs</code>, <code>extracted_findings</code>, <code>note_versions</code>), a note-generator service seam at <code>app/services/note_generator.py</code> (deterministic fake today; LLM plugs in at one function, output contract locked), provider review workspace in the frontend with three visually distinct trust tiers (transcript → findings → draft → signed), status state machine (<code>draft → provider_review → revised → signed → exported</code>), immutability after sign, audit events on every meaningful action, text download + clipboard export.</li>
 <li><strong>Brand alignment</strong> (phase 17): product UI uses the ChartNav marketing site&#x27;s exact token set (<code>--cn-*</code>). Inter typography, teal <code>#0B6E79</code> primary, real logo SVG in the header, subtle <code>Powered by ARCG Systems</code> footer. Axe-AA contrast preserved.</li>
 <li><strong>Domain</strong>: <code>chartnav.ai</code> → <code>https://arcgsystems.com/chartnav/</code> via GoDaddy 301 forwarding (external) + in-repo host-based safety-net in <code>arcg-live</code>. Runbook: <code>arcg-live/docs/chartnav-ai-domain-runbook.md</code>.</li>
-<li>Alembic head: <code>f6a7b8c9d0e1</code> (phase 18 — native patients + providers + encounter linkage).</li>
+<li>Alembic head: <code>a7b8c9d0e1f2</code> (phase 19 — transcript ingestion + extracted findings + note versions).</li>
 </ul>
 <h2>Testing layers</h2>
 <table><thead><tr><th>Layer</th><th>Tool</th><th>Count</th><th>Notes</th></tr></thead><tbody>
-<tr><td>pytest</td><td>pytest</td><td>155</td><td>+24 native clinical layer + FHIR adapter</td></tr>
+<tr><td>pytest</td><td>pytest</td><td>174</td><td>+19 transcript → note → signoff</td></tr>
 <tr><td>shell smoke</td><td>smoke.sh</td><td>9</td><td>unchanged</td></tr>
-<tr><td>Vitest</td><td>vitest</td><td>34</td><td>+3 patients/providers admin tabs</td></tr>
+<tr><td>Vitest</td><td>vitest</td><td>42</td><td>+8 NoteWorkspace (3-tier trust UI, sign, export)</td></tr>
 <tr><td>Playwright workflow</td><td>@playwright</td><td>12</td><td>unchanged contract</td></tr>
 <tr><td>Playwright a11y</td><td>@axe-core/playwright</td><td>5</td><td>NEW</td></tr>
 <tr><td>Playwright visual</td><td>Playwright snapshots</td><td>4</td><td>NEW (local only)</td></tr>
@@ -137,8 +143,8 @@ chartnav-platform/
 <p>older callers that pass no params still see the first 100 rows.</p>
 <h2>Automation</h2>
 <ul>
-<li><code>make verify</code> → 155 pytest + 9 smoke</li>
-<li><code>make web-verify</code> → 34 vitest + typecheck + build</li>
+<li><code>make verify</code> → 174 pytest + 9 smoke</li>
+<li><code>make web-verify</code> → 42 vitest + typecheck + build</li>
 <li><code>make e2e</code> → 12 workflow + 5 a11y + 4 visual (local)</li>
 <li><code>make e2e-a11y</code> / <code>make e2e-visual</code> / <code>make e2e-visual-update</code></li>
 <li><code>make audit-prune ARGS=&quot;--days 90 --dry-run&quot;</code></li>
@@ -248,6 +254,26 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 </tbody></table>
 <p>Encounter responses now also include <code>patient_id</code> + <code>provider_id</code></p>
 <p>nullable FKs pointing at the rows above.</p>
+<h2>Transcript → note workflow (🔒, org-scoped) — phase 19</h2>
+<table><thead><tr><th>Method</th><th>Path</th><th>Role</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>POST</code></td><td><code>/encounters/{id}/inputs</code></td><td>admin + clinician</td><td><code>input_type</code>, optional <code>transcript_text</code> (required for text_paste / manual_entry / imported_transcript); text inputs default <code>processing_status=completed</code>; audio uploads default <code>queued</code>.</td></tr>
+<tr><td><code>GET</code></td><td><code>/encounters/{id}/inputs</code></td><td>any authed</td><td>List DESC by id.</td></tr>
+<tr><td><code>POST</code></td><td><code>/encounters/{id}/notes/generate</code></td><td>admin + clinician</td><td>Creates <code>extracted_findings</code> + <code>note_versions</code> v+1. Defaults to most recent <code>completed</code> input; returns <code>{note, findings}</code>.</td></tr>
+<tr><td><code>GET</code></td><td><code>/encounters/{id}/notes</code></td><td>any authed</td><td>Versions DESC.</td></tr>
+<tr><td><code>GET</code></td><td><code>/note-versions/{id}</code></td><td>any authed</td><td>Returns <code>{note, findings}</code>.</td></tr>
+<tr><td><code>PATCH</code></td><td><code>/note-versions/{id}</code></td><td>admin + clinician</td><td>Edits narrative; auto-flips to <code>revised</code> + <code>generated_by=manual</code>. Signed/exported → 409 <code>note_immutable</code>.</td></tr>
+<tr><td><code>POST</code></td><td><code>/note-versions/{id}/submit-for-review</code></td><td>admin + clinician</td><td><code>draft</code> / <code>revised</code> → <code>provider_review</code>.</td></tr>
+<tr><td><code>POST</code></td><td><code>/note-versions/{id}/sign</code></td><td>admin + clinician only</td><td>Stamps <code>signed_at</code> + <code>signed_by_user_id</code>. Reviewer → 403 <code>role_cannot_sign</code>.</td></tr>
+<tr><td><code>POST</code></td><td><code>/note-versions/{id}/export</code></td><td>admin + clinician</td><td><code>signed</code> → <code>exported</code>; stamps <code>exported_at</code>. Pre-sign → 409 <code>note_not_signed</code>.</td></tr>
+</tbody></table>
+<p>Emits audit events: <code>encounter_input_created</code>,</p>
+<p><code>note_version_generated</code>, <code>note_version_submitted</code>,</p>
+<p><code>note_version_signed</code>, <code>note_version_exported</code>.</p>
+<p>New error codes: <code>invalid_input_type</code>, <code>transcript_required</code>,</p>
+<p><code>invalid_processing_status</code>, <code>input_not_found</code>, <code>input_not_ready</code>,</p>
+<p><code>no_completed_input</code>, <code>invalid_note_format</code>, <code>invalid_note_status</code>,</p>
+<p><code>invalid_note_transition</code>, <code>note_immutable</code>, <code>role_cannot_sign</code>,</p>
+<p><code>note_already_signed</code>, <code>note_not_signed</code>, <code>note_not_found</code>.</p>
 <h2>Encounters (🔒, org-scoped + RBAC)</h2>
 <h3>GET <code>/encounters</code></h3>
 <p>Any authenticated role. Always <code>WHERE organization_id = caller.org</code>.</p>
@@ -530,6 +556,37 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <p>preferred source of truth going forward; integrations can populate</p>
 <p><code>external_ref</code> on the corresponding <code>patients</code>/<code>providers</code> row and</p>
 <p>the encounter FK for full lineage.</p>
+<h3><code>encounter_inputs</code> / <code>extracted_findings</code> / <code>note_versions</code> (phase 19)</h3>
+<p>Three org-scoped tables (via <code>encounters.organization_id</code>) that</p>
+<p>persist the transcript → findings → note-draft → signoff pipeline.</p>
+<table><thead><tr><th>table</th><th>purpose</th><th>mutable after sign?</th></tr></thead><tbody>
+<tr><td><code>encounter_inputs</code></td><td>raw transcript / STT hand-off</td><td>❌ (audit-preserving)</td></tr>
+<tr><td><code>extracted_findings</code></td><td>structured facts the generator saw</td><td>❌ (re-generate = new row)</td></tr>
+<tr><td><code>note_versions</code></td><td>versioned narrative drafts; final signed note</td><td>❌ once <code>signed</code></td></tr>
+</tbody></table>
+<p>Key columns (condensed — full shape in migration <code>a7b8c9d0e1f2</code>):</p>
+<ul>
+<li><code>encounter_inputs</code>: <code>input_type</code> {audio_upload · text_paste ·</li>
+</ul>
+<p>manual_entry · imported_transcript}; <code>processing_status</code> {queued ·</p>
+<p>processing · completed · failed · needs_review}; <code>transcript_text</code></p>
+<p>nullable; <code>source_metadata</code> JSON blob for vendor metadata.</p>
+<ul>
+<li><code>extracted_findings</code>: top-level <code>chief_complaint</code>, <code>hpi_summary</code>,</li>
+</ul>
+<p><code>visual_acuity_od/os</code>, <code>iop_od/os</code>, <code>extraction_confidence</code>;</p>
+<p><code>structured_json</code> for <code>diagnoses[]</code>, <code>medications[]</code>, <code>imaging[]</code>,</p>
+<p><code>assessment</code>, <code>plan</code>, <code>follow_up_interval</code>.</p>
+<ul>
+<li><code>note_versions</code>: <code>version_number</code> unique per encounter,</li>
+</ul>
+<p><code>draft_status</code> {draft · provider_review · revised · signed ·</p>
+<p>exported}, <code>note_text</code>, <code>source_input_id</code> + <code>extracted_findings_id</code></p>
+<p>lineage, <code>generated_by</code> {system · manual}, <code>missing_data_flags</code></p>
+<p>JSON array, <code>signed_at</code> + <code>signed_by_user_id</code>, <code>exported_at</code>.</p>
+<p>Regeneration is <strong>always</strong> additive — a new <code>extracted_findings</code> row</p>
+<p>and a new <code>note_versions</code> row with <code>version_number + 1</code>. Old</p>
+<p>versions remain immutable for audit.</p>
 <h2>Source of truth per platform mode (phase 16 + 18)</h2>
 <table><thead><tr><th>Object</th><th><code>standalone</code></th><th><code>integrated_readthrough</code> (stub)</th><th><code>integrated_writethrough</code> (stub)</th></tr></thead><tbody>
 <tr><td>organization</td><td>ChartNav</td><td>mirrored</td><td>mirrored</td></tr>
@@ -554,6 +611,142 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <section id="sec-6"><h2>05 — Build log</h2>
 <h1>Build Log</h1>
 <p>Reverse-chronological.</p>
+<p>---</p>
+<h2>2026-04-18 — Phase 19: transcript → findings → note draft → signoff</h2>
+<h3>Step 1 — Migration <code>a7b8c9d0e1f2</code></h3>
+<ul>
+<li><code>encounter_inputs</code> (input_type, processing_status,</li>
+</ul>
+<p>transcript_text, confidence_summary, source_metadata JSON,</p>
+<p>created_by_user_id, timestamps, FK to <code>encounters</code>).</p>
+<ul>
+<li><code>extracted_findings</code> (CC, HPI, OD/OS VA + IOP, structured_json</li>
+</ul>
+<p>blob, extraction_confidence, FK to input + encounter).</p>
+<ul>
+<li><code>note_versions</code> (version_number unique per encounter,</li>
+</ul>
+<p>draft_status, note_format, note_text, source_input_id,</p>
+<p>extracted_findings_id, generated_by, provider_review_required,</p>
+<p>missing_data_flags JSON array, signed_at + signed_by_user_id,</p>
+<p>exported_at, timestamps).</p>
+<ul>
+<li>Booleans use <code>sa.text(&quot;true&quot;)</code> for Postgres parity.</li>
+</ul>
+<h3>Step 2 — Note-generator seam</h3>
+<ul>
+<li>New <code>apps/api/app/services/note_generator.py</code> + <code>services/__init__.py</code>.</li>
+<li><code>generate_draft(transcript_text, patient_display, provider_display)</code></li>
+</ul>
+<p>returns <code>GenerationResult(findings, note_text, missing_flags)</code>.</p>
+<ul>
+<li>Shipped body is a deterministic regex extractor + SOAP template</li>
+</ul>
+<p>(no LLM dependency, tests stable). A real model plugs into</p>
+<p><code>_run_generator</code>; the output contract is locked. Never fabricates</p>
+<p>values the transcript does not contain — emits `&lt;missing —</p>
+<p>provider to verify&gt;` placeholders + a missing-flag code instead.</p>
+<h3>Step 3 — HTTP surface</h3>
+<ul>
+<li>New endpoints:</li>
+<li><code>POST /encounters/{id}/inputs</code></li>
+<li><code>GET  /encounters/{id}/inputs</code></li>
+<li><code>POST /encounters/{id}/notes/generate</code></li>
+<li><code>GET  /encounters/{id}/notes</code></li>
+<li><code>GET  /note-versions/{id}</code></li>
+<li><code>PATCH /note-versions/{id}</code></li>
+<li><code>POST /note-versions/{id}/submit-for-review</code></li>
+<li><code>POST /note-versions/{id}/sign</code></li>
+<li><code>POST /note-versions/{id}/export</code></li>
+<li>Transitions + role rules enforced at the API layer. Signed notes</li>
+</ul>
+<p>are immutable (PATCH → 409 <code>note_immutable</code>). Only</p>
+<p>admin/clinician can sign. Export requires signed state. Audit</p>
+<p>events emitted on every meaningful action.</p>
+<h3>Step 4 — Provider review UI</h3>
+<ul>
+<li>New <code>apps/web/src/NoteWorkspace.tsx</code> — three-tier trust layout:</li>
+</ul>
+<p>transcript input · extracted findings (with confidence + missing</p>
+<p>flags) · note draft (editable → submit → sign → export).</p>
+<ul>
+<li>Provider-edit of the draft text auto-flips status to <code>revised</code></li>
+</ul>
+<p>and <code>generated_by=manual</code> so the UI can always tell generator</p>
+<p>output from provider-edited content.</p>
+<ul>
+<li>Reviewer role sees a read-only note and an explicit disabled-sign</li>
+</ul>
+<p>subtle-note; admins + clinicians get full workflow.</p>
+<ul>
+<li>Version picker surfaces below the draft once v2+ exists.</li>
+<li>Signed notes → Export button stamps <code>exported_at</code> and downloads</li>
+</ul>
+<p><code>chartnav-note-&lt;encounter&gt;-v&lt;n&gt;.txt</code>; Copy-to-clipboard button</p>
+<p>available post-sign.</p>
+<ul>
+<li>Trust breadcrumb at the top of the workspace spells out</li>
+</ul>
+<p><code>transcript → extracted facts → AI draft → provider signed</code>.</p>
+<h3>Step 5 — api.ts</h3>
+<ul>
+<li>New types: <code>InputType</code>, <code>InputProcessingStatus</code>, <code>NoteDraftStatus</code>,</li>
+</ul>
+<p><code>NoteFormat</code>, <code>EncounterInput</code>, <code>ExtractedFindings</code>, <code>NoteVersion</code>,</p>
+<p><code>NoteWithFindings</code>.</p>
+<ul>
+<li>New functions: <code>createEncounterInput</code>, <code>listEncounterInputs</code>,</li>
+</ul>
+<p><code>generateNoteVersion</code>, <code>listEncounterNotes</code>, <code>getNoteVersion</code>,</p>
+<p><code>patchNoteVersion</code>, <code>submitNoteForReview</code>, <code>signNoteVersion</code>,</p>
+<p><code>exportNoteVersion</code>.</p>
+<ul>
+<li><code>MISSING_FLAG_LABELS</code> constant maps flag codes to human labels.</li>
+</ul>
+<h3>Step 6 — Tests</h3>
+<ul>
+<li><strong>Backend</strong>: 174/174 pytest. New <code>tests/test_transcript_to_note.py</code></li>
+</ul>
+<p>(+19) covers ingest defaults, RBAC, generation + versioning</p>
+<p>preservation, missing-flag emission, provider edit → revised,</p>
+<p>submit-for-review, sign (RBAC + metadata), signed-immutable,</p>
+<p>export-only-from-signed, cross-org 404, audit-event trail.</p>
+<ul>
+<li><strong>Frontend</strong>: 42/42 Vitest. New</li>
+</ul>
+<p><code>src/test/NoteWorkspace.test.tsx</code> (+8): three tiers render</p>
+<p>distinctly, findings + confidence + missing-flags visible,</p>
+<p>provider edit flips generated-by label, submit→sign path,</p>
+<p>reviewer sees no Sign button + disabled-note, export downloads +</p>
+<p>switches to read-only, paste+generate happy path.</p>
+<ul>
+<li><strong>E2E</strong>: Playwright 17 workflow + a11y still green. Visual</li>
+</ul>
+<p>baselines refreshed for the new workspace tiers (4/4 local).</p>
+<h3>Step 7 — Docs</h3>
+<ul>
+<li>New <code>docs/build/30-transcript-to-note.md</code> — full phase reference</li>
+</ul>
+<p>(trust model, data model, generator seam, HTTP surface, UI</p>
+<p>layout, export, verification matrix, explicit non-goals).</p>
+<ul>
+<li>Updated <code>01-current-state</code>, <code>03-api-endpoints</code>, <code>04-data-model</code>,</li>
+</ul>
+<p><code>05-build-log</code> (this entry), <code>06-known-gaps</code>, <code>08-test-strategy</code>,</p>
+<p><code>09-ci-and-deploy-hardening</code>, <code>15-frontend-integration</code>,</p>
+<p><code>16-frontend-test-strategy</code>, <code>26-platform-mode-and-interoperability</code></p>
+<p>(export/handoff semantics), <code>02-workflow-state-machine</code> (note</p>
+<p>state machine), ER diagram, system-architecture + api-data-flow.</p>
+<ul>
+<li><code>scripts/build_docs.py</code> picks up section 30; executive summary</li>
+</ul>
+<p>extended. Final HTML + PDF regenerated.</p>
+<h3>Step 8 — Hygiene</h3>
+<ul>
+<li>Dev DB reset to pristine seeded state before commit.</li>
+<li>Visual baselines refreshed (<code>*-chromium-darwin.png</code>).</li>
+<li>No new runtime deps (generator uses stdlib only).</li>
+</ul>
 <p>---</p>
 <h2>2026-04-18 — Phase 18: native clinical layer + FHIR adapter</h2>
 <h3>Step 1 — Migration <code>f6a7b8c9d0e1</code></h3>
@@ -1153,6 +1346,16 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <h3>Playwright summary (12)</h3>
 <p>Adds &quot;admin can issue an invitation and download audit CSV&quot; on top of</p>
 <p>the 11 scenarios shipped through phase 13.</p>
+<h2>Phase-19 additions</h2>
+<ul>
+<li><strong>Transcript ingestion</strong>: <code>encounter_inputs</code> table + <code>POST/GET /encounters/{id}/inputs</code>. Supports <code>audio_upload</code> (queued → future STT), <code>text_paste</code>, <code>manual_entry</code>, <code>imported_transcript</code>.</li>
+<li><strong>Extracted findings</strong>: <code>extracted_findings</code> table — structured ophthalmology facts persisted separately from narrative. Confidence + missing-data flags feed the UI&#x27;s provider-verify checklist.</li>
+<li><strong>Note versioning</strong>: <code>note_versions</code> table with status machine (<code>draft → provider_review → revised → signed → exported</code>), immutability after sign, version_number monotonic per encounter, audit trail on every action.</li>
+<li><strong>Provider review UI</strong>: three-tier <code>NoteWorkspace</code> (transcript → findings → draft + signoff) embedded in the encounter detail pane. Reviewer role cannot sign (UI + API).</li>
+<li><strong>Generator seam</strong>: <code>app/services/note_generator.py</code> — deterministic fake today, LLM slot locked at one function, output contract stable.</li>
+<li><strong>Export/handoff</strong>: text download + clipboard copy + <code>exported_at</code> stamp. No EHR write-back (honest: vendor adapters are future work).</li>
+<li><strong>174 pytest</strong> (+19), <strong>42 Vitest</strong> (+8), 17 Playwright workflow+a11y + 4 visual (local, refreshed).</li>
+</ul>
 <h2>Phase-18 additions</h2>
 <ul>
 <li><strong>Native clinical layer</strong>: <code>patients</code> + <code>providers</code> tables (migration <code>f6a7b8c9d0e1</code>); <code>encounters.patient_id</code> + <code>encounters.provider_id</code> nullable FKs; seed populates real rows and backfills legacy encounters.</li>
@@ -1185,6 +1388,10 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <li><strong>Release compliance</strong>: <code>chartnav-sbom-&lt;v&gt;.json</code> + <code>chartnav-api-&lt;v&gt;.digest.txt</code> are produced by <code>release_build.sh</code> and attached to the GitHub Release.</li>
 </ul>
 <h2>Real gaps (prioritized for next phase)</h2>
+<p>0. <strong>No real LLM wired into the note generator yet</strong> — <code>app/services/note_generator.py</code> ships a deterministic regex + SOAP-template fake. The seam is a single function; output contract is locked. Next: swap for a real inference endpoint (or SMART-on-FHIR-aware model).</p>
+<p>0. <strong>No audio STT worker</strong> — <code>audio_upload</code> inputs stay <code>queued</code> forever. Future work: a background worker that fills <code>transcript_text</code> and flips processing_status.</p>
+<p>0. <strong>No EHR write-back for signed notes</strong> — export is download + clipboard only. FHIR <code>DocumentReference</code> writes remain <code>AdapterNotSupported</code>; vendor adapters layer real push.</p>
+<p>0. <strong>No PDF or HL7 export</strong> — plain text only. Deliberate: honest paste-into-EHR, not a vendor-format we don&#x27;t own.</p>
 <p>0. <strong>Encounter/status routes still bypass the adapter path</strong> in integrated modes — HTTP handlers hit the native DB directly rather than routing through <code>resolve_adapter()</code>. Standalone this is a nop (native adapter wraps the same DB); integrated_* needs the handler-level adapter dispatch + translation work in a follow-up phase so FHIR reads can actually surface through <code>/encounters</code>.</p>
 <p>0. <strong>No vendor-specific FHIR adapter yet</strong> — generic <code>FHIRAdapter</code> handles the common case. Epic/Cerner/Athena/Nextech SMART-on-FHIR auth + vendor quirks remain future work. Start with SMART-on-FHIR handshake + Epic sandbox.</p>
 <p>0. <strong>FHIR writes are intentionally unsupported</strong> — <code>update_encounter_status</code> and <code>write_note</code> raise <code>AdapterNotSupported</code>. <code>DocumentReference</code> + Binary upload is a real project and belongs in a vendor adapter.</p>
@@ -1403,6 +1610,43 @@ make docker-build
 <li><code>make verify</code> (SQLite): 28 pytest + 9 smoke — all green</li>
 <li><code>scripts/pg_verify.sh</code>: migrations + seed (x2) + smoke + status transition + event write — <strong>PASS</strong></li>
 </ul>
+<h2>Backend coverage (phase 19)</h2>
+<ul>
+<li><strong>174 pytest.</strong> New <code>tests/test_transcript_to_note.py</code> (+19):</li>
+<li>input creation defaults (text/audio); <code>transcript_required</code></li>
+</ul>
+<p>for text-type inputs; reviewer RBAC denial; cross-org 404.</p>
+<ul>
+<li><code>POST /encounters/{id}/notes/generate</code> creates v1 + findings;</li>
+</ul>
+<p>regeneration produces v2 and preserves v1; <code>no_completed_input</code></p>
+<p>when only queued inputs exist.</p>
+<ul>
+<li>missing-flag emission on a sparse transcript</li>
+</ul>
+<p>(<code>iop_missing</code>, <code>visual_acuity_missing</code>, <code>plan_missing</code>).</p>
+<ul>
+<li>provider PATCH flips <code>generated_by=manual</code> +</li>
+</ul>
+<p><code>draft_status=revised</code>.</p>
+<ul>
+<li>submit-for-review → <code>provider_review</code>.</li>
+<li>sign: reviewer → 403 <code>role_cannot_sign</code>; clinician stamps</li>
+</ul>
+<p><code>signed_at</code> + <code>signed_by_user_id</code>; signed → immutable</p>
+<p>(PATCH → 409 <code>note_immutable</code>).</p>
+<ul>
+<li>export requires signed state; stamps <code>exported_at</code>.</li>
+<li><code>GET /note-versions/{id}</code> returns both note and findings.</li>
+<li>audit trail verifies <code>encounter_input_created</code>,</li>
+</ul>
+<p><code>note_version_generated</code>, <code>note_version_signed</code>,</p>
+<p><code>note_version_exported</code>.</p>
+<ul>
+<li>Frontend: <strong>42 Vitest</strong> including +8 NoteWorkspace tests.</li>
+<li>Playwright: 17 workflow+a11y unchanged. Visual baselines</li>
+</ul>
+<p>refreshed (4 local) for the new workspace tiers.</p>
 <h2>Backend coverage (phase 18)</h2>
 <ul>
 <li><strong>155 pytest.</strong> New:</li>
@@ -2305,6 +2549,28 @@ make web-build        # vite build -&gt; apps/web/dist
 <li>Both panes wire into the existing admin-banner error flow — any</li>
 </ul>
 <p><code>ApiError</code> lands in the shared banner.</p>
+<h2>Note workspace (phase 19)</h2>
+<p>The encounter detail pane now mounts <code>NoteWorkspace</code> (new</p>
+<p><code>apps/web/src/NoteWorkspace.tsx</code>) above the existing timeline. Three</p>
+<p>visually distinct tiers make the trust model legible at a glance:</p>
+<p>1. <strong>Transcript input</strong> — chip-list of <code>encounter_inputs</code> with</p>
+<p>processing-status pills; paste-and-ingest textarea + **Generate</p>
+<p>draft** button for admins and clinicians.</p>
+<p>2. <strong>Extracted findings</strong> — read-only definition list (CC · HPI ·</p>
+<p>VA OD/OS · IOP OD/OS · diagnoses · plan · follow-up) plus a</p>
+<p>color-coded <strong>extraction confidence</strong> indicator (green high /</p>
+<p>blue medium / amber low) and a missing-data checklist banner</p>
+<p>naming every item the provider must verify before signing.</p>
+<p>3. <strong>Note draft</strong> — editable textarea while the note is</p>
+<p><code>draft</code>/<code>provider_review</code>/<code>revised</code>; read-only <code>&lt;pre&gt;</code> once</p>
+<p><code>signed</code> or <code>exported</code>. Actions ordered left-to-right: Save</p>
+<p>provider edit → Submit for review → Sign → Export / Copy.</p>
+<p>A trust breadcrumb at the top (`transcript → extracted facts → AI</p>
+<p>draft → provider signed`) reinforces the three-tier model. Status</p>
+<p>pills reuse the brand-aligned palette. Exporting a signed note</p>
+<p>triggers a <code>.txt</code> download named <code>chartnav-note-&lt;encounter&gt;-v&lt;n&gt;.txt</code>.</p>
+<p>Reviewer role: Sign button is hidden and a small subtle-note makes</p>
+<p>the RBAC reason explicit.</p>
 <h2>What this phase explicitly does NOT do</h2>
 <ul>
 <li>No real login flow — <code>X-User-Email</code> is still dev transport.</li>
@@ -2482,6 +2748,25 @@ make web-verify      # typecheck + test + build
 <li>Mocks extended: <code>listPatients</code>, <code>createPatient</code>, <code>listProviders</code>,</li>
 </ul>
 <p><code>createProvider</code>.</p>
+<h2>NoteWorkspace tests (phase 19)</h2>
+<ul>
+<li><strong>+8 tests</strong> in <code>src/test/NoteWorkspace.test.tsx</code>.</li>
+<li>Covers: three-tier render (transcript/findings/draft), findings</li>
+</ul>
+<p>block + confidence indicator + <code>data-confidence</code> attribute,</p>
+<p>missing-data flags banner, provider edit flips generated-by</p>
+<p>label to <code>provider (edited)</code>, submit-for-review + sign chain,</p>
+<p>reviewer role hides Sign button + renders <code>note-sign-disabled-note</code>,</p>
+<p>export switches draft to read-only, paste-to-generate happy path.</p>
+<ul>
+<li>Mocks extend the test harness with the full phase-19 api surface</li>
+</ul>
+<p>(<code>listEncounterInputs</code>, <code>generateNoteVersion</code>, <code>patchNoteVersion</code>,</p>
+<p><code>signNoteVersion</code>, <code>exportNoteVersion</code>, etc.).</p>
+<ul>
+<li><code>App.test.tsx</code> extends mocks so the workspace mounting inside</li>
+</ul>
+<p><code>EncounterDetail</code> doesn&#x27;t fetch-miss during App-level tests.</p>
 <h2>Gaps not yet covered</h2>
 <ul>
 <li>Visual regression not in CI (documented; OS-specific baselines).</li>
@@ -4476,7 +4761,219 @@ ChartNav · Clinical workflow platform        POWERED BY ARCG SYSTEMS
 <p>backfill by creating providers with matching <code>display_name</code> and</p>
 <p>re-running the seed, or by issuing targeted UPDATE statements.</p>
 </section>
-<section id="sec-31"><h2>Diagram — System architecture</h2>
+<section id="sec-31"><h2>30 — Transcript → findings → note → signoff</h2>
+<h1>Transcript → Findings → Note Draft → Signoff (phase 19)</h1>
+<p>The ChartNav wedge becomes real in this phase. ChartNav is now an</p>
+<p>operational layer that takes encounter input, extracts structured</p>
+<p>ophthalmology facts, generates a note draft, and walks the provider</p>
+<p>through review, edit, sign, and export — without pretending to be a</p>
+<p>certified EMR.</p>
+<h2>1. Trust model — three persistent tiers</h2>
+<p>The three stages have separate tables <strong>and</strong> separate UI surfaces so</p>
+<p>the operator can always tell what came from the transcript, what the</p>
+<p>generator extracted, and what the provider actually attested to.</p>
+<table><thead><tr><th>Tier</th><th>Table</th><th>Owner</th><th>Mutable after signoff?</th></tr></thead><tbody>
+<tr><td>1. transcript</td><td><code>encounter_inputs</code></td><td>operator who ingested</td><td>❌ (audit-preserving)</td></tr>
+<tr><td>2. findings</td><td><code>extracted_findings</code></td><td>generator</td><td>❌ (re-generate = new row)</td></tr>
+<tr><td>3. draft/final</td><td><code>note_versions</code></td><td>provider (after edits)</td><td>❌ once <code>signed</code></td></tr>
+</tbody></table>
+<p>Regeneration never overwrites. Every regeneration creates a NEW</p>
+<p><code>extracted_findings</code> + a NEW <code>note_versions</code> row with the next</p>
+<p><code>version_number</code>. The UI exposes a version picker so reviewers can</p>
+<p>inspect how the draft evolved.</p>
+<h2>2. Data model</h2>
+<h3><code>encounter_inputs</code></h3>
+<p>Raw source of record for &quot;what came out of the encounter.&quot;</p>
+<table><thead><tr><th>column</th><th>notes</th></tr></thead><tbody>
+<tr><td><code>input_type</code></td><td><code>audio_upload</code> \</td><td><code>text_paste</code> \</td><td><code>manual_entry</code> \</td><td><code>imported_transcript</code></td></tr>
+<tr><td><code>processing_status</code></td><td><code>queued</code> \</td><td><code>processing</code> \</td><td><code>completed</code> \</td><td><code>failed</code> \</td><td><code>needs_review</code></td></tr>
+<tr><td><code>transcript_text</code></td><td>nullable — null until STT completes for audio</td></tr>
+<tr><td><code>confidence_summary</code></td><td>optional vendor signal</td></tr>
+<tr><td><code>source_metadata</code></td><td>JSON blob (filename, duration, STT engine, …)</td></tr>
+<tr><td><code>created_by_user_id</code></td><td>audit trail</td></tr>
+</tbody></table>
+<p>Default statuses:</p>
+<ul>
+<li><code>text_paste</code>, <code>manual_entry</code>, <code>imported_transcript</code> → <strong>completed</strong> on arrival.</li>
+<li><code>audio_upload</code> → <strong>queued</strong> (future STT worker flips to <code>processing</code> → <code>completed</code>).</li>
+</ul>
+<h3><code>extracted_findings</code></h3>
+<p>Structured ophthalmology facts. Separate from narrative so audits can</p>
+<p>compare &quot;what the generator saw&quot; vs &quot;what the note said.&quot;</p>
+<p>Top-level columns cover ophthalmology essentials:</p>
+<p><code>chief_complaint</code>, <code>hpi_summary</code>, <code>visual_acuity_od</code>, <code>visual_acuity_os</code>,</p>
+<p><code>iop_od</code>, <code>iop_os</code>, <code>extraction_confidence</code>.</p>
+<p><code>structured_json</code> carries the rest as a single JSON blob so the schema</p>
+<p>stays honest about what isn&#x27;t first-class yet: <code>diagnoses[]</code>,</p>
+<p><code>medications[]</code>, <code>imaging[]</code>, <code>assessment</code>, <code>plan</code>,</p>
+<p><code>follow_up_interval</code>, custom flags.</p>
+<h3><code>note_versions</code></h3>
+<p>Versioned note drafts. Only one state at a time per `(encounter_id,</p>
+<p>version_number)`.</p>
+<p>Status machine:</p>
+<div class="mermaid">
+stateDiagram-v2
+    [*] --> draft
+    draft --> provider_review : submit
+    draft --> revised         : provider edit
+    draft --> signed          : sign
+    provider_review --> revised : edit
+    provider_review --> signed  : sign
+    provider_review --> draft   : retract
+    revised --> provider_review : submit
+    revised --> signed          : sign
+    signed --> exported
+    exported --> [*]
+</div>
+<p>Key invariants:</p>
+<ul>
+<li><code>draft_status ∈ {signed, exported}</code> → <strong>immutable</strong>. PATCH returns</li>
+</ul>
+<p>409 <code>note_immutable</code>. Regenerate to get a new version.</p>
+<ul>
+<li>A provider PATCH to <code>note_text</code> while the note is <code>draft</code> auto-flips</li>
+</ul>
+<p><code>generated_by → manual</code> and <code>draft_status → revised</code>. The UI can</p>
+<p>always tell the difference between generator output and</p>
+<p>provider-edited content.</p>
+<ul>
+<li>Only <code>admin</code> + <code>clinician</code> can sign. Reviewers read only — enforced</li>
+</ul>
+<p>at both the UI (hides the Sign button, shows a disabled-note) and</p>
+<p>the API (<code>role_cannot_sign</code> 403).</p>
+<ul>
+<li>Export is a <strong>separate state</strong> from sign. An exported note was</li>
+</ul>
+<p>signed *and* handed off (copy / download / upstream push).</p>
+<h3>Linkage</h3>
+<p><code>note_versions.source_input_id</code> and <code>note_versions.extracted_findings_id</code></p>
+<p>point at the exact tier-1 / tier-2 rows this version was generated</p>
+<p>from, preserving full lineage even after regeneration.</p>
+<h2>3. Generator seam</h2>
+<p><code>app/services/note_generator.py::generate_draft(...)</code> is the **one</p>
+<p>place** a real LLM plugs in. Today&#x27;s body is a deterministic regex</p>
+<p>extractor + SOAP template so the full encounter→signoff workflow can</p>
+<p>be exercised with zero external dependencies.</p>
+<p>Output contract (stable across implementations):</p>
+<pre class="code lang-python"><code>
+@dataclass(frozen=True)
+class GenerationResult:
+    findings: dict[str, Any]     # matches extracted_findings shape
+    note_text: str               # narrative body
+    missing_flags: list[str]     # e.g. [&quot;iop_missing&quot;, &quot;plan_missing&quot;]
+</code></pre>
+<p>Honest limitations of the shipped fake:</p>
+<ul>
+<li>only extracts values the transcript literally contains.</li>
+<li>emits <code>&lt;missing — provider to verify&gt;</code> placeholders rather than</li>
+</ul>
+<p>invented values.</p>
+<ul>
+<li>the missing-flags list feeds the UI&#x27;s &quot;items for provider to</li>
+</ul>
+<p>verify&quot; banner so the provider can&#x27;t miss that something was absent.</p>
+<p>To swap in a real model, replace <code>_run_generator</code> and keep the</p>
+<p>contract. Everything else stays.</p>
+<h2>4. HTTP surface</h2>
+<p>All endpoints are org-scoped via the existing encounter RBAC.</p>
+<p>Cross-org access returns 404 (never 403) to avoid leaking existence.</p>
+<table><thead><tr><th>Method</th><th>Path</th><th>Role</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>POST</code></td><td><code>/encounters/{id}/inputs</code></td><td>admin, clinician</td><td>Creates <code>encounter_inputs</code> row</td></tr>
+<tr><td><code>GET</code></td><td><code>/encounters/{id}/inputs</code></td><td>any authed</td><td>List all inputs for the encounter</td></tr>
+<tr><td><code>POST</code></td><td><code>/encounters/{id}/notes/generate</code></td><td>admin, clinician</td><td>Creates <code>extracted_findings</code> + <code>note_versions</code> v+1</td></tr>
+<tr><td><code>GET</code></td><td><code>/encounters/{id}/notes</code></td><td>any authed</td><td>List all versions (DESC)</td></tr>
+<tr><td><code>GET</code></td><td><code>/note-versions/{id}</code></td><td>any authed</td><td>Returns <code>{note, findings}</code></td></tr>
+<tr><td><code>PATCH</code></td><td><code>/note-versions/{id}</code></td><td>admin, clinician</td><td>Edits; auto-flips to <code>revised</code> + <code>generated_by=manual</code></td></tr>
+<tr><td><code>POST</code></td><td><code>/note-versions/{id}/submit-for-review</code></td><td>admin, clinician</td><td>`draft</td><td>revised → provider_review`</td></tr>
+<tr><td><code>POST</code></td><td><code>/note-versions/{id}/sign</code></td><td>admin, clinician</td><td>Stamps <code>signed_at</code> + <code>signed_by_user_id</code></td></tr>
+<tr><td><code>POST</code></td><td><code>/note-versions/{id}/export</code></td><td>admin, clinician</td><td><code>signed → exported</code>; stamps <code>exported_at</code></td></tr>
+</tbody></table>
+<p>Audit events emitted: <code>encounter_input_created</code>, <code>note_version_generated</code>,</p>
+<p><code>note_version_submitted</code>, <code>note_version_signed</code>, <code>note_version_exported</code>.</p>
+<p>New error codes: <code>invalid_input_type</code>, <code>transcript_required</code>,</p>
+<p><code>invalid_processing_status</code>, <code>input_not_found</code>, <code>input_not_ready</code>,</p>
+<p><code>no_completed_input</code>, <code>invalid_note_format</code>, <code>invalid_note_status</code>,</p>
+<p><code>invalid_note_transition</code>, <code>note_immutable</code>, <code>role_cannot_sign</code>,</p>
+<p><code>note_already_signed</code>, <code>note_not_signed</code>, <code>note_not_found</code>.</p>
+<h2>5. Provider review UI</h2>
+<p><code>apps/web/src/NoteWorkspace.tsx</code> renders three visually distinct tiers</p>
+<p>inside the encounter detail pane:</p>
+<ul>
+<li><strong>Tier 1 — Transcript input</strong>: chip list of inputs with processing</li>
+</ul>
+<p>status. Operators can paste a transcript inline and click</p>
+<p><strong>Generate draft</strong>.</p>
+<ul>
+<li><strong>Tier 2 — Extracted findings</strong>: read-only definition list +</li>
+</ul>
+<p>confidence pill (color-coded: green high / blue medium / amber low)</p>
+<p>+ a <strong>missing-data checklist</strong> the provider must verify before</p>
+<p>signing.</p>
+<ul>
+<li><strong>Tier 3 — Note draft</strong>: editable textarea when status ≠</li>
+</ul>
+<p>signed/exported; read-only <code>&lt;pre&gt;</code> once signed. Status chip + version</p>
+<p>number. A trust-breadcrumb at the top of the workspace spells out</p>
+<p><code>transcript → extracted facts → AI draft → provider signed</code>.</p>
+<p>Actions are ordered left-to-right to match the workflow: Save edit →</p>
+<p>Submit for review → Sign → Export (or Copy). Signing reveals the</p>
+<p>Export button; exporting downloads a <code>chartnav-note-&lt;encounter&gt;-v&lt;n&gt;.txt</code></p>
+<p>file.</p>
+<p>Reviewer role: no Sign button, a small subtle-note explains that</p>
+<p>clinician attestation is required.</p>
+<p>Version list renders below the draft once v2+ exists; clicking a</p>
+<p>version swaps the active view without losing the others.</p>
+<h2>6. Export / handoff</h2>
+<p>Today&#x27;s export is honest:</p>
+<p>1. <code>/note-versions/{id}/export</code> stamps <code>exported_at</code> and flips status.</p>
+<p>2. UI downloads a <code>.txt</code> file of the signed body.</p>
+<p>3. UI offers a <strong>Copy to clipboard</strong> button for paste-into-EHR flow.</p>
+<p>What&#x27;s explicitly <strong>not</strong> shipped:</p>
+<ul>
+<li>No <code>DocumentReference</code> write-back to FHIR — the FHIR adapter</li>
+</ul>
+<p>(phase 18) still raises <code>AdapterNotSupported</code> on <code>write_note</code>. A</p>
+<p>vendor-specific adapter layers the push on top.</p>
+<ul>
+<li>No PDF/HL7 export. Plain text covers paste-into-EHR without</li>
+</ul>
+<p>pretending to own a vendor-certified format.</p>
+<h2>7. Verification matrix</h2>
+<table><thead><tr><th>Command</th><th>Result</th></tr></thead><tbody>
+<tr><td><code>make verify</code> (SQLite)</td><td>✅ <strong>174/174 pytest + 9/9 smoke</strong></td></tr>
+<tr><td><code>npm run typecheck</code></td><td>✅ clean</td></tr>
+<tr><td><code>npm test</code> (Vitest)</td><td>✅ <strong>42/42</strong></td></tr>
+<tr><td><code>npm run build</code></td><td>✅ 206 KB JS / 17.5 KB CSS</td></tr>
+<tr><td><code>npx playwright test workflow + a11y</code></td><td>✅ 17/17</td></tr>
+<tr><td><code>npx playwright test visual --update-snapshots</code></td><td>✅ 4/4 (baselines refreshed)</td></tr>
+<tr><td>Generator on a rich transcript</td><td>✅ extracts VA 20/40, IOP 15/17, CC, plan, follow-up</td></tr>
+<tr><td>Generator on a sparse transcript</td><td>✅ emits <code>iop_missing</code>, <code>visual_acuity_missing</code>, <code>plan_missing</code> flags</td></tr>
+<tr><td>Sign immutability</td><td>✅ PATCH on signed → 409 <code>note_immutable</code></td></tr>
+<tr><td>Reviewer sign</td><td>✅ 403 <code>role_cannot_sign</code></td></tr>
+<tr><td>Export-before-sign</td><td>✅ 409 <code>note_not_signed</code></td></tr>
+<tr><td>Cross-org read of note-version</td><td>✅ 404 <code>note_not_found</code></td></tr>
+</tbody></table>
+<h2>8. What this phase does NOT do</h2>
+<ul>
+<li>Does <strong>not</strong> wire a real LLM. Today&#x27;s generator is a deterministic</li>
+</ul>
+<p>fake; the seam is the one line to change when a real model lands.</p>
+<ul>
+<li>Does <strong>not</strong> implement audio-to-text. <code>audio_upload</code> inputs stay</li>
+</ul>
+<p><code>queued</code> until a future STT worker flips them.</p>
+<ul>
+<li>Does <strong>not</strong> ship a scheduling, billing, or patient-portal surface.</li>
+<li>Does <strong>not</strong> claim certification. ChartNav is a workflow overlay,</li>
+</ul>
+<p>not a certified EHR.</p>
+<ul>
+<li>Does <strong>not</strong> implement vendor-specific EHR write-back. Export is a</li>
+</ul>
+<p>handoff state + downloadable text + clipboard, not an automated</p>
+<p>push into a certified record.</p>
+</section>
+<section id="sec-32"><h2>Diagram — System architecture</h2>
 <h1>System Architecture</h1>
 <div class="mermaid">
 flowchart LR
@@ -4587,7 +5084,7 @@ flowchart LR
   Compose --> PG
 </div>
 </section>
-<section id="sec-32"><h2>Diagram — Encounter status machine</h2>
+<section id="sec-33"><h2>Diagram — Encounter status machine</h2>
 <h1>Encounter Status State Machine</h1>
 <div class="mermaid">
 stateDiagram-v2
@@ -4609,7 +5106,7 @@ stateDiagram-v2
 <p>Legend: any edge not shown is rejected at <code>POST /encounters/{id}/status</code></p>
 <p>with HTTP 400 <code>invalid_transition</code>.</p>
 </section>
-<section id="sec-33"><h2>Diagram — ER</h2>
+<section id="sec-34"><h2>Diagram — ER</h2>
 <h1>ER Diagram</h1>
 <div class="mermaid">
 erDiagram
@@ -4622,6 +5119,12 @@ erDiagram
   patients      ||--o{ encounters       : "subject of (nullable FK)"
   providers     ||--o{ encounters       : "primary provider (nullable FK)"
   encounters    ||--o{ workflow_events  : "emits"
+  encounters    ||--o{ encounter_inputs : "captures (phase 19)"
+  encounters    ||--o{ extracted_findings: "extracted for (phase 19)"
+  encounters    ||--o{ note_versions    : "drafts + signs (phase 19)"
+  encounter_inputs  ||--o{ extracted_findings : "source of"
+  encounter_inputs  ||--o{ note_versions      : "source of"
+  extracted_findings||--o{ note_versions      : "feeds"
 
   security_audit_events {
     int id PK
@@ -4708,6 +5211,50 @@ erDiagram
     text event_data
     datetime created_at
   }
+  encounter_inputs {
+    int id PK
+    int encounter_id FK
+    string input_type "audio_upload | text_paste | manual_entry | imported_transcript"
+    string processing_status "queued | processing | completed | failed | needs_review"
+    text transcript_text "nullable"
+    string confidence_summary "nullable"
+    text source_metadata "JSON blob"
+    int created_by_user_id FK
+    datetime created_at
+    datetime updated_at
+  }
+  extracted_findings {
+    int id PK
+    int encounter_id FK
+    int input_id FK
+    text chief_complaint
+    text hpi_summary
+    string visual_acuity_od
+    string visual_acuity_os
+    string iop_od
+    string iop_os
+    text structured_json "JSON: diagnoses[], medications[], plan, follow_up_interval"
+    string extraction_confidence "high | medium | low"
+    datetime created_at
+  }
+  note_versions {
+    int id PK
+    int encounter_id FK
+    int version_number "unique per encounter"
+    string draft_status "draft | provider_review | revised | signed | exported"
+    string note_format "soap | assessment_plan | consult_note | freeform"
+    text note_text
+    int source_input_id FK
+    int extracted_findings_id FK
+    string generated_by "system | manual"
+    boolean provider_review_required
+    text missing_data_flags "JSON array"
+    datetime signed_at
+    int signed_by_user_id FK
+    datetime exported_at
+    datetime created_at
+    datetime updated_at
+  }
 </div>
 <h2>Seeded tenants &amp; users</h2>
 <table><thead><tr><th>org_id</th><th>slug</th><th>email</th><th>role</th></tr></thead><tbody>
@@ -4722,7 +5269,7 @@ erDiagram
 <p><code>users.organization_id</code> is the authoritative source of scope; never</p>
 <p>derived from client input.</p>
 </section>
-<section id="sec-34"><h2>Diagram — API / data flow</h2>
+<section id="sec-35"><h2>Diagram — API / data flow</h2>
 <h1>API / Data Flow &amp; CI</h1>
 <h2>UI → Backend request path</h2>
 <div class="mermaid">
