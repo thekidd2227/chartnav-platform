@@ -4,6 +4,97 @@ Reverse-chronological.
 
 ---
 
+## 2026-04-18 — Phase 22: async ingestion + orchestration lifecycle
+
+### Step 1 — Migration `c9d0e1f2a304`
+- `encounter_inputs` gains `retry_count` (NOT NULL default 0),
+  `last_error`, `last_error_code`, `started_at`, `finished_at`,
+  `worker_id`. Batch rewrite for SQLite portability.
+- Backward compatible: all additions are nullable with sensible
+  defaults. Seed unaffected.
+
+### Step 2 — Ingestion service (`app/services/ingestion.py`)
+- Owns the `queued → processing → completed | failed | needs_review`
+  state machine.
+- `run_ingestion_now(input_id)` synchronous entry point safe to
+  call from the HTTP path.
+- `enqueue_input(input_id)` flips terminal rows back to `queued` +
+  increments `retry_count`.
+- `set_transcriber(fn)` seam for real audio STT. Default is an
+  honest `audio_transcription_not_implemented` stub.
+- Explicit error codes: `input_not_found`, `input_not_queueable`,
+  `transcript_too_short`, `audio_transcription_not_implemented`,
+  `transcriber_contract_violation`, `invalid_input_type`,
+  `unexpected_error`, `max_retries_exceeded`.
+
+### Step 3 — Note orchestrator (`app/services/note_orchestrator.py`)
+- Wraps the phase-19 generator so the HTTP handler never touches
+  it directly.
+- Enforces the pipeline contract: input ready → findings extracted
+  → note drafted → provider review required.
+- All writes inside a single transaction.
+- `OrchestrationError(error_code, reason, status_code)` surfaces
+  clean error codes (`no_completed_input`, `input_not_ready`,
+  `input_not_found`, `generation_failed`).
+
+### Step 4 — HTTP surface
+- `POST /encounters/{id}/inputs` — every row now enters at
+  `queued`; text inputs run the pipeline inline so existing
+  callers still see `completed`. Failures are persisted.
+- `POST /encounter-inputs/{id}/process` — drive a queued row
+  through the pipeline; returns `{input, ingestion_error}`.
+- `POST /encounter-inputs/{id}/retry` — flip failed → queued +
+  increment retry_count; emits `encounter_input_retried` audit
+  event.
+- `POST /encounters/{id}/notes/generate` now delegates to the
+  orchestrator. Same contract, cleaner error translation.
+- Input responses now include `retry_count`, `last_error`,
+  `last_error_code`, `started_at`, `finished_at`, `worker_id`.
+
+### Step 5 — Frontend
+- `api.ts`: `EncounterInput` gains job-lifecycle fields;
+  `processEncounterInput` + `retryEncounterInput` helpers added.
+- `NoteWorkspace.tsx`: transcript tier now renders
+  `processing_status` as a color-coded pill, a `retries N` chip
+  when `retry_count > 0`, an error banner when `failed` /
+  `needs_review`, Retry + Process-now action buttons, and gates
+  the Generate-draft button on at least one `completed` input.
+- `styles.css`: color-coded pill rules for `queued` /
+  `processing` / `failed` / `needs_review`; retry-count chip.
+
+### Step 6 — Tests
+- Backend **+14** in `tests/test_ingestion_lifecycle.py`:
+  happy path, too-short failure, audio-queued default,
+  no-transcriber refusal, transcriber seam, retry + process chain,
+  retry refused on `completed`, audit event emitted, cross-org
+  404, reviewer 403, generate refuses `failed`, generate happy
+  path after refactor, process idempotent on `completed`.
+- Frontend **+4** in `src/test/NoteWorkspace.test.tsx`:
+  failed error banner + Retry dispatches retry→process;
+  `retries N` chip; queued Process-now button + Generate-disabled
+  gating; Generate enabled when completed input exists.
+- **210/210 pytest**, **49/49 Vitest**, 17/17 Playwright workflow
+  + a11y, 4/4 visual (baselines refreshed).
+
+### Step 7 — Docs
+- New `docs/build/33-async-ingestion-lifecycle.md` — full phase
+  reference (state machine diagram, schema, service seams, HTTP
+  surface, UI contract, verification, explicit non-goals).
+- Updated `01-current-state`, `03-api-endpoints`, `04-data-model`,
+  `05-build-log` (this entry), `06-known-gaps`, `08-test-strategy`,
+  `15-frontend-integration`, `16-frontend-test-strategy`,
+  `30-transcript-to-note` (points to section 33 for the real
+  lifecycle), `er-diagram` (new columns on encounter_inputs).
+- `scripts/build_docs.py` picks up section 33; executive summary
+  extended. Final HTML + PDF regenerated.
+
+### Step 8 — Hygiene
+- Dev DB reset to pristine seeded state before commit.
+- Visual baselines refreshed.
+- No new runtime deps (ingestion + orchestrator are stdlib only).
+
+---
+
 ## 2026-04-18 — Phase 21: external encounter → native workflow bridge
 
 ### Step 1 — Migration `b8c9d0e1f203`

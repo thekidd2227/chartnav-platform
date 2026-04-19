@@ -1,6 +1,6 @@
 # ChartNav — Current State
 
-**As of:** 2026-04-18 (phase: external encounter → native workflow bridge)
+**As of:** 2026-04-18 (phase: async ingestion + orchestration lifecycle)
 
 ## Repo layout (relevant)
 
@@ -24,8 +24,8 @@ chartnav-platform/
 │   │   │   ├── services/        # domain service seam (phase 19)
 │   │   │   │   └── note_generator.py  # regex fake today; LLM slot in, shape locked
 │   │   │   └── api/routes.py    # + /inputs + /notes/generate + /note-versions/* (phase 19)
-│   │   ├── alembic/versions/    # 9 migrations through b8c9d0e1f203
-│   │   ├── tests/               # 196 pytest (+11 encounter bridge)
+│   │   ├── alembic/versions/    # 10 migrations through c9d0e1f2a304
+│   │   ├── tests/               # 210 pytest (+14 ingestion lifecycle)
 │   │   └── Dockerfile · entrypoint.sh · .env.example
 │   └── web/
 │       ├── src/
@@ -58,20 +58,21 @@ chartnav-platform/
 - **Platform mode** (phase 16): `CHARTNAV_PLATFORM_MODE` ∈ {`standalone`, `integrated_readthrough`, `integrated_writethrough`}. Adapter boundary (`ClinicalSystemAdapter`) separates ChartNav core from any external EHR/EMR. Ships `NativeChartNavAdapter` (standalone) + `StubClinicalSystemAdapter` (integrated placeholder) + **`FHIRAdapter`** (phase 18). Vendor adapters plug in via `register_vendor_adapter`. Config fails loudly on misconfig. `GET /platform` surfaces mode + adapter + source-of-truth to the UI.
 - **Native clinical layer** (phase 18): `patients` and `providers` tables are org-scoped, soft-active, and carry `external_ref` for integrated-mode mirroring. `encounters.patient_id` + `encounters.provider_id` are nullable FKs so the legacy text fields (`patient_identifier`, `provider_name`) continue to render. Standalone mode persists and queries via the native adapter; `integrated_readthrough` refuses native writes with a clear error code.
 - **FHIR adapter** (phase 18): real R4 read-through over a pluggable transport. Normalizes Patient + Encounter resources into ChartNav's internal shape (status mapping, participant display, MRN extraction, birthDate/gender passthrough). Write paths raise `AdapterNotSupported` honestly. Config: `CHARTNAV_FHIR_BASE_URL`, `CHARTNAV_FHIR_AUTH_TYPE`, `CHARTNAV_FHIR_BEARER_TOKEN`.
+- **Async ingestion + orchestration lifecycle** (phase 22): `encounter_inputs` rows now run through a real job lifecycle (`queued → processing → completed | failed | needs_review`) with `retry_count`, `last_error`, `last_error_code`, `started_at`, `finished_at`, `worker_id`. New `app/services/ingestion.py` owns the state machine + an `set_transcriber(fn)` seam for real audio STT. New `app/services/note_orchestrator.py` wraps `note_generator` so the HTTP handler never touches the generator directly — an LLM drops into one function. Two new endpoints — `POST /encounter-inputs/{id}/process` (drive queued → terminal) and `POST /encounter-inputs/{id}/retry` (bump retry_count + flip back to queued). Frontend surfaces the full lifecycle: status pills, retry-count chip, honest error banner, Retry + Process-now buttons, and Generate gated on a completed input.
 - **External encounter → native workflow bridge** (phase 21): `POST /encounters/bridge` get-or-creates a native `encounters` row keyed on `(organization_id, external_ref, external_source)` for externally-sourced encounters. Idempotent. Preserves the phase-20 contract — the external EHR still owns encounter state; the bridge only unlocks ChartNav-native workflow (transcript → findings → draft → sign → export). Refused in standalone mode. Frontend surfaces a **Bridge to ChartNav** action on external encounter detail; after bridging, the encounter flips to `_source="chartnav"` and the full `NoteWorkspace` is available.
 - **Adapter-driven encounters** (phase 20): `GET /encounters` and `GET /encounters/{id}` dispatch through the resolved adapter. Standalone → native adapter (same SQL as before). Integrated → adapter-owned rows tagged `_source` (`chartnav` / `fhir` / `stub` / vendor). Write gating is mode-aware: `POST /encounters` returns 409 `encounter_write_unsupported` in both integrated modes; `POST /encounters/{id}/status` returns 409 in read-through and dispatches through the adapter in write-through (501 `adapter_write_not_supported` when the adapter raises `AdapterNotSupported`). Frontend surfaces a source-of-truth chip + SoT banner; status controls and the note workspace are suppressed on external encounters.
 - **Transcript → note drafting → signoff** (phase 19): three org-scoped tables (`encounter_inputs`, `extracted_findings`, `note_versions`), a note-generator service seam at `app/services/note_generator.py` (deterministic fake today; LLM plugs in at one function, output contract locked), provider review workspace in the frontend with three visually distinct trust tiers (transcript → findings → draft → signed), status state machine (`draft → provider_review → revised → signed → exported`), immutability after sign, audit events on every meaningful action, text download + clipboard export.
 - **Brand alignment** (phase 17): product UI uses the ChartNav marketing site's exact token set (`--cn-*`). Inter typography, teal `#0B6E79` primary, real logo SVG in the header, subtle `Powered by ARCG Systems` footer. Axe-AA contrast preserved.
 - **Domain**: `chartnav.ai` → `https://arcgsystems.com/chartnav/` via GoDaddy 301 forwarding (external) + in-repo host-based safety-net in `arcg-live`. Runbook: `arcg-live/docs/chartnav-ai-domain-runbook.md`.
-- Alembic head: `b8c9d0e1f203` (phase 21 — encounters.external_ref + external_source + unique bridge constraint).
+- Alembic head: `c9d0e1f2a304` (phase 22 — encounter_inputs job lifecycle: retry_count, last_error, started_at/finished_at, worker_id).
 
 ## Testing layers
 
 | Layer                | Tool         | Count | Notes |
 |----------------------|--------------|:-----:|-------|
-| pytest               | pytest       |  196  | +11 encounter bridge (idempotent get-or-create + full wedge on bridged row) |
+| pytest               | pytest       |  210  | +14 ingestion lifecycle (state machine, retry, transcriber seam, orchestrator contract) |
 | shell smoke          | smoke.sh     |   9   | unchanged |
-| Vitest               | vitest       |  45   | +1 bridge-button dispatches bridgeEncounter |
+| Vitest               | vitest       |  49   | +4 workspace lifecycle (retry, process, error banner, generate gating) |
 | Playwright workflow  | @playwright  |  12   | unchanged contract |
 | Playwright a11y      | @axe-core/playwright | 5 | NEW |
 | Playwright visual    | Playwright snapshots | 4 | NEW (local only) |
@@ -85,8 +86,8 @@ older callers that pass no params still see the first 100 rows.
 
 ## Automation
 
-- `make verify` → 196 pytest + 9 smoke
-- `make web-verify` → 45 vitest + typecheck + build
+- `make verify` → 210 pytest + 9 smoke
+- `make web-verify` → 49 vitest + typecheck + build
 - `make e2e` → 12 workflow + 5 a11y + 4 visual (local)
 - `make e2e-a11y` / `make e2e-visual` / `make e2e-visual-update`
 - `make audit-prune ARGS="--days 90 --dry-run"`

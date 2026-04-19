@@ -39,6 +39,14 @@
 Adds "admin can issue an invitation and download audit CSV" on top of
 the 11 scenarios shipped through phase 13.
 
+## Phase-22 additions
+
+- **Async ingestion lifecycle**: `encounter_inputs` grew `retry_count`, `last_error`, `last_error_code`, `started_at`, `finished_at`, `worker_id`. Real state machine: `queued → processing → completed | failed | needs_review`.
+- **Ingestion service** (`app/services/ingestion.py`) with `set_transcriber(fn)` seam for real STT.
+- **Note orchestrator** (`app/services/note_orchestrator.py`) — HTTP handler no longer touches the generator directly.
+- **Retry + process endpoints** + frontend UX for failed / needs_review / queued states.
+- **210 pytest** (+14), **49 Vitest** (+4), 17 Playwright + 4 visual.
+
 ## Phase-21 additions
 
 - **External encounter → native workflow bridge**: `POST /encounters/bridge` creates/resolves a native row keyed on `(org, external_ref, external_source)`. Idempotent. Frontend bridge button on external encounter detail.
@@ -98,7 +106,9 @@ the 11 scenarios shipped through phase 13.
 ## Real gaps (prioritized for next phase)
 
 0. **No real LLM wired into the note generator yet** — `app/services/note_generator.py` ships a deterministic regex + SOAP-template fake. The seam is a single function; output contract is locked. Next: swap for a real inference endpoint (or SMART-on-FHIR-aware model).
-0. **No audio STT worker** — `audio_upload` inputs stay `queued` forever. Future work: a background worker that fills `transcript_text` and flips processing_status.
+0. **No real audio STT yet** — `app/services/ingestion.py::transcribe_audio` is a `NotImplementedError`-shape stub. A real transcriber plugs in via `set_transcriber(fn)`; the full state machine, retry, and UI lifecycle are ready for it.
+0. **No background-worker infrastructure** — ingestion runs in the request path. The contract survives a move to cron / Celery / RQ without HTTP changes.
+0. **No streaming / WebSocket progress** — the UI polls on action completion. SSE or WebSocket updates are future work.
 0. **No EHR write-back for signed notes** — export is download + clipboard only. FHIR `DocumentReference` writes remain `AdapterNotSupported`; vendor adapters layer real push.
 0. **No PDF or HL7 export** — plain text only. Deliberate: honest paste-into-EHR, not a vendor-format we don't own.
 0. **No SMART-on-FHIR auth** on the FHIR adapter — `auth_type=bearer` takes a pre-provisioned token. Full SMART launch flow is future work.

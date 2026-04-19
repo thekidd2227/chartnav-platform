@@ -931,3 +931,33 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
   color: var(--cn-info);
   border-color: #BFDBFE;
 }
+
+/* ============================================================
+   Async ingestion lifecycle indicators (phase 22)
+   ============================================================ */
+.workspace__retry-count {
+  margin-left: 6px;
+  font-weight: 500;
+  opacity: 0.75;
+}
+.status-pill[data-status="queued"] {
+  background: #F1F5F9;
+  color: #334155;
+  border-color: #CBD5E1;
+}
+.status-pill[data-status="processing"] {
+  background: var(--cn-info-tint);
+  color: var(--cn-info);
+  border-color: #BFDBFE;
+}
+.status-pill[data-status="failed"] {
+  background: var(--cn-danger-tint);
+  color: var(--cn-danger);
+  border-color: #FECACA;
+}
+.status-pill[data-status="needs_review"],
+.status-pill[data-status="needs\ review"] {
+  background: var(--cn-warning-tint);
+  color: #92400E;
+  border-color: #FCD34D;
+}

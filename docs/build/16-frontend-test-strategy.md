@@ -195,6 +195,17 @@ two suites never cross-contaminate.
   matching `/bridg/i` since the copy now explains the bridge path
   instead of a blanket native-only limitation.
 
+## Ingestion lifecycle tests (phase 22)
+
+- **+4** in `src/test/NoteWorkspace.test.tsx`:
+  - `failed` input renders the `banner--error` with
+    `last_error_code` + `last_error`; Retry button is present and
+    dispatches `retry` then `process`.
+  - `retry_count > 0` renders the `retries N` trailing chip.
+  - `queued` input renders the Process-now button and Generate is
+    disabled until a `completed` input exists.
+  - Generate is enabled when a `completed` input is present.
+
 ## Gaps not yet covered
 - Visual regression not in CI (documented; OS-specific baselines).
 - No keyboard-only / screen-reader manual QA pass beyond axe's

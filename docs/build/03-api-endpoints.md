@@ -36,6 +36,19 @@ Base URL (local dev): `http://127.0.0.1:8000`. All error bodies use
 Encounter responses now also include `patient_id` + `provider_id`
 nullable FKs pointing at the rows above.
 
+## Ingestion lifecycle (phase 22)
+
+| Method | Path | Role | Behavior |
+|---|---|---|---|
+| `POST` | `/encounter-inputs/{id}/process` | admin + clinician | Synchronously drive a `queued` row through the pipeline. Returns `{input, ingestion_error}`. `ingestion_error` is `null` on success or `{error_code, reason}` on failure. |
+| `POST` | `/encounter-inputs/{id}/retry`   | admin + clinician | Flip `failed` / `needs_review` → `queued` and increment `retry_count`. 409 `input_not_queueable` on `completed`/`processing`. Emits `encounter_input_retried` audit event. |
+
+`POST /encounters/{id}/inputs` responses (and every input-listing
+response) now include `retry_count`, `last_error`, `last_error_code`,
+`started_at`, `finished_at`, `worker_id`. Text-type inputs still
+arrive at `completed`; failures are persisted and surfaced in the
+response body instead of thrown.
+
 ## Encounter bridge (phase 21)
 
 | Method | Path                 | Role              | Behavior |

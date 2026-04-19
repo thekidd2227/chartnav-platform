@@ -178,6 +178,21 @@ preferred source of truth going forward; integrations can populate
 `external_ref` on the corresponding `patients`/`providers` row and
 the encounter FK for full lineage.
 
+### `encounter_inputs` — async job lifecycle (phase 22)
+
+Six columns added (all nullable / sensibly defaulted):
+
+| column            | type         | notes |
+|-------------------|--------------|-------|
+| `retry_count`     | INTEGER NOT NULL | default 0; incremented only on explicit `POST /encounter-inputs/{id}/retry` |
+| `last_error`      | TEXT nullable | cleared on subsequent success |
+| `last_error_code` | VARCHAR(100) nullable | stable grep-able codes (`transcript_too_short`, `audio_transcription_not_implemented`, …) |
+| `started_at`      | DATETIME nullable | stamped when a worker enters `processing` |
+| `finished_at`     | DATETIME nullable | stamped on terminal state |
+| `worker_id`       | VARCHAR(64) nullable | `"inline"` for request-path runs; future workers can tag themselves |
+
+Migration `c9d0e1f2a304`. Standalone + integrated flows unaffected.
+
 ### `encounter_inputs` / `extracted_findings` / `note_versions` (phase 19)
 
 Three org-scoped tables (via `encounters.organization_id`) that

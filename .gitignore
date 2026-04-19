@@ -35,3 +35,4 @@ apps/web/e2e-results/
 
 # Release output
 dist/release/
+.claude/

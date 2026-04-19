@@ -1765,6 +1765,8 @@ NOTE_TRANSITIONS: dict[str, set[str]] = {
 INPUT_COLUMNS = (
     "id, encounter_id, input_type, processing_status, transcript_text, "
     "confidence_summary, source_metadata, created_by_user_id, "
+    "retry_count, last_error, last_error_code, "
+    "started_at, finished_at, worker_id, "
     "created_at, updated_at"
 )
 FINDINGS_COLUMNS = (
@@ -1858,6 +1860,13 @@ def create_encounter_input(
                 400,
             )
 
+    # Every input now enters the pipeline at `queued`; the ingestion
+    # service transitions it through `processing → completed | failed`.
+    # Callers can still override to `queued` explicitly for an audio
+    # upload that hasn't been dispatched yet, but cannot ship a row
+    # straight to `completed` — the pipeline owns that transition.
+    initial_status = requested_status if requested_status == "queued" else "queued"
+
     with transaction() as conn:
         new_id = insert_returning_id(
             conn,
@@ -1865,7 +1874,7 @@ def create_encounter_input(
             {
                 "encounter_id": encounter_id,
                 "input_type": payload.input_type,
-                "processing_status": requested_status,
+                "processing_status": initial_status,
                 "transcript_text": payload.transcript_text,
                 "confidence_summary": payload.confidence_summary,
                 "source_metadata": (
@@ -1889,6 +1898,22 @@ def create_encounter_input(
         detail=f"input_type={payload.input_type}",
     )
 
+    # Text-type inputs have all the material the pipeline needs now —
+    # run it inline so existing callers (and tests) see `completed`.
+    # Audio uploads stay `queued` for a future STT worker to pick up.
+    # Failures are persisted on the row; the HTTP response carries the
+    # terminal state either way. We do NOT raise — the row is created,
+    # the pipeline outcome is inspectable on the returned body.
+    if payload.input_type in {"text_paste", "manual_entry", "imported_transcript"}:
+        from app.services import ingestion as _ingest
+        try:
+            _ingest.run_ingestion_now(new_id)
+        except _ingest.IngestionError:
+            # Swallow — the failed row is persisted and the client
+            # sees `processing_status=failed` + `last_error_code` in
+            # the response. Retrying is an explicit operator action.
+            pass
+
     row = fetch_one(
         f"SELECT {INPUT_COLUMNS} FROM encounter_inputs WHERE id = :id",
         {"id": new_id},
@@ -1897,11 +1922,9 @@ def create_encounter_input(
 
 
 def _default_status(payload: "EncounterInputCreate") -> str:
-    # Text-paste and manual entry are "completed" on arrival because the
-    # transcript_text is already present. Audio uploads start "queued"
-    # so a future STT worker can flip them through processing -> completed.
-    if payload.input_type in {"text_paste", "manual_entry", "imported_transcript"}:
-        return "completed"
+    # Everything enters at `queued` now; the pipeline owns all
+    # transitions. Kept as a named helper so the contract remains
+    # grep-able when vendors plug in.
     return "queued"
 
 
@@ -1982,93 +2005,28 @@ def generate_note(
             400,
         )
 
-    # Resolve the source input.
-    if payload.input_id is not None:
-        input_row = fetch_one(
-            f"SELECT {INPUT_COLUMNS} FROM encounter_inputs "
-            "WHERE id = :id AND encounter_id = :eid",
-            {"id": payload.input_id, "eid": encounter_id},
-        )
-        if input_row is None:
-            raise _err("input_not_found", "no such encounter input", 404)
-    else:
-        input_row = fetch_one(
-            f"SELECT {INPUT_COLUMNS} FROM encounter_inputs "
-            "WHERE encounter_id = :eid AND processing_status = 'completed' "
-            "ORDER BY id DESC LIMIT 1",
-            {"eid": encounter_id},
-        )
-        if input_row is None:
-            raise _err(
-                "no_completed_input",
-                "encounter has no completed input to generate from; "
-                "POST /encounters/{id}/inputs first",
-                409,
-            )
-
-    if input_row["processing_status"] != "completed":
-        raise _err(
-            "input_not_ready",
-            f"input is {input_row['processing_status']!r}, expected "
-            "'completed' before generation",
-            409,
-        )
-
-    # Generate.
-    result = generate_draft(
-        transcript_text=input_row.get("transcript_text") or "",
-        patient_display=(
-            enc.get("patient_name") or enc.get("patient_identifier") or "<patient>"
-        ),
-        provider_display=enc.get("provider_name") or "<provider>",
+    # Orchestrator owns the pipeline (phase 22). It translates
+    # resolution failures (input not found / not ready) into clean
+    # error codes we forward straight through.
+    from app.services.note_orchestrator import (
+        OrchestrationError, run_note_generation,
     )
-
-    with transaction() as conn:
-        findings_id = insert_returning_id(
-            conn,
-            "extracted_findings",
-            {
-                "encounter_id": encounter_id,
-                "input_id": input_row["id"],
-                "chief_complaint": result.findings.get("chief_complaint"),
-                "hpi_summary": result.findings.get("hpi_summary"),
-                "visual_acuity_od": result.findings.get("visual_acuity_od"),
-                "visual_acuity_os": result.findings.get("visual_acuity_os"),
-                "iop_od": result.findings.get("iop_od"),
-                "iop_os": result.findings.get("iop_os"),
-                "structured_json": _json.dumps(
-                    result.findings.get("structured_json", {}), sort_keys=True
-                ),
-                "extraction_confidence": result.findings.get("extraction_confidence"),
-            },
-        )
-
-        # version_number: max(existing)+1 for this encounter.
-        max_row = conn.execute(
-            text(
-                "SELECT COALESCE(MAX(version_number), 0) AS n "
-                "FROM note_versions WHERE encounter_id = :eid"
+    try:
+        output = run_note_generation(
+            encounter_id=encounter_id,
+            input_id=payload.input_id,
+            patient_display=(
+                enc.get("patient_name") or enc.get("patient_identifier") or "<patient>"
             ),
-            {"eid": encounter_id},
-        ).mappings().first()
-        next_version = int(max_row["n"]) + 1 if max_row else 1
-
-        new_note_id = insert_returning_id(
-            conn,
-            "note_versions",
-            {
-                "encounter_id": encounter_id,
-                "version_number": next_version,
-                "draft_status": "draft",
-                "note_format": fmt,
-                "note_text": result.note_text,
-                "source_input_id": input_row["id"],
-                "extracted_findings_id": findings_id,
-                "generated_by": "system",
-                "provider_review_required": True,
-                "missing_data_flags": _json.dumps(result.missing_flags),
-            },
+            provider_display=enc.get("provider_name") or "<provider>",
+            note_format=fmt,
         )
+    except OrchestrationError as e:
+        raise _err(e.error_code, e.reason, e.status_code)
+
+    new_note_id = output.note_id
+    findings_id = output.findings_id
+    next_version = output.version_number
 
     from app import audit as _audit
     _audit.record(
@@ -2081,7 +2039,7 @@ def generate_note(
         method="POST",
         detail=(
             f"note_id={new_note_id} version={next_version} "
-            f"input_id={input_row['id']} flags={len(result.missing_flags)}"
+            f"findings_id={findings_id}"
         ),
     )
 
@@ -2315,3 +2273,98 @@ def export_note(
         detail=f"note_id={note_id}",
     )
     return _load_note_for_caller(note_id, caller)
+
+
+# ===========================================================================
+# Async ingestion lifecycle (phase 22)
+# ===========================================================================
+
+@router.post("/encounter-inputs/{input_id}/process", status_code=status.HTTP_200_OK)
+def process_encounter_input(
+    input_id: int,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Synchronously run the ingestion pipeline for a queued input.
+
+    Primary use: audio uploads that a worker would normally pick up.
+    Operators can also call this against text-type rows to retry
+    after a failed run — call `retry` first to flip `failed` →
+    `queued`, then `process`.
+    """
+    require_create_event(caller)
+
+    row = fetch_one(
+        f"SELECT {INPUT_COLUMNS} FROM encounter_inputs WHERE id = :id",
+        {"id": input_id},
+    )
+    if row is None:
+        raise _err("input_not_found", "no such encounter input", 404)
+    _load_encounter_for_caller(row["encounter_id"], caller)  # scope
+
+    from app.services import ingestion as _ingest
+    try:
+        _ingest.run_ingestion_now(input_id)
+    except _ingest.IngestionError as e:
+        # Pipeline already persisted the terminal state on the row.
+        # Still surface the error code to the client so they know
+        # the current attempt failed.
+        updated = fetch_one(
+            f"SELECT {INPUT_COLUMNS} FROM encounter_inputs WHERE id = :id",
+            {"id": input_id},
+        )
+        return {"input": updated, "ingestion_error": {
+            "error_code": e.error_code, "reason": e.reason,
+        }}
+
+    updated = fetch_one(
+        f"SELECT {INPUT_COLUMNS} FROM encounter_inputs WHERE id = :id",
+        {"id": input_id},
+    )
+    return {"input": updated, "ingestion_error": None}
+
+
+@router.post("/encounter-inputs/{input_id}/retry", status_code=status.HTTP_200_OK)
+def retry_encounter_input(
+    input_id: int,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Flip a `failed` / `needs_review` input back to `queued` + increment retry_count.
+
+    Does NOT automatically re-run the pipeline; callers chain this
+    with `POST /encounter-inputs/{id}/process` for the full retry.
+    """
+    require_create_event(caller)
+
+    row = fetch_one(
+        f"SELECT {INPUT_COLUMNS} FROM encounter_inputs WHERE id = :id",
+        {"id": input_id},
+    )
+    if row is None:
+        raise _err("input_not_found", "no such encounter input", 404)
+    _load_encounter_for_caller(row["encounter_id"], caller)
+
+    from app.services import ingestion as _ingest
+    try:
+        _ingest.enqueue_input(input_id)
+    except _ingest.NotReadyToProcess as e:
+        raise _err(e.error_code, e.reason, 409)
+    except _ingest.IngestionError as e:
+        raise _err(e.error_code, e.reason, 400)
+
+    from app import audit as _audit
+    _audit.record(
+        event_type="encounter_input_retried",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path=f"/encounter-inputs/{input_id}/retry",
+        method="POST",
+        detail=f"input_id={input_id}",
+    )
+
+    updated = fetch_one(
+        f"SELECT {INPUT_COLUMNS} FROM encounter_inputs WHERE id = :id",
+        {"id": input_id},
+    )
+    return updated

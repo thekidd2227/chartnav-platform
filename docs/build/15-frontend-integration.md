@@ -321,6 +321,30 @@ the RBAC reason explicit.
   was rewritten to describe the bridge instead of a blanket
   "native-only" limitation.
 
+## Async ingestion lifecycle UX (phase 22)
+
+Tier 1 of the NoteWorkspace now reflects the full async-job
+lifecycle the backend persists:
+
+- **Status pills** — color-coded per `processing_status`
+  (`queued` / `processing` / `completed` / `failed` /
+  `needs_review`).
+- **Retries chip** — "retries N" appears when `retry_count > 0`.
+- **Error banner** — `failed` / `needs_review` rows render a
+  `banner--error` showing `last_error_code: last_error`. No
+  silent failures.
+- **Retry button** — admin + clinician only; dispatches
+  `retry` then `process` and refreshes the list.
+- **Process now button** — on `queued` rows (primarily audio
+  uploads awaiting a worker or operator push).
+- **Generate gating** — the Generate-draft button is disabled
+  unless at least one input is `completed`. The button's
+  `title` explains why.
+
+All actions route through new `api.ts` helpers
+(`processEncounterInput`, `retryEncounterInput`) on top of the
+existing `listEncounterInputs` refresh cycle.
+
 ## What this phase explicitly does NOT do
 
 - No real login flow — `X-User-Email` is still dev transport.

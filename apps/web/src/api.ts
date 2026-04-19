@@ -784,6 +784,13 @@ export interface EncounterInput {
   confidence_summary: string | null;
   source_metadata: string | null;
   created_by_user_id: number | null;
+  // Phase 22 — async job lifecycle fields.
+  retry_count?: number;
+  last_error?: string | null;
+  last_error_code?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  worker_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -989,5 +996,41 @@ export function bridgeEncounter(
     email,
     method: "POST",
     body: JSON.stringify(body),
+  });
+}
+
+// ---------- Ingestion lifecycle (phase 22) ----------
+
+export interface EncounterInputJob extends EncounterInput {
+  retry_count: number;
+  last_error: string | null;
+  last_error_code: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  worker_id: string | null;
+}
+
+export interface ProcessResult {
+  input: EncounterInputJob;
+  ingestion_error: { error_code: string; reason: string } | null;
+}
+
+export function processEncounterInput(
+  email: string,
+  inputId: number,
+): Promise<ProcessResult> {
+  return request(`/encounter-inputs/${inputId}/process`, {
+    email,
+    method: "POST",
+  });
+}
+
+export function retryEncounterInput(
+  email: string,
+  inputId: number,
+): Promise<EncounterInputJob> {
+  return request(`/encounter-inputs/${inputId}/retry`, {
+    email,
+    method: "POST",
   });
 }

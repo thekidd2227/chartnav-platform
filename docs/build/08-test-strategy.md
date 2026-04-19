@@ -65,6 +65,20 @@ make docker-build
 - `make verify` (SQLite): 28 pytest + 9 smoke — all green
 - `scripts/pg_verify.sh`: migrations + seed (x2) + smoke + status transition + event write — **PASS**
 
+## Backend coverage (phase 22)
+
+- **210 pytest.** New `tests/test_ingestion_lifecycle.py` (+14):
+  happy-path through `completed`; too-short → `failed` with
+  `last_error_code`; audio-queued default; no-transcriber failure
+  honest error code; transcriber seam end-to-end; retry bumps
+  `retry_count` and emits audit event; retry refused on
+  `completed`; scope + RBAC (404, 403); `generate` refuses failed
+  input with `no_completed_input`; generate happy path still works
+  after orchestrator refactor; `process` idempotent on `completed`.
+- Frontend **49 Vitest** (+4 NoteWorkspace lifecycle assertions).
+- Playwright unchanged contract. Visual baselines refreshed for
+  the lifecycle UI.
+
 ## Backend coverage (phase 21)
 
 - **196 pytest.** New `tests/test_encounter_bridge.py` (+11):

@@ -30,6 +30,9 @@ vi.mock("../api", async () => {
     submitNoteForReview: vi.fn(),
     signNoteVersion: vi.fn(),
     exportNoteVersion: vi.fn(),
+    // Phase 22 — ingestion lifecycle.
+    processEncounterInput: vi.fn(),
+    retryEncounterInput: vi.fn(),
   };
 });
 

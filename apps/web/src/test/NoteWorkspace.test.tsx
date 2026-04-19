@@ -15,6 +15,9 @@ vi.mock("../api", async () => {
     submitNoteForReview: vi.fn(),
     signNoteVersion: vi.fn(),
     exportNoteVersion: vi.fn(),
+    // Phase 22 — ingestion lifecycle.
+    processEncounterInput: vi.fn(),
+    retryEncounterInput: vi.fn(),
   };
 });
 
@@ -277,5 +280,141 @@ describe("NoteWorkspace", () => {
     await waitFor(() =>
       expect(api.generateNoteVersion).toHaveBeenCalled()
     );
+  });
+
+  // -------------------------------------------------------------------
+  // Phase 22 — ingestion lifecycle UX
+  // -------------------------------------------------------------------
+
+  it("shows a failed input with last_error + offers a Retry button", async () => {
+    (api.listEncounterInputs as any).mockResolvedValue([
+      {
+        id: 7,
+        encounter_id: 1,
+        input_type: "text_paste",
+        processing_status: "failed",
+        transcript_text: "tiny",
+        confidence_summary: null,
+        source_metadata: null,
+        created_by_user_id: 1,
+        retry_count: 0,
+        last_error: "transcript is 4 characters; need at least 10",
+        last_error_code: "transcript_too_short",
+        started_at: "2026-04-18 22:00:00",
+        finished_at: "2026-04-18 22:00:01",
+        worker_id: "inline",
+        created_at: "2026-04-18 22:00:00",
+        updated_at: "2026-04-18 22:00:01",
+      },
+    ]);
+    (api.retryEncounterInput as any).mockResolvedValue({});
+    (api.processEncounterInput as any).mockResolvedValue({
+      input: {},
+      ingestion_error: null,
+    });
+    renderWorkspace();
+    const err = await screen.findByTestId("transcript-error-7");
+    expect(err).toHaveTextContent(/transcript_too_short/);
+    expect(err).toHaveTextContent(/need at least 10/);
+    const status = screen.getByTestId("transcript-status-7");
+    expect(status).toHaveAttribute("data-status", "failed");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("transcript-retry-7"));
+    await waitFor(() => {
+      expect(api.retryEncounterInput).toHaveBeenCalledWith(CLIN.email, 7);
+      expect(api.processEncounterInput).toHaveBeenCalledWith(CLIN.email, 7);
+    });
+  });
+
+  it("shows retry_count when > 0", async () => {
+    (api.listEncounterInputs as any).mockResolvedValue([
+      {
+        id: 8,
+        encounter_id: 1,
+        input_type: "audio_upload",
+        processing_status: "failed",
+        transcript_text: null,
+        confidence_summary: null,
+        source_metadata: null,
+        created_by_user_id: 1,
+        retry_count: 2,
+        last_error: "audio_transcription_not_implemented",
+        last_error_code: "audio_transcription_not_implemented",
+        started_at: "x",
+        finished_at: "x",
+        worker_id: "inline",
+        created_at: "x",
+        updated_at: "x",
+      },
+    ]);
+    renderWorkspace();
+    await screen.findByTestId("transcript-retry-count-8");
+    expect(screen.getByTestId("transcript-retry-count-8")).toHaveTextContent(
+      "retries 2"
+    );
+  });
+
+  it("queued input exposes a Process now button and disables Generate", async () => {
+    (api.listEncounterInputs as any).mockResolvedValue([
+      {
+        id: 9,
+        encounter_id: 1,
+        input_type: "audio_upload",
+        processing_status: "queued",
+        transcript_text: null,
+        confidence_summary: null,
+        source_metadata: null,
+        created_by_user_id: 1,
+        retry_count: 0,
+        last_error: null,
+        last_error_code: null,
+        started_at: null,
+        finished_at: null,
+        worker_id: null,
+        created_at: "x",
+        updated_at: "x",
+      },
+    ]);
+    (api.processEncounterInput as any).mockResolvedValue({
+      input: {},
+      ingestion_error: null,
+    });
+    renderWorkspace();
+    await screen.findByTestId("transcript-process-9");
+    // Generate button is disabled because no completed input exists.
+    expect(screen.getByTestId("generate-draft")).toBeDisabled();
+
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("transcript-process-9"));
+    await waitFor(() =>
+      expect(api.processEncounterInput).toHaveBeenCalledWith(CLIN.email, 9)
+    );
+  });
+
+  it("Generate stays enabled when a completed input exists", async () => {
+    (api.listEncounterInputs as any).mockResolvedValue([
+      {
+        id: 10,
+        encounter_id: 1,
+        input_type: "text_paste",
+        processing_status: "completed",
+        transcript_text: "done",
+        confidence_summary: null,
+        source_metadata: null,
+        created_by_user_id: 1,
+        retry_count: 0,
+        last_error: null,
+        last_error_code: null,
+        started_at: "x",
+        finished_at: "x",
+        worker_id: "inline",
+        created_at: "x",
+        updated_at: "x",
+      },
+    ]);
+    renderWorkspace();
+    await screen.findByTestId("transcript-status-10");
+    expect(screen.getByTestId("generate-draft")).toBeEnabled();
   });
 });

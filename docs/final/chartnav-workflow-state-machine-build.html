@@ -36,10 +36,10 @@
 <body>
 <header class="cover">
   <h1>ChartNav — Consolidated Build</h1>
-  <div class="sub">Phases 1–21: spine → state machine → auth → RBAC → CI → production seam → Postgres → frontend → E2E → JWT + ops → staging → governance → control plane → invitations → enterprise quality &amp; compliance → platform mode &amp; interoperability → brand &amp; domain alignment → native clinical layer + FHIR → transcript → note draft → provider signoff → adapter-driven encounters → external encounter bridge<br>
+  <div class="sub">Phases 1–22: spine → state machine → auth → RBAC → CI → production seam → Postgres → frontend → E2E → JWT + ops → staging → governance → control plane → invitations → enterprise quality &amp; compliance → platform mode &amp; interoperability → brand &amp; domain alignment → native clinical layer + FHIR → transcript → note draft → provider signoff → adapter-driven encounters → external encounter bridge → async ingestion + orchestration lifecycle<br>
   Repo: <code>thekidd2227/chartnav-platform</code></div>
 </header>
-<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth, org scoping, RBAC</a></li><li><a href="#sec-9">08 — Test strategy</a></li><li><a href="#sec-10">09 — CI & deploy hardening</a></li><li><a href="#sec-11">10 — Doc artifact pipeline</a></li><li><a href="#sec-12">11 — Production-auth seam</a></li><li><a href="#sec-13">12 — Runtime config</a></li><li><a href="#sec-14">13 — Deploy target</a></li><li><a href="#sec-15">14 — Postgres parity</a></li><li><a href="#sec-16">15 — Frontend integration</a></li><li><a href="#sec-17">16 — Frontend test strategy</a></li><li><a href="#sec-18">17 — E2E & release</a></li><li><a href="#sec-19">18 — Operational hardening</a></li><li><a href="#sec-20">19 — Staging deployment</a></li><li><a href="#sec-21">20 — Observability</a></li><li><a href="#sec-22">21 — Staging runbook</a></li><li><a href="#sec-23">22 — Admin governance</a></li><li><a href="#sec-24">23 — Operator control plane</a></li><li><a href="#sec-25">24 — Invitations & governance</a></li><li><a href="#sec-26">25 — Enterprise quality & compliance</a></li><li><a href="#sec-27">26 — Platform mode & interoperability</a></li><li><a href="#sec-28">27 — Adoption & implementation model</a></li><li><a href="#sec-29">28 — Brand & domain alignment</a></li><li><a href="#sec-30">29 — Native clinical layer & FHIR</a></li><li><a href="#sec-31">30 — Transcript → findings → note → signoff</a></li><li><a href="#sec-32">31 — Adapter-driven encounters & integrated write gating</a></li><li><a href="#sec-33">32 — External encounter → native workflow bridge</a></li><li><a href="#sec-34">Diagram — System architecture</a></li><li><a href="#sec-35">Diagram — Encounter status machine</a></li><li><a href="#sec-36">Diagram — ER</a></li><li><a href="#sec-37">Diagram — API / data flow</a></li></ol></nav>
+<nav class="toc"><strong>Contents</strong><ol><li><a href="#sec-1">Executive summary</a></li><li><a href="#sec-2">01 — Current state</a></li><li><a href="#sec-3">02 — Workflow state machine</a></li><li><a href="#sec-4">03 — API endpoints</a></li><li><a href="#sec-5">04 — Data model</a></li><li><a href="#sec-6">05 — Build log</a></li><li><a href="#sec-7">06 — Known gaps + verification matrix</a></li><li><a href="#sec-8">07 — Auth, org scoping, RBAC</a></li><li><a href="#sec-9">08 — Test strategy</a></li><li><a href="#sec-10">09 — CI & deploy hardening</a></li><li><a href="#sec-11">10 — Doc artifact pipeline</a></li><li><a href="#sec-12">11 — Production-auth seam</a></li><li><a href="#sec-13">12 — Runtime config</a></li><li><a href="#sec-14">13 — Deploy target</a></li><li><a href="#sec-15">14 — Postgres parity</a></li><li><a href="#sec-16">15 — Frontend integration</a></li><li><a href="#sec-17">16 — Frontend test strategy</a></li><li><a href="#sec-18">17 — E2E & release</a></li><li><a href="#sec-19">18 — Operational hardening</a></li><li><a href="#sec-20">19 — Staging deployment</a></li><li><a href="#sec-21">20 — Observability</a></li><li><a href="#sec-22">21 — Staging runbook</a></li><li><a href="#sec-23">22 — Admin governance</a></li><li><a href="#sec-24">23 — Operator control plane</a></li><li><a href="#sec-25">24 — Invitations & governance</a></li><li><a href="#sec-26">25 — Enterprise quality & compliance</a></li><li><a href="#sec-27">26 — Platform mode & interoperability</a></li><li><a href="#sec-28">27 — Adoption & implementation model</a></li><li><a href="#sec-29">28 — Brand & domain alignment</a></li><li><a href="#sec-30">29 — Native clinical layer & FHIR</a></li><li><a href="#sec-31">30 — Transcript → findings → note → signoff</a></li><li><a href="#sec-32">31 — Adapter-driven encounters & integrated write gating</a></li><li><a href="#sec-33">32 — External encounter → native workflow bridge</a></li><li><a href="#sec-34">33 — Async ingestion + orchestration lifecycle</a></li><li><a href="#sec-35">Diagram — System architecture</a></li><li><a href="#sec-36">Diagram — Encounter status machine</a></li><li><a href="#sec-37">Diagram — ER</a></li><li><a href="#sec-38">Diagram — API / data flow</a></li></ol></nav>
 <section id="sec-1"><h2>Executive summary</h2>
 <p>This document consolidates <strong>all</strong> ChartNav backend phases delivered to</p>
 <p>date.</p>
@@ -64,13 +64,14 @@
 <table><thead><tr><th><strong>Phase 19 — Transcript → findings → note draft → provider signoff.</strong> The ChartNav wedge becomes real: ingest encounter input, extract structured ophthalmology facts, generate a draft, walk the provider through review/edit/sign/export. Alembic migration <code>a7b8c9d0e1f2</code> adds three org-scoped tables: <code>encounter_inputs</code> (audio upload metadata, pasted text, manual entry, imported transcript — input_type + processing_status + transcript_text + confidence_summary + source_metadata JSON), <code>extracted_findings</code> (CC, HPI, VA OD/OS, IOP OD/OS, extraction_confidence top-level + structured_json for diagnoses/medications/imaging/plan/follow-up), and <code>note_versions</code> (monotonic version_number per encounter, status machine <code>draft → provider_review → revised → signed → exported</code>, <code>generated_by</code> {system</th><th>manual}, missing_data_flags JSON array, signed_at + signed_by_user_id, exported_at). The <strong>trust model is enforced at both the data layer and the UI</strong>: three separate tables → three visually distinct tiers in <code>apps/web/src/NoteWorkspace.tsx</code> (transcript → extracted facts → AI draft → provider signed). Nine new endpoints (<code>POST/GET /encounters/{id}/inputs</code>, <code>POST /encounters/{id}/notes/generate</code>, <code>GET /encounters/{id}/notes</code>, <code>GET/PATCH /note-versions/{id}</code>, <code>POST /note-versions/{id}/submit-for-review</code>, <code>.../sign</code>, <code>.../export</code>); provider edit auto-flips to <code>revised</code> + <code>generated_by=manual</code>; signed/exported notes are immutable (<code>note_immutable</code> 409); reviewers cannot sign (<code>role_cannot_sign</code> 403); audit events recorded on every meaningful action. A dedicated service seam at <code>app/services/note_generator.py</code> is the <strong>one place</strong> a real LLM plugs in — today&#x27;s body is a deterministic regex extractor + SOAP template that never fabricates values the transcript doesn&#x27;t contain, emitting explicit missing-data flags instead. Export is a separate state (download <code>.txt</code> + clipboard copy), honest about not writing back to vendor EHRs. Suites grow to <strong>174 pytest</strong> (+19), <strong>42 Vitest</strong> (+8), 17 Playwright workflow+a11y + 4 visual (baselines refreshed for the new workspace). Zero new runtime deps.</th></tr></thead><tbody>
 <tr><td><strong>Phase 20 — Adapter-driven encounters + integrated write gating.</strong> The <code>/encounters</code> and <code>/encounters/{id}</code> HTTP handlers now dispatch through <code>resolve_adapter()</code> in every mode. Standalone → native adapter (same SQL); integrated → stub / FHIR / vendor adapter. The <code>ClinicalSystemAdapter</code> protocol grew a <code>list_encounters(organization_id, location_id, status, provider_name, limit, offset) → EncounterListResult</code> method; <code>fetch_encounter</code> was widened to return the full ChartNav row shape. Every encounter row carries <code>_source</code> (<code>chartnav</code> / <code>fhir</code> / <code>stub</code> / vendor key) and <code>_external_ref</code> where applicable. The FHIR adapter implements <code>list_encounters</code> via <code>GET /Encounter?_count=…&amp;status=&lt;mapped&gt;</code> with full ChartNav→FHIR status translation (<code>planned ↔ scheduled</code>, <code>in-progress ↔ in_progress</code>, <code>finished ↔ completed</code>). Write gating is mode-aware: <code>POST /encounters</code> returns 409 <code>encounter_write_unsupported</code> in both integrated modes; <code>POST /encounters/{id}/status</code> returns 409 in read-through and <strong>adapter-dispatches</strong> in write-through (generic FHIR still raises <code>AdapterNotSupported</code> → 501 <code>adapter_write_not_supported</code>, which is a transport-honest distinction from the 409 &quot;mode blocks this entirely&quot;). ChartNav-native tables (<code>workflow_events</code>, <code>encounter_inputs</code>, <code>extracted_findings</code>, <code>note_versions</code>, <code>security_audit_events</code>) remain fully writable in every mode because they&#x27;re ChartNav&#x27;s own tracking. Frontend surfaces the SoT explicitly: encounter detail renders a <strong>source chip</strong> (teal for native, info-blue for external) and, when the encounter is external, a banner explaining the external EHR owns the row + suppressed transitions + suppressed <code>NoteWorkspace</code> with an honest subtle-note. <code>Encounter.id</code> widens to `number</td><td>string<code> so FHIR vendor ids round-trip cleanly through </code>getEncounter<code>/</code>updateEncounterStatus<code>/</code>createEncounterEvent<code>. Suites: <strong>185 pytest</strong> (+11 </code>test_integrated_encounters.py`), <strong>44 Vitest</strong> (+2 SoT UI), 17 Playwright + 4 visual (baselines refreshed). Zero new runtime deps; Alembic history unchanged.</td></tr>
 </tbody></table>
-<table><thead><tr><th><strong>Phase 21 — External encounter → native workflow bridge (this phase).</strong> The ChartNav wedge (transcript → findings → note draft → provider signoff) now runs on externally-sourced encounters. Alembic migration <code>b8c9d0e1f203</code> adds <code>encounters.external_ref</code> + <code>encounters.external_source</code> (nullable) plus a UNIQUE <code>(organization_id, external_ref, external_source)</code> — the DB-level guarantee that makes the bridge idempotent. New <code>apps/api/app/services/bridge.py::resolve_or_create_bridged_encounter(...)</code> is the single service seam: idempotent get-or-create, returns the native row with a `_bridged: true</th><th>false<code> tag so the frontend can differentiate first-create from subsequent resolves. New </code>POST /encounters/bridge<code> HTTP endpoint (admin + clinician; reviewer 403; standalone 409 </code>bridge_not_available_in_standalone_mode<code>) calls the service, emits a </code>encounter_bridged<code> audit event on first create only. Phase-20 contract preserved: bridging does NOT reopen encounter state writes — </code>POST /encounters/{id}/status<code> on a bridged row in integrated_readthrough still returns 409 </code>encounter_write_unsupported<code>. Frontend </code>ExternalEncounterBanner<code> component adds a <strong>Bridge to ChartNav</strong> button inside the SoT banner; clicking dispatches </code>bridgeEncounter(...)<code> and navigates to the native id, at which point the full </code>NoteWorkspace<code> appears because </code>_source<code> is now </code>chartnav<code>. Reviewer role sees the banner but no button, with a subtle-note explanation. The external-note copy was rewritten to describe the bridge path instead of a generic native-only limitation. Suites grow to <strong>196 pytest</strong> (+11 </code>test_encounter_bridge.py`), <strong>45 Vitest</strong> (+1), 17 Playwright + 4 visual (baselines refreshed). Zero new runtime deps.</th></tr></thead><tbody>
+<table><thead><tr><th><strong>Phase 21 — External encounter → native workflow bridge.</strong> The ChartNav wedge (transcript → findings → note draft → provider signoff) now runs on externally-sourced encounters. Alembic migration <code>b8c9d0e1f203</code> adds <code>encounters.external_ref</code> + <code>encounters.external_source</code> (nullable) plus a UNIQUE <code>(organization_id, external_ref, external_source)</code> — the DB-level guarantee that makes the bridge idempotent. New <code>apps/api/app/services/bridge.py::resolve_or_create_bridged_encounter(...)</code> is the single service seam: idempotent get-or-create, returns the native row with a `_bridged: true</th><th>false<code> tag so the frontend can differentiate first-create from subsequent resolves. New </code>POST /encounters/bridge<code> HTTP endpoint (admin + clinician; reviewer 403; standalone 409 </code>bridge_not_available_in_standalone_mode<code>) calls the service, emits a </code>encounter_bridged<code> audit event on first create only. Phase-20 contract preserved: bridging does NOT reopen encounter state writes — </code>POST /encounters/{id}/status<code> on a bridged row in integrated_readthrough still returns 409 </code>encounter_write_unsupported<code>. Frontend </code>ExternalEncounterBanner<code> component adds a <strong>Bridge to ChartNav</strong> button inside the SoT banner; clicking dispatches </code>bridgeEncounter(...)<code> and navigates to the native id, at which point the full </code>NoteWorkspace<code> appears because </code>_source<code> is now </code>chartnav<code>. Reviewer role sees the banner but no button, with a subtle-note explanation. The external-note copy was rewritten to describe the bridge path instead of a generic native-only limitation. Suites grow to <strong>196 pytest</strong> (+11 </code>test_encounter_bridge.py`), <strong>45 Vitest</strong> (+1), 17 Playwright + 4 visual (baselines refreshed). Zero new runtime deps.</th></tr></thead><tbody>
+<tr><td><strong>Phase 22 — Async ingestion + orchestration lifecycle (this phase).</strong> The transcript-to-note wedge now runs on a real async-job state machine instead of flipping rows straight to <code>completed</code> on arrival. Alembic migration <code>c9d0e1f2a304</code> adds six columns to <code>encounter_inputs</code> (<code>retry_count</code>, <code>last_error</code>, <code>last_error_code</code>, <code>started_at</code>, <code>finished_at</code>, <code>worker_id</code>). New <code>app/services/ingestion.py</code> owns the `queued → processing → completed</td><td>failed</td><td>needs_review<code> state machine, persists every transition as a single DB write, and exposes a </code>set_transcriber(fn)<code> seam for real audio STT (default is an honest </code>NotImplementedError<code>-shape stub). New </code>app/services/note_orchestrator.py<code> wraps the phase-19 </code>note_generator<code> so the HTTP handler never touches the generator directly — a real LLM drops into one function, the pipeline contract (input ready → findings extracted → note drafted → provider review required) is enforced. Two new endpoints ship: </code>POST /encounter-inputs/{id}/process<code> drives a queued row through the pipeline and returns </code>{input, ingestion_error}<code>; </code>POST /encounter-inputs/{id}/retry<code> flips </code>failed<code>/</code>needs_review<code> rows back to </code>queued<code> with </code>retry_count++<code> and emits an </code>encounter_input_retried<code> audit event. Frontend surfaces the full lifecycle in NoteWorkspace Tier 1: color-coded status pills, a </code>retries N<code> chip, an error banner with </code>last_error_code<code>+</code>last_error<code>, Retry + Process-now buttons, and a Generate-draft button gated on at least one </code>completed<code> input. Suites grow to <strong>210 pytest</strong> (+14 </code>test_ingestion_lifecycle.py`), <strong>49 Vitest</strong> (+4 NoteWorkspace lifecycle), 17 Playwright + 4 visual (baselines refreshed). No new runtime deps; the ingestion service + orchestrator are stdlib-only.</td></tr>
 </tbody></table>
 <p>Preserved untouched: <code>/health</code>, <code>/</code>, SQLite dev workflow, state machine + filtering surface, workflow_events model, existing endpoint contracts.</p>
 </section>
 <section id="sec-2"><h2>01 — Current state</h2>
 <h1>ChartNav — Current State</h1>
-<p><strong>As of:</strong> 2026-04-18 (phase: external encounter → native workflow bridge)</p>
+<p><strong>As of:</strong> 2026-04-18 (phase: async ingestion + orchestration lifecycle)</p>
 <h2>Repo layout (relevant)</h2>
 <pre class="code lang-"><code>
 chartnav-platform/
@@ -92,8 +93,8 @@ chartnav-platform/
 │   │   │   ├── services/        # domain service seam (phase 19)
 │   │   │   │   └── note_generator.py  # regex fake today; LLM slot in, shape locked
 │   │   │   └── api/routes.py    # + /inputs + /notes/generate + /note-versions/* (phase 19)
-│   │   ├── alembic/versions/    # 9 migrations through b8c9d0e1f203
-│   │   ├── tests/               # 196 pytest (+11 encounter bridge)
+│   │   ├── alembic/versions/    # 10 migrations through c9d0e1f2a304
+│   │   ├── tests/               # 210 pytest (+14 ingestion lifecycle)
 │   │   └── Dockerfile · entrypoint.sh · .env.example
 │   └── web/
 │       ├── src/
@@ -125,18 +126,19 @@ chartnav-platform/
 <li><strong>Platform mode</strong> (phase 16): <code>CHARTNAV_PLATFORM_MODE</code> ∈ {<code>standalone</code>, <code>integrated_readthrough</code>, <code>integrated_writethrough</code>}. Adapter boundary (<code>ClinicalSystemAdapter</code>) separates ChartNav core from any external EHR/EMR. Ships <code>NativeChartNavAdapter</code> (standalone) + <code>StubClinicalSystemAdapter</code> (integrated placeholder) + <strong><code>FHIRAdapter</code></strong> (phase 18). Vendor adapters plug in via <code>register_vendor_adapter</code>. Config fails loudly on misconfig. <code>GET /platform</code> surfaces mode + adapter + source-of-truth to the UI.</li>
 <li><strong>Native clinical layer</strong> (phase 18): <code>patients</code> and <code>providers</code> tables are org-scoped, soft-active, and carry <code>external_ref</code> for integrated-mode mirroring. <code>encounters.patient_id</code> + <code>encounters.provider_id</code> are nullable FKs so the legacy text fields (<code>patient_identifier</code>, <code>provider_name</code>) continue to render. Standalone mode persists and queries via the native adapter; <code>integrated_readthrough</code> refuses native writes with a clear error code.</li>
 <li><strong>FHIR adapter</strong> (phase 18): real R4 read-through over a pluggable transport. Normalizes Patient + Encounter resources into ChartNav&#x27;s internal shape (status mapping, participant display, MRN extraction, birthDate/gender passthrough). Write paths raise <code>AdapterNotSupported</code> honestly. Config: <code>CHARTNAV_FHIR_BASE_URL</code>, <code>CHARTNAV_FHIR_AUTH_TYPE</code>, <code>CHARTNAV_FHIR_BEARER_TOKEN</code>.</li>
+<li><strong>Async ingestion + orchestration lifecycle</strong> (phase 22): <code>encounter_inputs</code> rows now run through a real job lifecycle (<code>queued → processing → completed | failed | needs_review</code>) with <code>retry_count</code>, <code>last_error</code>, <code>last_error_code</code>, <code>started_at</code>, <code>finished_at</code>, <code>worker_id</code>. New <code>app/services/ingestion.py</code> owns the state machine + an <code>set_transcriber(fn)</code> seam for real audio STT. New <code>app/services/note_orchestrator.py</code> wraps <code>note_generator</code> so the HTTP handler never touches the generator directly — an LLM drops into one function. Two new endpoints — <code>POST /encounter-inputs/{id}/process</code> (drive queued → terminal) and <code>POST /encounter-inputs/{id}/retry</code> (bump retry_count + flip back to queued). Frontend surfaces the full lifecycle: status pills, retry-count chip, honest error banner, Retry + Process-now buttons, and Generate gated on a completed input.</li>
 <li><strong>External encounter → native workflow bridge</strong> (phase 21): <code>POST /encounters/bridge</code> get-or-creates a native <code>encounters</code> row keyed on <code>(organization_id, external_ref, external_source)</code> for externally-sourced encounters. Idempotent. Preserves the phase-20 contract — the external EHR still owns encounter state; the bridge only unlocks ChartNav-native workflow (transcript → findings → draft → sign → export). Refused in standalone mode. Frontend surfaces a <strong>Bridge to ChartNav</strong> action on external encounter detail; after bridging, the encounter flips to <code>_source=&quot;chartnav&quot;</code> and the full <code>NoteWorkspace</code> is available.</li>
 <li><strong>Adapter-driven encounters</strong> (phase 20): <code>GET /encounters</code> and <code>GET /encounters/{id}</code> dispatch through the resolved adapter. Standalone → native adapter (same SQL as before). Integrated → adapter-owned rows tagged <code>_source</code> (<code>chartnav</code> / <code>fhir</code> / <code>stub</code> / vendor). Write gating is mode-aware: <code>POST /encounters</code> returns 409 <code>encounter_write_unsupported</code> in both integrated modes; <code>POST /encounters/{id}/status</code> returns 409 in read-through and dispatches through the adapter in write-through (501 <code>adapter_write_not_supported</code> when the adapter raises <code>AdapterNotSupported</code>). Frontend surfaces a source-of-truth chip + SoT banner; status controls and the note workspace are suppressed on external encounters.</li>
 <li><strong>Transcript → note drafting → signoff</strong> (phase 19): three org-scoped tables (<code>encounter_inputs</code>, <code>extracted_findings</code>, <code>note_versions</code>), a note-generator service seam at <code>app/services/note_generator.py</code> (deterministic fake today; LLM plugs in at one function, output contract locked), provider review workspace in the frontend with three visually distinct trust tiers (transcript → findings → draft → signed), status state machine (<code>draft → provider_review → revised → signed → exported</code>), immutability after sign, audit events on every meaningful action, text download + clipboard export.</li>
 <li><strong>Brand alignment</strong> (phase 17): product UI uses the ChartNav marketing site&#x27;s exact token set (<code>--cn-*</code>). Inter typography, teal <code>#0B6E79</code> primary, real logo SVG in the header, subtle <code>Powered by ARCG Systems</code> footer. Axe-AA contrast preserved.</li>
 <li><strong>Domain</strong>: <code>chartnav.ai</code> → <code>https://arcgsystems.com/chartnav/</code> via GoDaddy 301 forwarding (external) + in-repo host-based safety-net in <code>arcg-live</code>. Runbook: <code>arcg-live/docs/chartnav-ai-domain-runbook.md</code>.</li>
-<li>Alembic head: <code>b8c9d0e1f203</code> (phase 21 — encounters.external_ref + external_source + unique bridge constraint).</li>
+<li>Alembic head: <code>c9d0e1f2a304</code> (phase 22 — encounter_inputs job lifecycle: retry_count, last_error, started_at/finished_at, worker_id).</li>
 </ul>
 <h2>Testing layers</h2>
 <table><thead><tr><th>Layer</th><th>Tool</th><th>Count</th><th>Notes</th></tr></thead><tbody>
-<tr><td>pytest</td><td>pytest</td><td>196</td><td>+11 encounter bridge (idempotent get-or-create + full wedge on bridged row)</td></tr>
+<tr><td>pytest</td><td>pytest</td><td>210</td><td>+14 ingestion lifecycle (state machine, retry, transcriber seam, orchestrator contract)</td></tr>
 <tr><td>shell smoke</td><td>smoke.sh</td><td>9</td><td>unchanged</td></tr>
-<tr><td>Vitest</td><td>vitest</td><td>45</td><td>+1 bridge-button dispatches bridgeEncounter</td></tr>
+<tr><td>Vitest</td><td>vitest</td><td>49</td><td>+4 workspace lifecycle (retry, process, error banner, generate gating)</td></tr>
 <tr><td>Playwright workflow</td><td>@playwright</td><td>12</td><td>unchanged contract</td></tr>
 <tr><td>Playwright a11y</td><td>@axe-core/playwright</td><td>5</td><td>NEW</td></tr>
 <tr><td>Playwright visual</td><td>Playwright snapshots</td><td>4</td><td>NEW (local only)</td></tr>
@@ -148,8 +150,8 @@ chartnav-platform/
 <p>older callers that pass no params still see the first 100 rows.</p>
 <h2>Automation</h2>
 <ul>
-<li><code>make verify</code> → 196 pytest + 9 smoke</li>
-<li><code>make web-verify</code> → 45 vitest + typecheck + build</li>
+<li><code>make verify</code> → 210 pytest + 9 smoke</li>
+<li><code>make web-verify</code> → 49 vitest + typecheck + build</li>
 <li><code>make e2e</code> → 12 workflow + 5 a11y + 4 visual (local)</li>
 <li><code>make e2e-a11y</code> / <code>make e2e-visual</code> / <code>make e2e-visual-update</code></li>
 <li><code>make audit-prune ARGS=&quot;--days 90 --dry-run&quot;</code></li>
@@ -259,6 +261,16 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 </tbody></table>
 <p>Encounter responses now also include <code>patient_id</code> + <code>provider_id</code></p>
 <p>nullable FKs pointing at the rows above.</p>
+<h2>Ingestion lifecycle (phase 22)</h2>
+<table><thead><tr><th>Method</th><th>Path</th><th>Role</th><th>Behavior</th></tr></thead><tbody>
+<tr><td><code>POST</code></td><td><code>/encounter-inputs/{id}/process</code></td><td>admin + clinician</td><td>Synchronously drive a <code>queued</code> row through the pipeline. Returns <code>{input, ingestion_error}</code>. <code>ingestion_error</code> is <code>null</code> on success or <code>{error_code, reason}</code> on failure.</td></tr>
+<tr><td><code>POST</code></td><td><code>/encounter-inputs/{id}/retry</code></td><td>admin + clinician</td><td>Flip <code>failed</code> / <code>needs_review</code> → <code>queued</code> and increment <code>retry_count</code>. 409 <code>input_not_queueable</code> on <code>completed</code>/<code>processing</code>. Emits <code>encounter_input_retried</code> audit event.</td></tr>
+</tbody></table>
+<p><code>POST /encounters/{id}/inputs</code> responses (and every input-listing</p>
+<p>response) now include <code>retry_count</code>, <code>last_error</code>, <code>last_error_code</code>,</p>
+<p><code>started_at</code>, <code>finished_at</code>, <code>worker_id</code>. Text-type inputs still</p>
+<p>arrive at <code>completed</code>; failures are persisted and surfaced in the</p>
+<p>response body instead of thrown.</p>
 <h2>Encounter bridge (phase 21)</h2>
 <table><thead><tr><th>Method</th><th>Path</th><th>Role</th><th>Behavior</th></tr></thead><tbody>
 <tr><td><code>POST</code></td><td><code>/encounters/bridge</code></td><td>admin + clinician</td><td>Get-or-create a native <code>encounters</code> row keyed on <code>(org, external_ref, external_source)</code>. Returns `{..., _bridged: true</td><td>false}<code>. 409 </code>bridge_not_available_in_standalone_mode<code> in standalone. 403 </code>role_forbidden<code> for reviewer. 400 </code>invalid_status<code> if </code>status<code> is out of the ALLOWED_STATUSES set. Emits </code>encounter_bridged` audit event on first create only.</td></tr>
@@ -588,6 +600,17 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <p>preferred source of truth going forward; integrations can populate</p>
 <p><code>external_ref</code> on the corresponding <code>patients</code>/<code>providers</code> row and</p>
 <p>the encounter FK for full lineage.</p>
+<h3><code>encounter_inputs</code> — async job lifecycle (phase 22)</h3>
+<p>Six columns added (all nullable / sensibly defaulted):</p>
+<table><thead><tr><th>column</th><th>type</th><th>notes</th></tr></thead><tbody>
+<tr><td><code>retry_count</code></td><td>INTEGER NOT NULL</td><td>default 0; incremented only on explicit <code>POST /encounter-inputs/{id}/retry</code></td></tr>
+<tr><td><code>last_error</code></td><td>TEXT nullable</td><td>cleared on subsequent success</td></tr>
+<tr><td><code>last_error_code</code></td><td>VARCHAR(100) nullable</td><td>stable grep-able codes (<code>transcript_too_short</code>, <code>audio_transcription_not_implemented</code>, …)</td></tr>
+<tr><td><code>started_at</code></td><td>DATETIME nullable</td><td>stamped when a worker enters <code>processing</code></td></tr>
+<tr><td><code>finished_at</code></td><td>DATETIME nullable</td><td>stamped on terminal state</td></tr>
+<tr><td><code>worker_id</code></td><td>VARCHAR(64) nullable</td><td><code>&quot;inline&quot;</code> for request-path runs; future workers can tag themselves</td></tr>
+</tbody></table>
+<p>Migration <code>c9d0e1f2a304</code>. Standalone + integrated flows unaffected.</p>
 <h3><code>encounter_inputs</code> / <code>extracted_findings</code> / <code>note_versions</code> (phase 19)</h3>
 <p>Three org-scoped tables (via <code>encounters.organization_id</code>) that</p>
 <p>persist the transcript → findings → note-draft → signoff pipeline.</p>
@@ -643,6 +666,137 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <section id="sec-6"><h2>05 — Build log</h2>
 <h1>Build Log</h1>
 <p>Reverse-chronological.</p>
+<p>---</p>
+<h2>2026-04-18 — Phase 22: async ingestion + orchestration lifecycle</h2>
+<h3>Step 1 — Migration <code>c9d0e1f2a304</code></h3>
+<ul>
+<li><code>encounter_inputs</code> gains <code>retry_count</code> (NOT NULL default 0),</li>
+</ul>
+<p><code>last_error</code>, <code>last_error_code</code>, <code>started_at</code>, <code>finished_at</code>,</p>
+<p><code>worker_id</code>. Batch rewrite for SQLite portability.</p>
+<ul>
+<li>Backward compatible: all additions are nullable with sensible</li>
+</ul>
+<p>defaults. Seed unaffected.</p>
+<h3>Step 2 — Ingestion service (<code>app/services/ingestion.py</code>)</h3>
+<ul>
+<li>Owns the <code>queued → processing → completed | failed | needs_review</code></li>
+</ul>
+<p>state machine.</p>
+<ul>
+<li><code>run_ingestion_now(input_id)</code> synchronous entry point safe to</li>
+</ul>
+<p>call from the HTTP path.</p>
+<ul>
+<li><code>enqueue_input(input_id)</code> flips terminal rows back to <code>queued</code> +</li>
+</ul>
+<p>increments <code>retry_count</code>.</p>
+<ul>
+<li><code>set_transcriber(fn)</code> seam for real audio STT. Default is an</li>
+</ul>
+<p>honest <code>audio_transcription_not_implemented</code> stub.</p>
+<ul>
+<li>Explicit error codes: <code>input_not_found</code>, <code>input_not_queueable</code>,</li>
+</ul>
+<p><code>transcript_too_short</code>, <code>audio_transcription_not_implemented</code>,</p>
+<p><code>transcriber_contract_violation</code>, <code>invalid_input_type</code>,</p>
+<p><code>unexpected_error</code>, <code>max_retries_exceeded</code>.</p>
+<h3>Step 3 — Note orchestrator (<code>app/services/note_orchestrator.py</code>)</h3>
+<ul>
+<li>Wraps the phase-19 generator so the HTTP handler never touches</li>
+</ul>
+<p>it directly.</p>
+<ul>
+<li>Enforces the pipeline contract: input ready → findings extracted</li>
+</ul>
+<p>→ note drafted → provider review required.</p>
+<ul>
+<li>All writes inside a single transaction.</li>
+<li><code>OrchestrationError(error_code, reason, status_code)</code> surfaces</li>
+</ul>
+<p>clean error codes (<code>no_completed_input</code>, <code>input_not_ready</code>,</p>
+<p><code>input_not_found</code>, <code>generation_failed</code>).</p>
+<h3>Step 4 — HTTP surface</h3>
+<ul>
+<li><code>POST /encounters/{id}/inputs</code> — every row now enters at</li>
+</ul>
+<p><code>queued</code>; text inputs run the pipeline inline so existing</p>
+<p>callers still see <code>completed</code>. Failures are persisted.</p>
+<ul>
+<li><code>POST /encounter-inputs/{id}/process</code> — drive a queued row</li>
+</ul>
+<p>through the pipeline; returns <code>{input, ingestion_error}</code>.</p>
+<ul>
+<li><code>POST /encounter-inputs/{id}/retry</code> — flip failed → queued +</li>
+</ul>
+<p>increment retry_count; emits <code>encounter_input_retried</code> audit</p>
+<p>event.</p>
+<ul>
+<li><code>POST /encounters/{id}/notes/generate</code> now delegates to the</li>
+</ul>
+<p>orchestrator. Same contract, cleaner error translation.</p>
+<ul>
+<li>Input responses now include <code>retry_count</code>, <code>last_error</code>,</li>
+</ul>
+<p><code>last_error_code</code>, <code>started_at</code>, <code>finished_at</code>, <code>worker_id</code>.</p>
+<h3>Step 5 — Frontend</h3>
+<ul>
+<li><code>api.ts</code>: <code>EncounterInput</code> gains job-lifecycle fields;</li>
+</ul>
+<p><code>processEncounterInput</code> + <code>retryEncounterInput</code> helpers added.</p>
+<ul>
+<li><code>NoteWorkspace.tsx</code>: transcript tier now renders</li>
+</ul>
+<p><code>processing_status</code> as a color-coded pill, a <code>retries N</code> chip</p>
+<p>when <code>retry_count &gt; 0</code>, an error banner when <code>failed</code> /</p>
+<p><code>needs_review</code>, Retry + Process-now action buttons, and gates</p>
+<p>the Generate-draft button on at least one <code>completed</code> input.</p>
+<ul>
+<li><code>styles.css</code>: color-coded pill rules for <code>queued</code> /</li>
+</ul>
+<p><code>processing</code> / <code>failed</code> / <code>needs_review</code>; retry-count chip.</p>
+<h3>Step 6 — Tests</h3>
+<ul>
+<li>Backend <strong>+14</strong> in <code>tests/test_ingestion_lifecycle.py</code>:</li>
+</ul>
+<p>happy path, too-short failure, audio-queued default,</p>
+<p>no-transcriber refusal, transcriber seam, retry + process chain,</p>
+<p>retry refused on <code>completed</code>, audit event emitted, cross-org</p>
+<p>404, reviewer 403, generate refuses <code>failed</code>, generate happy</p>
+<p>path after refactor, process idempotent on <code>completed</code>.</p>
+<ul>
+<li>Frontend <strong>+4</strong> in <code>src/test/NoteWorkspace.test.tsx</code>:</li>
+</ul>
+<p>failed error banner + Retry dispatches retry→process;</p>
+<p><code>retries N</code> chip; queued Process-now button + Generate-disabled</p>
+<p>gating; Generate enabled when completed input exists.</p>
+<ul>
+<li><strong>210/210 pytest</strong>, <strong>49/49 Vitest</strong>, 17/17 Playwright workflow</li>
+</ul>
+<p>+ a11y, 4/4 visual (baselines refreshed).</p>
+<h3>Step 7 — Docs</h3>
+<ul>
+<li>New <code>docs/build/33-async-ingestion-lifecycle.md</code> — full phase</li>
+</ul>
+<p>reference (state machine diagram, schema, service seams, HTTP</p>
+<p>surface, UI contract, verification, explicit non-goals).</p>
+<ul>
+<li>Updated <code>01-current-state</code>, <code>03-api-endpoints</code>, <code>04-data-model</code>,</li>
+</ul>
+<p><code>05-build-log</code> (this entry), <code>06-known-gaps</code>, <code>08-test-strategy</code>,</p>
+<p><code>15-frontend-integration</code>, <code>16-frontend-test-strategy</code>,</p>
+<p><code>30-transcript-to-note</code> (points to section 33 for the real</p>
+<p>lifecycle), <code>er-diagram</code> (new columns on encounter_inputs).</p>
+<ul>
+<li><code>scripts/build_docs.py</code> picks up section 33; executive summary</li>
+</ul>
+<p>extended. Final HTML + PDF regenerated.</p>
+<h3>Step 8 — Hygiene</h3>
+<ul>
+<li>Dev DB reset to pristine seeded state before commit.</li>
+<li>Visual baselines refreshed.</li>
+<li>No new runtime deps (ingestion + orchestrator are stdlib only).</li>
+</ul>
 <p>---</p>
 <h2>2026-04-18 — Phase 21: external encounter → native workflow bridge</h2>
 <h3>Step 1 — Migration <code>b8c9d0e1f203</code></h3>
@@ -1643,6 +1797,14 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 <h3>Playwright summary (12)</h3>
 <p>Adds &quot;admin can issue an invitation and download audit CSV&quot; on top of</p>
 <p>the 11 scenarios shipped through phase 13.</p>
+<h2>Phase-22 additions</h2>
+<ul>
+<li><strong>Async ingestion lifecycle</strong>: <code>encounter_inputs</code> grew <code>retry_count</code>, <code>last_error</code>, <code>last_error_code</code>, <code>started_at</code>, <code>finished_at</code>, <code>worker_id</code>. Real state machine: <code>queued → processing → completed | failed | needs_review</code>.</li>
+<li><strong>Ingestion service</strong> (<code>app/services/ingestion.py</code>) with <code>set_transcriber(fn)</code> seam for real STT.</li>
+<li><strong>Note orchestrator</strong> (<code>app/services/note_orchestrator.py</code>) — HTTP handler no longer touches the generator directly.</li>
+<li><strong>Retry + process endpoints</strong> + frontend UX for failed / needs_review / queued states.</li>
+<li><strong>210 pytest</strong> (+14), <strong>49 Vitest</strong> (+4), 17 Playwright + 4 visual.</li>
+</ul>
 <h2>Phase-21 additions</h2>
 <ul>
 <li><strong>External encounter → native workflow bridge</strong>: <code>POST /encounters/bridge</code> creates/resolves a native row keyed on <code>(org, external_ref, external_source)</code>. Idempotent. Frontend bridge button on external encounter detail.</li>
@@ -1701,7 +1863,9 @@ scheduled ─▶ in_progress ─▶ draft_ready ─▶ review_needed ─▶ comp
 </ul>
 <h2>Real gaps (prioritized for next phase)</h2>
 <p>0. <strong>No real LLM wired into the note generator yet</strong> — <code>app/services/note_generator.py</code> ships a deterministic regex + SOAP-template fake. The seam is a single function; output contract is locked. Next: swap for a real inference endpoint (or SMART-on-FHIR-aware model).</p>
-<p>0. <strong>No audio STT worker</strong> — <code>audio_upload</code> inputs stay <code>queued</code> forever. Future work: a background worker that fills <code>transcript_text</code> and flips processing_status.</p>
+<p>0. <strong>No real audio STT yet</strong> — <code>app/services/ingestion.py::transcribe_audio</code> is a <code>NotImplementedError</code>-shape stub. A real transcriber plugs in via <code>set_transcriber(fn)</code>; the full state machine, retry, and UI lifecycle are ready for it.</p>
+<p>0. <strong>No background-worker infrastructure</strong> — ingestion runs in the request path. The contract survives a move to cron / Celery / RQ without HTTP changes.</p>
+<p>0. <strong>No streaming / WebSocket progress</strong> — the UI polls on action completion. SSE or WebSocket updates are future work.</p>
 <p>0. <strong>No EHR write-back for signed notes</strong> — export is download + clipboard only. FHIR <code>DocumentReference</code> writes remain <code>AdapterNotSupported</code>; vendor adapters layer real push.</p>
 <p>0. <strong>No PDF or HL7 export</strong> — plain text only. Deliberate: honest paste-into-EHR, not a vendor-format we don&#x27;t own.</p>
 <p>0. <strong>No SMART-on-FHIR auth</strong> on the FHIR adapter — <code>auth_type=bearer</code> takes a pre-provisioned token. Full SMART launch flow is future work.</p>
@@ -1926,6 +2090,22 @@ make docker-build
 <li><code>make verify</code> (SQLite): 28 pytest + 9 smoke — all green</li>
 <li><code>scripts/pg_verify.sh</code>: migrations + seed (x2) + smoke + status transition + event write — <strong>PASS</strong></li>
 </ul>
+<h2>Backend coverage (phase 22)</h2>
+<ul>
+<li><strong>210 pytest.</strong> New <code>tests/test_ingestion_lifecycle.py</code> (+14):</li>
+</ul>
+<p>happy-path through <code>completed</code>; too-short → <code>failed</code> with</p>
+<p><code>last_error_code</code>; audio-queued default; no-transcriber failure</p>
+<p>honest error code; transcriber seam end-to-end; retry bumps</p>
+<p><code>retry_count</code> and emits audit event; retry refused on</p>
+<p><code>completed</code>; scope + RBAC (404, 403); <code>generate</code> refuses failed</p>
+<p>input with <code>no_completed_input</code>; generate happy path still works</p>
+<p>after orchestrator refactor; <code>process</code> idempotent on <code>completed</code>.</p>
+<ul>
+<li>Frontend <strong>49 Vitest</strong> (+4 NoteWorkspace lifecycle assertions).</li>
+<li>Playwright unchanged contract. Visual baselines refreshed for</li>
+</ul>
+<p>the lifecycle UI.</p>
 <h2>Backend coverage (phase 21)</h2>
 <ul>
 <li><strong>196 pytest.</strong> New <code>tests/test_encounter_bridge.py</code> (+11):</li>
@@ -2989,6 +3169,36 @@ make web-build        # vite build -&gt; apps/web/dist
 </ul>
 <p>was rewritten to describe the bridge instead of a blanket</p>
 <p>&quot;native-only&quot; limitation.</p>
+<h2>Async ingestion lifecycle UX (phase 22)</h2>
+<p>Tier 1 of the NoteWorkspace now reflects the full async-job</p>
+<p>lifecycle the backend persists:</p>
+<ul>
+<li><strong>Status pills</strong> — color-coded per <code>processing_status</code></li>
+</ul>
+<p>(<code>queued</code> / <code>processing</code> / <code>completed</code> / <code>failed</code> /</p>
+<p><code>needs_review</code>).</p>
+<ul>
+<li><strong>Retries chip</strong> — &quot;retries N&quot; appears when <code>retry_count &gt; 0</code>.</li>
+<li><strong>Error banner</strong> — <code>failed</code> / <code>needs_review</code> rows render a</li>
+</ul>
+<p><code>banner--error</code> showing <code>last_error_code: last_error</code>. No</p>
+<p>silent failures.</p>
+<ul>
+<li><strong>Retry button</strong> — admin + clinician only; dispatches</li>
+</ul>
+<p><code>retry</code> then <code>process</code> and refreshes the list.</p>
+<ul>
+<li><strong>Process now button</strong> — on <code>queued</code> rows (primarily audio</li>
+</ul>
+<p>uploads awaiting a worker or operator push).</p>
+<ul>
+<li><strong>Generate gating</strong> — the Generate-draft button is disabled</li>
+</ul>
+<p>unless at least one input is <code>completed</code>. The button&#x27;s</p>
+<p><code>title</code> explains why.</p>
+<p>All actions route through new <code>api.ts</code> helpers</p>
+<p>(<code>processEncounterInput</code>, <code>retryEncounterInput</code>) on top of the</p>
+<p>existing <code>listEncounterInputs</code> refresh cycle.</p>
 <h2>What this phase explicitly does NOT do</h2>
 <ul>
 <li>No real login flow — <code>X-User-Email</code> is still dev transport.</li>
@@ -3214,6 +3424,21 @@ make web-verify      # typecheck + test + build
 </ul>
 <p>matching <code>/bridg/i</code> since the copy now explains the bridge path</p>
 <p>instead of a blanket native-only limitation.</p>
+<h2>Ingestion lifecycle tests (phase 22)</h2>
+<ul>
+<li><strong>+4</strong> in <code>src/test/NoteWorkspace.test.tsx</code>:</li>
+<li><code>failed</code> input renders the <code>banner--error</code> with</li>
+</ul>
+<p><code>last_error_code</code> + <code>last_error</code>; Retry button is present and</p>
+<p>dispatches <code>retry</code> then <code>process</code>.</p>
+<ul>
+<li><code>retry_count &gt; 0</code> renders the <code>retries N</code> trailing chip.</li>
+<li><code>queued</code> input renders the Process-now button and Generate is</li>
+</ul>
+<p>disabled until a <code>completed</code> input exists.</p>
+<ul>
+<li>Generate is enabled when a <code>completed</code> input is present.</li>
+</ul>
 <h2>Gaps not yet covered</h2>
 <ul>
 <li>Visual regression not in CI (documented; OS-specific baselines).</li>
@@ -5805,7 +6030,211 @@ def resolve_or_create_bridged_encounter(
 <p>the same logical encounter (<code>external_source</code> is part of the key;</p>
 <p>two vendor mirrors of one encounter get two native rows by design).</p>
 </section>
-<section id="sec-34"><h2>Diagram — System architecture</h2>
+<section id="sec-34"><h2>33 — Async ingestion + orchestration lifecycle</h2>
+<h1>Async Ingestion + Orchestration Lifecycle (phase 22)</h1>
+<p>The transcript-to-note wedge now runs through a real async-job</p>
+<p>lifecycle instead of flipping rows straight to <code>completed</code> on</p>
+<p>arrival. Text inputs still look instant to the operator, but they</p>
+<p>pass through the same pipeline a future audio STT worker will use —</p>
+<p>and every transition, retry, and failure is persisted.</p>
+<p>The note generator seam from phase 19 is now wrapped in an explicit</p>
+<p>orchestrator, so the HTTP handler never touches the generator</p>
+<p>directly. A real LLM drops into one function; the rest of the</p>
+<p>pipeline is already shaped.</p>
+<h2>1. Encounter-input state machine</h2>
+<div class="mermaid">
+stateDiagram-v2
+    [*] --> queued
+    queued --> processing : run_ingestion_now
+    processing --> completed
+    processing --> failed          : IngestionError
+    processing --> needs_review    : (reserved — operator-flagged)
+    failed --> queued              : retry_input (retry_count++)
+    needs_review --> queued        : retry_input (retry_count++)
+    completed --> [*]
+    failed --> [*]
+    needs_review --> [*]
+</div>
+<p><strong>Invariants</strong></p>
+<ul>
+<li><code>queued</code> → <code>processing</code> is a single DB write. A crashed worker</li>
+</ul>
+<p>never leaves the row in a half-state.</p>
+<ul>
+<li><code>processing</code> rows never re-enter the pipeline without first going</li>
+</ul>
+<p>back through <code>queued</code>.</p>
+<ul>
+<li><code>retry_count</code> is incremented only on explicit retry (not on</li>
+</ul>
+<p>initial run).</p>
+<ul>
+<li><code>failed</code> rows always carry <code>last_error</code> + <code>last_error_code</code> + a</li>
+</ul>
+<p><code>finished_at</code>. Those are cleared on a subsequent success.</p>
+<ul>
+<li><code>started_at</code> / <code>finished_at</code> / <code>worker_id</code> are always set when</li>
+</ul>
+<p>they should be set; ops can answer &quot;why is this stuck&quot;.</p>
+<h2>2. Schema change (migration <code>c9d0e1f2a304</code>)</h2>
+<p>Six columns added to <code>encounter_inputs</code> via batch rewrite:</p>
+<table><thead><tr><th>column</th><th>type</th><th>notes</th></tr></thead><tbody>
+<tr><td><code>retry_count</code></td><td>INTEGER NOT NULL</td><td>default 0. Incremented only by explicit retry.</td></tr>
+<tr><td><code>last_error</code></td><td>TEXT nullable</td><td>cleared on success</td></tr>
+<tr><td><code>last_error_code</code></td><td>VARCHAR(100) nullable</td><td>stable, grep-able codes</td></tr>
+<tr><td><code>started_at</code></td><td>DATETIME nullable</td><td>when a worker first entered <code>processing</code></td></tr>
+<tr><td><code>finished_at</code></td><td>DATETIME nullable</td><td>terminal-state stamp</td></tr>
+<tr><td><code>worker_id</code></td><td>VARCHAR(64) nullable</td><td><code>&quot;inline&quot;</code> today; future workers can tag themselves</td></tr>
+</tbody></table>
+<p>No data changes for existing rows (all new cols nullable with</p>
+<p>sensible defaults). Standalone + integrated flows unaffected.</p>
+<h2>3. Ingestion service (<code>app/services/ingestion.py</code>)</h2>
+<ul>
+<li><code>run_ingestion_now(input_id, *, worker_id=&quot;inline&quot;, max_retries=3)</code></li>
+</ul>
+<p>synchronously drives one row through the state machine. Safe to</p>
+<p>call from the HTTP request path (tests do). Contract is identical</p>
+<p>to how a future background worker would call it.</p>
+<ul>
+<li><code>enqueue_input(input_id)</code> flips <code>failed</code> / <code>needs_review</code> → <code>queued</code></li>
+</ul>
+<p>and increments <code>retry_count</code>. Idempotent on <code>queued</code>. Refuses to</p>
+<p>stomp on <code>processing</code>.</p>
+<ul>
+<li><code>set_transcriber(fn)</code> installs a real audio transcriber. Default</li>
+</ul>
+<p>raises <code>audio_transcription_not_implemented</code> — audio uploads</p>
+<p>fail honestly instead of pretending to have content.</p>
+<ul>
+<li>Error codes emitted:</li>
+<li><code>input_not_found</code></li>
+<li><code>input_not_queueable</code></li>
+<li><code>transcript_too_short</code></li>
+<li><code>audio_transcription_not_implemented</code></li>
+<li><code>transcriber_contract_violation</code></li>
+<li><code>invalid_input_type</code></li>
+<li><code>unexpected_error</code></li>
+<li><code>max_retries_exceeded</code></li>
+</ul>
+<h2>4. Orchestrator (<code>app/services/note_orchestrator.py</code>)</h2>
+<p>Sits between the HTTP handler and the deterministic</p>
+<p><code>note_generator.generate_draft(...)</code> seam. Enforces the pipeline</p>
+<p>contract:</p>
+<p>1. resolve the source <code>encounter_inputs</code> row (payload input_id or</p>
+<p>most-recent <code>completed</code>).</p>
+<p>2. assert <code>processing_status == completed</code> (else</p>
+<p><code>input_not_ready</code>).</p>
+<p>3. call <code>generate_draft(...)</code> — the single place to swap in a</p>
+<p>real LLM.</p>
+<p>4. persist <code>extracted_findings</code> + <code>note_versions</code> (version_number</p>
+<p>+ 1) in one transaction.</p>
+<p>All writes happen inside <code>engine.begin()</code>; a generator failure</p>
+<p>never leaves a half-written row on disk. Errors raise</p>
+<p><code>OrchestrationError(error_code, reason, status_code)</code> which the</p>
+<p>HTTP handler forwards verbatim.</p>
+<h2>5. HTTP surface</h2>
+<table><thead><tr><th>Method</th><th>Path</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>POST</code></td><td><code>/encounters/{id}/inputs</code></td><td>Unchanged contract. Every row now enters at <code>queued</code>; text-type inputs run the pipeline inline so existing callers still see <code>completed</code> on the response. Audio uploads stay <code>queued</code> for a future worker. <strong>Failures are persisted</strong> — the row is created, the response carries <code>processing_status=failed</code> + <code>last_error_code</code>.</td></tr>
+<tr><td><code>POST</code></td><td><code>/encounter-inputs/{id}/process</code></td><td>Drive a queued row through the pipeline. Returns <code>{input, ingestion_error}</code> — <code>ingestion_error</code> is <code>null</code> on success, <code>{error_code, reason}</code> on failure.</td></tr>
+<tr><td><code>POST</code></td><td><code>/encounter-inputs/{id}/retry</code></td><td>Flip <code>failed</code> / <code>needs_review</code> → <code>queued</code> + increment retry_count. Emits <code>encounter_input_retried</code> audit event. Chain with <code>/process</code> for the full retry.</td></tr>
+<tr><td><code>POST</code></td><td><code>/encounters/{id}/notes/generate</code></td><td>Now delegates to the orchestrator. Same contract.</td></tr>
+</tbody></table>
+<p>Ingest responses now include <code>retry_count</code>, <code>last_error</code>,</p>
+<p><code>last_error_code</code>, <code>started_at</code>, <code>finished_at</code>, <code>worker_id</code>.</p>
+<h2>6. Frontend — honest processing UX</h2>
+<p><code>NoteWorkspace.tsx</code> (Tier 1) now reflects the full lifecycle:</p>
+<ul>
+<li>Each transcript card shows a status pill reflecting the actual</li>
+</ul>
+<p><code>processing_status</code> (<code>queued</code> / <code>processing</code> / <code>completed</code> /</p>
+<p><code>failed</code> / <code>needs_review</code>), color-coded via the brand token</p>
+<p>palette (teal / info-blue / green / red / amber).</p>
+<ul>
+<li>A <code>retries N</code> trailing chip appears when <code>retry_count &gt; 0</code>.</li>
+<li>A <code>banner banner--error</code> renders below the pill when <code>failed</code> /</li>
+</ul>
+<p><code>needs_review</code> is set, showing <code>last_error_code:</code> + <code>last_error</code>.</p>
+<ul>
+<li>A <strong>Retry</strong> button appears on <code>failed</code>/<code>needs_review</code> rows for</li>
+</ul>
+<p>admin + clinician — runs <code>retry</code> then <code>process</code> in sequence.</p>
+<ul>
+<li>A <strong>Process now</strong> button appears on <code>queued</code> rows — useful for</li>
+</ul>
+<p>audio uploads that haven&#x27;t been picked up by a worker.</p>
+<ul>
+<li>The <strong>Generate draft</strong> button is now gated: disabled unless at</li>
+</ul>
+<p>least one input is <code>completed</code>. The button&#x27;s title attribute</p>
+<p>explains why it&#x27;s disabled when it is.</p>
+<h2>7. Tests</h2>
+<p>Backend (<code>tests/test_ingestion_lifecycle.py</code>, +14):</p>
+<ul>
+<li>text paste flows to <code>completed</code> with <code>started_at</code>/<code>finished_at</code></li>
+</ul>
+<p>stamped.</p>
+<ul>
+<li>too-short transcript → <code>failed</code> + <code>last_error_code</code> +</li>
+</ul>
+<p><code>retry_count=0</code>.</p>
+<ul>
+<li>audio upload stays <code>queued</code> on create.</li>
+<li>audio without transcriber → <code>failed</code> with</li>
+</ul>
+<p><code>audio_transcription_not_implemented</code>.</p>
+<ul>
+<li>transcriber seam: <code>set_transcriber(fn)</code> flips audio to</li>
+</ul>
+<p><code>completed</code> end-to-end.</p>
+<ul>
+<li>retry: <code>failed</code> → <code>queued</code> with <code>retry_count=1</code>; subsequent</li>
+</ul>
+<p><code>process</code> honors retry_count persistence.</p>
+<ul>
+<li><code>retry</code> refused on <code>completed</code> (409 <code>input_not_queueable</code>).</li>
+<li><code>retry</code> emits <code>encounter_input_retried</code> audit event.</li>
+<li>org scoping enforced (cross-org retry = 404).</li>
+<li>reviewer cannot retry (403).</li>
+<li><code>generate</code> refuses <code>failed</code> input (409 <code>no_completed_input</code>).</li>
+<li><code>generate</code> happy path still works after orchestrator refactor.</li>
+<li><code>process</code> idempotent on <code>completed</code>.</li>
+</ul>
+<p>Frontend (<code>src/test/NoteWorkspace.test.tsx</code>, +4):</p>
+<ul>
+<li>failed status renders error banner + Retry button; clicking</li>
+</ul>
+<p>dispatches <code>retry</code> then <code>process</code>.</p>
+<ul>
+<li><code>retry_count &gt; 0</code> renders the <code>retries N</code> chip.</li>
+<li>queued input exposes a Process-now button; Generate is disabled</li>
+</ul>
+<p>until a completed input exists.</p>
+<ul>
+<li>Generate is enabled when a completed input is present.</li>
+</ul>
+<p>Playwright + visual baselines refreshed.</p>
+<h2>8. What this phase does NOT do</h2>
+<ul>
+<li>No real audio STT. <code>transcribe_audio</code> is a</li>
+</ul>
+<p><code>NotImplementedError</code>-style stub until an operator installs a</p>
+<p>real transcriber via <code>set_transcriber(...)</code>.</p>
+<ul>
+<li>No background worker / queue infrastructure — <code>run_ingestion_now</code></li>
+</ul>
+<p>runs in the request path. The contract survives a move to a real</p>
+<p>worker (cron, Celery, RQ, etc.); the HTTP handler stays the same.</p>
+<ul>
+<li>No streaming of processing progress to the UI — the UI polls via</li>
+</ul>
+<p>the normal input-list refresh when actions complete. WebSocket /</p>
+<p>SSE updates are future work.</p>
+<ul>
+<li>Real LLM still not wired; note generator remains deterministic</li>
+</ul>
+<p>regex + SOAP template (phase 19 seam, unchanged).</p>
+</section>
+<section id="sec-35"><h2>Diagram — System architecture</h2>
 <h1>System Architecture</h1>
 <div class="mermaid">
 flowchart LR
@@ -5916,7 +6345,7 @@ flowchart LR
   Compose --> PG
 </div>
 </section>
-<section id="sec-35"><h2>Diagram — Encounter status machine</h2>
+<section id="sec-36"><h2>Diagram — Encounter status machine</h2>
 <h1>Encounter Status State Machine</h1>
 <div class="mermaid">
 stateDiagram-v2
@@ -5938,7 +6367,7 @@ stateDiagram-v2
 <p>Legend: any edge not shown is rejected at <code>POST /encounters/{id}/status</code></p>
 <p>with HTTP 400 <code>invalid_transition</code>.</p>
 </section>
-<section id="sec-36"><h2>Diagram — ER</h2>
+<section id="sec-37"><h2>Diagram — ER</h2>
 <h1>ER Diagram</h1>
 <div class="mermaid">
 erDiagram
@@ -6054,6 +6483,12 @@ erDiagram
     string confidence_summary "nullable"
     text source_metadata "JSON blob"
     int created_by_user_id FK
+    int retry_count "phase 22 — monotonic on explicit retry"
+    text last_error "phase 22 — nullable; cleared on success"
+    string last_error_code "phase 22 — stable error code"
+    datetime started_at "phase 22 — nullable"
+    datetime finished_at "phase 22 — nullable"
+    string worker_id "phase 22 — inline/worker tag"
     datetime created_at
     datetime updated_at
   }
@@ -6103,7 +6538,7 @@ erDiagram
 <p><code>users.organization_id</code> is the authoritative source of scope; never</p>
 <p>derived from client input.</p>
 </section>
-<section id="sec-37"><h2>Diagram — API / data flow</h2>
+<section id="sec-38"><h2>Diagram — API / data flow</h2>
 <h1>API / Data Flow &amp; CI</h1>
 <h2>UI → Backend request path</h2>
 <div class="mermaid">

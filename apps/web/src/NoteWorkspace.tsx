@@ -33,6 +33,8 @@ import {
   listEncounterInputs,
   listEncounterNotes,
   patchNoteVersion,
+  processEncounterInput,
+  retryEncounterInput,
   signNoteVersion,
   submitNoteForReview,
 } from "./api";
@@ -154,6 +156,41 @@ export function NoteWorkspace({
       });
       showFlash("ok", "Transcript ingested.");
       setNewTranscript("");
+      await loadInputs();
+    } catch (err) {
+      showFlash("error", friendly(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onRetry = async (inputId: number) => {
+    setLoading(true);
+    try {
+      await retryEncounterInput(identity, inputId);
+      // After retry flips the row to `queued`, re-run the pipeline.
+      await processEncounterInput(identity, inputId);
+      showFlash("ok", "Retry complete. Check the updated status.");
+      await loadInputs();
+    } catch (err) {
+      showFlash("error", friendly(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onProcess = async (inputId: number) => {
+    setLoading(true);
+    try {
+      const res = await processEncounterInput(identity, inputId);
+      if (res.ingestion_error) {
+        showFlash(
+          "error",
+          `${res.ingestion_error.error_code}: ${res.ingestion_error.reason}`
+        );
+      } else {
+        showFlash("ok", "Input processed.");
+      }
       await loadInputs();
     } catch (err) {
       showFlash("error", friendly(err));
@@ -319,13 +356,67 @@ export function NoteWorkspace({
           >
             <div className="event-item__head">
               <span className="event-item__type">{inp.input_type}</span>
-              <span className="status-pill" data-status={inp.processing_status}>
-                {inp.processing_status}
+              <span
+                className="status-pill"
+                data-status={inp.processing_status}
+                data-testid={`transcript-status-${inp.id}`}
+              >
+                {inp.processing_status.replace(/_/g, " ")}
+                {typeof inp.retry_count === "number" && inp.retry_count > 0 && (
+                  <span
+                    className="workspace__retry-count"
+                    aria-label="retry count"
+                    data-testid={`transcript-retry-count-${inp.id}`}
+                  >
+                    · retries {inp.retry_count}
+                  </span>
+                )}
               </span>
             </div>
+            {(inp.processing_status === "failed" ||
+              inp.processing_status === "needs_review") && inp.last_error && (
+              <div
+                className="banner banner--error"
+                data-testid={`transcript-error-${inp.id}`}
+                role="alert"
+              >
+                <strong>{inp.last_error_code ?? "ingestion_failed"}:</strong>{" "}
+                {inp.last_error}
+              </div>
+            )}
             {inp.transcript_text && (
               <pre className="workspace__transcript">{inp.transcript_text}</pre>
             )}
+            {canEdit &&
+              (inp.processing_status === "failed" ||
+                inp.processing_status === "needs_review" ||
+                inp.processing_status === "queued") && (
+                <div className="actions" style={{ marginTop: 6 }}>
+                  {(inp.processing_status === "failed" ||
+                    inp.processing_status === "needs_review") && (
+                    <button
+                      type="button"
+                      className="btn"
+                      disabled={loading}
+                      onClick={() => onRetry(inp.id)}
+                      data-testid={`transcript-retry-${inp.id}`}
+                    >
+                      Retry
+                    </button>
+                  )}
+                  {inp.processing_status === "queued" && (
+                    <button
+                      type="button"
+                      className="btn"
+                      disabled={loading}
+                      onClick={() => onProcess(inp.id)}
+                      data-testid={`transcript-process-${inp.id}`}
+                    >
+                      Process now
+                    </button>
+                  )}
+                </div>
+              )}
           </div>
         ))}
         {canEdit && (
@@ -355,9 +446,17 @@ export function NoteWorkspace({
               <button
                 type="button"
                 className="btn"
-                disabled={loading || inputs.length === 0}
+                disabled={
+                  loading ||
+                  !inputs.some((i) => i.processing_status === "completed")
+                }
                 onClick={onGenerate}
                 data-testid="generate-draft"
+                title={
+                  inputs.some((i) => i.processing_status === "completed")
+                    ? "Generate a draft from the most recent completed input"
+                    : "Waiting for a completed input — process or retry one first"
+                }
               >
                 Generate draft
               </button>

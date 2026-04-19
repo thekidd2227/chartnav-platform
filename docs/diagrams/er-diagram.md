@@ -114,6 +114,12 @@ erDiagram
     string confidence_summary "nullable"
     text source_metadata "JSON blob"
     int created_by_user_id FK
+    int retry_count "phase 22 — monotonic on explicit retry"
+    text last_error "phase 22 — nullable; cleared on success"
+    string last_error_code "phase 22 — stable error code"
+    datetime started_at "phase 22 — nullable"
+    datetime finished_at "phase 22 — nullable"
+    string worker_id "phase 22 — inline/worker tag"
     datetime created_at
     datetime updated_at
   }
