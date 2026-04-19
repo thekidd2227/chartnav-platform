@@ -40,6 +40,10 @@ vi.mock("../api", async () => {
     recordQuickCommentUsage: vi.fn(),
     // Phase 29 — clinical shortcuts usage audit.
     recordClinicalShortcutUsage: vi.fn(),
+    // Phase 30 — clinical shortcut favorites.
+    listMyClinicalShortcutFavorites: vi.fn(),
+    favoriteClinicalShortcut: vi.fn(),
+    unfavoriteClinicalShortcut: vi.fn(),
   };
 });
 
@@ -224,6 +228,18 @@ beforeEach(() => {
     recorded: true,
     shortcut_id: "rd-01",
   });
+  // Phase 30 defaults — no pinned shortcuts, successful toggle ops.
+  (api.listMyClinicalShortcutFavorites as any).mockResolvedValue([]);
+  (api.favoriteClinicalShortcut as any).mockImplementation(
+    async (_e: string, ref: string) => ({
+      id: 1,
+      organization_id: 1,
+      user_id: 2,
+      shortcut_ref: ref,
+      created_at: "2026-04-19 12:00:00",
+    })
+  );
+  (api.unfavoriteClinicalShortcut as any).mockResolvedValue({ removed: 1 });
   (api.createEncounterInput as any).mockResolvedValue({});
 });
 
@@ -1537,5 +1553,221 @@ describe("NoteWorkspace", () => {
     // The two audit streams must stay separate — a shortcut click
     // must never register as a quick-comment event.
     expect(api.recordQuickCommentUsage).not.toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------
+  // Phase 30 — retina expansion, shortcut favorites, caret-to-blank
+  // -------------------------------------------------------------------
+
+  it("renders the four new retina-expansion groups", async () => {
+    renderWorkspace();
+    await screen.findByTestId("clinical-shortcuts-panel");
+    // Groups from phase 30.
+    expect(
+      screen.getByTestId("clinical-shortcuts-group-diabetic-retinopathy-dme")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("clinical-shortcuts-group-erm-vmt-macular-hole")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("clinical-shortcuts-group-brvo-crvo-retinal-vascular")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId(
+        "clinical-shortcuts-group-post-injection-post-vitrectomy-post-op"
+      )
+    ).toBeInTheDocument();
+    // Spot-check verbatim shorthand phrases per the brief's clinical
+    // tone. Use `toHaveTextContent` because abbreviations inside the
+    // bodies are wrapped in `<abbr>` nodes and would otherwise break
+    // a raw `getByText` substring query across DOM boundaries.
+    expect(screen.getByTestId("clinical-shortcut-dm-02")).toHaveTextContent(
+      /center-involving DME on OCT/i
+    );
+    expect(screen.getByTestId("clinical-shortcut-mac-03")).toHaveTextContent(
+      /Full-thickness macular hole/i
+    );
+    expect(screen.getByTestId("clinical-shortcut-vasc-02")).toHaveTextContent(
+      /Non-ischemic CRVO with diffuse intraretinal/i
+    );
+    expect(screen.getByTestId("clinical-shortcut-post-02")).toHaveTextContent(
+      /Post-injection return precautions reviewed in detail/i
+    );
+  });
+
+  it("abbreviation-aware search for 'DME' surfaces the diabetic group", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await screen.findByTestId("clinical-shortcuts-panel");
+    await user.type(screen.getByTestId("clinical-shortcuts-search"), "DME");
+    expect(
+      screen.getByTestId("clinical-shortcuts-group-diabetic-retinopathy-dme")
+    ).toBeInTheDocument();
+    // Non-diabetic groups with no DME mention drop out.
+    expect(
+      screen.queryByTestId("clinical-shortcuts-group-pvd")
+    ).not.toBeInTheDocument();
+  });
+
+  it("abbreviation-aware search for 'CRVO' surfaces the retinal-vascular group", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await screen.findByTestId("clinical-shortcuts-panel");
+    await user.type(screen.getByTestId("clinical-shortcuts-search"), "CRVO");
+    expect(
+      screen.getByTestId("clinical-shortcuts-group-brvo-crvo-retinal-vascular")
+    ).toBeInTheDocument();
+  });
+
+  it("abbreviation-aware search for 'FTMH' surfaces the macular-hole shortcuts", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await screen.findByTestId("clinical-shortcuts-panel");
+    await user.type(screen.getByTestId("clinical-shortcuts-search"), "FTMH");
+    // Should include mac-03 (verbatim FTMH body) and mac-04
+    // (tagged ftmh).
+    expect(
+      screen.getByTestId("clinical-shortcut-mac-03")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("clinical-shortcut-mac-04")
+    ).toBeInTheDocument();
+  });
+
+  it("shortcut star toggle calls favoriteClinicalShortcut and refreshes list", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await screen.findByTestId("clinical-shortcuts-panel");
+    expect(
+      screen.queryByTestId("clinical-shortcuts-favorites")
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByTestId("clinical-shortcut-star-dm-01"));
+    await waitFor(() =>
+      expect(api.favoriteClinicalShortcut).toHaveBeenCalledWith(
+        CLIN.email,
+        "dm-01"
+      )
+    );
+    expect(api.listMyClinicalShortcutFavorites).toHaveBeenCalled();
+  });
+
+  it("Favorites strip renders above the main catalog when a shortcut is pinned", async () => {
+    (api.listMyClinicalShortcutFavorites as any).mockResolvedValue([
+      {
+        id: 10,
+        organization_id: 1,
+        user_id: 2,
+        shortcut_ref: "post-03",
+        created_at: "x",
+      },
+    ]);
+    renderWorkspace();
+    const strip = await screen.findByTestId(
+      "clinical-shortcuts-favorites"
+    );
+    expect(strip).toHaveTextContent(/s\/p PPV/i);
+    expect(
+      within(strip).getByTestId("clinical-shortcut-favorite-post-03")
+    ).toBeInTheDocument();
+    // Star on the main-catalog row renders as pinned.
+    expect(
+      screen.getByTestId("clinical-shortcut-star-post-03")
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("shortcut favorites and star controls are hidden for reviewers", async () => {
+    (api.listMyClinicalShortcutFavorites as any).mockResolvedValue([
+      {
+        id: 10,
+        organization_id: 1,
+        user_id: 2,
+        shortcut_ref: "dm-01",
+        created_at: "x",
+      },
+    ]);
+    render(
+      <NoteWorkspace
+        identity="rev@chartnav.local"
+        me={REV}
+        encounterId={1}
+        patientDisplay="Test"
+        providerDisplay="Dr T"
+      />
+    );
+    await screen.findByTestId("workspace-tier-transcript");
+    expect(
+      screen.queryByTestId("clinical-shortcuts-favorites")
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("clinical-shortcut-star-dm-01")
+    ).not.toBeInTheDocument();
+    expect(api.listMyClinicalShortcutFavorites).not.toHaveBeenCalled();
+  });
+
+  it("caret-to-first-blank: clicking rd-01 selects the first `___` in the draft", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    const textarea = (await screen.findByTestId(
+      "note-draft-textarea"
+    )) as HTMLTextAreaElement;
+    // Clear existing draft and seed a tiny known body so selection
+    // offsets are deterministic.
+    await user.clear(textarea);
+    await user.type(textarea, "START|END");
+    textarea.focus();
+    textarea.setSelectionRange(5, 5); // caret between `|`
+
+    await screen.findByTestId("clinical-shortcuts-panel");
+    await user.click(screen.getByTestId("clinical-shortcut-rd-01"));
+    // rAF runs before the assertion resolves; wait for the textarea
+    // selection to land on the placeholder.
+    await waitFor(() => {
+      const value = textarea.value;
+      const selected = value.slice(
+        textarea.selectionStart,
+        textarea.selectionEnd
+      );
+      expect(selected).toBe("___");
+      // And the selection lands on the FIRST `___`, not a later one.
+      const firstBlank = value.indexOf("___");
+      expect(textarea.selectionStart).toBe(firstBlank);
+    });
+  });
+
+  it("caret fallback: no blank → caret lands at end of inserted phrase", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    const textarea = (await screen.findByTestId(
+      "note-draft-textarea"
+    )) as HTMLTextAreaElement;
+    await user.clear(textarea);
+    await user.type(textarea, "existing");
+    textarea.focus();
+    textarea.setSelectionRange(8, 8);
+    // pvd-03 has no `___` placeholder.
+    await user.click(screen.getByTestId("clinical-shortcut-pvd-03"));
+    await waitFor(() => {
+      // caret should land AT the end of the inserted phrase (not at
+      // a phantom `___`). Simplest assertion: the selection is
+      // collapsed (start === end) and sits strictly after the seeded
+      // "existing" prefix.
+      expect(textarea.selectionStart).toBe(textarea.selectionEnd);
+      expect(textarea.selectionStart).toBeGreaterThan("existing".length);
+    });
+  });
+
+  it("`s/p` in shortcut bodies renders with hover help via the case-insensitive matcher", async () => {
+    renderWorkspace();
+    await screen.findByTestId("clinical-shortcuts-panel");
+    // dm-03 body: "PDR s/p PRP, stable without new NVD or NVE."
+    const row = screen.getByTestId("clinical-shortcut-dm-03");
+    // At least one `s/p` inside the body should have been wrapped.
+    const abbrs = within(row).getAllByText("s/p");
+    expect(abbrs.length).toBeGreaterThan(0);
+    expect(abbrs[0].tagName.toLowerCase()).toBe("abbr");
+    expect(abbrs[0]).toHaveAttribute(
+      "title",
+      expect.stringMatching(/Status post/i)
+    );
   });
 });

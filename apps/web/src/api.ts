@@ -1444,3 +1444,42 @@ export async function recordClinicalShortcutUsage(
     return null;
   }
 }
+
+// ---------- Clinical Shortcut favorites (phase 30) -----------------------
+
+export interface ClinicalShortcutFavorite {
+  id: number;
+  organization_id: number;
+  user_id: number;
+  shortcut_ref: string;
+  created_at: string;
+}
+
+export function listMyClinicalShortcutFavorites(
+  email: string
+): Promise<ClinicalShortcutFavorite[]> {
+  return request("/me/clinical-shortcuts/favorites", { email });
+}
+
+export function favoriteClinicalShortcut(
+  email: string,
+  shortcutRef: string
+): Promise<ClinicalShortcutFavorite> {
+  return request("/me/clinical-shortcuts/favorites", {
+    email,
+    method: "POST",
+    body: JSON.stringify({ shortcut_ref: shortcutRef }),
+  });
+}
+
+export function unfavoriteClinicalShortcut(
+  email: string,
+  shortcutRef: string
+): Promise<{ removed: number }> {
+  return request(
+    `/me/clinical-shortcuts/favorites?shortcut_ref=${encodeURIComponent(
+      shortcutRef
+    )}`,
+    { email, method: "DELETE" }
+  );
+}

@@ -4,6 +4,97 @@ Reverse-chronological.
 
 ---
 
+## 2026-04-19 — Phase 30: shortcut favorites + caret-to-blank + retina expansion
+
+Three narrow ergonomic wins on the phase-29 Clinical Shortcuts
+surface: per-doctor shortcut favorites (separate table from the
+phase-28 quick-comment favorites), caret jumps to the first
+`___` placeholder on insertion with the three underscores
+pre-selected so typing replaces them in one gesture, and 20
+retina-heavy clinical phrases across 4 new groups (DR/DME, ERM/
+VMT/MH, vascular, post-op). Abbreviation reference grew from 29 to
+50 hints — only where the new content uses them. `s/p` now hover-
+renders via a case-insensitive matcher that normalises to the
+canonical uppercase key.
+
+### Changes
+- **Migration e1f2a3041505** — new `clinician_shortcut_favorites`
+  table keyed on the catalog's stable string refs. One row per
+  `(user, shortcut_ref)` via UNIQUE.
+- **Routes** — `GET/POST/DELETE /me/clinical-shortcuts/favorites`
+  (idempotent POST upsert, DELETE via query param). Admin/
+  clinician only (reviewer 403). Audit events
+  `clinician_shortcut_favorited` + `_unfavorited`.
+- **Catalog** — 20 new shortcuts in clinicalShortcuts.ts with
+  stable IDs (`dm-01..dm-05`, `mac-01..mac-05`,
+  `vasc-01..vasc-05`, `post-01..post-05`). All AAO-style
+  conservative shorthand; blanks are intentional fill-in points.
+- **Abbreviation table** grew by 21 entries — AC, BRAO, BRVO,
+  CRAO, CRVO, DM, DME, FA, FTMH, ILM, IVT, ME, MH, NV, NVD, NVE,
+  NVG, NVI, PCP, S/P, VA. Only additions that the new shortcuts
+  actually use or that are plausible search terms.
+- **Matcher** — segmentAbbreviations flipped to `gi` +
+  uppercase-normalised key lookup so `s/p PPV` renders with
+  hover help without twin upper/lower dictionary keys. Word-
+  boundary guards unchanged.
+- **spliceIntoDraft** — now scans the inserted body for the
+  first `___`, lands the caret there, and selects the three
+  underscores. Falls back to end-of-insertion when no
+  placeholder exists (phase-28 baseline).
+- **Frontend api.ts** — ClinicalShortcutFavorite type +
+  listMyClinicalShortcutFavorites / favoriteClinicalShortcut /
+  unfavoriteClinicalShortcut.
+- **NoteWorkspace** — shortcut favorites state, loader, toggle;
+  ★ Favorites strip at the top of the Clinical Shortcuts panel;
+  ☆/★ star toggle per catalog row with `aria-pressed` semantics;
+  orphaned favorites (ref no longer in catalog) filtered out,
+  never broken.
+
+### Tests
+- Backend +8 (`tests/test_clinical_shortcut_favorites.py`):
+  happy path, idempotency, list scoping, unfavorite
+  idempotence, reviewer 403 across all three endpoints, empty
+  ref rejected, audit events, surface isolation (no leak to
+  encounter reads).
+  Full backend suite: **293 passed** (285 + 8).
+- Frontend +10 (`NoteWorkspace.test.tsx`): four new groups
+  render with verbatim phrasing (spot-check via
+  `toHaveTextContent` so `<abbr>` wrappers don't break
+  substring matching), abbreviation-aware search for DME /
+  CRVO / FTMH, star toggle dispatch + refresh, Favorites strip
+  render with aria-pressed, reviewer hides strip + no fetch,
+  caret-to-first-blank selects the three underscores, caret
+  fallback when no blank, case-insensitive `s/p` hover help.
+  Full vitest suite: **102 passed** (19 + 20 + 63).
+- Typecheck clean. Vite build 246.74 kB JS / 21.26 kB CSS
+  (gzip 72.46 / 4.41 kB).
+
+### Docs
+- New `docs/build/41-shortcut-ergonomics-and-retina-expansion.md`.
+- Updated `docs/build/16-frontend-test-strategy.md`.
+
+### Files touched
+- `apps/api/alembic/versions/e1f2a3041505_clinical_shortcut_favorites.py`
+- `apps/api/app/api/routes.py`
+- `apps/api/tests/test_clinical_shortcut_favorites.py` (new)
+- `apps/web/src/clinicalShortcuts.ts`
+- `apps/web/src/api.ts`
+- `apps/web/src/NoteWorkspace.tsx`
+- `apps/web/src/test/NoteWorkspace.test.tsx`
+- `docs/build/05-build-log.md`,
+  `16-frontend-test-strategy.md`,
+  `41-shortcut-ergonomics-and-retina-expansion.md` (new)
+
+### Files intentionally avoided
+- Marketing site.
+- No unified favorites table (quick-comment favorites and
+  shortcut favorites stay on separate tables).
+- No Playwright scenario (phase-28's spec already proves the
+  cross-stack insertion wedge through the shared splice helper).
+- No whole-PDF abbreviation dump (now 50 curated entries).
+
+---
+
 ## 2026-04-19 — Phase 29: Clinical Shortcuts (specialist shorthand pack)
 
 A second doctor-only layer on the clinician workspace: a curated

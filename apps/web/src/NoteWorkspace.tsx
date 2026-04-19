@@ -21,6 +21,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiError,
+  ClinicalShortcutFavorite,
   ClinicianQuickComment,
   ClinicianQuickCommentFavorite,
   EncounterInput,
@@ -35,15 +36,18 @@ import {
   deleteMyQuickComment,
   downloadNoteArtifact,
   exportNoteVersion,
+  favoriteClinicalShortcut,
   favoriteQuickComment,
   generateNoteVersion,
   getPlatform,
+  listMyClinicalShortcutFavorites,
   listMyQuickComments,
   listMyQuickCommentFavorites,
   listNoteTransmissions,
   recordClinicalShortcutUsage,
   recordQuickCommentUsage,
   transmitNoteVersion,
+  unfavoriteClinicalShortcut,
   unfavoriteQuickComment,
   updateMyQuickComment,
   getNoteVersion,
@@ -64,7 +68,9 @@ import {
   ABBREVIATION_HINTS,
   CLINICAL_SHORTCUTS,
   CLINICAL_SHORTCUT_GROUPS,
+  SHORTCUT_BLANK_TOKEN,
   clinicalShortcutMatches,
+  firstBlankOffset,
   segmentAbbreviations,
   type ClinicalShortcut,
 } from "./clinicalShortcuts";
@@ -138,6 +144,13 @@ export function NoteWorkspace({
   // filter. Abbreviation-aware matching lives in
   // `clinicalShortcutMatches` (see clinicalShortcuts.ts).
   const [shortcutSearch, setShortcutSearch] = useState("");
+
+  // Phase 30 — per-doctor shortcut favorites. Persisted separately
+  // from quick-comment favorites (different URL + different table)
+  // so the two favoritism models evolve independently.
+  const [shortcutFavorites, setShortcutFavorites] = useState<
+    ClinicalShortcutFavorite[]
+  >([]);
 
   const canSign = me.role === "admin" || me.role === "clinician";
   const canEdit = canSign; // same set today
@@ -277,6 +290,44 @@ export function NoteWorkspace({
     loadFavorites();
   }, [loadFavorites]);
 
+  // Phase 30 — Clinical Shortcut favorites.
+  const loadShortcutFavorites = useCallback(async () => {
+    if (!canUseQuickComments) {
+      setShortcutFavorites([]);
+      return;
+    }
+    try {
+      setShortcutFavorites(await listMyClinicalShortcutFavorites(identity));
+    } catch {
+      setShortcutFavorites([]);
+    }
+  }, [identity, canUseQuickComments]);
+
+  useEffect(() => {
+    loadShortcutFavorites();
+  }, [loadShortcutFavorites]);
+
+  const favoriteShortcutSet = useMemo(
+    () => new Set(shortcutFavorites.map((f) => f.shortcut_ref)),
+    [shortcutFavorites]
+  );
+
+  const toggleShortcutFavorite = useCallback(
+    async (shortcutRef: string) => {
+      try {
+        if (favoriteShortcutSet.has(shortcutRef)) {
+          await unfavoriteClinicalShortcut(identity, shortcutRef);
+        } else {
+          await favoriteClinicalShortcut(identity, shortcutRef);
+        }
+        await loadShortcutFavorites();
+      } catch (e) {
+        showFlash("error", friendly(e));
+      }
+    },
+    [identity, favoriteShortcutSet, loadShortcutFavorites, showFlash]
+  );
+
   const favoritePreloadedSet = useMemo(
     () =>
       new Set(
@@ -372,12 +423,46 @@ export function NoteWorkspace({
 
       setEditBody(next);
 
-      if (textarea !== null && caretAfter !== null) {
-        const place = caretAfter;
+      // Phase 30 — if the inserted phrase carries a `___` placeholder,
+      // land the caret on the first one and select the 3 chars so the
+      // clinician can type straight over it. Falls through to the
+      // end-of-insertion caret when no placeholder is present, which
+      // preserves the phase-28 behaviour for free-form quick comments.
+      let selStart = caretAfter;
+      let selEnd = caretAfter;
+      const blankOffsetInBody = firstBlankOffset(body);
+      if (blankOffsetInBody >= 0 && caretAfter !== null) {
+        // `caretAfter` points to just past the inserted phrase; the
+        // phrase itself started `body.length + trailingLen` chars
+        // earlier. Recover the insertion start by subtracting the
+        // pad-adjusted phrase length.
+        const insertionEnd = caretAfter;
+        const trailingLen = next.length - insertionEnd;  // chars after the caret
+        // insertionStart == position in `next` where the phrase began.
+        const insertionStart =
+          insertionEnd - (body.length + /* trailing newline we added */ 0);
+        // We don't need insertionStart precisely when we can just
+        // search for the placeholder forward from the start of `next`
+        // — the first `___` in `next` is guaranteed to be inside the
+        // fragment we just spliced (drafts can't contain `___`
+        // naturally in clinical text; if they do, landing on the
+        // earliest one is still the right UX).
+        void insertionStart;
+        void trailingLen;
+        const blankIdxInNext = next.indexOf(SHORTCUT_BLANK_TOKEN);
+        if (blankIdxInNext >= 0) {
+          selStart = blankIdxInNext;
+          selEnd = blankIdxInNext + SHORTCUT_BLANK_TOKEN.length;
+        }
+      }
+
+      if (textarea !== null && selStart !== null && selEnd !== null) {
+        const start = selStart;
+        const end = selEnd;
         requestAnimationFrame(() => {
           try {
             textarea.focus();
-            textarea.setSelectionRange(place, place);
+            textarea.setSelectionRange(start, end);
           } catch {
             /* jsdom / detached DOM tolerant */
           }
@@ -1507,6 +1592,58 @@ export function NoteWorkspace({
             />
           </div>
 
+          {/* Phase 30 — Favorites strip. Renders above the main
+              catalog whenever at least one pinned shortcut still
+              resolves (a favorite whose ref was removed from the
+              catalog is filtered out rather than broken). */}
+          {(() => {
+            const q = shortcutSearch.trim().toLowerCase();
+            const favRows = shortcutFavorites
+              .map((fav) =>
+                CLINICAL_SHORTCUTS.find((s) => s.id === fav.shortcut_ref)
+              )
+              .filter((s): s is ClinicalShortcut => !!s)
+              .filter((s) =>
+                !q ? true : clinicalShortcutMatches(s, shortcutSearch)
+              );
+            if (favRows.length === 0) return null;
+            return (
+              <div
+                className="workspace__qc-favorites"
+                data-testid="clinical-shortcuts-favorites"
+              >
+                <div className="workspace__qc-group-title">★ Favorites</div>
+                <ul className="workspace__qc-list">
+                  {favRows.map((s) => (
+                    <li key={s.id}>
+                      <button
+                        className="btn btn--muted btn--qc"
+                        onClick={() => insertClinicalShortcut(s)}
+                        data-testid={`clinical-shortcut-favorite-${s.id}`}
+                        disabled={!canEdit || noteSigned || !activeNote}
+                        title="Click to insert pinned shortcut"
+                      >
+                        {segmentAbbreviations(s.body).map((seg, i) =>
+                          typeof seg === "string" ? (
+                            <span key={i}>{seg}</span>
+                          ) : (
+                            <abbr
+                              key={i}
+                              title={seg.meaning}
+                              className="cn-abbr"
+                            >
+                              {seg.abbr}
+                            </abbr>
+                          )
+                        )}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })()}
+
           <div
             className="workspace__qc-preloaded"
             data-testid="clinical-shortcuts-list"
@@ -1528,39 +1665,63 @@ export function NoteWorkspace({
                 >
                   <div className="workspace__qc-group-title">{group}</div>
                   <ul className="workspace__qc-list">
-                    {items.map((shortcut) => (
-                      <li key={shortcut.id} className="workspace__qc-row">
-                        <button
-                          className="btn btn--muted btn--qc"
-                          onClick={() => insertClinicalShortcut(shortcut)}
-                          data-testid={`clinical-shortcut-${shortcut.id}`}
-                          disabled={!canEdit || noteSigned || !activeNote}
-                          title={
-                            !activeNote
-                              ? "Generate a draft first"
-                              : noteSigned
-                                ? "Note is signed — cannot insert"
-                                : "Click to insert into draft"
-                          }
-                        >
-                          {segmentAbbreviations(shortcut.body).map(
-                            (seg, i) =>
-                              typeof seg === "string" ? (
-                                <span key={i}>{seg}</span>
-                              ) : (
-                                <abbr
-                                  key={i}
-                                  title={seg.meaning}
-                                  className="cn-abbr"
-                                  data-testid={`clinical-shortcut-abbr-${seg.abbr}`}
-                                >
-                                  {seg.abbr}
-                                </abbr>
-                              )
-                          )}
-                        </button>
-                      </li>
-                    ))}
+                    {items.map((shortcut) => {
+                      const isFav = favoriteShortcutSet.has(shortcut.id);
+                      return (
+                        <li key={shortcut.id} className="workspace__qc-row">
+                          <button
+                            className="btn btn--muted btn--qc"
+                            onClick={() => insertClinicalShortcut(shortcut)}
+                            data-testid={`clinical-shortcut-${shortcut.id}`}
+                            disabled={!canEdit || noteSigned || !activeNote}
+                            title={
+                              !activeNote
+                                ? "Generate a draft first"
+                                : noteSigned
+                                  ? "Note is signed — cannot insert"
+                                  : "Click to insert into draft"
+                            }
+                          >
+                            {segmentAbbreviations(shortcut.body).map(
+                              (seg, i) =>
+                                typeof seg === "string" ? (
+                                  <span key={i}>{seg}</span>
+                                ) : (
+                                  <abbr
+                                    key={i}
+                                    title={seg.meaning}
+                                    className="cn-abbr"
+                                    data-testid={`clinical-shortcut-abbr-${seg.abbr}`}
+                                  >
+                                    {seg.abbr}
+                                  </abbr>
+                                )
+                            )}
+                          </button>
+                          <button
+                            className={
+                              "btn btn--ghost btn--qc-star" +
+                              (isFav ? " btn--qc-star--on" : "")
+                            }
+                            onClick={() => toggleShortcutFavorite(shortcut.id)}
+                            data-testid={`clinical-shortcut-star-${shortcut.id}`}
+                            aria-pressed={isFav}
+                            aria-label={
+                              isFav
+                                ? `Unpin ${shortcut.id}`
+                                : `Pin ${shortcut.id}`
+                            }
+                            title={
+                              isFav
+                                ? "Unpin from Favorites"
+                                : "Pin to Favorites"
+                            }
+                          >
+                            {isFav ? "★" : "☆"}
+                          </button>
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
               );

@@ -35,12 +35,23 @@ export interface ClinicalShortcut {
   tags: string[];
 }
 
-export type ClinicalShortcutGroup = "PVD" | "Retinal detachment" | "Wet/Dry AMD";
+export type ClinicalShortcutGroup =
+  | "PVD"
+  | "Retinal detachment"
+  | "Wet/Dry AMD"
+  | "Diabetic retinopathy / DME"
+  | "ERM / VMT / macular hole"
+  | "BRVO / CRVO / retinal vascular"
+  | "Post-injection / post-vitrectomy / post-op";
 
 export const CLINICAL_SHORTCUT_GROUPS: ClinicalShortcutGroup[] = [
   "PVD",
   "Retinal detachment",
   "Wet/Dry AMD",
+  "Diabetic retinopathy / DME",
+  "ERM / VMT / macular hole",
+  "BRVO / CRVO / retinal vascular",
+  "Post-injection / post-vitrectomy / post-op",
 ];
 
 export const CLINICAL_SHORTCUTS: ClinicalShortcut[] = [
@@ -162,6 +173,246 @@ export const CLINICAL_SHORTCUTS: ClinicalShortcut[] = [
       "macular hemorrhage", "macula", "oct", "injection",
     ],
   },
+
+  // ---------- Diabetic retinopathy / DME ----------
+  // Conservative clinician shorthand; stage-language is stable across
+  // the ETDRS / ICDRS vocabularies that AAO documentation uses.
+  {
+    id: "dm-01",
+    group: "Diabetic retinopathy / DME",
+    body:
+      "NPDR without DME in both eyes; stable. Continue yearly DFE and " +
+      "systemic glycemic control.",
+    tags: [
+      "npdr", "dm", "dme", "diabetic retinopathy", "diabetic",
+      "dfe", "yearly", "observation",
+    ],
+  },
+  {
+    id: "dm-02",
+    group: "Diabetic retinopathy / DME",
+    body:
+      "Moderate NPDR with center-involving DME on OCT; recommend " +
+      "intravitreal anti-VEGF injection ___.",
+    tags: [
+      "npdr", "dme", "macular edema", "anti-vegf", "injection",
+      "diabetic retinopathy", "oct", "csdme",
+    ],
+  },
+  {
+    id: "dm-03",
+    group: "Diabetic retinopathy / DME",
+    body:
+      "PDR s/p PRP, stable without new NVD or NVE. Continue close " +
+      "interval follow-up.",
+    tags: [
+      "pdr", "prp", "panretinal photocoagulation", "nvd", "nve",
+      "neovascularization", "diabetic retinopathy", "s/p",
+    ],
+  },
+  {
+    id: "dm-04",
+    group: "Diabetic retinopathy / DME",
+    body:
+      "Active PDR with NVD / NVE on exam; recommend completion of " +
+      "PRP ___ sessions. Anti-VEGF considered as adjunct.",
+    tags: [
+      "pdr", "nvd", "nve", "neovascularization", "prp",
+      "panretinal photocoagulation", "anti-vegf", "active",
+    ],
+  },
+  {
+    id: "dm-05",
+    group: "Diabetic retinopathy / DME",
+    body:
+      "Center-involved DME on OCT with central subfield thickness ___ " +
+      "microns; plan anti-VEGF.",
+    tags: [
+      "dme", "cme", "macular edema", "oct", "csdme",
+      "anti-vegf", "central subfield", "microns", "injection",
+    ],
+  },
+
+  // ---------- ERM / VMT / macular hole ----------
+  {
+    id: "mac-01",
+    group: "ERM / VMT / macular hole",
+    body:
+      "ERM with mild metamorphopsia, VA ___. Observation vs. PPV with " +
+      "membrane peel discussed; patient elected ___.",
+    tags: [
+      "erm", "epiretinal membrane", "metamorphopsia", "ppv",
+      "membrane peel", "macula", "vitrectomy", "va",
+    ],
+  },
+  {
+    id: "mac-02",
+    group: "ERM / VMT / macular hole",
+    body:
+      "VMT on OCT with foveal distortion, VA ___; observation vs. PPV " +
+      "discussed.",
+    tags: [
+      "vmt", "vitreomacular traction", "oct", "foveal",
+      "ppv", "vitrectomy", "macula", "va",
+    ],
+  },
+  {
+    id: "mac-03",
+    group: "ERM / VMT / macular hole",
+    body:
+      "Full-thickness macular hole, stage ___, aperture size ___ microns; " +
+      "recommend PPV with ILM peel and gas tamponade.",
+    tags: [
+      "ftmh", "macular hole", "mh", "ppv", "vitrectomy",
+      "ilm", "internal limiting membrane", "gas", "tamponade",
+      "microns", "stage",
+    ],
+  },
+  {
+    id: "mac-04",
+    group: "ERM / VMT / macular hole",
+    body:
+      "Post-op s/p PPV + ILM peel for FTMH; macular hole closed on OCT, " +
+      "VA improving.",
+    tags: [
+      "ftmh", "macular hole", "postop", "post-op", "s/p",
+      "ppv", "ilm", "oct", "closed", "va",
+    ],
+  },
+  {
+    id: "mac-05",
+    group: "ERM / VMT / macular hole",
+    body:
+      "Lamellar macular hole, stable on OCT, no surgical indication today. " +
+      "Reassess in ___ months.",
+    tags: [
+      "lamellar", "macular hole", "mh", "oct", "stable",
+      "observation",
+    ],
+  },
+
+  // ---------- BRVO / CRVO / retinal vascular ----------
+  {
+    id: "vasc-01",
+    group: "BRVO / CRVO / retinal vascular",
+    body:
+      "BRVO involving the ___ quadrant with intraretinal hemorrhage and " +
+      "cotton-wool spots; macular edema on OCT. Plan anti-VEGF.",
+    tags: [
+      "brvo", "branch retinal vein occlusion", "intraretinal hemorrhage",
+      "cotton-wool spots", "macular edema", "me", "oct", "anti-vegf",
+      "injection",
+    ],
+  },
+  {
+    id: "vasc-02",
+    group: "BRVO / CRVO / retinal vascular",
+    body:
+      "Non-ischemic CRVO with diffuse intraretinal hemorrhage in 4 " +
+      "quadrants; macular edema on OCT. Plan anti-VEGF and monitor " +
+      "conversion to ischemic.",
+    tags: [
+      "crvo", "central retinal vein occlusion", "non-ischemic",
+      "intraretinal hemorrhage", "macular edema", "me", "oct",
+      "anti-vegf", "injection",
+    ],
+  },
+  {
+    id: "vasc-03",
+    group: "BRVO / CRVO / retinal vascular",
+    body:
+      "Ischemic CRVO with extensive capillary non-perfusion on FA; monitor " +
+      "closely for anterior segment neovascularization and neovascular " +
+      "glaucoma.",
+    tags: [
+      "crvo", "central retinal vein occlusion", "ischemic",
+      "capillary non-perfusion", "fa", "fluorescein angiography",
+      "nvg", "neovascular glaucoma", "nvi",
+      "anterior segment neovascularization",
+    ],
+  },
+  {
+    id: "vasc-04",
+    group: "BRVO / CRVO / retinal vascular",
+    body:
+      "BRAO with segmental retinal whitening along the distribution of " +
+      "the ___ arteriole; workup for embolic source initiated.",
+    tags: [
+      "brao", "branch retinal artery occlusion",
+      "retinal whitening", "embolic", "arteriole", "workup",
+    ],
+  },
+  {
+    id: "vasc-05",
+    group: "BRVO / CRVO / retinal vascular",
+    body:
+      "Hypertensive retinopathy with AV nicking and scattered cotton-wool " +
+      "spots; blood pressure control counseled with PCP.",
+    tags: [
+      "hypertensive retinopathy", "htn", "av nicking",
+      "cotton-wool spots", "pcp", "counseling",
+    ],
+  },
+
+  // ---------- Post-injection / post-vitrectomy / post-op ----------
+  {
+    id: "post-01",
+    group: "Post-injection / post-vitrectomy / post-op",
+    body:
+      "Intravitreal ___ injection OS performed under sterile technique " +
+      "with 5% povidone-iodine and lid speculum; patient tolerated well, " +
+      "no immediate complications.",
+    tags: [
+      "injection", "anti-vegf", "intravitreal", "ivt",
+      "postop", "procedure", "os", "povidone",
+    ],
+  },
+  {
+    id: "post-02",
+    group: "Post-injection / post-vitrectomy / post-op",
+    body:
+      "Post-injection return precautions reviewed in detail: pain, " +
+      "redness, worsening vision, or increasing floaters warrant urgent " +
+      "contact to r/o endophthalmitis or RD.",
+    tags: [
+      "injection", "postop", "counseling", "precautions",
+      "endophthalmitis", "rd", "retinal detachment", "r/o",
+    ],
+  },
+  {
+    id: "post-03",
+    group: "Post-injection / post-vitrectomy / post-op",
+    body:
+      "Post-op day ___ s/p PPV: retina attached, IOP ___ mmHg, AC quiet, " +
+      "no evidence of endophthalmitis. Continue topical steroid / " +
+      "antibiotic taper.",
+    tags: [
+      "postop", "post-op", "s/p", "ppv", "vitrectomy",
+      "iop", "ac", "endophthalmitis", "steroid", "antibiotic",
+    ],
+  },
+  {
+    id: "post-04",
+    group: "Post-injection / post-vitrectomy / post-op",
+    body:
+      "Post-op week ___ s/p scleral buckle: buckle in good position, " +
+      "retina attached 360°, no SRF on exam.",
+    tags: [
+      "postop", "post-op", "s/p", "sb", "scleral buckle",
+      "retina attached", "srf", "subretinal fluid",
+    ],
+  },
+  {
+    id: "post-05",
+    group: "Post-injection / post-vitrectomy / post-op",
+    body:
+      "Post-op s/p PRP with good laser uptake; no progression of PDR or " +
+      "new NVE on exam today.",
+    tags: [
+      "postop", "post-op", "s/p", "prp", "panretinal photocoagulation",
+      "pdr", "nve", "neovascularization", "laser",
+    ],
+  },
 ];
 
 /**
@@ -181,23 +432,42 @@ export const CLINICAL_SHORTCUTS: ClinicalShortcut[] = [
  * clinician is likely to search for it.
  */
 export const ABBREVIATION_HINTS: Record<string, string> = {
+  AC: "Anterior chamber",
   AMD: "Age-related macular degeneration",
   ARMD: "Age-related macular degeneration",
+  BRAO: "Branch retinal artery occlusion",
+  BRVO: "Branch retinal vein occlusion",
   CME: "Cystoid macular edema",
   "C/D": "Cup-to-disc ratio",
+  CRAO: "Central retinal artery occlusion",
+  CRVO: "Central retinal vein occlusion",
   DFE: "Dilated fundus exam",
+  DM: "Diabetes mellitus",
+  DME: "Diabetic macular edema",
   "D&Q": "Deep and quiet (anterior chamber)",
   ERM: "Epiretinal membrane",
+  FA: "Fluorescein angiography",
+  FTMH: "Full-thickness macular hole",
+  ILM: "Internal limiting membrane",
   IOP: "Intraocular pressure",
   IRF: "Intraretinal fluid",
+  IVT: "Intravitreal injection",
+  ME: "Macular edema",
+  MH: "Macular hole",
+  NPDR: "Non-proliferative diabetic retinopathy",
+  NV: "Neovascularization",
+  NVD: "Neovascularization of the disc",
+  NVE: "Neovascularization elsewhere",
+  NVG: "Neovascular glaucoma",
+  NVI: "Neovascularization of the iris",
   OCT: "Optical coherence tomography",
   ONH: "Optic nerve head",
   OD: "Right eye (oculus dexter)",
   OS: "Left eye (oculus sinister)",
   OU: "Both eyes (oculus uterque)",
+  PCP: "Primary care physician",
   PED: "Pigment epithelial detachment",
   PDR: "Proliferative diabetic retinopathy",
-  NPDR: "Non-proliferative diabetic retinopathy",
   PPV: "Pars plana vitrectomy",
   PR: "Pneumatic retinopexy",
   PRP: "Pan-retinal photocoagulation",
@@ -209,6 +479,8 @@ export const ABBREVIATION_HINTS: Record<string, string> = {
   SB: "Scleral buckle",
   SLE: "Slit lamp exam",
   SRF: "Subretinal fluid",
+  "S/P": "Status post",
+  VA: "Visual acuity",
   VMT: "Vitreomacular traction",
 };
 
@@ -279,11 +551,16 @@ export function segmentAbbreviations(body: string): AbbrSegment[] {
     t.replace(/[.*+?^${}()|[\]\\/&]/g, "\\$&")
   );
   // Use lookarounds to avoid matching inside longer alpha tokens;
-  // allow trailing punctuation/whitespace. `\b` alone doesn't work
-  // for tokens that contain a slash like `C/D`.
+  // `\b` alone doesn't work for tokens that contain a slash like
+  // `C/D` or `S/P`. The `i` flag lets us pick up the lowercase
+  // shorthand clinicians actually write ("s/p PPV" etc.) while the
+  // hint lookup uses the canonical uppercase key. The word-boundary
+  // lookaround prevents false positives on substrings inside ordinary
+  // prose ("macula" does not match AC, "vasopressor" does not match
+  // VA, etc.).
   const pattern = new RegExp(
     `(^|[^A-Za-z0-9])(${escaped.join("|")})(?=[^A-Za-z0-9]|$)`,
-    "g"
+    "gi"
   );
 
   const out: AbbrSegment[] = [];
@@ -293,10 +570,33 @@ export function segmentAbbreviations(body: string): AbbrSegment[] {
     const [, leading, token] = m;
     const matchStart = m.index + leading.length;
     if (matchStart > lastIndex) out.push(body.slice(lastIndex, matchStart));
-    const meaning = ABBREVIATION_HINTS[token];
+    const key = token.toUpperCase();
+    const meaning = ABBREVIATION_HINTS[key] ?? ABBREVIATION_HINTS[token];
+    // Preserve the source capitalization in the rendered `<abbr>` so
+    // the note fragment reads as the clinician wrote it, not as the
+    // canonical key.
     out.push({ abbr: token, meaning });
     lastIndex = matchStart + token.length;
   }
   if (lastIndex < body.length) out.push(body.slice(lastIndex));
   return out;
+}
+
+/**
+ * Placeholder token used inside shortcut bodies to mark a
+ * fill-in-the-blank target. Clinical phrasing like
+ * `involving ___ quadrants` or `from ___ to ___ o'clock` signals the
+ * doctor needs to land the caret on the first `___` right after
+ * insertion so they can type over it immediately.
+ */
+export const SHORTCUT_BLANK_TOKEN = "___";
+
+/**
+ * Return the zero-based offset of the first `___` placeholder inside
+ * `body`, or `-1` if none exists. Callers use this to jump the caret
+ * (and optionally select the placeholder) after insertion so typing
+ * replaces it in one gesture.
+ */
+export function firstBlankOffset(body: string): number {
+  return body.indexOf(SHORTCUT_BLANK_TOKEN);
 }

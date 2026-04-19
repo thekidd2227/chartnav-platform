@@ -3262,3 +3262,150 @@ def record_clinical_shortcut_use(
         detail=f"shortcut_id={shortcut_id}{ctx}",
     )
     return {"recorded": True, "shortcut_id": shortcut_id}
+
+
+# ===========================================================================
+# Clinical Shortcut favorites (phase 30)
+# ===========================================================================
+#
+# Parallel to the phase-28 quick-comment favorites surface, keyed on
+# the shortcut catalog's stable string ids. Kept as a separate table
+# and a separate URL namespace so the two favoritism models evolve
+# independently (quick-comment favorites reference DB rows and care
+# about soft-delete; shortcut favorites reference frontend-bundle
+# content that cannot be soft-deleted). Idempotent POST upsert so the
+# UI star button can re-fire without state tracking.
+
+
+CLINICAL_SHORTCUT_FAV_COLUMNS = (
+    "id, organization_id, user_id, shortcut_ref, created_at"
+)
+
+
+class ClinicalShortcutFavoriteBody(BaseModel):
+    shortcut_ref: str = Field(
+        ..., min_length=1, max_length=CLINICAL_SHORTCUT_ID_MAX,
+    )
+
+
+@router.get("/me/clinical-shortcuts/favorites")
+def list_my_shortcut_favorites(
+    caller: Caller = Depends(require_caller),
+) -> list[dict]:
+    _require_quick_comment_role(caller)
+    rows = fetch_all(
+        f"SELECT {CLINICAL_SHORTCUT_FAV_COLUMNS} "
+        "FROM clinician_shortcut_favorites "
+        "WHERE organization_id = :org AND user_id = :uid "
+        "ORDER BY created_at ASC, id ASC",
+        {"org": caller.organization_id, "uid": caller.user_id},
+    )
+    return [dict(r) for r in rows]
+
+
+@router.post(
+    "/me/clinical-shortcuts/favorites",
+    status_code=status.HTTP_201_CREATED,
+)
+def favorite_clinical_shortcut(
+    payload: ClinicalShortcutFavoriteBody,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    _require_quick_comment_role(caller)
+    ref = payload.shortcut_ref.strip()
+    if not ref:
+        raise _err(
+            "shortcut_ref_required",
+            "shortcut_ref is required and must be non-empty",
+            400,
+        )
+
+    existing = fetch_one(
+        f"SELECT {CLINICAL_SHORTCUT_FAV_COLUMNS} "
+        "FROM clinician_shortcut_favorites "
+        "WHERE user_id = :uid AND organization_id = :org "
+        "AND shortcut_ref = :ref",
+        {
+            "uid": caller.user_id,
+            "org": caller.organization_id,
+            "ref": ref,
+        },
+    )
+    if existing is not None:
+        return dict(existing)
+
+    with transaction() as conn:
+        new_id = conn.execute(
+            text(
+                "INSERT INTO clinician_shortcut_favorites "
+                "(organization_id, user_id, shortcut_ref) "
+                "VALUES (:org, :uid, :ref) RETURNING id"
+            ),
+            {
+                "org": caller.organization_id,
+                "uid": caller.user_id,
+                "ref": ref,
+            },
+        ).mappings().first()["id"]
+
+    from app import audit as _audit
+    _audit.record(
+        event_type="clinician_shortcut_favorited",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path="/me/clinical-shortcuts/favorites",
+        method="POST",
+        detail=f"favorite_id={new_id} shortcut_ref={ref}",
+    )
+
+    row = fetch_one(
+        f"SELECT {CLINICAL_SHORTCUT_FAV_COLUMNS} "
+        "FROM clinician_shortcut_favorites WHERE id = :id",
+        {"id": int(new_id)},
+    )
+    return dict(row)
+
+
+@router.delete("/me/clinical-shortcuts/favorites")
+def unfavorite_clinical_shortcut(
+    shortcut_ref: str = Query(
+        ..., min_length=1, max_length=CLINICAL_SHORTCUT_ID_MAX,
+        description="shortcut to unpin",
+    ),
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    _require_quick_comment_role(caller)
+    ref = shortcut_ref.strip()
+    if not ref:
+        raise _err("shortcut_ref_required", "shortcut_ref is required", 400)
+
+    with transaction() as conn:
+        result = conn.execute(
+            text(
+                "DELETE FROM clinician_shortcut_favorites "
+                "WHERE user_id = :uid AND organization_id = :org "
+                "AND shortcut_ref = :ref"
+            ),
+            {
+                "uid": caller.user_id,
+                "org": caller.organization_id,
+                "ref": ref,
+            },
+        )
+        removed = result.rowcount if result.rowcount is not None else 0
+
+    if removed > 0:
+        from app import audit as _audit
+        _audit.record(
+            event_type="clinician_shortcut_unfavorited",
+            request_id=None,
+            actor_email=caller.email,
+            actor_user_id=caller.user_id,
+            organization_id=caller.organization_id,
+            path="/me/clinical-shortcuts/favorites",
+            method="DELETE",
+            detail=f"shortcut_ref={ref}",
+        )
+    return {"removed": int(removed)}

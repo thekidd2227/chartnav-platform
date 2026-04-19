@@ -206,6 +206,33 @@ two suites never cross-contaminate.
     disabled until a `completed` input exists.
   - Generate is enabled when a `completed` input is present.
 
+## Shortcut ergonomics + retina expansion (phase 30)
+
+- **+10** in `src/test/NoteWorkspace.test.tsx`:
+  - four new retina-heavy groups render; verbatim phrasing
+    asserted via `toHaveTextContent` (so `<abbr>` nodes inside
+    the shortcut bodies don't break substring matching).
+  - abbreviation-aware search: `DME` surfaces the diabetic
+    group and drops PVD; `CRVO` surfaces the retinal-vascular
+    group; `FTMH` surfaces `mac-03` + `mac-04`.
+  - shortcut star toggle dispatches `favoriteClinicalShortcut`
+    and triggers `listMyClinicalShortcutFavorites` refetch.
+  - Favorites strip renders above the main catalog when a pin
+    exists; pinned main-catalog row reports `aria-pressed="true"`.
+  - Reviewer view: Favorites strip hidden AND
+    `listMyClinicalShortcutFavorites` never fires.
+  - Caret-to-blank: clicking `rd-01` selects the three
+    underscore placeholder (`selectionStart === firstBlank`).
+  - Caret fallback: clicking `pvd-03` (no blank) collapses the
+    caret after the seeded prefix rather than landing on a
+    phantom `___`.
+  - `s/p` inside `dm-03` renders via a case-insensitive
+    `<abbr title="Status post">` lookup.
+- New mocks: `listMyClinicalShortcutFavorites`,
+  `favoriteClinicalShortcut`, `unfavoriteClinicalShortcut`.
+- Vitest suite total: **102 tests** (NoteWorkspace 63, App 19,
+  AdminPanel 20).
+
 ## Clinical Shortcuts — specialist shorthand pack (phase 29)
 
 - **+11** in `src/test/NoteWorkspace.test.tsx`:
