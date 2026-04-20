@@ -108,6 +108,20 @@ class Settings:
     # typical ~15-minute clinic encounter at 16 kHz mono.
     audio_upload_max_bytes: int
 
+    # Phase 35 — async ingestion mode.
+    # `inline` (default for dev/test): the upload route runs the
+    #   ingestion pipeline synchronously and returns the terminal
+    #   row state. Convenient for tests + dogfood.
+    # `async` (production): the row stays at `queued`; the worker
+    #   loop picks it up on its next tick. The upload returns
+    #   immediately so a slow STT vendor never holds a request open.
+    audio_ingest_mode: str
+    # Phase 35 — STT provider selector. See
+    # app/services/stt_provider.py for the supported keys
+    # ("stub", "openai_whisper", "none"). Surface here mirrors how
+    # CHARTNAV_INTEGRATION_ADAPTER is exposed.
+    stt_provider: str
+
 
 _DEFAULT_CORS = (
     "http://localhost:5173,http://127.0.0.1:5173,"
@@ -211,6 +225,19 @@ def _load() -> Settings:
         raise RuntimeError(
             "CHARTNAV_AUDIO_UPLOAD_MAX_BYTES must be an integer"
         )
+
+    audio_ingest_mode = (
+        _env("CHARTNAV_AUDIO_INGEST_MODE", "inline") or "inline"
+    ).lower()
+    if audio_ingest_mode not in {"inline", "async"}:
+        raise RuntimeError(
+            "CHARTNAV_AUDIO_INGEST_MODE must be 'inline' or 'async' "
+            f"(got {audio_ingest_mode!r})"
+        )
+
+    stt_provider = (
+        _env("CHARTNAV_STT_PROVIDER", "stub") or "stub"
+    ).lower()
     if fhir_auth_type not in {"none", "bearer"}:
         raise RuntimeError(
             f"CHARTNAV_FHIR_AUTH_TYPE must be 'none' or 'bearer' "
@@ -238,6 +265,8 @@ def _load() -> Settings:
         fhir_bearer_token=fhir_bearer_token,
         audio_upload_dir=audio_upload_dir,
         audio_upload_max_bytes=audio_upload_max_bytes,
+        audio_ingest_mode=audio_ingest_mode,
+        stt_provider=stt_provider,
     )
 
 

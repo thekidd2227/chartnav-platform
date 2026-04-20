@@ -16,14 +16,18 @@ from app.middleware import (
     RateLimitMiddleware,
     RequestIdMiddleware,
 )
-from app.services.audio_transcriber import install_default as _install_stub_stt
+from app.services.stt_provider import install_default as _install_stt_provider
 
-# Phase 33 — wire the stub audio transcriber at import time so
-# `audio_upload` inputs move through the ingestion pipeline
-# deterministically. A vendor-specific STT adapter can overwrite
-# the registration via `app.services.ingestion.set_transcriber(...)`
-# after this line.
-_install_stub_stt()
+# Phase 33 → Phase 35 — wire the configured STT provider at import
+# time. `CHARTNAV_STT_PROVIDER` picks between:
+#   "stub"           (default; deterministic placeholder for dev/test)
+#   "openai_whisper" (real OpenAI Whisper; requires
+#                     CHARTNAV_OPENAI_API_KEY)
+#   "none"           (explicitly no STT; audio uploads fail honestly)
+# A vendor-specific adapter can still overwrite the registration via
+# `app.services.ingestion.set_transcriber(...)` or
+# `app.services.stt_provider.install_provider(...)` after this line.
+_install_stt_provider()
 
 configure_logging()
 log = logging.getLogger("chartnav")

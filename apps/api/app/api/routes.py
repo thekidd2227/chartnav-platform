@@ -1953,6 +1953,41 @@ def list_encounter_inputs(
     )
 
 
+@router.get("/encounter-inputs/{input_id:int}")
+def get_encounter_input(
+    input_id: int,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Single-row read for an `encounter_inputs` row.
+
+    Phase-35 addition. Both mobile and desktop poll the per-row
+    state (queued → processing → completed | failed) when async
+    ingestion is enabled, so they need a cheap one-row endpoint
+    rather than refetching the whole encounter list.
+
+    Cross-org → 404 via the encounter-load helper, same masking
+    contract as every other input read.
+    """
+    row = fetch_one(
+        "SELECT ei.*, e.organization_id AS _org "
+        "FROM encounter_inputs ei "
+        "JOIN encounters e ON e.id = ei.encounter_id "
+        "WHERE ei.id = :id",
+        {"id": input_id},
+    )
+    if row is None or row.get("_org") != caller.organization_id:
+        raise _err(
+            "encounter_input_not_found",
+            "no such encounter input",
+            404,
+        )
+    out = fetch_one(
+        f"SELECT {INPUT_COLUMNS} FROM encounter_inputs WHERE id = :id",
+        {"id": input_id},
+    )
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Note generation / listing / read / patch / review / sign / export
 # ---------------------------------------------------------------------------
@@ -3788,16 +3823,26 @@ async def create_encounter_audio_input(
             413,
         )
 
-    # Persist to disk. UUID-named files so original filename leaks no
-    # patient-identifiable data into the filesystem; original name is
-    # still stored in `source_metadata.original_filename` for audit.
-    root = _audio_upload_root()
-    encounter_dir = root / str(encounter_id)
-    encounter_dir.mkdir(parents=True, exist_ok=True)
-    stored_ext = ext or ".bin"
-    stored_name = f"{secrets.token_hex(8)}{stored_ext}"
-    stored_path = encounter_dir / stored_name
-    stored_path.write_bytes(bytes(body))
+    # Phase 35 — persist via the storage abstraction so `stored_path`
+    # is no longer the contract. `storage_ref` is the opaque handle
+    # the rest of the system passes around; we still write
+    # `stored_path` alongside it for back-compat with phase-33
+    # readers that haven't been updated yet.
+    from app.services.audio_storage import (
+        StorageError as _StorageError,
+        resolve_storage as _resolve_storage,
+        storage_ref_to_legacy_path as _legacy_path,
+    )
+    storage = _resolve_storage()
+    try:
+        storage_ref = storage.put(
+            encounter_id=encounter_id,
+            ext=ext,
+            body=bytes(body),
+            content_type=content_type or "application/octet-stream",
+        )
+    except _StorageError as e:
+        raise _err(e.error_code, e.reason, 500)
 
     # Tests inject stub-transcript hints via headers so the HTTP path
     # can drive queued → completed / failed deterministically without
@@ -3805,13 +3850,20 @@ async def create_encounter_audio_input(
     stub_transcript = request.headers.get("x-stub-transcript")
     stub_transcript_error = request.headers.get("x-stub-transcript-error")
 
+    legacy_stored_path = _legacy_path(storage_ref)
     metadata: dict[str, Any] = {
         "original_filename": original_filename,
-        "filename": stored_name,
+        # Phase-33 `filename` was the on-disk name; preserve a
+        # short identifier even when the storage backend doesn't
+        # use a filesystem path.
+        "filename": (legacy_stored_path or "").rsplit("/", 1)[-1] or "audio",
         "content_type": content_type or "application/octet-stream",
         "size_bytes": len(body),
-        "stored_path": str(stored_path),
+        "storage_ref": storage_ref,
     }
+    if legacy_stored_path:
+        # Back-compat for phase-33 readers + audit dashboards.
+        metadata["stored_path"] = legacy_stored_path
     if stub_transcript:
         metadata["stub_transcript"] = stub_transcript
     if stub_transcript_error:
@@ -3843,20 +3895,25 @@ async def create_encounter_audio_input(
         method="POST",
         detail=(
             f"input_id={new_id} bytes={len(body)} "
-            f"content_type={metadata['content_type']}"
+            f"content_type={metadata['content_type']} "
+            f"scheme={storage_ref.get('scheme')} "
+            f"mode={_settings.audio_ingest_mode}"
         ),
     )
 
-    # Run the ingestion pipeline inline so the caller sees the
-    # resulting state in the response body. Failures persist on the
-    # row; we never 500 on a stub-forced failure — that's inspectable
-    # via `processing_status=failed` + `last_error_code` in the
-    # returned JSON.
-    from app.services import ingestion as _ingest
-    try:
-        _ingest.run_ingestion_now(new_id)
-    except _ingest.IngestionError:
-        pass
+    # Phase 35 — pipeline mode gate. `inline` (default for dev/test)
+    # runs the ingestion synchronously so the caller sees the
+    # terminal state in the response. `async` (production) leaves
+    # the row at `queued` and returns immediately so the request
+    # path is never blocked on a slow STT vendor — the worker loop
+    # picks it up.
+    if _settings.audio_ingest_mode == "inline":
+        from app.services import ingestion as _ingest
+        try:
+            _ingest.run_ingestion_now(new_id)
+        except _ingest.IngestionError:
+            # Failure already persisted on the row.
+            pass
 
     row = fetch_one(
         f"SELECT {INPUT_COLUMNS} FROM encounter_inputs WHERE id = :id",
