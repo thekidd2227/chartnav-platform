@@ -4040,3 +4040,103 @@ def patch_encounter_input_transcript(
         {"id": input_id},
     )
     return updated
+
+
+# ===========================================================================
+# Deployment / observability surface (phase 37)
+# ===========================================================================
+#
+# Six admin-only read endpoints + one public capability manifest +
+# one public deployment manifest. ChartNav's own admin section, LCC,
+# and SourceDeck all read from the same data — there is one
+# capability with three lenses.
+#
+# Auth model:
+#  - /admin/deployment/*    → admin-only (require_admin), org-scoped
+#  - /admin/deployment/config-actual → admin-only, masked secrets
+#  - /capability/manifest   → public (SourceDeck catalog)
+#  - /deployment/manifest   → public (release fingerprint)
+#
+# PHI minimisation: aggregates and counts only. The deepest a
+# control-plane reader sees is `(input_id, status, last_error_code)`.
+
+
+@router.get("/admin/deployment/overview")
+def deployment_overview(
+    hours: int = Query(24, ge=1, le=720),
+    caller: Caller = Depends(require_admin),
+) -> dict:
+    from app.services import deployment_telemetry as _telem
+    return _telem.deployment_overview(
+        organization_id=caller.organization_id, hours=int(hours),
+    )
+
+
+@router.get("/admin/deployment/locations")
+def deployment_locations(
+    hours: int = Query(24, ge=1, le=720),
+    caller: Caller = Depends(require_admin),
+) -> dict:
+    from app.services import deployment_telemetry as _telem
+    return _telem.deployment_locations(
+        organization_id=caller.organization_id, hours=int(hours),
+    )
+
+
+@router.get("/admin/deployment/alerts")
+def deployment_alerts(
+    hours: int = Query(24, ge=1, le=720),
+    caller: Caller = Depends(require_admin),
+) -> dict:
+    from app.services import deployment_telemetry as _telem
+    return _telem.deployment_alerts(
+        organization_id=caller.organization_id, hours=int(hours),
+    )
+
+
+@router.get("/admin/deployment/jobs")
+def deployment_jobs(
+    limit: int = Query(50, ge=1, le=500),
+    caller: Caller = Depends(require_admin),
+) -> dict:
+    from app.services import deployment_telemetry as _telem
+    return _telem.deployment_jobs(
+        organization_id=caller.organization_id, limit=int(limit),
+    )
+
+
+@router.get("/admin/deployment/qa")
+def deployment_qa(
+    caller: Caller = Depends(require_admin),
+) -> dict:
+    from app.services import deployment_telemetry as _telem
+    return _telem.deployment_qa(organization_id=caller.organization_id)
+
+
+@router.get("/admin/deployment/config-actual")
+def deployment_config_actual(
+    caller: Caller = Depends(require_admin),
+) -> dict:
+    from app.services.capability_manifest import deployment_config_actual as _cfg
+    return _cfg()
+
+
+@router.get("/deployment/manifest")
+def deployment_manifest_public() -> dict:
+    """Public release/runtime fingerprint. SourceDeck reads this to
+    confirm a deployed instance matches the catalog version it
+    expects. No tenant data — only the build identity + which seams
+    are wired."""
+    from app.services import deployment_telemetry as _telem
+    return _telem.deployment_manifest()
+
+
+@router.get("/capability/manifest")
+def capability_manifest_public() -> dict:
+    """Public capability catalog read used by SourceDeck. No tenant
+    data — only the capability descriptor + setup inputs +
+    prerequisites + implementation modes."""
+    from app.services.capability_manifest import (
+        capability_card, card_to_dict,
+    )
+    return card_to_dict(capability_card())
