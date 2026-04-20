@@ -380,9 +380,18 @@ def capability_card() -> CapabilityCard:
     )
 
 
+# Stable schema id for /capability/manifest. SourceDeck (and any other
+# external consumer) keys off this so that when we ever need to break the
+# shape, we can publish v2 without silently breaking v1 readers. Bump the
+# integer suffix when, and only when, an existing field is renamed,
+# removed, or has its type changed. Adding new fields is *not* a bump.
+CAPABILITY_MANIFEST_SCHEMA_VERSION = "capability_manifest/v1"
+
+
 def card_to_dict(card: CapabilityCard) -> dict[str, Any]:
     """JSON-serialise the dataclass tree for the HTTP layer."""
     return {
+        "schema_version": CAPABILITY_MANIFEST_SCHEMA_VERSION,
         "key": card.key,
         "version": card.version,
         "name": card.name,

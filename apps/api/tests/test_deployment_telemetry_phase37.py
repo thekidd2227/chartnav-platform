@@ -47,6 +47,9 @@ def test_capability_manifest_is_public_and_well_shaped(client):
     r = client.get("/capability/manifest")
     assert r.status_code == 200, r.text
     body = r.json()
+    # Stable schema id consumers (SourceDeck) key off — bump only on a
+    # breaking change. See CAPABILITY_MANIFEST_SCHEMA_VERSION.
+    assert body["schema_version"] == "capability_manifest/v1"
     assert body["key"] == "chartnav"
     assert body["version"]
     assert body["name"] == "ChartNav"
@@ -72,6 +75,7 @@ def test_deployment_manifest_is_public_and_carries_runtime_fingerprint(client):
     r = client.get("/deployment/manifest")
     assert r.status_code == 200
     body = r.json()
+    assert body["schema_version"] == "deployment_manifest/v1"
     assert body["release_version"]
     assert body["api_version"] == "v1"
     assert body["platform_mode"]
@@ -98,6 +102,7 @@ def test_overview_shape_for_admin(client):
     r = client.get("/admin/deployment/overview", headers=ADMIN1)
     assert r.status_code == 200, r.text
     body = r.json()
+    assert body["schema_version"] == "deployment_overview/v1"
     # Top-level keys.
     for k in (
         "deployment_id", "window_hours", "generated_at", "release",

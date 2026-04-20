@@ -367,6 +367,15 @@ def _qa_summary(organization_id: int) -> dict[str, Any]:
 # Public aggregates
 # ---------------------------------------------------------------------------
 
+# Stable schema ids for the public deployment contracts. SourceDeck and
+# any other consumer key off these so we can publish vN+1 without
+# silently breaking vN readers. Bump the integer suffix only when an
+# existing field is renamed, removed, or has its type changed. Adding a
+# new field is *not* a bump.
+DEPLOYMENT_OVERVIEW_SCHEMA_VERSION = "deployment_overview/v1"
+DEPLOYMENT_MANIFEST_SCHEMA_VERSION = "deployment_manifest/v1"
+
+
 def deployment_overview(*, organization_id: int, hours: int = 24) -> dict[str, Any]:
     """Top-level rollup. The default lens for the ChartNav admin
     section + LCC's per-deployment card + SourceDeck's
@@ -380,6 +389,7 @@ def deployment_overview(*, organization_id: int, hours: int = 24) -> dict[str, A
     manifest = _release_manifest()
 
     return {
+        "schema_version": DEPLOYMENT_OVERVIEW_SCHEMA_VERSION,
         "deployment_id": organization_id,  # one deployment ↔ one org today
         "window_hours": int(hours),
         "generated_at": _now().isoformat(),
@@ -460,6 +470,7 @@ def deployment_manifest() -> dict[str, Any]:
     capability version it expects."""
     m = _release_manifest()
     return {
+        "schema_version": DEPLOYMENT_MANIFEST_SCHEMA_VERSION,
         "release_version": m.release_version,
         "api_version": m.api_version,
         "platform_mode": m.platform_mode,
