@@ -137,26 +137,40 @@ def test_run_one_drives_queued_to_completed(client):
 
 
 def test_run_one_records_failure_and_releases_claim(client):
-    """A failing pipeline leaves the row at `failed` with no stuck claim."""
+    """A failing pipeline leaves the row at `failed` with no stuck claim.
+
+    Phase 33 installs a stub audio transcriber by default — it would
+    happily emit a placeholder and this test would see `completed`
+    instead of `failed`. Explicitly uninstall it so the worker's
+    failure-handling contract stays covered.
+    """
     from app.services import worker
     from app.db import fetch_one
-
-    # No transcriber installed → audio_upload fails honestly.
-    input_id = _queue_audio_input(client)
-    tick = worker.run_one(worker_id="w-fail")
-    assert tick is not None
-    assert tick.status == "failed"
-    assert tick.ingestion_error == "audio_transcription_not_implemented"
-
-    row = fetch_one(
-        "SELECT processing_status, claimed_by, claimed_at, "
-        "last_error_code FROM encounter_inputs WHERE id = :id",
-        {"id": input_id},
+    from app.services.ingestion import (
+        _not_implemented_transcriber, set_transcriber, transcribe_audio,
     )
-    assert row["processing_status"] == "failed"
-    # claim released so a subsequent retry doesn't hit stale-claim logic
-    assert row["claimed_by"] is None
-    assert row["claimed_at"] is None
+
+    saved = transcribe_audio
+    set_transcriber(_not_implemented_transcriber)
+    try:
+        # No transcriber installed → audio_upload fails honestly.
+        input_id = _queue_audio_input(client)
+        tick = worker.run_one(worker_id="w-fail")
+        assert tick is not None
+        assert tick.status == "failed"
+        assert tick.ingestion_error == "audio_transcription_not_implemented"
+
+        row = fetch_one(
+            "SELECT processing_status, claimed_by, claimed_at, "
+            "last_error_code FROM encounter_inputs WHERE id = :id",
+            {"id": input_id},
+        )
+        assert row["processing_status"] == "failed"
+        # claim released so a subsequent retry doesn't hit stale-claim logic
+        assert row["claimed_by"] is None
+        assert row["claimed_at"] is None
+    finally:
+        set_transcriber(saved)
     assert row["last_error_code"] == "audio_transcription_not_implemented"
 
 

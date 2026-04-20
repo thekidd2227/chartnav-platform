@@ -4,6 +4,120 @@ Reverse-chronological.
 
 ---
 
+## 2026-04-19 — Phase 33: audio intake + transcription wedge
+
+The first real speech-to-chart path through ChartNav. File-upload
+audio intake → ingestion pipeline runs through the phase-22 seam →
+deterministic stub transcriber emits a clearly-labelled placeholder
+(or canned text via test header) → clinician reviews + edits the
+transcript before draft generation. No fake live vendor STT, no
+browser mic, no ambient listening. Honest seams everywhere.
+
+### Changes
+- **New `app/services/audio_transcriber.py`** — deterministic stub
+  with `[stub-transcript]` provenance prefix; honours
+  `metadata.stub_transcript` and `stub_transcript_error` for test
+  harnesses; registered at app bootstrap via `install_default()`.
+- **`app/main.py`** — installs the stub at import time so audio
+  uploads stop failing with `audio_transcription_not_implemented`
+  by default. Vendor adapters overwrite via the existing
+  `set_transcriber(...)` registry.
+- **`app/config.py`** — `audio_upload_dir` (env
+  `CHARTNAV_AUDIO_UPLOAD_DIR`, default `./audio_uploads`) and
+  `audio_upload_max_bytes` (default 25 MiB).
+- **Routes**:
+  - `POST /encounters/{id}/inputs/audio` — multipart `audio`
+    upload. Writes UUID-named blob under
+    `<dir>/<encounter_id>/<uuid>.<ext>`, creates
+    `encounter_inputs` row with `input_type='audio_upload'` +
+    full `source_metadata` (filename, content_type, size,
+    stored_path, original_filename), runs the pipeline inline,
+    returns the final row with terminal `processing_status`.
+    Format allowlist (WAV/MP3/MP4/M4A/OGG/WEBM/FLAC/AAC) +
+    size cap; reviewer 403; cross-org 404.
+  - `PATCH /encounter-inputs/{id}/transcript` — clinician
+    review/edit, completed-only, ≥10 chars after trim. Audit
+    detail records input_id + encounter_id + chars only — never
+    the body.
+- **Stub-test seam** — `X-Stub-Transcript` and
+  `X-Stub-Transcript-Error` request headers thread into
+  `source_metadata` so HTTP-level tests can drive the pipeline
+  deterministically.
+- **`pyproject.toml`** — `python-multipart>=0.0.20` added so
+  Starlette's form parser actually works.
+- **Frontend** —
+  - `api.ts`: `uploadEncounterAudio` (FormData via `fetch`,
+    error envelope unified with the rest of the API surface) +
+    `patchEncounterInputTranscript`.
+  - `NoteWorkspace.tsx`: new "Upload a dictation audio file"
+    form above the existing paste textarea; clearly-labelled
+    stub-transcriber notice; **Edit transcript** button on every
+    completed input; review-modal with cancel/save and a 10-char
+    minimum guard. Reviewer view hides both the upload form and
+    the edit affordance.
+
+### Tests
+- Backend +18 (`tests/test_audio_intake.py`): row creation +
+  metadata, empty body 400, unknown format 400, oversize 413,
+  reviewer 403, cross-org 404, default placeholder lands as
+  completed, canned transcript via header, stub forced-error
+  lands as failed with `stub_transcription_failed`, retry path
+  still fails honestly, edit on completed succeeds, edit on
+  non-completed → 409, edit cross-org 404, edit reviewer 403,
+  edit audit body-free (PHI invariant), generation blocked
+  until completed audio exists, edited transcript flows into
+  next generation (not the placeholder), provenance isolation
+  from shortcut + quick-comment usage events.
+  Two pre-existing phase-22 regression tests
+  (`test_audio_upload_fails_when_no_transcriber_installed`,
+  `test_run_one_records_failure_and_releases_claim`) tightened
+  to explicitly uninstall the stub before asserting the legacy
+  honest-failure path.
+  Full backend suite: **327 passed** (309 + 18).
+- Frontend +7 (`NoteWorkspace.test.tsx`): audio upload form
+  renders for clinicians; hidden for reviewers; upload
+  dispatches `uploadEncounterAudio` + refreshes inputs;
+  completed audio renders Edit transcript; failed audio doesn't;
+  edit modal saves via `patchEncounterInputTranscript` + closes;
+  Save disabled <10 chars; Generate stays blocked with honest
+  hint when no completed input exists.
+  Full vitest suite: **122 passed** (19 + 20 + 83).
+- Typecheck clean. Vite build 257.19 kB JS / 21.26 kB CSS
+  (gzip 75.78 / 4.41 kB).
+
+### Docs
+- New `docs/build/44-audio-intake-and-transcription-wedge.md`.
+- Updated `docs/build/16-frontend-test-strategy.md`.
+
+### Files touched
+- `apps/api/app/services/audio_transcriber.py` (new)
+- `apps/api/app/main.py`
+- `apps/api/app/config.py`
+- `apps/api/app/api/routes.py`
+- `apps/api/pyproject.toml`
+- `apps/api/tests/test_audio_intake.py` (new)
+- `apps/api/tests/test_ingestion_lifecycle.py`
+- `apps/api/tests/test_worker.py`
+- `apps/web/src/api.ts`
+- `apps/web/src/NoteWorkspace.tsx`
+- `apps/web/src/test/NoteWorkspace.test.tsx`
+- `docs/build/05-build-log.md`,
+  `16-frontend-test-strategy.md`,
+  `44-audio-intake-and-transcription-wedge.md` (new)
+
+### Files intentionally avoided
+- Marketing site.
+- No live vendor STT (Deepgram/Whisper). No browser mic /
+  ambient listening / mobile recorder UX / chunked upload.
+- No object-storage adapter — local-disk only; `stored_path` is
+  a string so an S3/GCS adapter slots in without schema change.
+- No new migration — existing `encounter_inputs` columns
+  (transcript_text, source_metadata, processing_status,
+  retry_count, last_error, last_error_code, started_at,
+  finished_at, worker_id) cover the wedge.
+
+---
+
 ## 2026-04-19 — Phase 32: Shift+Tab + per-user usage + CSV export + Oculoplastics
 
 Four tight wins on the Clinical Shortcuts surface: bidirectional

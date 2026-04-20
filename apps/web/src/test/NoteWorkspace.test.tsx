@@ -44,6 +44,9 @@ vi.mock("../api", async () => {
     listMyClinicalShortcutFavorites: vi.fn(),
     favoriteClinicalShortcut: vi.fn(),
     unfavoriteClinicalShortcut: vi.fn(),
+    // Phase 33 — audio intake + transcript review.
+    uploadEncounterAudio: vi.fn(),
+    patchEncounterInputTranscript: vi.fn(),
   };
 });
 
@@ -240,6 +243,55 @@ beforeEach(() => {
     })
   );
   (api.unfavoriteClinicalShortcut as any).mockResolvedValue({ removed: 1 });
+  // Phase 33 defaults.
+  (api.uploadEncounterAudio as any).mockImplementation(
+    async (_email: string, _enc: number, file: File) => ({
+      id: 501,
+      encounter_id: 1,
+      input_type: "audio_upload",
+      processing_status: "completed",
+      transcript_text: `[stub-transcript] File metadata: ${file.name} (${file.type || "audio/unknown"}, ${file.size} bytes).`,
+      confidence_summary: null,
+      source_metadata: JSON.stringify({
+        original_filename: file.name,
+        content_type: file.type || "audio/unknown",
+        size_bytes: file.size,
+      }),
+      created_by_user_id: 2,
+      retry_count: 0,
+      last_error: null,
+      last_error_code: null,
+      started_at: "2026-04-20 00:00:00",
+      finished_at: "2026-04-20 00:00:01",
+      worker_id: "inline",
+      claimed_by: null,
+      claimed_at: null,
+      created_at: "2026-04-20 00:00:00",
+      updated_at: "2026-04-20 00:00:01",
+    })
+  );
+  (api.patchEncounterInputTranscript as any).mockImplementation(
+    async (_email: string, id: number, text: string) => ({
+      id,
+      encounter_id: 1,
+      input_type: "audio_upload",
+      processing_status: "completed",
+      transcript_text: text,
+      confidence_summary: null,
+      source_metadata: null,
+      created_by_user_id: 2,
+      retry_count: 0,
+      last_error: null,
+      last_error_code: null,
+      started_at: null,
+      finished_at: null,
+      worker_id: null,
+      claimed_by: null,
+      claimed_at: null,
+      created_at: "x",
+      updated_at: "y",
+    })
+  );
   (api.createEncounterInput as any).mockResolvedValue({});
 });
 
@@ -2071,5 +2123,242 @@ describe("NoteWorkspace", () => {
     expect(
       screen.queryByTestId("clinical-shortcut-ocp-01")
     ).not.toBeInTheDocument();
+  });
+
+  // -------------------------------------------------------------------
+  // Phase 33 — audio intake + transcript review
+  // -------------------------------------------------------------------
+
+  it("audio upload form renders for clinicians (phase 33)", async () => {
+    renderWorkspace();
+    const form = await screen.findByTestId("audio-upload-form");
+    expect(form).toBeInTheDocument();
+    expect(
+      within(form).getByTestId("audio-upload-input")
+    ).toBeInTheDocument();
+    const submit = within(form).getByTestId("audio-upload-submit");
+    // Disabled until a file is chosen.
+    expect(submit).toBeDisabled();
+  });
+
+  it("audio upload form is hidden for reviewers", async () => {
+    render(
+      <NoteWorkspace
+        identity="rev@chartnav.local"
+        me={REV}
+        encounterId={1}
+        patientDisplay="Test"
+        providerDisplay="Dr T"
+      />
+    );
+    await screen.findByTestId("workspace-tier-transcript");
+    expect(
+      screen.queryByTestId("audio-upload-form")
+    ).not.toBeInTheDocument();
+  });
+
+  it("uploading audio dispatches uploadEncounterAudio and refreshes inputs", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    const fileInput = (await screen.findByTestId(
+      "audio-upload-input"
+    )) as HTMLInputElement;
+    const file = new File(["RIFF....WAVE"], "dictation.wav", {
+      type: "audio/wav",
+    });
+    await user.upload(fileInput, file);
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("audio-upload-submit")
+      ).not.toBeDisabled()
+    );
+    await user.click(screen.getByTestId("audio-upload-submit"));
+    await waitFor(() =>
+      expect(api.uploadEncounterAudio).toHaveBeenCalledWith(
+        CLIN.email,
+        1,
+        file
+      )
+    );
+    // Inputs list is re-fetched after upload.
+    expect(api.listEncounterInputs).toHaveBeenCalled();
+  });
+
+  it("completed audio input shows the Edit transcript button", async () => {
+    (api.listEncounterInputs as any).mockResolvedValue([
+      {
+        id: 701,
+        encounter_id: 1,
+        input_type: "audio_upload",
+        processing_status: "completed",
+        transcript_text:
+          "[stub-transcript] Audio ingested; placeholder transcript.",
+        confidence_summary: null,
+        source_metadata: null,
+        created_by_user_id: 2,
+        retry_count: 0,
+        last_error: null,
+        last_error_code: null,
+        started_at: "a",
+        finished_at: "b",
+        worker_id: "inline",
+        claimed_by: null,
+        claimed_at: null,
+        created_at: "a",
+        updated_at: "b",
+      },
+    ]);
+    renderWorkspace();
+    await screen.findByTestId("transcript-edit-701");
+  });
+
+  it("non-completed audio inputs do NOT show the Edit transcript button", async () => {
+    (api.listEncounterInputs as any).mockResolvedValue([
+      {
+        id: 702,
+        encounter_id: 1,
+        input_type: "audio_upload",
+        processing_status: "failed",
+        transcript_text: null,
+        confidence_summary: null,
+        source_metadata: null,
+        created_by_user_id: 2,
+        retry_count: 0,
+        last_error: "stub forced failure",
+        last_error_code: "stub_transcription_failed",
+        started_at: "a",
+        finished_at: "b",
+        worker_id: "inline",
+        claimed_by: null,
+        claimed_at: null,
+        created_at: "a",
+        updated_at: "b",
+      },
+    ]);
+    renderWorkspace();
+    await screen.findByTestId("transcript-status-702");
+    expect(
+      screen.queryByTestId("transcript-edit-702")
+    ).not.toBeInTheDocument();
+    // Retry is still offered for failed rows.
+    expect(screen.getByTestId("transcript-retry-702")).toBeInTheDocument();
+  });
+
+  it("Edit transcript modal saves via patchEncounterInputTranscript", async () => {
+    const completed = {
+      id: 703,
+      encounter_id: 1,
+      input_type: "audio_upload" as const,
+      processing_status: "completed" as const,
+      transcript_text: "[stub-transcript] original placeholder body.",
+      confidence_summary: null,
+      source_metadata: null,
+      created_by_user_id: 2,
+      retry_count: 0,
+      last_error: null,
+      last_error_code: null,
+      started_at: "a",
+      finished_at: "b",
+      worker_id: "inline",
+      claimed_by: null,
+      claimed_at: null,
+      created_at: "a",
+      updated_at: "b",
+    };
+    (api.listEncounterInputs as any).mockResolvedValue([completed]);
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(await screen.findByTestId("transcript-edit-703"));
+    const modal = await screen.findByTestId("transcript-edit-modal");
+    const textarea = within(modal).getByTestId(
+      "transcript-edit-textarea"
+    ) as HTMLTextAreaElement;
+    await user.clear(textarea);
+    await user.type(
+      textarea,
+      "Doctor-corrected transcript. Visual acuity OD 20/40, OS 20/20."
+    );
+    await user.click(within(modal).getByTestId("transcript-edit-save"));
+    await waitFor(() =>
+      expect(api.patchEncounterInputTranscript).toHaveBeenCalledWith(
+        CLIN.email,
+        703,
+        "Doctor-corrected transcript. Visual acuity OD 20/40, OS 20/20."
+      )
+    );
+    // Modal closes after save.
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("transcript-edit-modal")
+      ).not.toBeInTheDocument()
+    );
+  });
+
+  it("Edit transcript Save is disabled under 10 chars (provenance guard)", async () => {
+    const completed = {
+      id: 704,
+      encounter_id: 1,
+      input_type: "audio_upload" as const,
+      processing_status: "completed" as const,
+      transcript_text: "[stub-transcript] original body.",
+      confidence_summary: null,
+      source_metadata: null,
+      created_by_user_id: 2,
+      retry_count: 0,
+      last_error: null,
+      last_error_code: null,
+      started_at: "a",
+      finished_at: "b",
+      worker_id: "inline",
+      claimed_by: null,
+      claimed_at: null,
+      created_at: "a",
+      updated_at: "b",
+    };
+    (api.listEncounterInputs as any).mockResolvedValue([completed]);
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(await screen.findByTestId("transcript-edit-704"));
+    const modal = await screen.findByTestId("transcript-edit-modal");
+    const textarea = within(modal).getByTestId(
+      "transcript-edit-textarea"
+    ) as HTMLTextAreaElement;
+    await user.clear(textarea);
+    await user.type(textarea, "short");
+    expect(
+      within(modal).getByTestId("transcript-edit-save")
+    ).toBeDisabled();
+  });
+
+  it("generation stays blocked until an input completes (audio-aware path)", async () => {
+    (api.listEncounterInputs as any).mockResolvedValue([
+      {
+        id: 705,
+        encounter_id: 1,
+        input_type: "audio_upload",
+        processing_status: "processing",
+        transcript_text: null,
+        confidence_summary: null,
+        source_metadata: null,
+        created_by_user_id: 2,
+        retry_count: 0,
+        last_error: null,
+        last_error_code: null,
+        started_at: "a",
+        finished_at: null,
+        worker_id: "inline",
+        claimed_by: null,
+        claimed_at: null,
+        created_at: "a",
+        updated_at: "b",
+      },
+    ]);
+    renderWorkspace();
+    await screen.findByTestId("transcript-status-705");
+    expect(screen.getByTestId("generate-draft")).toBeDisabled();
+    // And the blocked-hint surfaces honestly.
+    expect(
+      screen.getByTestId("generate-blocked-note")
+    ).toBeInTheDocument();
   });
 });

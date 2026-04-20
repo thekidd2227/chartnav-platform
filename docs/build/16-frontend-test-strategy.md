@@ -206,6 +206,35 @@ two suites never cross-contaminate.
     disabled until a `completed` input exists.
   - Generate is enabled when a `completed` input is present.
 
+## Audio intake + transcript review (phase 33)
+
+- **+7** in `src/test/NoteWorkspace.test.tsx`:
+  - Audio upload form renders for clinicians; the submit
+    button is disabled until a file is chosen.
+  - Audio upload form is hidden for reviewers (no `canEdit`
+    gate exposes it).
+  - Choosing a file + clicking Upload dispatches
+    `uploadEncounterAudio(email, encId, File)` and triggers
+    `listEncounterInputs` to refresh.
+  - A completed audio row renders the **Edit transcript**
+    button (`transcript-edit-{id}`).
+  - A failed audio row does NOT render Edit transcript — Retry
+    is offered instead.
+  - The Edit-transcript modal dispatches
+    `patchEncounterInputTranscript` with the new text on Save
+    and closes.
+  - Save is disabled while the trimmed body is < 10 characters
+    (provenance guard).
+  - Generation stays blocked + the
+    `generate-blocked-note` hint surfaces when only a
+    `processing` audio input exists (audio-aware path).
+- New mocks: `uploadEncounterAudio`, `patchEncounterInputTranscript`.
+  `uploadEncounterAudio` echoes the File metadata into a
+  `[stub-transcript]` placeholder so downstream component
+  rendering matches what the real backend returns.
+- Vitest suite total: **122 tests** (NoteWorkspace 83, App 19,
+  AdminPanel 20).
+
 ## Shift+Tab + oculoplastics + usage CSV (phase 32)
 
 - **+7** in `src/test/NoteWorkspace.test.tsx`:

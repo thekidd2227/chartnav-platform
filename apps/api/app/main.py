@@ -16,6 +16,14 @@ from app.middleware import (
     RateLimitMiddleware,
     RequestIdMiddleware,
 )
+from app.services.audio_transcriber import install_default as _install_stub_stt
+
+# Phase 33 — wire the stub audio transcriber at import time so
+# `audio_upload` inputs move through the ingestion pipeline
+# deterministically. A vendor-specific STT adapter can overwrite
+# the registration via `app.services.ingestion.set_transcriber(...)`
+# after this line.
+_install_stub_stt()
 
 configure_logging()
 log = logging.getLogger("chartnav")

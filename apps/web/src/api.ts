@@ -1483,3 +1483,71 @@ export function unfavoriteClinicalShortcut(
     { email, method: "DELETE" }
   );
 }
+
+// ---------- Audio intake + transcript review (phase 33) ------------------
+
+/** Upload a raw audio file for an encounter and receive the
+ *  persisted `encounter_inputs` row (already run through the
+ *  ingestion pipeline, so `processing_status` is the final state).
+ *
+ *  Stub-transcript headers are exposed so test harnesses + dogfood
+ *  flows can drive the pipeline deterministically without a real
+ *  STT provider. A production deployment should never set these.
+ */
+export async function uploadEncounterAudio(
+  email: string,
+  encounterId: number,
+  file: File,
+  opts: {
+    stubTranscript?: string;
+    stubTranscriptError?: string;
+  } = {}
+): Promise<EncounterInput> {
+  const form = new FormData();
+  form.append("audio", file, file.name);
+  const headers = new Headers({ "X-User-Email": email });
+  if (opts.stubTranscript) {
+    headers.set("X-Stub-Transcript", opts.stubTranscript);
+  }
+  if (opts.stubTranscriptError) {
+    headers.set("X-Stub-Transcript-Error", opts.stubTranscriptError);
+  }
+  const res = await fetch(
+    `${API_URL}/encounters/${encounterId}/inputs/audio`,
+    { method: "POST", body: form, headers }
+  );
+  const text = await res.text();
+  let body: any;
+  try {
+    body = text ? JSON.parse(text) : undefined;
+  } catch {
+    body = text;
+  }
+  if (!res.ok) {
+    const detail = body && typeof body === "object" ? body.detail : undefined;
+    const code =
+      (detail && typeof detail === "object" && detail.error_code) ||
+      "http_error";
+    const reason =
+      (detail && typeof detail === "object" && detail.reason) ||
+      (typeof body === "string" ? body : res.statusText);
+    throw new ApiError(res.status, code, reason);
+  }
+  return body as EncounterInput;
+}
+
+/** Clinician edit of a completed input's transcript, in place.
+ *  The server refuses if the input isn't in `processing_status=completed`
+ *  so a race with the ingestion pipeline is impossible.
+ */
+export function patchEncounterInputTranscript(
+  email: string,
+  inputId: number,
+  transcriptText: string
+): Promise<EncounterInput> {
+  return request(`/encounter-inputs/${inputId}/transcript`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify({ transcript_text: transcriptText }),
+  });
+}

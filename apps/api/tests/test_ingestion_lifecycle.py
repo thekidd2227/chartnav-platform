@@ -85,30 +85,49 @@ def test_audio_upload_is_queued_on_create(client):
 
 
 def test_audio_upload_fails_when_no_transcriber_installed(client):
-    """process an audio upload without a transcriber → failed honestly."""
-    # Create a queued audio input.
-    r = client.post(
-        "/encounters/1/inputs",
-        json={
-            "input_type": "audio_upload",
-            "source_metadata": {"filename": "rec.wav"},
-        },
-        headers=CLIN1,
-    )
-    input_id = r.json()["id"]
+    """process an audio upload without a transcriber → failed honestly.
 
-    # Process it.
-    r = client.post(
-        f"/encounter-inputs/{input_id}/process", headers=CLIN1,
+    Phase 33 installs a stub transcriber by default so audio uploads
+    move through the pipeline out-of-the-box. This test explicitly
+    uninstalls the stub first to verify the legacy honest-failure
+    contract is preserved: if no transcriber at all is wired, the
+    pipeline must fail with `audio_transcription_not_implemented`.
+    """
+    from app.services.ingestion import (
+        _not_implemented_transcriber, set_transcriber, transcribe_audio,
     )
-    assert r.status_code == 200, r.text
-    body = r.json()
-    assert body["input"]["processing_status"] == "failed"
-    assert (
-        body["ingestion_error"]["error_code"]
-        == "audio_transcription_not_implemented"
-    )
-    assert body["input"]["last_error_code"] == "audio_transcription_not_implemented"
+    saved = transcribe_audio
+    set_transcriber(_not_implemented_transcriber)
+    try:
+        # Create a queued audio input.
+        r = client.post(
+            "/encounters/1/inputs",
+            json={
+                "input_type": "audio_upload",
+                "source_metadata": {"filename": "rec.wav"},
+            },
+            headers=CLIN1,
+        )
+        input_id = r.json()["id"]
+
+        # Process it.
+        r = client.post(
+            f"/encounter-inputs/{input_id}/process", headers=CLIN1,
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["input"]["processing_status"] == "failed"
+        assert (
+            body["ingestion_error"]["error_code"]
+            == "audio_transcription_not_implemented"
+        )
+        assert (
+            body["input"]["last_error_code"]
+            == "audio_transcription_not_implemented"
+        )
+    finally:
+        # Restore whatever transcriber was installed before the test.
+        set_transcriber(saved)
 
 
 # ---------------------------------------------------------------------

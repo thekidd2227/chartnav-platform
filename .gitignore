@@ -36,3 +36,7 @@ apps/web/e2e-results/
 # Release output
 dist/release/
 .claude/
+
+# Phase 33 — runtime audio upload directory. Never commit blobs.
+apps/api/audio_uploads/
+audio_uploads/

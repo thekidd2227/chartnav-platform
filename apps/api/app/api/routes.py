@@ -8,7 +8,15 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    status,
+)
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import text
@@ -3645,3 +3653,310 @@ def shortcut_usage_summary_csv(
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# ===========================================================================
+# Audio intake + transcript review (phase 33)
+# ===========================================================================
+#
+# Two new surfaces on top of the phase-22 ingestion pipeline:
+#
+# POST /encounters/{id}/inputs/audio
+#   Multipart file upload. Writes the audio blob to
+#   `settings.audio_upload_dir/<encounter_id>/<uuid>.<ext>`, creates an
+#   `encounter_inputs` row with `input_type='audio_upload'` and
+#   `source_metadata` populated with filename/content_type/size/
+#   stored_path/original_filename, and kicks the ingestion pipeline
+#   inline. The stub transcriber (installed at app bootstrap) returns
+#   a deterministic placeholder OR honours the `stub_transcript` /
+#   `stub_transcript_error` hints in the `X-Stub-*` headers so tests
+#   can drive the state machine without shipping binary fixtures.
+#
+# PATCH /encounter-inputs/{id}/transcript
+#   Doctor review/edit on a completed input. Lets the clinician hand-
+#   correct stub / STT output BEFORE note generation. Audit-logged
+#   with `encounter_input_transcript_edited`. Cross-org → 404.
+#   Only admin/clinician; reviewer → 403 (read-only role).
+#
+# Provenance stays crisp: the `source_metadata` carries the upload
+# details; `transcript_text` is the text (edited or not) that goes
+# into note generation. Clinical Shortcuts + Quick Comments are a
+# *separate* surface (clinician clipboard, not encounter data) and
+# must not leak into either column.
+
+
+AUDIO_ALLOWED_CONTENT_TYPES = {
+    "audio/wav", "audio/x-wav", "audio/wave",
+    "audio/mpeg", "audio/mp3",
+    "audio/mp4", "audio/m4a", "audio/x-m4a",
+    "audio/ogg", "audio/webm", "audio/flac",
+    "audio/aac",
+    # Some browsers upload Blob without a recognisable content-type
+    # when the user drags-and-drops; fall back to the extension check
+    # inside the handler for those.
+    "application/octet-stream",
+}
+AUDIO_ALLOWED_EXTENSIONS = {
+    ".wav", ".mp3", ".mp4", ".m4a", ".ogg", ".webm", ".flac", ".aac",
+}
+
+
+def _audio_upload_root() -> "Path":
+    from pathlib import Path
+    from app.config import settings
+    root = Path(settings.audio_upload_dir)
+    if not root.is_absolute():
+        # Resolve relative to the API package root so different CWDs
+        # (tests, prod, docker) land in the same place.
+        root = Path(__file__).resolve().parents[2] / settings.audio_upload_dir
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+@router.post(
+    "/encounters/{encounter_id}/inputs/audio",
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_encounter_audio_input(
+    encounter_id: int,
+    request: Request,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Accept a doctor audio upload and queue it for transcription.
+
+    Multipart form-data with a single `audio` part. The handler:
+
+    1. Validates role + encounter ownership.
+    2. Reads the upload body, enforcing
+       `settings.audio_upload_max_bytes`.
+    3. Writes the blob to
+       `<audio_upload_dir>/<encounter_id>/<uuid>.<ext>`.
+    4. Creates an `encounter_inputs` row with `input_type='audio_upload'`
+       and source metadata carrying the upload fingerprint.
+    5. Runs the ingestion pipeline inline so the caller sees the
+       resulting status in the response body. Stub transcription is
+       synchronous; a real STT adapter would queue-and-return.
+    """
+    from fastapi import Request  # noqa: F401 — imported up top already
+    from pathlib import Path
+    import secrets
+    from app.config import settings as _settings
+
+    require_create_event(caller)
+    _load_encounter_for_caller(encounter_id, caller)
+
+    form = await request.form()
+    upload = form.get("audio")
+    if upload is None or not hasattr(upload, "read"):
+        raise _err(
+            "audio_upload_missing",
+            "multipart field `audio` is required",
+            400,
+        )
+    original_filename = getattr(upload, "filename", None) or "upload"
+    content_type = (getattr(upload, "content_type", None) or "").lower()
+
+    lower_name = original_filename.lower()
+    ext = ""
+    for candidate in AUDIO_ALLOWED_EXTENSIONS:
+        if lower_name.endswith(candidate):
+            ext = candidate
+            break
+    content_ok = content_type in AUDIO_ALLOWED_CONTENT_TYPES
+    if not content_ok and not ext:
+        raise _err(
+            "audio_format_not_supported",
+            (
+                "only audio/wav, mp3, mp4/m4a, ogg, webm, flac, aac "
+                "uploads are accepted"
+            ),
+            400,
+        )
+
+    body = await upload.read()
+    if not isinstance(body, (bytes, bytearray)) or len(body) == 0:
+        raise _err(
+            "audio_upload_empty",
+            "uploaded audio file is empty",
+            400,
+        )
+    max_bytes = int(_settings.audio_upload_max_bytes)
+    if len(body) > max_bytes:
+        raise _err(
+            "audio_upload_too_large",
+            f"upload exceeds max size of {max_bytes} bytes",
+            413,
+        )
+
+    # Persist to disk. UUID-named files so original filename leaks no
+    # patient-identifiable data into the filesystem; original name is
+    # still stored in `source_metadata.original_filename` for audit.
+    root = _audio_upload_root()
+    encounter_dir = root / str(encounter_id)
+    encounter_dir.mkdir(parents=True, exist_ok=True)
+    stored_ext = ext or ".bin"
+    stored_name = f"{secrets.token_hex(8)}{stored_ext}"
+    stored_path = encounter_dir / stored_name
+    stored_path.write_bytes(bytes(body))
+
+    # Tests inject stub-transcript hints via headers so the HTTP path
+    # can drive queued → completed / failed deterministically without
+    # mutating the module-level transcriber.
+    stub_transcript = request.headers.get("x-stub-transcript")
+    stub_transcript_error = request.headers.get("x-stub-transcript-error")
+
+    metadata: dict[str, Any] = {
+        "original_filename": original_filename,
+        "filename": stored_name,
+        "content_type": content_type or "application/octet-stream",
+        "size_bytes": len(body),
+        "stored_path": str(stored_path),
+    }
+    if stub_transcript:
+        metadata["stub_transcript"] = stub_transcript
+    if stub_transcript_error:
+        metadata["stub_transcript_error"] = stub_transcript_error
+
+    with transaction() as conn:
+        new_id = insert_returning_id(
+            conn,
+            "encounter_inputs",
+            {
+                "encounter_id": encounter_id,
+                "input_type": "audio_upload",
+                "processing_status": "queued",
+                "transcript_text": None,
+                "confidence_summary": None,
+                "source_metadata": _json.dumps(metadata, sort_keys=True),
+                "created_by_user_id": caller.user_id,
+            },
+        )
+
+    from app import audit as _audit
+    _audit.record(
+        event_type="encounter_input_audio_uploaded",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path=f"/encounters/{encounter_id}/inputs/audio",
+        method="POST",
+        detail=(
+            f"input_id={new_id} bytes={len(body)} "
+            f"content_type={metadata['content_type']}"
+        ),
+    )
+
+    # Run the ingestion pipeline inline so the caller sees the
+    # resulting state in the response body. Failures persist on the
+    # row; we never 500 on a stub-forced failure — that's inspectable
+    # via `processing_status=failed` + `last_error_code` in the
+    # returned JSON.
+    from app.services import ingestion as _ingest
+    try:
+        _ingest.run_ingestion_now(new_id)
+    except _ingest.IngestionError:
+        pass
+
+    row = fetch_one(
+        f"SELECT {INPUT_COLUMNS} FROM encounter_inputs WHERE id = :id",
+        {"id": new_id},
+    )
+    return row
+
+
+class TranscriptEditBody(BaseModel):
+    transcript_text: str = Field(
+        ..., min_length=1,
+        description="clinician-edited transcript; replaces the current text",
+    )
+
+
+@router.patch("/encounter-inputs/{input_id}/transcript")
+def patch_encounter_input_transcript(
+    input_id: int,
+    payload: TranscriptEditBody,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Clinician review/edit of a completed input's transcript.
+
+    Gated:
+    - admin / clinician only (reviewer 403).
+    - cross-org → 404 via the shared input-load helper.
+    - the input must be in a terminal-completed state; we do NOT let
+      a clinician overwrite a row mid-STT (that would race the
+      pipeline's own writes).
+
+    The edit is persisted in-place with a fresh `updated_at`. The
+    `transcript_text` column is what note generation reads, so this
+    edit flows straight into the next draft without any additional
+    machinery. Audit event records who edited what and the new
+    length; the body itself is NOT duplicated into the audit detail
+    (PHI minimisation).
+    """
+    require_create_event(caller)
+
+    row = fetch_one(
+        "SELECT ei.id, ei.encounter_id, ei.processing_status, "
+        "ei.transcript_text, e.organization_id "
+        "FROM encounter_inputs ei "
+        "JOIN encounters e ON e.id = ei.encounter_id "
+        "WHERE ei.id = :id",
+        {"id": input_id},
+    )
+    if row is None or row["organization_id"] != caller.organization_id:
+        raise _err(
+            "encounter_input_not_found",
+            "no such encounter input",
+            404,
+        )
+    if row["processing_status"] != "completed":
+        raise _err(
+            "encounter_input_not_editable",
+            (
+                f"transcript can only be edited when processing_status"
+                f"='completed' (current: {row['processing_status']!r})"
+            ),
+            409,
+        )
+
+    new_text = payload.transcript_text.strip()
+    if len(new_text) < 10:
+        raise _err(
+            "transcript_too_short",
+            "transcript must be at least 10 characters after trim",
+            400,
+        )
+
+    with transaction() as conn:
+        conn.execute(
+            text(
+                "UPDATE encounter_inputs SET "
+                "transcript_text = :text, "
+                "updated_at = CURRENT_TIMESTAMP "
+                "WHERE id = :id"
+            ),
+            {"id": input_id, "text": new_text},
+        )
+
+    from app import audit as _audit
+    _audit.record(
+        event_type="encounter_input_transcript_edited",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path=f"/encounter-inputs/{input_id}/transcript",
+        method="PATCH",
+        # PHI minimisation: record size + encounter ref, not content.
+        detail=(
+            f"input_id={input_id} encounter_id={row['encounter_id']} "
+            f"chars={len(new_text)}"
+        ),
+    )
+
+    updated = fetch_one(
+        f"SELECT {INPUT_COLUMNS} FROM encounter_inputs WHERE id = :id",
+        {"id": input_id},
+    )
+    return updated

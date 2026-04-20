@@ -33,6 +33,8 @@ import {
   NoteTransmission,
   createEncounterInput,
   createMyQuickComment,
+  patchEncounterInputTranscript,
+  uploadEncounterAudio,
   deleteMyQuickComment,
   downloadNoteArtifact,
   exportNoteVersion,
@@ -115,6 +117,17 @@ export function NoteWorkspace({
   const [flash, setFlash] = useState<Flash | null>(null);
   const [editBody, setEditBody] = useState<string | null>(null);
   const [newTranscript, setNewTranscript] = useState("");
+  // Phase 33 — audio intake + transcript review. `audioFile` holds the
+  // selected File object while the doctor reviews size/name before
+  // submitting; `audioUploading` drives the spinner. Transcript edits
+  // are a separate, modal-ish buffer so the clinician can revert
+  // without losing the original placeholder.
+  const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [audioUploading, setAudioUploading] = useState(false);
+  const [transcriptEditInputId, setTranscriptEditInputId] = useState<
+    number | null
+  >(null);
+  const [transcriptEditValue, setTranscriptEditValue] = useState("");
   // Phase 26 — signed-note transmission surface. The transmit button
   // only renders when the backend advertises `document_transmit: true`
   // via `GET /platform`. We fetch once per mount; platform config
@@ -628,6 +641,65 @@ export function NoteWorkspace({
     }
   };
 
+  const onAudioUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!audioFile) {
+      showFlash("error", "Choose an audio file first.");
+      return;
+    }
+    setAudioUploading(true);
+    try {
+      await uploadEncounterAudio(identity, encounterId, audioFile);
+      showFlash(
+        "ok",
+        `Audio uploaded: ${audioFile.name}. Running transcription…`
+      );
+      setAudioFile(null);
+      await loadInputs();
+    } catch (err) {
+      showFlash("error", friendly(err));
+    } finally {
+      setAudioUploading(false);
+    }
+  };
+
+  const openTranscriptEditor = (input: EncounterInput) => {
+    setTranscriptEditInputId(input.id);
+    setTranscriptEditValue(input.transcript_text ?? "");
+  };
+
+  const closeTranscriptEditor = () => {
+    setTranscriptEditInputId(null);
+    setTranscriptEditValue("");
+  };
+
+  const saveTranscriptEdit = async () => {
+    if (transcriptEditInputId === null) return;
+    const text = transcriptEditValue.trim();
+    if (text.length < 10) {
+      showFlash(
+        "error",
+        "Transcript must be at least 10 characters after trimming."
+      );
+      return;
+    }
+    setLoading(true);
+    try {
+      await patchEncounterInputTranscript(
+        identity,
+        transcriptEditInputId,
+        text
+      );
+      showFlash("ok", "Transcript updated.");
+      closeTranscriptEditor();
+      await loadInputs();
+    } catch (err) {
+      showFlash("error", friendly(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const onRetry = async (inputId: number) => {
     setLoading(true);
     try {
@@ -893,6 +965,19 @@ export function NoteWorkspace({
             {inp.transcript_text && (
               <pre className="workspace__transcript">{inp.transcript_text}</pre>
             )}
+            {canEdit && inp.processing_status === "completed" && (
+              <div className="actions" style={{ marginTop: 6 }}>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={loading}
+                  onClick={() => openTranscriptEditor(inp)}
+                  data-testid={`transcript-edit-${inp.id}`}
+                >
+                  Edit transcript
+                </button>
+              </div>
+            )}
             {canEdit &&
               (inp.processing_status === "failed" ||
                 inp.processing_status === "needs_review" ||
@@ -925,6 +1010,48 @@ export function NoteWorkspace({
               )}
           </div>
         ))}
+        {canEdit && (
+          <form
+            className="event-form"
+            onSubmit={onAudioUpload}
+            data-testid="audio-upload-form"
+          >
+            <label>
+              Upload a dictation audio file
+              <input
+                type="file"
+                accept="audio/*,.wav,.mp3,.m4a,.mp4,.ogg,.webm,.flac,.aac"
+                onChange={(e) => setAudioFile(e.target.files?.[0] ?? null)}
+                data-testid="audio-upload-input"
+                disabled={audioUploading}
+              />
+            </label>
+            <p className="subtle-note">
+              Doctor-only. A stub transcriber emits a clearly-labeled
+              placeholder until a production STT provider is wired.
+              Edit the transcript below after it lands before generating
+              a draft.
+            </p>
+            <div className="row">
+              <button
+                type="submit"
+                className="btn btn--primary"
+                disabled={audioUploading || !audioFile}
+                data-testid="audio-upload-submit"
+              >
+                {audioUploading ? "Uploading…" : "Upload audio"}
+              </button>
+              {audioFile && (
+                <span
+                  className="subtle-note"
+                  data-testid="audio-upload-filename"
+                >
+                  {audioFile.name} · {Math.round(audioFile.size / 1024)} KB
+                </span>
+              )}
+            </div>
+          </form>
+        )}
         {canEdit && (
           <form
             className="event-form"
@@ -1833,6 +1960,58 @@ export function NoteWorkspace({
                 data-testid="quick-comments-modal-save"
               >
                 Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Phase 33 — clinician transcript review/edit modal. Opens
+          from the "Edit transcript" button on any completed input.
+          Keeps provenance obvious: source audio row is preserved,
+          only the text body is replaced. */}
+      {canEdit && transcriptEditInputId !== null && (
+        <div
+          className="modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Edit transcript"
+          data-testid="transcript-edit-modal"
+        >
+          <div className="modal">
+            <h3>Edit transcript</h3>
+            <p className="subtle-note">
+              Clinician review of the transcript. The source audio
+              input is preserved; only the transcript body is
+              replaced. Quick Comments and Clinical Shortcuts stay
+              separate from transcript provenance.
+            </p>
+            <textarea
+              value={transcriptEditValue}
+              onChange={(e) => setTranscriptEditValue(e.target.value)}
+              rows={10}
+              data-testid="transcript-edit-textarea"
+              placeholder="Hand-correct the transcript before draft generation."
+              autoFocus
+            />
+            <div className="modal__actions">
+              <button
+                className="btn"
+                onClick={closeTranscriptEditor}
+                disabled={loading}
+                data-testid="transcript-edit-cancel"
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn--primary"
+                onClick={saveTranscriptEdit}
+                disabled={
+                  loading || transcriptEditValue.trim().length < 10
+                }
+                data-testid="transcript-edit-save"
+              >
+                Save transcript
               </button>
             </div>
           </div>

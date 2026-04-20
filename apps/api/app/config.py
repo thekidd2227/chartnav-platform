@@ -97,6 +97,17 @@ class Settings:
     fhir_auth_type: str            # "none" | "bearer"
     fhir_bearer_token: str | None
 
+    # Phase 33 — audio intake.
+    # Where uploaded audio files are persisted. Relative paths are
+    # resolved against the repo root at runtime. Each upload lands at
+    # `<dir>/<encounter_id>/<uuid>.<ext>` so operators can grep by
+    # encounter + nothing filename-sensitive leaks into the DB.
+    audio_upload_dir: str
+    # Max upload size in bytes. Enforced at the HTTP layer so a
+    # misconfigured client can't fill disk. Default 25 MiB — fits a
+    # typical ~15-minute clinic encounter at 16 kHz mono.
+    audio_upload_max_bytes: int
+
 
 _DEFAULT_CORS = (
     "http://localhost:5173,http://127.0.0.1:5173,"
@@ -189,6 +200,17 @@ def _load() -> Settings:
     fhir_base_url = _env("CHARTNAV_FHIR_BASE_URL")
     fhir_auth_type = (_env("CHARTNAV_FHIR_AUTH_TYPE", "none") or "none").lower()
     fhir_bearer_token = _env("CHARTNAV_FHIR_BEARER_TOKEN")
+
+    audio_upload_dir = _env("CHARTNAV_AUDIO_UPLOAD_DIR", "./audio_uploads") or "./audio_uploads"
+    try:
+        audio_upload_max_bytes = int(
+            _env("CHARTNAV_AUDIO_UPLOAD_MAX_BYTES", str(25 * 1024 * 1024))
+            or str(25 * 1024 * 1024)
+        )
+    except ValueError:
+        raise RuntimeError(
+            "CHARTNAV_AUDIO_UPLOAD_MAX_BYTES must be an integer"
+        )
     if fhir_auth_type not in {"none", "bearer"}:
         raise RuntimeError(
             f"CHARTNAV_FHIR_AUTH_TYPE must be 'none' or 'bearer' "
@@ -214,6 +236,8 @@ def _load() -> Settings:
         fhir_base_url=fhir_base_url,
         fhir_auth_type=fhir_auth_type,
         fhir_bearer_token=fhir_bearer_token,
+        audio_upload_dir=audio_upload_dir,
+        audio_upload_max_bytes=audio_upload_max_bytes,
     )
 
 

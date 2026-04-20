@@ -11,6 +11,8 @@ dependencies = [
   "sqlalchemy>=2.0",
   "alembic>=1.13",
   "pyjwt[crypto]>=2.8",
+  # Required for multipart form parsing (phase 33 audio upload).
+  "python-multipart>=0.0.20",
 ]
 
 [project.optional-dependencies]
