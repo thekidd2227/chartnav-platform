@@ -3850,6 +3850,27 @@ async def create_encounter_audio_input(
     stub_transcript = request.headers.get("x-stub-transcript")
     stub_transcript_error = request.headers.get("x-stub-transcript-error")
 
+    # Phase 36 — capture provenance. The frontend sets these on a
+    # browser-mic recording so audit + downstream tooling can tell
+    # the difference between a hand-uploaded file and a live
+    # recording. Bounded enum — anything else is a 400, NOT a silent
+    # acceptance, because future schemas will key off the value.
+    capture_source_raw = (
+        request.headers.get("x-capture-source") or ""
+    ).strip().lower()
+    if capture_source_raw and capture_source_raw not in {
+        "browser-mic", "file-upload",
+    }:
+        raise _err(
+            "audio_capture_source_invalid",
+            (
+                "X-Capture-Source must be 'browser-mic' or "
+                "'file-upload' when set"
+            ),
+            400,
+        )
+    capture_source = capture_source_raw or "file-upload"
+
     legacy_stored_path = _legacy_path(storage_ref)
     metadata: dict[str, Any] = {
         "original_filename": original_filename,
@@ -3860,6 +3881,7 @@ async def create_encounter_audio_input(
         "content_type": content_type or "application/octet-stream",
         "size_bytes": len(body),
         "storage_ref": storage_ref,
+        "capture_source": capture_source,
     }
     if legacy_stored_path:
         # Back-compat for phase-33 readers + audit dashboards.
@@ -3897,7 +3919,8 @@ async def create_encounter_audio_input(
             f"input_id={new_id} bytes={len(body)} "
             f"content_type={metadata['content_type']} "
             f"scheme={storage_ref.get('scheme')} "
-            f"mode={_settings.audio_ingest_mode}"
+            f"mode={_settings.audio_ingest_mode} "
+            f"capture_source={capture_source}"
         ),
     )
 

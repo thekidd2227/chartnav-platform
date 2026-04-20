@@ -67,6 +67,13 @@ import {
   type QuickCommentCategory,
 } from "./quickComments";
 import {
+  BrowserCaptureError,
+  type BrowserRecording,
+  type BrowserCaptureSupport,
+  detectBrowserCapture,
+  startBrowserRecording,
+} from "./audioRecorder";
+import {
   ABBREVIATION_HINTS,
   CLINICAL_SHORTCUTS,
   CLINICAL_SHORTCUT_GROUPS,
@@ -124,6 +131,35 @@ export function NoteWorkspace({
   // without losing the original placeholder.
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioUploading, setAudioUploading] = useState(false);
+
+  // Phase 36 — browser microphone capture state. Detected once per
+  // mount because the browser's MediaRecorder support doesn't change
+  // mid-session. The recorder controller is held in a ref so a
+  // re-render doesn't drop the in-flight `MediaRecorder`.
+  const captureSupport = useMemo<BrowserCaptureSupport>(
+    () => detectBrowserCapture(),
+    []
+  );
+  type RecorderState =
+    | { kind: "idle" }
+    | { kind: "recording"; controller: BrowserRecording; startedAt: number }
+    | { kind: "recorded"; file: File }
+    | { kind: "uploading"; file: File };
+  const [recorderState, setRecorderState] = useState<RecorderState>({
+    kind: "idle",
+  });
+  const [recordedElapsedSec, setRecordedElapsedSec] = useState(0);
+  // Forces the elapsed-time display to tick. We keep the source of
+  // truth in the recorder controller; this is just a UI nudge.
+  useEffect(() => {
+    if (recorderState.kind !== "recording") return;
+    const id = setInterval(() => {
+      setRecordedElapsedSec(
+        Math.floor((Date.now() - recorderState.startedAt) / 1000)
+      );
+    }, 250);
+    return () => clearInterval(id);
+  }, [recorderState]);
   const [transcriptEditInputId, setTranscriptEditInputId] = useState<
     number | null
   >(null);
@@ -668,7 +704,9 @@ export function NoteWorkspace({
     }
     setAudioUploading(true);
     try {
-      await uploadEncounterAudio(identity, encounterId, audioFile);
+      await uploadEncounterAudio(identity, encounterId, audioFile, {
+        captureSource: "file-upload",
+      });
       showFlash(
         "ok",
         `Audio uploaded: ${audioFile.name}. Running transcription…`
@@ -679,6 +717,97 @@ export function NoteWorkspace({
       showFlash("error", friendly(err));
     } finally {
       setAudioUploading(false);
+    }
+  };
+
+  // ---- Phase 36 — browser microphone capture handlers ------------
+
+  const onStartRecording = async () => {
+    if (recorderState.kind !== "idle") return;
+    if (!captureSupport.supported) {
+      showFlash(
+        "error",
+        "This browser doesn't support microphone capture. Use the file-upload form instead."
+      );
+      return;
+    }
+    try {
+      const controller = await startBrowserRecording();
+      setRecordedElapsedSec(0);
+      setRecorderState({
+        kind: "recording",
+        controller,
+        startedAt: Date.now(),
+      });
+    } catch (err) {
+      // BrowserCaptureError carries a stable code for the UI copy.
+      if (err instanceof BrowserCaptureError) {
+        if (err.code === "browser_capture_permission_denied") {
+          showFlash(
+            "error",
+            "Microphone access denied. Allow it in your browser, or use the file-upload form below."
+          );
+        } else if (err.code === "browser_capture_unsupported") {
+          showFlash(
+            "error",
+            "Browser microphone capture isn't available. Use the file-upload form below."
+          );
+        } else {
+          showFlash("error", `Recording failed: ${err.message}`);
+        }
+      } else {
+        showFlash("error", friendly(err));
+      }
+    }
+  };
+
+  const onStopRecording = async () => {
+    if (recorderState.kind !== "recording") return;
+    try {
+      const file = await recorderState.controller.stop();
+      setRecorderState({ kind: "recorded", file });
+    } catch (err) {
+      if (err instanceof BrowserCaptureError) {
+        showFlash("error", `Recording stop failed: ${err.message}`);
+      } else {
+        showFlash("error", friendly(err));
+      }
+      setRecorderState({ kind: "idle" });
+    }
+  };
+
+  const onDiscardRecording = () => {
+    if (recorderState.kind === "recording") {
+      try {
+        recorderState.controller.cancel();
+      } catch {
+        /* noop */
+      }
+    }
+    setRecorderState({ kind: "idle" });
+    setRecordedElapsedSec(0);
+  };
+
+  const onUploadRecording = async () => {
+    if (recorderState.kind !== "recorded") return;
+    const file = recorderState.file;
+    setRecorderState({ kind: "uploading", file });
+    try {
+      await uploadEncounterAudio(identity, encounterId, file, {
+        captureSource: "browser-mic",
+      });
+      showFlash(
+        "ok",
+        `Recording uploaded (${file.name}). Running transcription…`
+      );
+      setRecorderState({ kind: "idle" });
+      setRecordedElapsedSec(0);
+      await loadInputs();
+    } catch (err) {
+      showFlash("error", friendly(err));
+      // Keep the recorded blob so the doctor can retry without
+      // re-recording.
+      setRecorderState({ kind: "recorded", file });
     }
   };
 
@@ -1029,6 +1158,121 @@ export function NoteWorkspace({
               )}
           </div>
         ))}
+        {canEdit && (
+          <div
+            className="event-form workspace__audio-record"
+            data-testid="audio-record-panel"
+          >
+            <div className="workspace__audio-record-head">
+              <strong>Record dictation</strong>
+              <span
+                className="subtle-note"
+                data-testid="audio-record-mode"
+              >
+                {captureSupport.supported
+                  ? `Browser capture (${captureSupport.pickedExt?.replace(".", "") ?? "webm"})`
+                  : "Browser capture unavailable"}
+              </span>
+            </div>
+            {!captureSupport.supported && (
+              <p
+                className="subtle-note"
+                data-testid="audio-record-unsupported"
+              >
+                This browser doesn&apos;t expose a usable microphone +
+                MediaRecorder API. Use the file-upload form below;
+                pick AirPods or your preferred mic at the OS level
+                and any recorder app will produce a file ChartNav can
+                ingest.
+              </p>
+            )}
+            {captureSupport.supported && (
+              <p className="subtle-note">
+                Click <strong>Start</strong> to record from whichever
+                input the OS routes to your browser
+                (AirPods / wired headset / built-in mic). The
+                browser will prompt for microphone permission on
+                first use.
+              </p>
+            )}
+            <div className="row workspace__audio-record-actions">
+              {recorderState.kind === "idle" && (
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  onClick={onStartRecording}
+                  disabled={!captureSupport.supported}
+                  data-testid="audio-record-start"
+                >
+                  Start recording
+                </button>
+              )}
+              {recorderState.kind === "recording" && (
+                <>
+                  <button
+                    type="button"
+                    className="btn btn--primary"
+                    onClick={onStopRecording}
+                    data-testid="audio-record-stop"
+                  >
+                    Stop ({recordedElapsedSec}s)
+                  </button>
+                  <span
+                    className="workspace__audio-record-indicator"
+                    aria-live="polite"
+                    data-testid="audio-record-indicator"
+                  >
+                    ● recording
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn--ghost"
+                    onClick={onDiscardRecording}
+                    data-testid="audio-record-cancel"
+                  >
+                    Cancel
+                  </button>
+                </>
+              )}
+              {recorderState.kind === "recorded" && (
+                <>
+                  <button
+                    type="button"
+                    className="btn btn--primary"
+                    onClick={onUploadRecording}
+                    data-testid="audio-record-upload"
+                  >
+                    Upload recording
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={onDiscardRecording}
+                    data-testid="audio-record-discard"
+                  >
+                    Discard
+                  </button>
+                  <span
+                    className="subtle-note"
+                    data-testid="audio-record-filename"
+                  >
+                    {recorderState.file.name} ·{" "}
+                    {Math.round(recorderState.file.size / 1024)} KB
+                  </span>
+                </>
+              )}
+              {recorderState.kind === "uploading" && (
+                <span
+                  className="subtle-note"
+                  data-testid="audio-record-uploading"
+                  aria-live="polite"
+                >
+                  Uploading {recorderState.file.name}…
+                </span>
+              )}
+            </div>
+          </div>
+        )}
         {canEdit && (
           <form
             className="event-form"

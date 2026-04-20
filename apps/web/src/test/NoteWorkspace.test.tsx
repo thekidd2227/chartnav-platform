@@ -2,6 +2,21 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// Phase 36 — the recorder module wraps real browser globals
+// (MediaRecorder, getUserMedia) that jsdom doesn't ship. Mock the
+// module surface so workspace tests can drive the UI states
+// (idle / recording / recorded / uploading) deterministically.
+vi.mock("../audioRecorder", async () => {
+  const actual = await vi.importActual<typeof import("../audioRecorder")>(
+    "../audioRecorder"
+  );
+  return {
+    ...actual,
+    detectBrowserCapture: vi.fn(),
+    startBrowserRecording: vi.fn(),
+  };
+});
+
 vi.mock("../api", async () => {
   const actual = await vi.importActual<typeof import("../api")>("../api");
   return {
@@ -51,6 +66,7 @@ vi.mock("../api", async () => {
 });
 
 import * as api from "../api";
+import * as audioRecorder from "../audioRecorder";
 import { NoteWorkspace } from "../NoteWorkspace";
 
 const ADMIN: api.Me = {
@@ -293,6 +309,16 @@ beforeEach(() => {
     })
   );
   (api.createEncounterInput as any).mockResolvedValue({});
+
+  // Phase 36 — recorder defaults to "supported, webm/opus" so the
+  // workspace renders the live recording controls. Individual tests
+  // override `detectBrowserCapture` to drive the unsupported path.
+  (audioRecorder.detectBrowserCapture as any).mockReturnValue({
+    supported: true,
+    pickedMime: "audio/webm;codecs=opus",
+    pickedExt: ".webm",
+  });
+  (audioRecorder.startBrowserRecording as any).mockReset();
 });
 
 function renderWorkspace(me: api.Me = CLIN) {
@@ -2174,10 +2200,14 @@ describe("NoteWorkspace", () => {
     );
     await user.click(screen.getByTestId("audio-upload-submit"));
     await waitFor(() =>
+      // Phase 36: file-upload path now threads `captureSource:"file-upload"`
+      // so the audit trail can distinguish hand-uploaded files from
+      // browser-mic recordings. Phase-33 contract otherwise unchanged.
       expect(api.uploadEncounterAudio).toHaveBeenCalledWith(
         CLIN.email,
         1,
-        file
+        file,
+        expect.objectContaining({ captureSource: "file-upload" })
       )
     );
     // Inputs list is re-fetched after upload.
@@ -2447,5 +2477,174 @@ describe("NoteWorkspace", () => {
       expect.stringMatching(/PVD: Posterior vitreous detachment/i)
     );
     expect(abbr).toHaveAttribute("tabindex", "0");
+  });
+
+  // -------------------------------------------------------------------
+  // Phase 36 — browser microphone capture UI
+  // -------------------------------------------------------------------
+
+  it("recorder panel renders the Start button when capture is supported", async () => {
+    renderWorkspace();
+    const panel = await screen.findByTestId("audio-record-panel");
+    expect(within(panel).getByTestId("audio-record-mode")).toHaveTextContent(
+      /webm|mp4|ogg/i
+    );
+    expect(
+      within(panel).getByTestId("audio-record-start")
+    ).not.toBeDisabled();
+    expect(
+      within(panel).queryByTestId("audio-record-unsupported")
+    ).not.toBeInTheDocument();
+    // File-upload form remains intact alongside the recorder.
+    expect(screen.getByTestId("audio-upload-form")).toBeInTheDocument();
+  });
+
+  it("recorder panel falls back to upload-only when capture is unsupported", async () => {
+    (audioRecorder.detectBrowserCapture as any).mockReturnValue({
+      supported: false,
+      reason: "browser_capture_unsupported",
+    });
+    renderWorkspace();
+    await screen.findByTestId("audio-record-panel");
+    expect(
+      screen.getByTestId("audio-record-mode")
+    ).toHaveTextContent(/unavailable/i);
+    expect(
+      screen.getByTestId("audio-record-unsupported")
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("audio-record-start")).toBeDisabled();
+    // Critical: the file-upload form is still there as a fallback.
+    expect(screen.getByTestId("audio-upload-form")).toBeInTheDocument();
+  });
+
+  it("permission denied shows a clear hint and leaves recorder idle + file-upload intact", async () => {
+    const denied = Object.assign(new Error("denied"), {
+      code: "browser_capture_permission_denied",
+    });
+    Object.setPrototypeOf(denied, audioRecorder.BrowserCaptureError.prototype);
+    (audioRecorder.startBrowserRecording as any).mockRejectedValue(denied);
+    const user = userEvent.setup();
+    renderWorkspace();
+    await screen.findByTestId("audio-record-panel");
+    await user.click(screen.getByTestId("audio-record-start"));
+    // Recorder rolls back to idle (Stop button never appears, Start
+    // is still enabled).
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("audio-record-stop")
+      ).not.toBeInTheDocument()
+    );
+    expect(screen.getByTestId("audio-record-start")).not.toBeDisabled();
+    // Flash carries the permission-denied copy.
+    expect(
+      screen.getByText(/microphone access denied/i)
+    ).toBeInTheDocument();
+    // File-upload still intact.
+    expect(screen.getByTestId("audio-upload-form")).toBeInTheDocument();
+  });
+
+  it("happy path: start → stop → upload threads captureSource='browser-mic' to the API", async () => {
+    const recordedFile = new File(["fake-audio-bytes"], "rec.webm", {
+      type: "audio/webm",
+    });
+    const stopFn = vi.fn().mockResolvedValue(recordedFile);
+    const cancelFn = vi.fn();
+    (audioRecorder.startBrowserRecording as any).mockResolvedValue({
+      mimeType: "audio/webm;codecs=opus",
+      ext: ".webm",
+      stop: stopFn,
+      cancel: cancelFn,
+    });
+
+    const user = userEvent.setup();
+    renderWorkspace();
+    await screen.findByTestId("audio-record-panel");
+
+    // 1) Start.
+    await user.click(screen.getByTestId("audio-record-start"));
+    await screen.findByTestId("audio-record-stop");
+    expect(
+      screen.getByTestId("audio-record-indicator")
+    ).toHaveTextContent(/recording/i);
+
+    // 2) Stop → recorded state with the file metadata visible.
+    await user.click(screen.getByTestId("audio-record-stop"));
+    expect(stopFn).toHaveBeenCalled();
+    const filename = await screen.findByTestId("audio-record-filename");
+    expect(filename).toHaveTextContent(/rec\.webm/);
+
+    // 3) Upload → uploadEncounterAudio called with captureSource.
+    await user.click(screen.getByTestId("audio-record-upload"));
+    await waitFor(() =>
+      expect(api.uploadEncounterAudio).toHaveBeenCalledWith(
+        CLIN.email,
+        1,
+        recordedFile,
+        expect.objectContaining({ captureSource: "browser-mic" })
+      )
+    );
+    // After successful upload, recorder returns to idle so the next
+    // dictation is one click away.
+    await waitFor(() =>
+      expect(screen.getByTestId("audio-record-start")).toBeInTheDocument()
+    );
+  });
+
+  it("Discard rolls the recorder back to idle without uploading", async () => {
+    const recordedFile = new File(["abc"], "rec.webm", {
+      type: "audio/webm",
+    });
+    const stopFn = vi.fn().mockResolvedValue(recordedFile);
+    (audioRecorder.startBrowserRecording as any).mockResolvedValue({
+      mimeType: "audio/webm",
+      ext: ".webm",
+      stop: stopFn,
+      cancel: vi.fn(),
+    });
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(await screen.findByTestId("audio-record-start"));
+    await user.click(await screen.findByTestId("audio-record-stop"));
+    await screen.findByTestId("audio-record-discard");
+    await user.click(screen.getByTestId("audio-record-discard"));
+    expect(api.uploadEncounterAudio).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(screen.getByTestId("audio-record-start")).toBeInTheDocument()
+    );
+  });
+
+  it("hand-uploaded files still tag captureSource='file-upload'", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    const fileInput = (await screen.findByTestId(
+      "audio-upload-input"
+    )) as HTMLInputElement;
+    const file = new File(["raw"], "hand.wav", { type: "audio/wav" });
+    await user.upload(fileInput, file);
+    await user.click(screen.getByTestId("audio-upload-submit"));
+    await waitFor(() =>
+      expect(api.uploadEncounterAudio).toHaveBeenCalledWith(
+        CLIN.email,
+        1,
+        file,
+        expect.objectContaining({ captureSource: "file-upload" })
+      )
+    );
+  });
+
+  it("recorder panel is hidden for reviewers (canEdit gate)", async () => {
+    render(
+      <NoteWorkspace
+        identity="rev@chartnav.local"
+        me={REV}
+        encounterId={1}
+        patientDisplay="Test"
+        providerDisplay="Dr T"
+      />
+    );
+    await screen.findByTestId("workspace-tier-transcript");
+    expect(
+      screen.queryByTestId("audio-record-panel")
+    ).not.toBeInTheDocument();
   });
 });

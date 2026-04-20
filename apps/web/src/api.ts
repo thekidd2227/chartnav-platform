@@ -1486,6 +1486,13 @@ export function unfavoriteClinicalShortcut(
 
 // ---------- Audio intake + transcript review (phase 33) ------------------
 
+/** Stable enum of how an audio file reached the encounter. Threaded
+ *  to the backend in the `X-Capture-Source` header and persisted on
+ *  `source_metadata.capture_source` so audit + downstream tooling
+ *  can distinguish a hand-uploaded file from a browser-mic recording.
+ */
+export type AudioCaptureSource = "browser-mic" | "file-upload";
+
 /** Upload a raw audio file for an encounter and receive the
  *  persisted `encounter_inputs` row (already run through the
  *  ingestion pipeline, so `processing_status` is the final state).
@@ -1493,6 +1500,12 @@ export function unfavoriteClinicalShortcut(
  *  Stub-transcript headers are exposed so test harnesses + dogfood
  *  flows can drive the pipeline deterministically without a real
  *  STT provider. A production deployment should never set these.
+ *
+ *  Phase-36 additions:
+ *  - `captureSource` — `"browser-mic"` for live recordings,
+ *    `"file-upload"` for the hand-uploaded path. Defaults to
+ *    `"file-upload"` for backward compatibility with phase-33
+ *    callers that didn't pass the option.
  */
 export async function uploadEncounterAudio(
   email: string,
@@ -1501,6 +1514,7 @@ export async function uploadEncounterAudio(
   opts: {
     stubTranscript?: string;
     stubTranscriptError?: string;
+    captureSource?: AudioCaptureSource;
   } = {}
 ): Promise<EncounterInput> {
   const form = new FormData();
@@ -1511,6 +1525,9 @@ export async function uploadEncounterAudio(
   }
   if (opts.stubTranscriptError) {
     headers.set("X-Stub-Transcript-Error", opts.stubTranscriptError);
+  }
+  if (opts.captureSource) {
+    headers.set("X-Capture-Source", opts.captureSource);
   }
   const res = await fetch(
     `${API_URL}/encounters/${encounterId}/inputs/audio`,
