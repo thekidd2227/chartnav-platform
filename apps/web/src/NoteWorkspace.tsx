@@ -167,6 +167,17 @@ export function NoteWorkspace({
     ClinicalShortcutFavorite[]
   >([]);
 
+  // Phase 34 — explicit favorites loading state on both surfaces
+  // (Quick-Comment Favorites + Clinical-Shortcut Favorites). The
+  // strips previously rendered nothing while the network round-trip
+  // ran, which made the absence of pins indistinguishable from "the
+  // fetch hasn't returned yet". We initialise true so the first
+  // paint shows the skeleton; the loaders flip false in their
+  // `finally` blocks.
+  const [favoritesLoading, setFavoritesLoading] = useState(true);
+  const [shortcutFavoritesLoading, setShortcutFavoritesLoading] =
+    useState(true);
+
   const canSign = me.role === "admin" || me.role === "clinician";
   const canEdit = canSign; // same set today
   const noteSigned =
@@ -292,12 +303,16 @@ export function NoteWorkspace({
   const loadFavorites = useCallback(async () => {
     if (!canUseQuickComments) {
       setFavorites([]);
+      setFavoritesLoading(false);
       return;
     }
+    setFavoritesLoading(true);
     try {
       setFavorites(await listMyQuickCommentFavorites(identity));
     } catch {
       setFavorites([]);
+    } finally {
+      setFavoritesLoading(false);
     }
   }, [identity, canUseQuickComments]);
 
@@ -309,12 +324,16 @@ export function NoteWorkspace({
   const loadShortcutFavorites = useCallback(async () => {
     if (!canUseQuickComments) {
       setShortcutFavorites([]);
+      setShortcutFavoritesLoading(false);
       return;
     }
+    setShortcutFavoritesLoading(true);
     try {
       setShortcutFavorites(await listMyClinicalShortcutFavorites(identity));
     } catch {
       setShortcutFavorites([]);
+    } finally {
+      setShortcutFavoritesLoading(false);
     }
   }, [identity, canUseQuickComments]);
 
@@ -1511,9 +1530,8 @@ export function NoteWorkspace({
           {/* Favorites strip — surfaces the doctor's pinned picks
               (preloaded or custom) above the main library so the
               phrases they actually use every day are one click away.
-              Rendered ONLY when there's at least one favorite that
-              resolves (a favorited custom comment that's been
-              soft-deleted is filtered out). */}
+              Phase 34: explicit loading + empty states so the strip
+              never silently disappears while data is in flight. */}
           {(() => {
             const q = qcSearch.trim().toLowerCase();
             const favRows: {
@@ -1551,7 +1569,36 @@ export function NoteWorkspace({
                 });
               }
             }
-            if (favRows.length === 0) return null;
+            if (favoritesLoading) {
+              return (
+                <div
+                  className="workspace__qc-favorites workspace__qc-favorites--loading"
+                  data-testid="quick-comments-favorites-loading"
+                  aria-busy="true"
+                >
+                  <div className="workspace__qc-group-title">★ Favorites</div>
+                  <p className="subtle-note">Loading pinned comments…</p>
+                </div>
+              );
+            }
+            if (favRows.length === 0) {
+              // Two distinct empty paths: nothing pinned at all, or
+              // nothing pinned matched the search. Both surface a
+              // calm, doctor-friendly hint instead of the strip just
+              // vanishing.
+              const hint = q
+                ? `No pinned comments match "${q}".`
+                : "Pin a comment with ☆ on any preloaded or custom row to see it here.";
+              return (
+                <div
+                  className="workspace__qc-favorites workspace__qc-favorites--empty"
+                  data-testid="quick-comments-favorites-empty"
+                >
+                  <div className="workspace__qc-group-title">★ Favorites</div>
+                  <p className="subtle-note">{hint}</p>
+                </div>
+              );
+            }
             return (
               <div
                 className="workspace__qc-favorites"
@@ -1769,10 +1816,10 @@ export function NoteWorkspace({
             />
           </div>
 
-          {/* Phase 30 — Favorites strip. Renders above the main
-              catalog whenever at least one pinned shortcut still
-              resolves (a favorite whose ref was removed from the
-              catalog is filtered out rather than broken). */}
+          {/* Phase 30 — Favorites strip. Phase 34: explicit loading +
+              empty UX so the strip never silently disappears while
+              data is in flight, and so a doctor with no pins sees an
+              honest "click ☆ to pin" hint instead of nothing. */}
           {(() => {
             const q = shortcutSearch.trim().toLowerCase();
             const favRows = shortcutFavorites
@@ -1783,7 +1830,32 @@ export function NoteWorkspace({
               .filter((s) =>
                 !q ? true : clinicalShortcutMatches(s, shortcutSearch)
               );
-            if (favRows.length === 0) return null;
+            if (shortcutFavoritesLoading) {
+              return (
+                <div
+                  className="workspace__qc-favorites workspace__qc-favorites--loading"
+                  data-testid="clinical-shortcuts-favorites-loading"
+                  aria-busy="true"
+                >
+                  <div className="workspace__qc-group-title">★ Favorites</div>
+                  <p className="subtle-note">Loading pinned shortcuts…</p>
+                </div>
+              );
+            }
+            if (favRows.length === 0) {
+              const hint = q
+                ? `No pinned shortcuts match "${q}".`
+                : "Pin a shortcut with ☆ on any catalog row to see it here.";
+              return (
+                <div
+                  className="workspace__qc-favorites workspace__qc-favorites--empty"
+                  data-testid="clinical-shortcuts-favorites-empty"
+                >
+                  <div className="workspace__qc-group-title">★ Favorites</div>
+                  <p className="subtle-note">{hint}</p>
+                </div>
+              );
+            }
             return (
               <div
                 className="workspace__qc-favorites"
@@ -1808,6 +1880,8 @@ export function NoteWorkspace({
                               key={i}
                               title={seg.meaning}
                               className="cn-abbr"
+                              tabIndex={0}
+                              aria-label={`${seg.abbr}: ${seg.meaning ?? "abbreviation"}`}
                             >
                               {seg.abbr}
                             </abbr>
@@ -1868,6 +1942,8 @@ export function NoteWorkspace({
                                     key={i}
                                     title={seg.meaning}
                                     className="cn-abbr"
+                                    tabIndex={0}
+                                    aria-label={`${seg.abbr}: ${seg.meaning ?? "abbreviation"}`}
                                     data-testid={`clinical-shortcut-abbr-${seg.abbr}`}
                                   >
                                     {seg.abbr}
@@ -1903,16 +1979,26 @@ export function NoteWorkspace({
                 </div>
               );
             })}
-            {CLINICAL_SHORTCUTS.every(
-              (s) => !clinicalShortcutMatches(s, shortcutSearch)
-            ) && (
-              <p
-                className="empty"
-                data-testid="clinical-shortcuts-empty"
-              >
-                No clinical shortcuts match your search.
-              </p>
-            )}
+            {shortcutSearch.trim() &&
+              CLINICAL_SHORTCUTS.every(
+                (s) => !clinicalShortcutMatches(s, shortcutSearch)
+              ) && (
+                <div
+                  className="empty workspace__qc-empty"
+                  role="status"
+                  data-testid="clinical-shortcuts-empty"
+                >
+                  <p>
+                    No clinical shortcuts match{" "}
+                    <strong>&ldquo;{shortcutSearch.trim()}&rdquo;</strong>.
+                  </p>
+                  <p className="subtle-note">
+                    Try an abbreviation (e.g. <code>RD</code>,{" "}
+                    <code>SRF</code>, <code>POAG</code>, <code>MGD</code>) or
+                    clear the search.
+                  </p>
+                </div>
+              )}
           </div>
         </section>
       )}

@@ -2361,4 +2361,91 @@ describe("NoteWorkspace", () => {
       screen.getByTestId("generate-blocked-note")
     ).toBeInTheDocument();
   });
+
+  // -------------------------------------------------------------------
+  // Phase 34 — favorites loading/empty + search empty + a11y abbr
+  // -------------------------------------------------------------------
+
+  it("Quick-Comments favorites strip shows an empty hint when no pins exist", async () => {
+    // Default phase-30 mocks return [] for both favorite endpoints.
+    renderWorkspace();
+    const empty = await screen.findByTestId(
+      "quick-comments-favorites-empty"
+    );
+    expect(empty).toHaveTextContent(/Pin a comment with ☆/i);
+    // The non-empty favorites strip must NOT also render.
+    expect(
+      screen.queryByTestId("quick-comments-favorites")
+    ).not.toBeInTheDocument();
+  });
+
+  it("Clinical-Shortcut favorites strip shows an empty hint when no pins exist", async () => {
+    renderWorkspace();
+    const empty = await screen.findByTestId(
+      "clinical-shortcuts-favorites-empty"
+    );
+    expect(empty).toHaveTextContent(/Pin a shortcut with ☆/i);
+    expect(
+      screen.queryByTestId("clinical-shortcuts-favorites")
+    ).not.toBeInTheDocument();
+  });
+
+  it("Clinical-Shortcut favorites strip surfaces a loading placeholder until the fetch resolves", async () => {
+    // Make the favorites request hang so the loading state is
+    // observable before the empty / populated states resolve.
+    let resolveFavs!: (value: any) => void;
+    (api.listMyClinicalShortcutFavorites as any).mockReturnValue(
+      new Promise((res) => {
+        resolveFavs = res;
+      })
+    );
+    renderWorkspace();
+    const loading = await screen.findByTestId(
+      "clinical-shortcuts-favorites-loading"
+    );
+    expect(loading).toHaveAttribute("aria-busy", "true");
+    expect(loading).toHaveTextContent(/Loading pinned shortcuts/i);
+    // Resolve, then the loading state must yield to the empty state.
+    resolveFavs([]);
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("clinical-shortcuts-favorites-loading")
+      ).not.toBeInTheDocument()
+    );
+    await screen.findByTestId("clinical-shortcuts-favorites-empty");
+  });
+
+  it("Clinical-Shortcut search-empty state names the query and offers an abbreviation hint", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await screen.findByTestId("clinical-shortcuts-panel");
+    await user.type(
+      screen.getByTestId("clinical-shortcuts-search"),
+      "zzznotamatch"
+    );
+    const empty = await screen.findByTestId("clinical-shortcuts-empty");
+    expect(empty).toHaveTextContent(/zzznotamatch/);
+    // Abbreviation suggestion list is part of the empty-state copy.
+    expect(empty).toHaveTextContent(/RD/);
+    expect(empty).toHaveTextContent(/POAG/);
+    expect(empty).toHaveAttribute("role", "status");
+  });
+
+  it("Clinical-Shortcut abbreviation has an accessible name + is keyboard-focusable", async () => {
+    renderWorkspace();
+    // Multiple PVD-tagged shortcuts (`pvd-01`, `pvd-02`, `pvd-03`) all
+    // wrap the literal `PVD`, so the abbr testid resolves to multiple
+    // nodes. They share the same a11y contract, so any one is enough.
+    const abbrs = await screen.findAllByTestId(
+      "clinical-shortcut-abbr-PVD"
+    );
+    expect(abbrs.length).toBeGreaterThan(0);
+    const abbr = abbrs[0];
+    expect(abbr.tagName.toLowerCase()).toBe("abbr");
+    expect(abbr).toHaveAttribute(
+      "aria-label",
+      expect.stringMatching(/PVD: Posterior vitreous detachment/i)
+    );
+    expect(abbr).toHaveAttribute("tabindex", "0");
+  });
 });

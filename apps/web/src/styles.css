@@ -1115,13 +1115,68 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
 /* ---- Phase 29 — Clinical Shortcuts section ---- */
 .workspace__clinical-shortcuts {
   margin-top: 20px;
+  /* Phase 34 — explicit visual divider between Quick Comments and
+     Clinical Shortcuts so a doctor reads them as separate surfaces
+     even when both are scrolled into view. */
+  padding-top: 16px;
+  border-top: 2px solid var(--cn-border, #E2E8F0);
 }
 /* Subtle abbreviation hint inside shortcut bodies. Underline with a
    dotted rule so the hover target reads as "more info" rather than
-   as a clickable link. */
+   as a clickable link. Phase 34 — focusable + a11y-labelled, with a
+   visible focus ring so keyboard / screen-reader users get the
+   meaning without needing to mouse over. */
 .cn-abbr {
   text-decoration: underline dotted;
   text-underline-offset: 2px;
   cursor: help;
   font-variant-numeric: tabular-nums;
+  border-radius: 2px;
+}
+.cn-abbr:focus,
+.cn-abbr:focus-visible {
+  outline: 2px solid var(--cn-accent, #2563EB);
+  outline-offset: 2px;
+  background: rgba(37, 99, 235, 0.08);
+}
+
+/* Phase 34 — favorites loading + empty + search-empty UX. The
+   loading variant carries a faint shimmer so it reads as "fetch
+   in flight" rather than as a configured empty state. */
+.workspace__qc-favorites--loading {
+  opacity: 0.7;
+  background: linear-gradient(
+    180deg,
+    var(--cn-surface-alt, #F8FAFC),
+    var(--cn-surface, #FFFFFF) 120%
+  );
+}
+.workspace__qc-favorites--empty {
+  background: var(--cn-surface, #FFFFFF);
+  border-style: dashed;
+  border-color: var(--cn-border, #E2E8F0);
+}
+.workspace__qc-favorites--empty .subtle-note,
+.workspace__qc-favorites--loading .subtle-note {
+  margin: 6px 0 2px;
+}
+.workspace__qc-empty {
+  padding: 14px 16px;
+  margin-top: 12px;
+  border: 1px dashed var(--cn-border, #E2E8F0);
+  border-radius: var(--cn-radius-sm, 6px);
+  background: var(--cn-surface-alt, #F8FAFC);
+}
+.workspace__qc-empty p {
+  margin: 0;
+}
+.workspace__qc-empty p + .subtle-note {
+  margin-top: 6px;
+}
+.workspace__qc-empty code {
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--cn-surface, #FFFFFF);
+  border: 1px solid var(--cn-border, #E2E8F0);
+  font-size: 12px;
 }
