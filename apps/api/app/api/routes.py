@@ -4407,3 +4407,75 @@ def delete_my_custom_shortcut(
         detail=f"custom_shortcut_id={shortcut_id}",
     )
     return _load_custom_shortcut_for_caller(shortcut_id, caller)
+
+
+# =====================================================================
+# Phase 47 — /admin/kpi/* — pilot KPI / ROI scorecard
+# ---------------------------------------------------------------------
+# Admin-only. Org-scoped. Derived entirely from existing lifecycle
+# timestamps (encounter_inputs + note_versions + encounters).
+# =====================================================================
+
+@router.get("/admin/kpi/overview")
+def kpi_overview_route(
+    hours: int = Query(24 * 7, ge=1, le=24 * 90),
+    caller: Caller = Depends(require_admin),
+) -> dict:
+    from app.services.kpi_scorecard import kpi_overview
+    return kpi_overview(
+        organization_id=caller.organization_id,
+        hours=int(hours),
+    )
+
+
+@router.get("/admin/kpi/providers")
+def kpi_providers_route(
+    hours: int = Query(24 * 7, ge=1, le=24 * 90),
+    caller: Caller = Depends(require_admin),
+) -> dict:
+    from app.services.kpi_scorecard import kpi_providers
+    return kpi_providers(
+        organization_id=caller.organization_id,
+        hours=int(hours),
+    )
+
+
+@router.get("/admin/kpi/export.csv")
+def kpi_export_csv_route(
+    hours: int = Query(24 * 7, ge=1, le=24 * 90),
+    caller: Caller = Depends(require_admin),
+) -> Response:
+    """Flat CSV of the per-provider scorecard. Suitable for pilot
+    reporting and before/after comparisons."""
+    from app.services.kpi_scorecard import kpi_providers, kpi_csv_rows
+
+    payload = kpi_providers(
+        organization_id=caller.organization_id,
+        hours=int(hours),
+    )
+    rows = kpi_csv_rows(payload)
+    buf = io.StringIO()
+    writer = csv.writer(buf, quoting=csv.QUOTE_MINIMAL)
+    writer.writerows(rows)
+
+    # Audit the export so ops can see who pulled a pilot scorecard.
+    from app import audit as _audit
+    _audit.record(
+        event_type="admin_kpi_export",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path="/admin/kpi/export.csv",
+        method="GET",
+        detail=f"hours={hours} provider_rows={len(rows) - 1}",
+    )
+
+    filename = f"chartnav-kpi-org{caller.organization_id}-{hours}h.csv"
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
+    )
