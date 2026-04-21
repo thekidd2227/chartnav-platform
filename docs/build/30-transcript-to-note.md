@@ -222,3 +222,19 @@ What's explicitly **not** shipped:
 - Does **not** implement vendor-specific EHR write-back. Export is a
   handoff state + downloadable text + clipboard, not an automated
   push into a certified record.
+
+## Addendum — hardening wave (2026-04-20)
+
+- **Transcript status pill clarity**: every `transcript-status-<id>`
+  pill now carries a human-readable `title` + `aria-label`
+  explaining what the state means. The explanation is produced by
+  the pure helper `transcriptStatusHelp(status)` exported from
+  `apps/web/src/NoteWorkspace.tsx`. States covered: `queued`,
+  `processing`, `completed`, `failed`, `needs_review`, with a
+  generic fallback for any future state.
+- **Export-before-sign guard messaging**: a new
+  `note-export-disabled-hint` surface renders next to the Sign
+  button when the active clinician has a reviewable draft but
+  has not signed yet. Copy: "Export unlocks once the note is
+  signed." This replaces a silent absence with honest, stable UX.
+- No state-machine changes, no generator-seam changes.

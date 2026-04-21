@@ -1255,6 +1255,11 @@ export function NoteWorkspace({
                 className="status-pill"
                 data-status={inp.processing_status}
                 data-testid={`transcript-status-${inp.id}`}
+                title={transcriptStatusHelp(inp.processing_status)}
+                aria-label={`Transcript state: ${inp.processing_status.replace(
+                  /_/g,
+                  " "
+                )} — ${transcriptStatusHelp(inp.processing_status)}`}
               >
                 {inp.processing_status.replace(/_/g, " ")}
                 {typeof inp.retry_count === "number" && inp.retry_count > 0 && (
@@ -1740,6 +1745,20 @@ export function NoteWorkspace({
                 >
                   Export note
                 </button>
+              )}
+              {/* Export-before-sign guard messaging (hardening lane).
+                  Only rendered when the active clinician has not
+                  signed yet. Keeps the doctor from hunting for a
+                  missing button and documents the contract. */}
+              {canSign && activeNote && !noteSigned && (
+                <span
+                  className="subtle-note"
+                  data-testid="note-export-disabled-hint"
+                  title="Export unlocks after sign"
+                  aria-live="polite"
+                >
+                  Export unlocks once the note is signed.
+                </span>
               )}
               {noteSigned && (
                 <button
@@ -2855,4 +2874,24 @@ function friendly(e: unknown): string {
   if (e instanceof ApiError) return `${e.status} ${e.errorCode} — ${e.reason}`;
   if (e instanceof Error) return e.message;
   return String(e);
+}
+
+/** Human-readable explanation for each transcript processing state.
+ *  Surfaced via the status pill's `title` + `aria-label`. Hardening
+ *  lane: state clarity without changing the state machine. */
+export function transcriptStatusHelp(status: string): string {
+  switch (status) {
+    case "queued":
+      return "Waiting for a worker to pick up the input.";
+    case "processing":
+      return "A worker is extracting text from the input.";
+    case "completed":
+      return "Transcript is ready; a draft can be generated.";
+    case "failed":
+      return "Ingestion failed. Retry, edit the transcript, or remove this input.";
+    case "needs_review":
+      return "Ingestion finished with low confidence; review required before drafting.";
+    default:
+      return `Transcript state: ${status.replace(/_/g, " ")}.`;
+  }
 }

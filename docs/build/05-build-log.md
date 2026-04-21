@@ -1779,3 +1779,39 @@ backend code touched; no migrations; no backend phase doc collisions.
 - **Phase 3 — Dev auth + org scoping** (`efb5b56`)
 - **Phase 2 — Strict state machine + filtering** (`505f025`)
 - **Phase 1 — Workflow spine** (`93fceb4`)
+
+## Hardening wave — 2026-04-20
+
+Non-architectural hardening pass on the shipped wedge and the
+integrated/native encounter UX. No migrations, no adapter contract
+changes, no bridge-architecture changes.
+
+- **New Playwright spec** — `apps/web/tests/e2e/note-workspace-hardening-wave.spec.ts`
+  with 5 deterministic scenarios covering native NoteWorkspace
+  mounting, source-chip value, transcript status pill tooltip,
+  tier DOM-order contract, and the export-before-sign guard.
+- **New vitest suite** — `apps/web/src/test/wedge-hardening.test.tsx`
+  with 19 regression tests covering `encounterSourceLabel` across
+  chartnav/fhir/stub/unknown sources, `ExamSummary` rendering (VA,
+  IOP, diagnoses, plan, confidence, missing-data, ophthalmology
+  segments, empty state), `trustKindForNote`, `TrustBadge`, and
+  the new `transcriptStatusHelp` helper.
+- **Small UI hardening** —
+  - transcript status pill now carries a `title` + `aria-label`
+    with a human-readable explanation per state
+    (`queued` / `processing` / `completed` / `failed` /
+    `needs_review`).
+  - new `note-export-disabled-hint` surface explains that export
+    unlocks after sign (export-before-sign guard messaging).
+  - `external-encounter-banner` now carries `data-disabled-reason=
+    "encounter_owned_by_external_ehr"` + `data-source` +
+    `data-external-ref` attributes for stable selectors + honest
+    machine-readable disabled reason.
+- **Pre-existing selector drift fixed** — `workflow.spec.ts`
+  "admin can append a workflow event" was looking for the phase-pre-38
+  `.event-item__type` node; updated to assert against the shipped
+  `[data-testid="timeline"] .timeline__chip` Timeline surface.
+
+Validation: tsc clean (src/) · vitest 170/170 · Playwright 20/20
+across the new + adjacent affected specs · `vite build` 56 modules →
+318 KB JS / 45 KB CSS (gzip 93 / 8 KB).

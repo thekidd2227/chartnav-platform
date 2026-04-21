@@ -450,3 +450,28 @@ two suites never cross-contaminate.
   automated ruleset.
 - The create modal doesn't exercise location-list errors yet.
 - Loading skeletons / spinner content not asserted.
+
+## Addendum — hardening wave (2026-04-20)
+
+Stable testid contract expanded for the currently shipped wedge and
+integrated/native encounter UX:
+
+| Surface | Stable testid(s) |
+|---|---|
+| Source chip (native / external) | `detail-source-chip` (with `data-source="chartnav\|fhir\|stub\|…"`) |
+| External encounter banner | `external-encounter-banner` (with `data-disabled-reason`, `data-source`, `data-external-ref`) |
+| External note-workspace replacement copy | `note-workspace-external-note` |
+| Three trust tiers | `workspace-tier-transcript` / `workspace-tier-findings` / `workspace-tier-draft` (DOM order enforced by a Playwright bounding-box check) |
+| Transcript status pill | `transcript-status-<id>` (with `title` + `aria-label` explaining the state) |
+| Missing data banner | `missing-flags-banner` |
+| Export-before-sign hint | `note-export-disabled-hint` |
+| Sign button | `note-sign` (still wrapped by the phase-38 `PreSignCheckpoint` modal — acknowledge via `presign-ack` + `presign-confirm` in tests that drive sign) |
+| Exam summary | `exam-summary` + `exam-summary-{cc,hpi,va,iop,dx,plan,followup,confidence,missing,segments,seg-<key>,empty,draft-kind}` |
+| Trust badge | `trust-badge-<kind>` |
+| Timeline | `timeline` + `timeline-chip-<id>` + `timeline-lane-<Lane>` |
+
+New regression suites:
+
+- `apps/web/src/test/wedge-hardening.test.tsx` — 19 focused tests.
+- `apps/web/tests/e2e/note-workspace-hardening-wave.spec.ts` — 5
+  deterministic Playwright scenarios.

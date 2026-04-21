@@ -1728,6 +1728,9 @@ function ExternalEncounterBanner({
       className="banner banner--info"
       data-testid="external-encounter-banner"
       role="note"
+      data-source={String(externalSource)}
+      data-external-ref={String(externalRef)}
+      data-disabled-reason="encounter_owned_by_external_ehr"
     >
       <div>
         <strong>This encounter lives in the external EHR.</strong> Status

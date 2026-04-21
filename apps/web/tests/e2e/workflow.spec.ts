@@ -93,9 +93,14 @@ test.describe("ChartNav end-to-end", () => {
     await page.getByTestId("event-data").fill(`{"note":"${marker}"}`);
     await page.getByTestId("event-submit").click();
     await expect(page.getByTestId("banner-ok")).toContainText("manual_note");
-    // Event appears in timeline.
-    await expect(page.locator(`.event-item__type >> text=manual_note`)).toBeVisible();
-    await expect(page.locator(`.event-item__data >> text=${marker}`)).toBeVisible();
+    // Event appears in the timeline surface. Phase 38 replaced
+    // `.event-item` cards with the Timeline component's
+    // `.timeline__chip` lane chips — selector updated to the
+    // shipped markup.
+    await expect(page.getByTestId("timeline")).toBeVisible();
+    await expect(
+      page.locator('[data-testid="timeline"] .timeline__chip >> text=manual_note')
+    ).toBeVisible();
   });
 
   test("clinician performs operational transition; review edge is not offered", async ({ page }) => {

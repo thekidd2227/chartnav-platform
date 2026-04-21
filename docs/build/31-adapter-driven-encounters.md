@@ -183,3 +183,20 @@ Honest limitations:
   `encounters` table. `external_ref` is available on `patients`/
   `providers`; encounter-level mirroring is future work.
 - Does not change standalone behavior for existing encounter routes.
+
+## Addendum — hardening wave (2026-04-20)
+
+- **External banner machine-readable disabled reason**: the shipped
+  `external-encounter-banner` now carries three stable data
+  attributes — `data-source`, `data-external-ref`, and
+  `data-disabled-reason="encounter_owned_by_external_ehr"`. This
+  lets observability + e2e tests assert on the canonical reason
+  string instead of scraping visible copy. Adapter contract and
+  bridge semantics are unchanged.
+- **Source-chip label contract** (for tests + telemetry):
+  - `_source=chartnav` or undefined → "ChartNav (native)"
+  - `_source=fhir` → "External (FHIR)"
+  - `_source=stub` → "External (stub)"
+  - any other string → "External (<string>)"
+- Coverage added in `apps/web/src/test/wedge-hardening.test.tsx`
+  (`encounterSourceLabel + encounterIsNative` describe block).
