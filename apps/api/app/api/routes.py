@@ -5216,3 +5216,170 @@ def security_audit_sink_test(
         detail=f"mode={result.get('mode')} ok={result.get('ok')}",
     )
     return result
+
+
+# ===========================================================================
+# Phase 53 — Wave 8 enterprise operations & exceptions control plane
+# ===========================================================================
+#
+# Admin-facing read surface that aggregates actionable exception state
+# across the platform into a single ops queue. All endpoints are gated
+# by `caller_is_security_admin(caller)` so they are consistent with
+# the /admin/security/* pattern. Zero writes; this entire surface is
+# observation.
+
+def _require_security_admin_inline(caller: Caller) -> None:
+    """Inline guard that mirrors the existing /admin/security/* style.
+    Keeps the ops surface consistent with the rest of the admin
+    plane."""
+    from app.security_policy import caller_is_security_admin
+    if not caller_is_security_admin(caller):
+        raise _err(
+            "security_admin_required",
+            "this action requires the security-admin role for this organization",
+            403,
+        )
+
+
+@router.get("/admin/operations/overview")
+def admin_operations_overview(
+    hours: int = Query(default=168, ge=1, le=24 * 31),
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Aggregate counters for every operational exception category,
+    plus a synthesized security-policy status card. This is the
+    single call the admin nav + overview tab makes on mount."""
+    _require_security_admin_inline(caller)
+    from app.services.operations_exceptions import compute_counters
+    return compute_counters(caller.organization_id, hours=hours).as_dict()
+
+
+@router.get("/admin/operations/blocked-notes")
+def admin_operations_blocked_notes(
+    hours: int = Query(default=168, ge=1, le=24 * 31),
+    limit: int = Query(default=200, ge=1, le=500),
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Merged sign-blocked + export-blocked + approval-denial audit
+    rows. Used by the Blocked Notes tab."""
+    _require_security_admin_inline(caller)
+    from app.services.operations_exceptions import list_blocked_notes
+    items = list_blocked_notes(caller.organization_id, hours=hours, limit=limit)
+    return {
+        "organization_id": caller.organization_id,
+        "hours": int(hours),
+        "items": [it.as_dict() for it in items],
+    }
+
+
+@router.get("/admin/operations/final-approval-queue")
+def admin_operations_final_approval_queue(
+    limit: int = Query(default=100, ge=1, le=500),
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Live-state pending + invalidated final-approval rows. This is
+    the primary clinical-ops queue: every row is a piece of
+    unfinished work visible to the admin plane."""
+    _require_security_admin_inline(caller)
+    from app.services.operations_exceptions import (
+        list_final_approval_pending,
+        list_final_approval_invalidated,
+    )
+    pending = list_final_approval_pending(caller.organization_id, limit=limit)
+    invalidated = list_final_approval_invalidated(
+        caller.organization_id, limit=limit,
+    )
+    return {
+        "organization_id": caller.organization_id,
+        "pending": [it.as_dict() for it in pending],
+        "invalidated": [it.as_dict() for it in invalidated],
+    }
+
+
+@router.get("/admin/operations/identity-exceptions")
+def admin_operations_identity_exceptions(
+    hours: int = Query(default=168, ge=1, le=24 * 31),
+    limit: int = Query(default=200, ge=1, le=500),
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Identity / provisioning failure events. This surface is
+    intentionally narrow — it reports what actually happens
+    (unknown_user, invalid_issuer, token_expired, cross-org attempt,
+    etc.). The repo does not implement SCIM today; there is no
+    SCIM-conflict queue to emit, and this endpoint does not pretend
+    otherwise."""
+    _require_security_admin_inline(caller)
+    from app.services.operations_exceptions import list_identity_exceptions
+    items = list_identity_exceptions(
+        caller.organization_id, hours=hours, limit=limit,
+    )
+    return {
+        "organization_id": caller.organization_id,
+        "hours": int(hours),
+        "items": [it.as_dict() for it in items],
+        "scim_configured": False,
+        "oidc_identity_mapping": "email_claim_lookup",
+    }
+
+
+@router.get("/admin/operations/session-exceptions")
+def admin_operations_session_exceptions(
+    hours: int = Query(default=168, ge=1, le=24 * 31),
+    limit: int = Query(default=200, ge=1, le=500),
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    _require_security_admin_inline(caller)
+    from app.services.operations_exceptions import list_session_exceptions
+    items = list_session_exceptions(
+        caller.organization_id, hours=hours, limit=limit,
+    )
+    return {
+        "organization_id": caller.organization_id,
+        "hours": int(hours),
+        "items": [it.as_dict() for it in items],
+    }
+
+
+@router.get("/admin/operations/stuck-ingest")
+def admin_operations_stuck_ingest(
+    limit: int = Query(default=50, ge=1, le=500),
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    _require_security_admin_inline(caller)
+    from app.services.operations_exceptions import list_stuck_ingest
+    items = list_stuck_ingest(caller.organization_id, limit=limit)
+    return {
+        "organization_id": caller.organization_id,
+        "items": [it.as_dict() for it in items],
+    }
+
+
+@router.get("/admin/operations/security-config-status")
+def admin_operations_security_config_status(
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Synthesized card: is this org's security policy configured?
+    Not a denial event — an advisory card for the admin surface."""
+    _require_security_admin_inline(caller)
+    from app.services.operations_exceptions import security_config_status
+    return security_config_status(caller.organization_id)
+
+
+@router.get("/admin/operations/categories")
+def admin_operations_categories(
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Publish the full category taxonomy + metadata so the UI can
+    render labels and remediation copy without inlining it.
+    """
+    _require_security_admin_inline(caller)
+    from app.services.operations_exceptions import (
+        CATEGORY_METADATA,
+        ExceptionCategory,
+    )
+    return {
+        "categories": [
+            {"value": c.value, **CATEGORY_METADATA[c]}
+            for c in ExceptionCategory
+        ],
+    }

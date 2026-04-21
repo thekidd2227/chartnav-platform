@@ -2031,3 +2031,156 @@ export function finalApproveNoteVersion(
     body: JSON.stringify(body),
   });
 }
+
+// =====================================================================
+// Phase 53 — Wave 8 operations & exceptions control plane
+// =====================================================================
+
+export type OperationsSeverity = "info" | "warning" | "error";
+
+/** The canonical list of operational exception category values. Kept
+ *  loosely typed (string) so the client does not break when the
+ *  server adds a new category — the UI treats unknown categories as
+ *  opaque and renders them via the `/categories` metadata. */
+export type OperationsCategoryValue = string;
+
+export interface OperationsCategoryMeta {
+  value: OperationsCategoryValue;
+  label: string;
+  severity: OperationsSeverity;
+  next_step: string;
+}
+
+export interface OperationsCategoriesResponse {
+  categories: OperationsCategoryMeta[];
+}
+
+export interface OperationsItem {
+  category: OperationsCategoryValue;
+  severity: OperationsSeverity;
+  label: string;
+  next_step: string;
+  note_id?: number;
+  note_version_number?: number;
+  encounter_id?: number;
+  actor_email?: string;
+  actor_user_id?: number;
+  error_code?: string;
+  detail?: string;
+  occurred_at?: string;
+  draft_status?: string;
+  final_approval_status?: "pending" | "approved" | "invalidated";
+}
+
+export interface OperationsSecurityPolicyStatus {
+  session_tracking_configured: boolean;
+  audit_sink_configured: boolean;
+  security_admin_allowlist_configured: boolean;
+  mfa_required: boolean;
+  idle_timeout_minutes: number | null;
+  absolute_timeout_minutes: number | null;
+  audit_sink_mode: string;
+  security_admin_allowlist_count: number;
+  unconfigured: boolean;
+}
+
+export interface OperationsOverview {
+  organization_id: number;
+  window_hours: number;
+  since: string;
+  until: string;
+  counts: Record<string, number>;
+  security_policy: OperationsSecurityPolicyStatus;
+  total_open: number;
+}
+
+export interface OperationsListResponse {
+  organization_id: number;
+  hours?: number;
+  items: OperationsItem[];
+}
+
+export interface OperationsFinalApprovalQueue {
+  organization_id: number;
+  pending: OperationsItem[];
+  invalidated: OperationsItem[];
+}
+
+export interface OperationsIdentityResponse extends OperationsListResponse {
+  /** Honest flag — SCIM is not implemented in this repo today. */
+  scim_configured: boolean;
+  /** Describes how OIDC claims resolve to users. Today: email-claim lookup. */
+  oidc_identity_mapping: string;
+}
+
+export function getOperationsOverview(
+  email: string,
+  hours: number = 168
+): Promise<OperationsOverview> {
+  return request(
+    `/admin/operations/overview?hours=${encodeURIComponent(String(hours))}`,
+    { email }
+  );
+}
+
+export function getOperationsCategories(
+  email: string
+): Promise<OperationsCategoriesResponse> {
+  return request("/admin/operations/categories", { email });
+}
+
+export function getOperationsBlockedNotes(
+  email: string,
+  hours: number = 168,
+  limit: number = 200
+): Promise<OperationsListResponse> {
+  return request(
+    `/admin/operations/blocked-notes?hours=${hours}&limit=${limit}`,
+    { email }
+  );
+}
+
+export function getOperationsFinalApprovalQueue(
+  email: string,
+  limit: number = 100
+): Promise<OperationsFinalApprovalQueue> {
+  return request(
+    `/admin/operations/final-approval-queue?limit=${limit}`,
+    { email }
+  );
+}
+
+export function getOperationsIdentityExceptions(
+  email: string,
+  hours: number = 168,
+  limit: number = 200
+): Promise<OperationsIdentityResponse> {
+  return request(
+    `/admin/operations/identity-exceptions?hours=${hours}&limit=${limit}`,
+    { email }
+  );
+}
+
+export function getOperationsSessionExceptions(
+  email: string,
+  hours: number = 168,
+  limit: number = 200
+): Promise<OperationsListResponse> {
+  return request(
+    `/admin/operations/session-exceptions?hours=${hours}&limit=${limit}`,
+    { email }
+  );
+}
+
+export function getOperationsStuckIngest(
+  email: string,
+  limit: number = 50
+): Promise<OperationsListResponse> {
+  return request(`/admin/operations/stuck-ingest?limit=${limit}`, { email });
+}
+
+export function getOperationsSecurityConfigStatus(
+  email: string
+): Promise<OperationsSecurityPolicyStatus> {
+  return request("/admin/operations/security-config-status", { email });
+}
