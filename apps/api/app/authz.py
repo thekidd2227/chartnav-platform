@@ -12,9 +12,12 @@ Design goals:
     can branch on them.
 
 Roles (must match `users.role`):
-  - admin      — full in-org read/write + org metadata management
-  - clinician  — charting-side of the state machine; can create/read/append
-  - reviewer   — review-side of the state machine; read-only on create/append
+  - admin       — full in-org read/write + org metadata management
+  - clinician   — charting-side of the state machine; can create/read/append
+  - reviewer    — review-side of the state machine; read-only on create/append
+  - front_desk  — scheduling-side: create/reschedule encounters, edit patient
+                  display fields, drive the scheduled→in_progress transition.
+                  CANNOT see transcripts, sign notes, or export audit.
 """
 
 from __future__ import annotations
@@ -30,24 +33,37 @@ from app.auth import Caller, require_caller
 ROLE_ADMIN = "admin"
 ROLE_CLINICIAN = "clinician"
 ROLE_REVIEWER = "reviewer"
+ROLE_FRONT_DESK = "front_desk"
 
-KNOWN_ROLES: set[str] = {ROLE_ADMIN, ROLE_CLINICIAN, ROLE_REVIEWER}
+KNOWN_ROLES: set[str] = {
+    ROLE_ADMIN,
+    ROLE_CLINICIAN,
+    ROLE_REVIEWER,
+    ROLE_FRONT_DESK,
+}
 
 # -- permission surface ---------------------------------------------------
 #
 # READ surface — who can see what:
-#   admin, clinician, reviewer  →  encounters, events, org metadata
+#   admin, clinician, reviewer, front_desk  →  encounters, events, org metadata
+#   Front desk is specifically DENIED on transcript / findings / note
+#   content; those routes opt in by calling `require_clinical_content`.
 #
 # WRITE surface — who can mutate what:
-CAN_CREATE_ENCOUNTER: set[str] = {ROLE_ADMIN, ROLE_CLINICIAN}
+CAN_CREATE_ENCOUNTER: set[str] = {ROLE_ADMIN, ROLE_CLINICIAN, ROLE_FRONT_DESK}
 CAN_CREATE_EVENT: set[str] = {ROLE_ADMIN, ROLE_CLINICIAN}
+
+# Roles that may read raw clinical content (transcripts, findings,
+# drafts, signed notes). Front desk is excluded on purpose — they are
+# operational, not clinical.
+CAN_READ_CLINICAL_CONTENT: set[str] = {ROLE_ADMIN, ROLE_CLINICIAN, ROLE_REVIEWER}
 
 # Per-transition authorization map. Keys are (from_status, to_status)
 # tuples. Values are the set of roles allowed to perform that edge.
-# Admin can perform any valid edge; clinicians and reviewers are
-# partitioned by operational vs review-stage.
+# Admin can perform any valid edge; clinicians, reviewers, and front
+# desk are partitioned by operational vs review vs scheduling.
 TRANSITION_ROLES: dict[tuple[str, str], set[str]] = {
-    ("scheduled", "in_progress"):      {ROLE_ADMIN, ROLE_CLINICIAN},
+    ("scheduled", "in_progress"):      {ROLE_ADMIN, ROLE_CLINICIAN, ROLE_FRONT_DESK},
     ("in_progress", "draft_ready"):    {ROLE_ADMIN, ROLE_CLINICIAN},
     ("draft_ready", "in_progress"):    {ROLE_ADMIN, ROLE_CLINICIAN},  # rework back to charting
     ("draft_ready", "review_needed"):  {ROLE_ADMIN, ROLE_REVIEWER},
@@ -106,6 +122,22 @@ def require_create_event(caller: Caller = Depends(require_caller)) -> Caller:
         raise forbidden(
             "role_cannot_create_event",
             f"role '{caller.role}' may not create workflow events",
+        )
+    return caller
+
+
+def require_clinical_content(caller: Caller = Depends(require_caller)) -> Caller:
+    """Gate routes that expose raw clinical content.
+
+    Transcripts, extracted findings, note_version bodies, and signed
+    artifacts are only for admin / clinician / reviewer. Front desk
+    callers hit 403 `role_cannot_read_clinical` so the UI can hide
+    those tiers and the backend stays the source of truth.
+    """
+    if caller.role not in CAN_READ_CLINICAL_CONTENT:
+        raise forbidden(
+            "role_cannot_read_clinical",
+            f"role '{caller.role}' may not read clinical content",
         )
     return caller
 

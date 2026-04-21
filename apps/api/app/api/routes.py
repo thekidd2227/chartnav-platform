@@ -4140,3 +4140,270 @@ def capability_manifest_public() -> dict:
         capability_card, card_to_dict,
     )
     return card_to_dict(capability_card())
+
+
+# =====================================================================
+# Phase 38 — /me/custom-shortcuts (per-clinician authored shortcuts)
+# ---------------------------------------------------------------------
+# Shares the shape of /me/quick-comments but keys a different concern:
+# authored shortcut fragments that live alongside the catalog
+# Clinical Shortcuts shipped in the frontend bundle. Reviewers +
+# front desk are excluded — this is a clinician / admin surface.
+# =====================================================================
+
+CS_COLUMNS = (
+    "id, organization_id, user_id, shortcut_ref, group_name, body, "
+    "tags, is_active, created_at, updated_at"
+)
+CS_MAX_BODY_CHARS = 4000
+CS_MAX_REF_CHARS = 64
+CS_MAX_GROUP_CHARS = 64
+
+
+class CustomShortcutBody(BaseModel):
+    shortcut_ref: Optional[str] = Field(
+        None, min_length=1, max_length=CS_MAX_REF_CHARS,
+        description=(
+            "stable per-user ref; server auto-generates 'my-<uuid>' "
+            "when omitted"
+        ),
+    )
+    group_name: Optional[str] = Field(None, max_length=CS_MAX_GROUP_CHARS)
+    body: str = Field(..., min_length=1, max_length=CS_MAX_BODY_CHARS)
+    tags: Optional[list[str]] = None
+
+
+class CustomShortcutPatchBody(BaseModel):
+    group_name: Optional[str] = Field(None, max_length=CS_MAX_GROUP_CHARS)
+    body: Optional[str] = Field(None, min_length=1, max_length=CS_MAX_BODY_CHARS)
+    tags: Optional[list[str]] = None
+    is_active: Optional[bool] = None
+
+
+def _require_custom_shortcut_role(caller: Caller) -> None:
+    if caller.role not in {"admin", "clinician"}:
+        raise _err(
+            "role_cannot_edit_custom_shortcuts",
+            "only admin or clinician may author custom shortcuts",
+            403,
+        )
+
+
+def _cs_row_to_dict(row: Any) -> dict:
+    d = dict(row)
+    tags_raw = d.get("tags")
+    if tags_raw:
+        try:
+            d["tags"] = json.loads(tags_raw)
+        except (ValueError, TypeError):
+            d["tags"] = []
+    else:
+        d["tags"] = []
+    return d
+
+
+def _load_custom_shortcut_for_caller(
+    shortcut_id: int, caller: Caller
+) -> dict[str, Any]:
+    row = fetch_one(
+        f"SELECT {CS_COLUMNS} FROM clinician_custom_shortcuts WHERE id = :id",
+        {"id": shortcut_id},
+    )
+    if row is None:
+        raise _err("custom_shortcut_not_found", "no such custom shortcut", 404)
+    row = _cs_row_to_dict(row)
+    if (
+        row["organization_id"] != caller.organization_id
+        or row["user_id"] != caller.user_id
+    ):
+        # Mask cross-user / cross-org behind a 404 (same pattern as QC).
+        raise _err("custom_shortcut_not_found", "no such custom shortcut", 404)
+    return row
+
+
+@router.get("/me/custom-shortcuts")
+def list_my_custom_shortcuts(
+    include_inactive: bool = Query(False, description="Include soft-deleted"),
+    caller: Caller = Depends(require_caller),
+) -> list[dict]:
+    _require_custom_shortcut_role(caller)
+    sql = (
+        f"SELECT {CS_COLUMNS} FROM clinician_custom_shortcuts "
+        "WHERE organization_id = :org AND user_id = :uid"
+    )
+    params: dict[str, Any] = {
+        "org": caller.organization_id,
+        "uid": caller.user_id,
+    }
+    if not include_inactive:
+        sql += " AND is_active = :active"
+        params["active"] = True
+    sql += " ORDER BY updated_at DESC, id DESC"
+    rows = fetch_all(sql, params)
+    return [_cs_row_to_dict(r) for r in rows]
+
+
+@router.post("/me/custom-shortcuts", status_code=status.HTTP_201_CREATED)
+def create_my_custom_shortcut(
+    payload: CustomShortcutBody,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    _require_custom_shortcut_role(caller)
+    body = payload.body.strip()
+    if not body:
+        raise _err(
+            "custom_shortcut_body_required",
+            "body is required and must be non-empty",
+            400,
+        )
+    group_name = (payload.group_name or "My patterns").strip() or "My patterns"
+    if payload.shortcut_ref and payload.shortcut_ref.strip():
+        ref = payload.shortcut_ref.strip()
+    else:
+        # Auto-mint a namespaced ref so each per-user entry has a
+        # stable string id the audit stream + favorites surface can
+        # key on, analogous to 'pvd-01' in the catalog pack.
+        import uuid
+        ref = f"my-{uuid.uuid4().hex[:12]}"
+    tags_json: Optional[str] = None
+    if payload.tags:
+        cleaned = [t.strip() for t in payload.tags if t and t.strip()]
+        if cleaned:
+            tags_json = json.dumps(cleaned)
+
+    with transaction() as conn:
+        new_id = conn.execute(
+            text(
+                "INSERT INTO clinician_custom_shortcuts "
+                "(organization_id, user_id, shortcut_ref, group_name, "
+                " body, tags, is_active) "
+                "VALUES (:org, :uid, :ref, :grp, :body, :tags, :active) "
+                "RETURNING id"
+            ),
+            {
+                "org": caller.organization_id,
+                "uid": caller.user_id,
+                "ref": ref,
+                "grp": group_name,
+                "body": body,
+                "tags": tags_json,
+                "active": True,
+            },
+        ).mappings().first()["id"]
+
+    from app import audit as _audit
+    _audit.record(
+        event_type="clinician_custom_shortcut_created",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path="/me/custom-shortcuts",
+        method="POST",
+        detail=f"custom_shortcut_id={new_id} ref={ref} chars={len(body)}",
+    )
+
+    return _load_custom_shortcut_for_caller(int(new_id), caller)
+
+
+@router.patch("/me/custom-shortcuts/{shortcut_id:int}")
+def update_my_custom_shortcut(
+    shortcut_id: int,
+    payload: CustomShortcutPatchBody,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    _require_custom_shortcut_role(caller)
+    existing = _load_custom_shortcut_for_caller(shortcut_id, caller)
+
+    set_parts: list[str] = ["updated_at = CURRENT_TIMESTAMP"]
+    params: dict[str, Any] = {"id": shortcut_id}
+    changed: list[str] = []
+
+    if payload.body is not None:
+        body = payload.body.strip()
+        if not body:
+            raise _err(
+                "custom_shortcut_body_required",
+                "body must be non-empty when provided",
+                400,
+            )
+        set_parts.append("body = :body")
+        params["body"] = body
+        changed.append("body")
+
+    if payload.group_name is not None:
+        grp = payload.group_name.strip() or "My patterns"
+        set_parts.append("group_name = :grp")
+        params["grp"] = grp
+        changed.append("group")
+
+    if payload.tags is not None:
+        cleaned = [t.strip() for t in payload.tags if t and t.strip()]
+        set_parts.append("tags = :tags")
+        params["tags"] = json.dumps(cleaned) if cleaned else None
+        changed.append("tags")
+
+    if payload.is_active is not None:
+        set_parts.append("is_active = :active")
+        params["active"] = payload.is_active
+        changed.append("active")
+
+    if len(set_parts) == 1:
+        # Only the updated_at bump — surface a soft 200 with unchanged row.
+        return existing
+
+    with transaction() as conn:
+        conn.execute(
+            text(
+                "UPDATE clinician_custom_shortcuts SET "
+                + ", ".join(set_parts)
+                + " WHERE id = :id"
+            ),
+            params,
+        )
+
+    from app import audit as _audit
+    _audit.record(
+        event_type="clinician_custom_shortcut_updated",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path=f"/me/custom-shortcuts/{shortcut_id}",
+        method="PATCH",
+        detail=f"custom_shortcut_id={shortcut_id} changed={','.join(changed)}",
+    )
+
+    return _load_custom_shortcut_for_caller(shortcut_id, caller)
+
+
+@router.delete("/me/custom-shortcuts/{shortcut_id:int}")
+def delete_my_custom_shortcut(
+    shortcut_id: int,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    _require_custom_shortcut_role(caller)
+    existing = _load_custom_shortcut_for_caller(shortcut_id, caller)
+    if not existing.get("is_active", True):
+        return existing
+    with transaction() as conn:
+        conn.execute(
+            text(
+                "UPDATE clinician_custom_shortcuts "
+                "SET is_active = :active, updated_at = CURRENT_TIMESTAMP "
+                "WHERE id = :id"
+            ),
+            {"id": shortcut_id, "active": False},
+        )
+    from app import audit as _audit
+    _audit.record(
+        event_type="clinician_custom_shortcut_soft_deleted",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path=f"/me/custom-shortcuts/{shortcut_id}",
+        method="DELETE",
+        detail=f"custom_shortcut_id={shortcut_id}",
+    )
+    return _load_custom_shortcut_for_caller(shortcut_id, caller)

@@ -86,6 +86,18 @@ import {
   type ClinicalShortcut,
 } from "./clinicalShortcuts";
 
+// Phase 38 — doctor expansion.
+import {
+  CustomShortcut,
+  listMyCustomShortcuts,
+  createMyCustomShortcut,
+  deleteMyCustomShortcut,
+} from "./api";
+import { TrustBadge, trustKindForNote } from "./TrustBadge";
+import { NoteDiff } from "./NoteDiff";
+import { DualView } from "./DualView";
+import { VOICE_MODE_REGISTRY, VOICE_MODES, VoiceMode } from "./voiceModes";
+
 // ---------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------
@@ -195,6 +207,58 @@ export function NoteWorkspace({
   // filter. Abbreviation-aware matching lives in
   // `clinicalShortcutMatches` (see clinicalShortcuts.ts).
   const [shortcutSearch, setShortcutSearch] = useState("");
+
+  // Phase 38 — doctor expansion state:
+  //   - customShortcuts: the doctor's authored "my patterns" list.
+  //     Lives in `clinician_custom_shortcuts`; loaded per-identity.
+  //   - showDiff: toggles the NoteDiff comparator (A5).
+  //   - showDualView: toggles the DualView transcript↔draft split (A2).
+  //   - voiceMode: "ambient" (default) vs "targeted" push-to-talk (A4).
+  const [customShortcuts, setCustomShortcuts] = useState<CustomShortcut[]>([]);
+  const [newPatternBody, setNewPatternBody] = useState("");
+  const [newPatternPending, setNewPatternPending] = useState(false);
+  const [showDiff, setShowDiff] = useState(false);
+  const [showDualView, setShowDualView] = useState(false);
+  const [voiceMode, setVoiceMode] = useState<VoiceMode>("ambient");
+
+  // Load custom shortcuts once per identity; refresh when the
+  // list changes (create/delete).
+  const refreshCustomShortcuts = useCallback(async () => {
+    try {
+      const rows = await listMyCustomShortcuts(identity);
+      setCustomShortcuts(rows);
+    } catch {
+      setCustomShortcuts([]);
+    }
+  }, [identity]);
+  useEffect(() => { refreshCustomShortcuts(); }, [refreshCustomShortcuts]);
+
+  const [patternError, setPatternError] = useState<string | null>(null);
+  const addCustomPattern = async () => {
+    const body = newPatternBody.trim();
+    if (!body || newPatternPending) return;
+    setNewPatternPending(true);
+    setPatternError(null);
+    try {
+      await createMyCustomShortcut(identity, { body });
+      setNewPatternBody("");
+      await refreshCustomShortcuts();
+    } catch (e) {
+      setPatternError(friendly(e));
+    } finally {
+      setNewPatternPending(false);
+    }
+  };
+
+  const removeCustomPattern = async (id: number) => {
+    setPatternError(null);
+    try {
+      await deleteMyCustomShortcut(identity, id);
+      await refreshCustomShortcuts();
+    } catch (e) {
+      setPatternError(friendly(e));
+    }
+  };
 
   // Phase 30 — per-doctor shortcut favorites. Persisted separately
   // from quick-comment favorites (different URL + different table)
@@ -2347,6 +2411,234 @@ export function NoteWorkspace({
           </div>
         </div>
       )}
+
+      {/* ============================================================
+          Phase 38 — doctor expansion surfaces.
+          ------------------------------------------------------------
+          A single additive section that aggregates the doctor-side
+          improvements without disturbing the existing tier layout
+          above:
+            · Trust badges across transcript / findings / draft
+            · My patterns (per-user custom shortcuts, backend-backed)
+            · Voice mode toggle (ambient vs targeted)
+            · Dual-view transcript ↔ draft
+            · Notes-version diff + delta digest
+          ============================================================ */}
+      <section
+        className="workspace__tier"
+        style={{ marginTop: 16 }}
+        data-testid="workspace-phase38"
+        aria-label="Doctor tools"
+      >
+        <div className="workspace__tier-head">
+          <h4>Doctor tools</h4>
+          <span className="subtle-note">
+            Provenance badges · my patterns · dual view · note diff ·
+            voice modes
+          </span>
+        </div>
+
+        {/* Trust badges — one badge per tier, each calibrated to the
+            strongest signal available at render time. */}
+        <div
+          style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}
+          data-testid="trust-badge-row"
+        >
+          <TrustBadge kind="external" label="Transcript" title="Operator input; source of record" />
+          {activeFindings && (
+            <TrustBadge
+              kind={
+                activeFindings.extraction_confidence === "high"
+                  ? "ai-high"
+                  : activeFindings.extraction_confidence === "low"
+                  ? "ai-low"
+                  : "ai-medium"
+              }
+              label={`Findings · ${activeFindings.extraction_confidence ?? "unknown"}`}
+              title="Structured facts extracted by the generator"
+            />
+          )}
+          {activeNote && (
+            <TrustBadge
+              kind={trustKindForNote(activeNote, activeFindings)}
+              label={`Draft · v${activeNote.version_number}`}
+              title={`generated_by=${activeNote.generated_by}; status=${activeNote.draft_status}`}
+            />
+          )}
+        </div>
+
+        {/* Voice mode toggle (A4). This is a client-side affordance;
+            existing audio intake always lands in the "ambient" path
+            today. The "targeted" path is the on-ramp for the
+            push-to-talk / phrase-into-cursor workflow once the
+            transcriber seam exposes a short-capture API. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+          <span className="subtle-note">Voice mode</span>
+          <div className="voicemode" role="radiogroup" aria-label="Voice mode" data-testid="voicemode">
+            {VOICE_MODES.map((m) => (
+              <button
+                key={m}
+                type="button"
+                className="voicemode__btn"
+                role="radio"
+                aria-checked={voiceMode === m}
+                aria-pressed={voiceMode === m}
+                data-testid={`voicemode-${m}`}
+                onClick={() => setVoiceMode(m)}
+                title={VOICE_MODE_REGISTRY[m].hint}
+              >
+                {VOICE_MODE_REGISTRY[m].label}
+              </button>
+            ))}
+          </div>
+          <span className="subtle-note">
+            {VOICE_MODE_REGISTRY[voiceMode].hint}
+          </span>
+        </div>
+
+        {/* Toggles for dual-view + note diff. Rendered as subtle
+            chevrons so they don't compete with the primary sign /
+            export actions. */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+          <button
+            type="button"
+            className="btn btn--muted"
+            onClick={() => setShowDualView((v) => !v)}
+            data-testid="toggle-dualview"
+            aria-pressed={showDualView}
+          >
+            {showDualView ? "Hide" : "Show"} dual view
+          </button>
+          <button
+            type="button"
+            className="btn btn--muted"
+            onClick={() => setShowDiff((v) => !v)}
+            data-testid="toggle-notediff"
+            aria-pressed={showDiff}
+            disabled={notes.length < 2}
+            title={notes.length < 2 ? "Needs 2 note versions" : "Compare versions"}
+          >
+            {showDiff ? "Hide" : "Show"} note diff
+          </button>
+        </div>
+
+        {/* Dual-view transcript ↔ draft (A2). Reads the transcript
+            from the most recent completed input and the draft from
+            the active note. Cross-highlight is substring-heuristic
+            until generator-emitted spans land. */}
+        {showDualView && (() => {
+          const latestTranscriptInput =
+            [...inputs]
+              .filter((i) => i.transcript_text && i.transcript_text.trim())
+              .sort((a, b) =>
+                (b.updated_at || "").localeCompare(a.updated_at || "")
+              )[0] ?? null;
+          const transcript = latestTranscriptInput?.transcript_text ?? "";
+          const draft = activeNote?.note_text ?? "";
+          if (!transcript && !draft) {
+            return (
+              <div className="subtle-note" data-testid="dualview-empty">
+                Dual view needs both a transcript and a draft on this encounter.
+              </div>
+            );
+          }
+          return <DualView transcript={transcript} draft={draft} />;
+        })()}
+
+        {/* Notes-level diff + digest (A5). */}
+        {showDiff && notes.length >= 2 && (
+          <div style={{ marginTop: 10 }}>
+            <NoteDiff versions={notes} />
+          </div>
+        )}
+
+        {/* My patterns — per-user custom shortcuts (A3). */}
+        <div style={{ marginTop: 14 }} data-testid="my-patterns">
+          <h4 style={{ margin: "0 0 6px", fontSize: 13, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--cn-muted)" }}>
+            My patterns
+          </h4>
+          <p className="subtle-note" style={{ margin: "0 0 8px" }}>
+            Your own authored shortcut fragments. Separate from the
+            shared Clinical Shortcuts catalog above.
+          </p>
+          {patternError && (
+            <div className="banner banner--error" role="alert" data-testid="my-patterns-error">
+              {patternError}
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+            <input
+              type="text"
+              value={newPatternBody}
+              onChange={(e) => setNewPatternBody(e.target.value)}
+              placeholder="Author a new pattern — inserted verbatim into the draft"
+              data-testid="my-pattern-input"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addCustomPattern();
+                }
+              }}
+              style={{
+                flex: 1,
+                padding: "6px 8px",
+                border: "1px solid var(--cn-line-strong)",
+                borderRadius: "var(--cn-radius-md)",
+                background: "var(--cn-surface)",
+                color: "var(--cn-fg)",
+                font: "inherit",
+              }}
+            />
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={addCustomPattern}
+              disabled={newPatternPending || !newPatternBody.trim()}
+              data-testid="my-pattern-add"
+            >
+              {newPatternPending ? "…" : "Add"}
+            </button>
+          </div>
+          {customShortcuts.length === 0 ? (
+            <div className="subtle-note" data-testid="my-patterns-empty">
+              No custom patterns yet. Author one above and it will
+              appear here for every encounter.
+            </div>
+          ) : (
+            <ul
+              style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 6 }}
+              data-testid="my-patterns-list"
+            >
+              {customShortcuts.map((p) => (
+                <li
+                  key={p.id}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 8,
+                    padding: "8px 10px",
+                    border: "1px solid var(--cn-line)",
+                    borderRadius: "var(--cn-radius-sm)",
+                    background: "var(--cn-surface)",
+                  }}
+                  data-testid={`my-pattern-row-${p.id}`}
+                >
+                  <span style={{ flex: 1, whiteSpace: "pre-wrap" }}>{p.body}</span>
+                  <button
+                    type="button"
+                    className="btn btn--muted"
+                    onClick={() => removeCustomPattern(p.id)}
+                    data-testid={`my-pattern-delete-${p.id}`}
+                    title="Delete this pattern"
+                  >
+                    ✕
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </section>
     </div>
   );
 }

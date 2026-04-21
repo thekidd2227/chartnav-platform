@@ -8,6 +8,13 @@ export const SEEDED_IDENTITIES: { email: string; label: string }[] = [
   { email: "admin@chartnav.local", label: "Org 1 · admin" },
   { email: "clin@chartnav.local", label: "Org 1 · clinician" },
   { email: "rev@chartnav.local", label: "Org 1 · reviewer" },
+  // Phase 38 — front_desk role surface. The seed user for this
+  // email is created on demand through the admin invite flow; the
+  // listing here exists so `Custom email…` isn't required every
+  // time a developer wants to validate the scheduling-side
+  // affordances. Backend still enforces role via
+  // `ck_users_role_allowed` and `authz.py`.
+  { email: "front@chartnav.local", label: "Org 1 · front desk" },
   { email: "admin@northside.local", label: "Org 2 · admin" },
   { email: "clin@northside.local", label: "Org 2 · clinician" },
 ];

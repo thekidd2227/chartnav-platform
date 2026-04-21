@@ -2,11 +2,33 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import { InviteAccept } from "./InviteAccept";
+import { applyPreferences, loadDensity, loadTheme } from "./preferences";
 import "./styles.css";
 
 const root = document.getElementById("root");
 if (!root) {
   throw new Error("Root element not found");
+}
+
+// Phase 38 — apply persisted density + theme before the first paint
+// so the root element never flashes the default styling.
+try {
+  applyPreferences(loadDensity(), loadTheme());
+} catch {
+  // non-fatal; the app still renders with defaults
+}
+// Follow system theme changes while `theme === "system"`. The
+// individual components re-apply on user action; this listener only
+// handles the system-follows case.
+if (typeof window !== "undefined" && window.matchMedia) {
+  try {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = () => applyPreferences(loadDensity(), loadTheme());
+    if (typeof mq.addEventListener === "function") mq.addEventListener("change", onChange);
+    else if (typeof (mq as any).addListener === "function") (mq as any).addListener(onChange);
+  } catch {
+    /* non-fatal */
+  }
 }
 
 // Tiny hash-based route split: /accept and ?invite=... → minimal accept

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   API_URL,
   ALLOWED_STATUSES,
@@ -8,11 +8,13 @@ import {
   EVENT_TYPES,
   Me,
   NewEncounterInput,
+  Patient,
   Role,
   WorkflowEvent,
   allowedNextStatuses,
   canCreateEncounter,
   canCreateEvent,
+  canReadClinicalContent,
   bridgeEncounter,
   createEncounter,
   createEncounterEvent,
@@ -25,11 +27,31 @@ import {
   isAdmin,
   listEncountersPage,
   listLocations,
+  listPatients,
   updateEncounterStatus,
 } from "./api";
 import { AdminPanel } from "./AdminPanel";
 import { NoteWorkspace } from "./NoteWorkspace";
 import { SEEDED_IDENTITIES, loadIdentity, saveIdentity } from "./identity";
+import {
+  Density,
+  ThemeMode,
+  applyPreferences,
+  loadDensity,
+  loadTheme,
+  saveDensity,
+  saveTheme,
+} from "./preferences";
+import { PreferenceControls } from "./PreferenceControls";
+import {
+  CommandAction,
+  CommandPalette,
+  useCommandPaletteShortcut,
+} from "./CommandPalette";
+import { Timeline } from "./Timeline";
+import { DayView } from "./DayView";
+import { WallDisplay } from "./WallDisplay";
+import { EncounterSlip } from "./EncounterSlip";
 
 type Banner =
   | { kind: "ok"; msg: string }
@@ -62,6 +84,38 @@ export default function App() {
   const PAGE_SIZE = 25;
   const [offset, setOffset] = useState(0);
   const [total, setTotal] = useState(0);
+
+  // Phase 38 — visual prefs + command palette + day view + bulk + wall + slip.
+  const [density, setDensity] = useState<Density>(() => loadDensity());
+  const [theme, setTheme] = useState<ThemeMode>(() => loadTheme());
+  useEffect(() => { applyPreferences(density, theme); }, [density, theme]);
+
+  const [cmdkOpen, setCmdkOpen] = useState(false);
+  useCommandPaletteShortcut(() => setCmdkOpen(true));
+
+  const [view, setView] = useState<"list" | "day">(() => {
+    try { return (localStorage.getItem("chartnav.view") as any) === "day" ? "day" : "list"; }
+    catch { return "list"; }
+  });
+  useEffect(() => { try { localStorage.setItem("chartnav.view", view); } catch {} }, [view]);
+  const [dayDate, setDayDate] = useState<Date>(() => new Date());
+  const [showWall, setShowWall] = useState(false);
+  const [showSlipFor, setShowSlipFor] = useState<Encounter | null>(null);
+  const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
+
+  // Shared locations cache, used by the wall display, encounter slip,
+  // and the create-encounter modal. Loads once per identity; the
+  // modal still provides its own loading indicator for first paint.
+  const [locationsCache, setLocationsCache] = useState<
+    { id: number; organization_id: number; name: string; is_active: number | boolean; created_at: string }[]
+  >([]);
+  useEffect(() => {
+    let cancelled = false;
+    listLocations(identity)
+      .then((rows) => { if (!cancelled) setLocationsCache(rows as any); })
+      .catch(() => { if (!cancelled) setLocationsCache([]); });
+    return () => { cancelled = true; };
+  }, [identity]);
 
   // ---- loaders ---------------------------------------------------------
 
@@ -219,10 +273,151 @@ export default function App() {
     });
   };
 
+  // Bulk actions (B4) — fan out a single status across selected rows.
+  // Runs sequentially to keep audit/telemetry messages legible; the
+  // API already handles concurrent writes but the UI feels steadier
+  // this way.
+  const onBulkTransition = async (status: string) => {
+    const ids = Array.from(bulkSelected);
+    if (!ids.length) return;
+    setBanner({ kind: "info", msg: `Applying ${status} to ${ids.length} encounter${ids.length === 1 ? "" : "s"}…` });
+    let ok = 0; let err = 0;
+    for (const id of ids) {
+      try {
+        await updateEncounterStatus(identity, isNaN(Number(id)) ? id : Number(id), status);
+        ok += 1;
+      } catch { err += 1; }
+    }
+    setBulkSelected(new Set());
+    await refreshList();
+    if (selectedId != null) await refreshDetail(selectedId);
+    setBanner({
+      kind: err === 0 ? "ok" : "error",
+      msg: `Bulk ${status}: ${ok} ok${err ? `, ${err} failed` : ""}`,
+    });
+  };
+
   // ---- render ----------------------------------------------------------
 
   const canCreate = me ? canCreateEncounter(me.role) : false;
   const canAdmin = me ? isAdmin(me.role) : false;
+  const canClinical = me ? canReadClinicalContent(me.role) : true;
+
+  // Command palette actions. Must be recomputed any time the user's
+  // role, the selected encounter, or feature flags change; that keeps
+  // the surface honest ("Sign note" only appears when signing would
+  // actually work).
+  const cmdkActions: CommandAction[] = useMemo(() => {
+    const xs: CommandAction[] = [];
+    xs.push({
+      id: "nav-list",
+      label: "Switch to list view",
+      section: "Navigation",
+      kbd: "L",
+      when: view !== "list",
+      run: () => setView("list"),
+    });
+    xs.push({
+      id: "nav-day",
+      label: "Switch to day view (today's board)",
+      section: "Navigation",
+      kbd: "D",
+      keywords: "schedule calendar today",
+      when: view !== "day",
+      run: () => setView("day"),
+    });
+    xs.push({
+      id: "nav-wall",
+      label: "Open wall display (rooms & waiting)",
+      section: "Navigation",
+      keywords: "waiting rooms board big screen",
+      when: !showWall,
+      run: () => setShowWall(true),
+    });
+    if (canCreate) {
+      xs.push({
+        id: "new-encounter",
+        label: "New encounter",
+        section: "Encounters",
+        kbd: "N",
+        when: !showCreate,
+        run: () => setShowCreate(true),
+      });
+    }
+    if (canAdmin) {
+      xs.push({
+        id: "open-admin",
+        label: "Open admin panel",
+        section: "Navigation",
+        when: !showAdmin,
+        run: () => setShowAdmin(true),
+      });
+    }
+    if (encounter) {
+      xs.push({
+        id: "print-slip",
+        label: `Print encounter slip #${encounter.id}`,
+        section: "Encounter",
+        keywords: "slip print paper hand off",
+        run: () => setShowSlipFor(encounter),
+      });
+      if (encounterIsNative(encounter) && me) {
+        for (const next of allowedNextStatuses(me.role, encounter.status)) {
+          xs.push({
+            id: `trans-${next}`,
+            label: `Move to ${next.replace(/_/g, " ")}`,
+            section: "Encounter",
+            context: `from ${encounter.status}`,
+            run: () => onTransition(next),
+          });
+        }
+      }
+    }
+    xs.push({
+      id: "pref-dark",
+      label: "Switch to dark theme",
+      section: "Preferences",
+      when: theme !== "dark",
+      run: () => setTheme("dark"),
+    });
+    xs.push({
+      id: "pref-light",
+      label: "Switch to light theme",
+      section: "Preferences",
+      when: theme !== "light",
+      run: () => setTheme("light"),
+    });
+    xs.push({
+      id: "pref-system",
+      label: "Follow system theme",
+      section: "Preferences",
+      when: theme !== "system",
+      run: () => setTheme("system"),
+    });
+    xs.push({
+      id: "pref-comfortable",
+      label: "Density · comfortable",
+      section: "Preferences",
+      when: density !== "comfortable",
+      run: () => setDensity("comfortable"),
+    });
+    xs.push({
+      id: "pref-default",
+      label: "Density · default",
+      section: "Preferences",
+      when: density !== "default",
+      run: () => setDensity("default"),
+    });
+    xs.push({
+      id: "pref-compact",
+      label: "Density · compact",
+      section: "Preferences",
+      when: density !== "compact",
+      run: () => setDensity("compact"),
+    });
+    return xs;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, showWall, showCreate, showAdmin, canCreate, canAdmin, encounter, me, density, theme]);
 
   return (
     <>
@@ -240,6 +435,51 @@ export default function App() {
         <div className="header-meta">
           <IdentityBadge me={me} meError={meError} meLoading={meLoading} />
           <span className="chip">API {API_URL}</span>
+          <div
+            className="pref-picker"
+            role="tablist"
+            aria-label="View"
+            data-testid="view-toggle"
+          >
+            <button
+              type="button"
+              className="pref-picker__btn"
+              role="tab"
+              aria-pressed={view === "list"}
+              data-testid="view-list"
+              onClick={() => setView("list")}
+            >
+              List
+            </button>
+            <button
+              type="button"
+              className="pref-picker__btn"
+              role="tab"
+              aria-pressed={view === "day"}
+              data-testid="view-day"
+              onClick={() => setView("day")}
+            >
+              Day
+            </button>
+          </div>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => setShowWall(true)}
+            data-testid="open-wall"
+            title="Open wall display"
+          >
+            Wall
+          </button>
+          <button
+            type="button"
+            className="btn btn--muted"
+            onClick={() => setCmdkOpen(true)}
+            title="Command palette · ⌘K"
+            data-testid="open-cmdk"
+          >
+            ⌘K
+          </button>
           {canCreate && (
             <button
               className="btn btn--primary"
@@ -258,6 +498,12 @@ export default function App() {
               Admin
             </button>
           )}
+          <PreferenceControls
+            density={density}
+            theme={theme}
+            onDensity={(d) => { setDensity(d); saveDensity(d); }}
+            onTheme={(t) => { setTheme(t); saveTheme(t); }}
+          />
           <IdentityPicker value={identity} onChange={onIdentityChange} />
         </div>
       </header>
@@ -271,12 +517,52 @@ export default function App() {
               setOffset(0);
             }}
           />
+          {bulkSelected.size > 0 && (
+            <div className="bulk-toolbar" data-testid="bulk-toolbar" role="toolbar" aria-label="Bulk actions">
+              <span className="bulk-toolbar__count" data-testid="bulk-count">
+                {bulkSelected.size} selected
+              </span>
+              <button
+                className="btn"
+                onClick={() => onBulkTransition("in_progress")}
+                data-testid="bulk-in-progress"
+                title="Check in / move to in_progress"
+              >
+                Check in
+              </button>
+              <button
+                className="btn"
+                onClick={() => onBulkTransition("completed")}
+                data-testid="bulk-completed"
+                title="Mark completed (only valid from review_needed)"
+              >
+                Complete
+              </button>
+              <button
+                className="btn btn--muted"
+                onClick={() => setBulkSelected(new Set())}
+                data-testid="bulk-clear"
+              >
+                Clear
+              </button>
+            </div>
+          )}
           <EncounterList
             rows={encounters}
             loading={listLoading}
             error={listError}
             selectedId={selectedId}
             onSelect={setSelectedId}
+            bulkSelected={bulkSelected}
+            onBulkToggle={(id) => {
+              const key = String(id);
+              setBulkSelected((prev) => {
+                const next = new Set(prev);
+                if (next.has(key)) next.delete(key);
+                else next.add(key);
+                return next;
+              });
+            }}
           />
           {total > PAGE_SIZE && (
             <div className="pagination" data-testid="pagination">
@@ -313,7 +599,14 @@ export default function App() {
               {banner.msg}
             </div>
           )}
-          {selectedId == null ? (
+          {view === "day" ? (
+            <DayView
+              encounters={encounters}
+              date={dayDate}
+              onDateChange={setDayDate}
+              onPick={(id) => { setSelectedId(id); setView("list"); }}
+            />
+          ) : selectedId == null ? (
             <div className="empty">
               Select an encounter from the list to see details, events, and allowed actions.
               {canCreate && (
@@ -334,6 +627,7 @@ export default function App() {
               onTransition={onTransition}
               onAddEvent={onAddEvent}
               onRefreshDetail={() => refreshDetail(selectedId)}
+              onPrintSlip={(e) => setShowSlipFor(e)}
             />
           )}
         </section>
@@ -352,6 +646,30 @@ export default function App() {
           identity={identity}
           me={me}
           onClose={() => setShowAdmin(false)}
+        />
+      )}
+
+      <CommandPalette
+        open={cmdkOpen}
+        actions={cmdkActions}
+        onClose={() => setCmdkOpen(false)}
+      />
+
+      {showWall && (
+        <WallDisplay
+          encounters={encounters}
+          locations={locationsCache as any}
+          onClose={() => setShowWall(false)}
+        />
+      )}
+
+      {showSlipFor && (
+        <EncounterSlip
+          encounter={showSlipFor}
+          location={
+            locationsCache.find((l) => l.id === showSlipFor.location_id) as any ?? null
+          }
+          onClose={() => setShowSlipFor(null)}
         />
       )}
 
@@ -550,12 +868,16 @@ function EncounterList({
   error,
   selectedId,
   onSelect,
+  bulkSelected,
+  onBulkToggle,
 }: {
   rows: Encounter[];
   loading: boolean;
   error: string | null;
   selectedId: number | string | null;
   onSelect: (id: number | string) => void;
+  bulkSelected?: Set<string>;
+  onBulkToggle?: (id: number | string) => void;
 }) {
   if (loading && rows.length === 0)
     return (
@@ -594,6 +916,17 @@ function EncounterList({
             if (ev.key === "Enter" || ev.key === " ") onSelect(e.id);
           }}
         >
+          {onBulkToggle && (
+            <input
+              type="checkbox"
+              className="enc-row__select"
+              aria-label={`Select encounter ${e.id}`}
+              data-testid={`enc-row-select-${e.id}`}
+              checked={bulkSelected?.has(String(e.id)) ?? false}
+              onClick={(ev) => ev.stopPropagation()}
+              onChange={() => onBulkToggle(e.id)}
+            />
+          )}
           <div>
             <div className="enc-row__pid">
               #{e.id} · {e.patient_identifier}
@@ -620,6 +953,7 @@ function EncounterDetail({
   onTransition,
   onAddEvent,
   onRefreshDetail,
+  onPrintSlip,
 }: {
   loading: boolean;
   error: string | null;
@@ -630,6 +964,7 @@ function EncounterDetail({
   onTransition: (status: string) => Promise<void> | void;
   onAddEvent: (type: string, data: string) => Promise<void> | void;
   onRefreshDetail: () => void;
+  onPrintSlip?: (e: Encounter) => void;
 }) {
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
   const [pendingEvent, setPendingEvent] = useState(false);
@@ -739,7 +1074,7 @@ function EncounterDetail({
         )}
       </section>
 
-      {me && nativeEncounter && typeof encounter.id === "number" && (
+      {me && nativeEncounter && typeof encounter.id === "number" && me.role !== "front_desk" && (
         <section className="section">
           <NoteWorkspace
             identity={identity}
@@ -752,7 +1087,15 @@ function EncounterDetail({
           />
         </section>
       )}
-      {me && !nativeEncounter && (
+      {me?.role === "front_desk" && (
+        <section className="section" data-testid="note-workspace-frontdesk-blocked">
+          <div className="subtle-note">
+            Front desk doesn't read clinical content. Use the actions
+            above to check in, reschedule, or print the encounter slip.
+          </div>
+        </section>
+      )}
+      {me && me.role !== "front_desk" && !nativeEncounter && (
         <section className="section" data-testid="note-workspace-external-note">
           <div className="subtle-note">
             Note drafting on an externally-sourced encounter requires
@@ -766,16 +1109,21 @@ function EncounterDetail({
       )}
 
       <section className="section">
-        <h3>Timeline ({events.length})</h3>
-        {events.map((ev) => (
-          <div className="event-item" key={ev.id}>
-            <div className="event-item__head">
-              <span className="event-item__type">{ev.event_type}</span>
-              <span className="event-item__when">{fmt(ev.created_at)}</span>
-            </div>
-            <div className="event-item__data">{renderEventData(ev)}</div>
-          </div>
-        ))}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <h3 style={{ margin: 0 }}>Timeline ({events.length})</h3>
+          {onPrintSlip && (
+            <button
+              type="button"
+              className="btn btn--muted"
+              onClick={() => onPrintSlip(encounter)}
+              data-testid="print-slip-button"
+              title="Print encounter slip"
+            >
+              Print slip
+            </button>
+          )}
+        </div>
+        <Timeline events={events} />
       </section>
 
       <section className="section">
@@ -884,6 +1232,33 @@ function CreateEncounterModal({
   const [locLoading, setLocLoading] = useState(true);
   const [locError, setLocError] = useState<string | null>(null);
 
+  // Patient typeahead (B3) — enriches the free-text flow without
+  // removing it. Front desk picks an existing row; clinician can
+  // still type a net-new identifier.
+  const [patientQuery, setPatientQuery] = useState("");
+  const [patientSuggestions, setPatientSuggestions] = useState<Patient[]>([]);
+  const [patientSearchPending, setPatientSearchPending] = useState(false);
+  useEffect(() => {
+    const q = patientQuery.trim();
+    if (q.length < 2) {
+      setPatientSuggestions([]);
+      return;
+    }
+    setPatientSearchPending(true);
+    let cancelled = false;
+    const h = setTimeout(async () => {
+      try {
+        const rows = await listPatients(identity, { q, limit: 8 });
+        if (!cancelled) setPatientSuggestions(rows);
+      } catch {
+        if (!cancelled) setPatientSuggestions([]);
+      } finally {
+        if (!cancelled) setPatientSearchPending(false);
+      }
+    }, 200);
+    return () => { cancelled = true; clearTimeout(h); };
+  }, [patientQuery, identity]);
+
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -955,6 +1330,71 @@ function CreateEncounterModal({
           </button>
         </div>
         <form className="modal__body event-form" onSubmit={submit}>
+          <label>
+            Find patient
+            <input
+              type="text"
+              data-testid="create-patient-search"
+              value={patientQuery}
+              onChange={(e) => setPatientQuery(e.target.value)}
+              placeholder="Name or MRN — type to search the patients table"
+              aria-describedby="create-patient-search-help"
+            />
+          </label>
+          {patientQuery.trim().length >= 2 && (
+            <div
+              data-testid="create-patient-suggestions"
+              style={{
+                maxHeight: 200,
+                overflowY: "auto",
+                border: "1px solid var(--cn-line)",
+                borderRadius: "var(--cn-radius-md)",
+                background: "var(--cn-surface-alt)",
+              }}
+            >
+              {patientSearchPending && (
+                <div className="subtle-note" style={{ padding: "8px 10px" }}>
+                  searching…
+                </div>
+              )}
+              {!patientSearchPending && patientSuggestions.length === 0 && (
+                <div className="subtle-note" style={{ padding: "8px 10px" }}>
+                  No match. Enter a new identifier below to create a walk-in.
+                </div>
+              )}
+              {patientSuggestions.map((p) => {
+                const name = [p.first_name, p.last_name].filter(Boolean).join(" ") || `#${p.id}`;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className="dayview__card"
+                    style={{ width: "100%", textAlign: "left", border: 0 }}
+                    data-testid={`create-patient-suggestion-${p.id}`}
+                    onClick={() => {
+                      setPatientId(p.patient_identifier || p.external_ref || `PT-${p.id}`);
+                      setPatientName(name);
+                      setPatientQuery("");
+                      setPatientSuggestions([]);
+                    }}
+                  >
+                    <span className="dayview__card__main">
+                      <span className="dayview__card__name">{name}</span>
+                      <span className="dayview__card__meta">
+                        {[p.patient_identifier, p.external_ref, p.date_of_birth]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <span id="create-patient-search-help" className="subtle-note">
+            Selecting a patient pre-fills the identifier + name below.
+            A net-new identifier still works for walk-ins.
+          </span>
           <label>
             Patient ID *
             <input

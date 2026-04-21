@@ -22,7 +22,19 @@ export class ApiError extends Error {
   }
 }
 
-export type Role = "admin" | "clinician" | "reviewer";
+export type Role = "admin" | "clinician" | "reviewer" | "front_desk";
+
+export const ALL_ROLES: Role[] = ["admin", "clinician", "reviewer", "front_desk"];
+
+export function roleLabel(role: Role): string {
+  switch (role) {
+    case "admin":      return "Admin";
+    case "clinician":  return "Clinician";
+    case "reviewer":   return "Reviewer";
+    case "front_desk": return "Front desk";
+    default:           return role;
+  }
+}
 
 export interface Me {
   user_id: number;
@@ -617,22 +629,39 @@ const REVIEWER_EDGES: Edge[] = [
 ];
 const ALL_EDGES: Edge[] = [...CLINICIAN_EDGES, ...REVIEWER_EDGES];
 
+// Front desk drives only the scheduling-side edge; clinical tiers
+// stay with clinician + reviewer. Must stay in lockstep with
+// `TRANSITION_ROLES` in apps/api/app/authz.py.
+const FRONT_DESK_EDGES: Edge[] = [
+  ["scheduled", "in_progress"],
+];
+
 export function allowedNextStatuses(role: Role, current: string): string[] {
   const edges =
     role === "admin"
       ? ALL_EDGES
       : role === "clinician"
       ? CLINICIAN_EDGES
+      : role === "front_desk"
+      ? FRONT_DESK_EDGES
       : REVIEWER_EDGES;
   return edges.filter(([from]) => from === current).map(([, to]) => to);
 }
 
 export function canCreateEvent(role: Role): boolean {
+  // Event authoring is clinical; front desk never writes events.
   return role === "admin" || role === "clinician";
 }
 
 export function canCreateEncounter(role: Role): boolean {
-  return role === "admin" || role === "clinician";
+  // Front desk creates encounters at check-in; matches
+  // `CAN_CREATE_ENCOUNTER` server-side.
+  return role === "admin" || role === "clinician" || role === "front_desk";
+}
+
+export function canReadClinicalContent(role: Role): boolean {
+  // Front desk is explicitly excluded from clinical tiers.
+  return role === "admin" || role === "clinician" || role === "reviewer";
 }
 
 export function isAdmin(role: Role): boolean {
@@ -1566,5 +1595,77 @@ export function patchEncounterInputTranscript(
     email,
     method: "PATCH",
     body: JSON.stringify({ transcript_text: transcriptText }),
+  });
+}
+
+// =====================================================================
+// Phase 38 — /me/custom-shortcuts (per-clinician authored shortcuts)
+// =====================================================================
+
+export interface CustomShortcut {
+  id: number;
+  organization_id: number;
+  user_id: number;
+  shortcut_ref: string;
+  group_name: string;
+  body: string;
+  tags: string[];
+  is_active: boolean | number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CustomShortcutCreateBody {
+  shortcut_ref?: string;
+  group_name?: string;
+  body: string;
+  tags?: string[];
+}
+
+export interface CustomShortcutPatchBody {
+  group_name?: string;
+  body?: string;
+  tags?: string[];
+  is_active?: boolean;
+}
+
+export function listMyCustomShortcuts(
+  email: string,
+  opts: { includeInactive?: boolean } = {}
+): Promise<CustomShortcut[]> {
+  const qs = opts.includeInactive ? "?include_inactive=true" : "";
+  return request(`/me/custom-shortcuts${qs}`, { email });
+}
+
+export function createMyCustomShortcut(
+  email: string,
+  body: CustomShortcutCreateBody
+): Promise<CustomShortcut> {
+  return request("/me/custom-shortcuts", {
+    email,
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateMyCustomShortcut(
+  email: string,
+  id: number,
+  body: CustomShortcutPatchBody
+): Promise<CustomShortcut> {
+  return request(`/me/custom-shortcuts/${id}`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export function deleteMyCustomShortcut(
+  email: string,
+  id: number
+): Promise<CustomShortcut> {
+  return request(`/me/custom-shortcuts/${id}`, {
+    email,
+    method: "DELETE",
   });
 }
