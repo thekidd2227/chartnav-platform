@@ -1669,3 +1669,117 @@ export function deleteMyCustomShortcut(
     method: "DELETE",
   });
 }
+
+// =====================================================================
+// Phase 47 — /admin/kpi/* — pilot KPI / ROI scorecard client
+// =====================================================================
+
+export interface KpiLatencySummary {
+  n: number;
+  median: number | null;
+  mean: number | null;
+  p90: number | null;
+  min: number | null;
+  max: number | null;
+}
+
+export interface KpiOverview {
+  organization_id: number;
+  window: { since: string; until: string; hours: number };
+  counts: {
+    encounters: number;
+    signed_notes: number;
+    exported_notes: number;
+    open_drafts: number;
+  };
+  latency_minutes: {
+    transcript_to_draft: KpiLatencySummary;
+    draft_to_sign: KpiLatencySummary;
+    total_time_to_sign: KpiLatencySummary;
+  };
+  quality: {
+    missing_data_rate: number | null;
+    export_ready_rate: number | null;
+    notes_observed: number;
+    notes_with_missing_flags: number;
+    avg_revisions_per_signed_note: number | null;
+  };
+}
+
+export interface KpiProviderRow {
+  provider: string;
+  encounters: number;
+  signed_notes: number;
+  notes_observed: number;
+  missing_flag_count: number;
+  missing_data_rate_pct: number | null;
+  transcript_to_draft_min: KpiLatencySummary;
+  draft_to_sign_min: KpiLatencySummary;
+  total_time_to_sign_min: KpiLatencySummary;
+  avg_revisions_per_signed_note: number | null;
+}
+
+export interface KpiProviders {
+  organization_id: number;
+  window: { since: string; until: string; hours: number };
+  providers: KpiProviderRow[];
+}
+
+export interface KpiCompare {
+  organization_id: number;
+  window_hours: number;
+  current: KpiOverview;
+  previous: KpiOverview;
+  deltas: {
+    latency_minutes_median_pct_change: {
+      transcript_to_draft: number | null;
+      draft_to_sign: number | null;
+      total_time_to_sign: number | null;
+    };
+    quality_pct_change: {
+      missing_data_rate: number | null;
+      export_ready_rate: number | null;
+    };
+    counts_delta: {
+      encounters: number;
+      signed_notes: number;
+      exported_notes: number;
+    };
+  };
+}
+
+export function getKpiOverview(email: string, hours: number): Promise<KpiOverview> {
+  return request(`/admin/kpi/overview?hours=${hours}`, { email });
+}
+
+export function getKpiProviders(email: string, hours: number): Promise<KpiProviders> {
+  return request(`/admin/kpi/providers?hours=${hours}`, { email });
+}
+
+export function getKpiCompare(email: string, hours: number): Promise<KpiCompare> {
+  return request(`/admin/kpi/compare?hours=${hours}`, { email });
+}
+
+/** Build the CSV-export URL. The server sets Content-Disposition so
+ *  a plain anchor-click download works; no fetch is needed. */
+export function kpiExportUrl(email: string, hours: number): string {
+  // The export endpoint uses the same X-User-Email header path. To
+  // avoid exposing the header in a bare anchor download, callers
+  // fetch + blob-download via the helper below.
+  return `${API_URL}/admin/kpi/export.csv?hours=${hours}`;
+}
+
+export async function downloadKpiCsv(email: string, hours: number): Promise<{ filename: string; blob: Blob }> {
+  const res = await fetch(kpiExportUrl(email, hours), {
+    headers: { "X-User-Email": email },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new ApiError(res.status, "kpi_export_failed", text || res.statusText);
+  }
+  const cd = res.headers.get("content-disposition") || "";
+  const m = /filename="?([^"]+)"?/i.exec(cd);
+  const filename = (m && m[1]) || `chartnav-kpi-${hours}h.csv`;
+  const blob = await res.blob();
+  return { filename, blob };
+}

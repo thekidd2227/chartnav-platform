@@ -78,10 +78,32 @@ def kpi_overview(
     The default window is 7 days so pilot reviews see a week's
     cadence. Callers override with `hours` for tighter or wider
     windows.
+
+    Thin wrapper around `_kpi_overview_range(since, until)` —
+    compare / range modes call the range helper directly.
     """
     cur = now or _now()
     since = cur - timedelta(hours=hours)
+    return _kpi_overview_range(organization_id, since=since, until=cur)
+
+
+def _kpi_overview_range(
+    organization_id: int,
+    since: datetime,
+    until: datetime,
+) -> dict[str, Any]:
+    """Range-based org KPI rollup. Both bounds are inclusive of the
+    start and exclusive of the end — matches the pilot semantics
+    ("what happened from April 1 through April 30" means the 1st at
+    00:00:00 to the 30th at 23:59:59, i.e. the `until` is one tick
+    past the observation period's close).
+
+    Used by both `kpi_overview` (now-relative) and `kpi_compare`
+    (explicit A vs B ranges). Keeps the SQL + aggregation in one
+    place so the two surfaces can never drift.
+    """
     since_iso = since.isoformat()
+    until_iso = until.isoformat()
 
     # --- 1. Counts inside the window --------------------------------------
     counts_row = fetch_one(
@@ -95,10 +117,12 @@ def kpi_overview(
         LEFT JOIN note_versions nv
           ON nv.encounter_id = e.id
          AND nv.created_at >= :since
+         AND nv.created_at <  :until
         WHERE e.organization_id = :org
           AND e.created_at >= :since
+          AND e.created_at <  :until
         """,
-        {"org": organization_id, "since": since_iso},
+        {"org": organization_id, "since": since_iso, "until": until_iso},
     )
     counts = dict(counts_row) if counts_row else {}
 
@@ -113,9 +137,10 @@ def kpi_overview(
         JOIN encounters e ON e.id = ei.encounter_id
         WHERE e.organization_id = :org
           AND ei.created_at >= :since
+          AND ei.created_at <  :until
         ORDER BY ei.encounter_id ASC, ei.created_at ASC
         """,
-        {"org": organization_id, "since": since_iso},
+        {"org": organization_id, "since": since_iso, "until": until_iso},
     )
     notes = fetch_all(
         """
@@ -132,9 +157,10 @@ def kpi_overview(
         JOIN encounters e ON e.id = nv.encounter_id
         WHERE e.organization_id = :org
           AND nv.created_at >= :since
+          AND nv.created_at <  :until
         ORDER BY nv.encounter_id ASC, nv.version_number ASC
         """,
-        {"org": organization_id, "since": since_iso},
+        {"org": organization_id, "since": since_iso, "until": until_iso},
     )
 
     transcript_to_draft: list[float] = []
@@ -203,12 +229,15 @@ def kpi_overview(
         else None
     )
 
+    total_seconds = max(0, (until - since).total_seconds())
+    hours_window = round(total_seconds / 3600.0, 2)
+
     return {
         "organization_id": organization_id,
         "window": {
             "since": since_iso,
-            "until": cur.isoformat(),
-            "hours": hours,
+            "until": until_iso,
+            "hours": hours_window,
         },
         "counts": {
             "encounters": int(counts.get("encounters") or 0),
@@ -467,9 +496,103 @@ def kpi_csv_rows(providers_payload: dict[str, Any]) -> list[list[Any]]:
     return rows
 
 
+# ---------------------------------------------------------------------
+# Before / after comparison
+# ---------------------------------------------------------------------
+
+def kpi_compare(
+    organization_id: int,
+    hours: int = 24 * 7,
+    now: Optional[datetime] = None,
+) -> dict[str, Any]:
+    """Compare two consecutive windows of the same width:
+        current  = [ now - hours, now )
+        previous = [ now - 2*hours, now - hours )
+
+    Rendered into a single payload so the scorecard can show
+    deltas without two round-trips. Each period carries its own
+    `_kpi_overview_range` payload so the UI can point at exact
+    numbers on each side.
+
+    Also surfaces a compact `deltas` block:
+      - pct_change on latency medians (lower is better → negative
+        delta means improvement)
+      - pct_change on quality rates (higher export_ready_rate is
+        better, lower missing_data_rate is better — UI labels the
+        direction; service returns raw math)
+    """
+    cur = now or _now()
+    window = timedelta(hours=hours)
+    cur_payload = _kpi_overview_range(
+        organization_id, since=cur - window, until=cur
+    )
+    prev_payload = _kpi_overview_range(
+        organization_id, since=cur - 2 * window, until=cur - window
+    )
+    return {
+        "organization_id": organization_id,
+        "window_hours": hours,
+        "current": cur_payload,
+        "previous": prev_payload,
+        "deltas": _compute_deltas(cur_payload, prev_payload),
+    }
+
+
+def _compute_deltas(cur: dict[str, Any], prev: dict[str, Any]) -> dict[str, Any]:
+    """Compute honest current - previous deltas on the fields a pilot
+    reviewer actually reads. `pct_change` is returned when previous
+    is non-zero; otherwise `None` (we never divide by zero)."""
+    def _pctdelta(a: Optional[float], b: Optional[float]) -> Optional[float]:
+        if a is None or b is None:
+            return None
+        if b == 0:
+            return None
+        return round(((a - b) / b) * 100.0, 2)
+
+    cur_lat = cur.get("latency_minutes", {})
+    prev_lat = prev.get("latency_minutes", {})
+    cur_q = cur.get("quality", {})
+    prev_q = prev.get("quality", {})
+    cur_c = cur.get("counts", {})
+    prev_c = prev.get("counts", {})
+
+    return {
+        "latency_minutes_median_pct_change": {
+            "transcript_to_draft": _pctdelta(
+                cur_lat.get("transcript_to_draft", {}).get("median"),
+                prev_lat.get("transcript_to_draft", {}).get("median"),
+            ),
+            "draft_to_sign": _pctdelta(
+                cur_lat.get("draft_to_sign", {}).get("median"),
+                prev_lat.get("draft_to_sign", {}).get("median"),
+            ),
+            "total_time_to_sign": _pctdelta(
+                cur_lat.get("total_time_to_sign", {}).get("median"),
+                prev_lat.get("total_time_to_sign", {}).get("median"),
+            ),
+        },
+        "quality_pct_change": {
+            "missing_data_rate": _pctdelta(
+                cur_q.get("missing_data_rate"),
+                prev_q.get("missing_data_rate"),
+            ),
+            "export_ready_rate": _pctdelta(
+                cur_q.get("export_ready_rate"),
+                prev_q.get("export_ready_rate"),
+            ),
+        },
+        "counts_delta": {
+            "encounters": int(cur_c.get("encounters", 0)) - int(prev_c.get("encounters", 0)),
+            "signed_notes": int(cur_c.get("signed_notes", 0)) - int(prev_c.get("signed_notes", 0)),
+            "exported_notes": int(cur_c.get("exported_notes", 0)) - int(prev_c.get("exported_notes", 0)),
+        },
+    }
+
+
 __all__ = [
     "kpi_overview",
     "kpi_providers",
+    "kpi_compare",
     "kpi_csv_rows",
     "CSV_COLUMNS",
 ]

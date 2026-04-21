@@ -175,3 +175,85 @@ def test_kpi_window_rejects_out_of_range(client):
     assert r.status_code == 422
     r = client.get("/admin/kpi/overview?hours=99999", headers=ADMIN1)
     assert r.status_code == 422
+
+
+# ---------- compare route + service -------------------------------------
+
+def test_kpi_compare_admin_only(client):
+    r = client.get("/admin/kpi/compare", headers=CLIN1)
+    assert r.status_code == 403
+    r = client.get("/admin/kpi/compare", headers=REV1)
+    assert r.status_code == 403
+
+
+def test_kpi_compare_returns_current_previous_and_deltas(client):
+    r = client.get("/admin/kpi/compare?hours=24", headers=ADMIN1)
+    assert r.status_code == 200
+    body = r.json()
+    # shape
+    assert body["window_hours"] == 24
+    assert "current" in body and "previous" in body and "deltas" in body
+    assert body["current"]["organization_id"] == body["organization_id"]
+    assert body["previous"]["organization_id"] == body["organization_id"]
+
+    # Both periods carry the standard overview shape.
+    for p in (body["current"], body["previous"]):
+        assert "counts" in p and "latency_minutes" in p and "quality" in p
+        assert "window" in p and "since" in p["window"] and "until" in p["window"]
+
+    # Windows are adjacent: previous.until == current.since.
+    assert body["previous"]["window"]["until"] == body["current"]["window"]["since"]
+
+    # Deltas always include the standard blocks (even if values are None
+    # because the seed doesn't drive the full pipeline).
+    d = body["deltas"]
+    assert set(d["latency_minutes_median_pct_change"].keys()) == {
+        "transcript_to_draft", "draft_to_sign", "total_time_to_sign",
+    }
+    assert set(d["quality_pct_change"].keys()) == {
+        "missing_data_rate", "export_ready_rate",
+    }
+    assert set(d["counts_delta"].keys()) == {
+        "encounters", "signed_notes", "exported_notes",
+    }
+
+
+def test_kpi_compare_scoped_to_caller_org(client):
+    r1 = client.get("/admin/kpi/compare?hours=24", headers=ADMIN1)
+    r2 = client.get("/admin/kpi/compare?hours=24", headers=ADMIN2)
+    assert r1.status_code == 200 and r2.status_code == 200
+    assert r1.json()["organization_id"] != r2.json()["organization_id"]
+
+
+def test_pctdelta_never_divides_by_zero():
+    """The compare math returns None rather than NaN/inf when the
+    previous period is zero — pilot reviews cannot trust a number
+    that came from dividing by zero."""
+    from app.services.kpi_scorecard import _compute_deltas
+    cur = {
+        "counts": {"encounters": 10, "signed_notes": 5, "exported_notes": 2},
+        "latency_minutes": {
+            "transcript_to_draft": {"median": 12.0},
+            "draft_to_sign": {"median": 20.0},
+            "total_time_to_sign": {"median": 35.0},
+        },
+        "quality": {"missing_data_rate": 10.0, "export_ready_rate": 50.0},
+    }
+    prev = {
+        "counts": {"encounters": 0, "signed_notes": 0, "exported_notes": 0},
+        "latency_minutes": {
+            "transcript_to_draft": {"median": 0.0},
+            "draft_to_sign": {"median": None},
+            "total_time_to_sign": {"median": 40.0},
+        },
+        "quality": {"missing_data_rate": 0.0, "export_ready_rate": None},
+    }
+    d = _compute_deltas(cur, prev)
+    # zero-divisor → None
+    assert d["latency_minutes_median_pct_change"]["transcript_to_draft"] is None
+    # None previous → None
+    assert d["latency_minutes_median_pct_change"]["draft_to_sign"] is None
+    # real previous → real pct
+    assert d["latency_minutes_median_pct_change"]["total_time_to_sign"] == -12.5
+    # raw integer deltas are fine even when previous is zero
+    assert d["counts_delta"]["encounters"] == 10

@@ -4440,6 +4440,21 @@ def kpi_providers_route(
     )
 
 
+@router.get("/admin/kpi/compare")
+def kpi_compare_route(
+    hours: int = Query(24 * 7, ge=1, le=24 * 90),
+    caller: Caller = Depends(require_admin),
+) -> dict:
+    """Current window vs. previous window of the same width, in one
+    payload. The UI uses this for the before / after comparison mode
+    on the pilot scorecard."""
+    from app.services.kpi_scorecard import kpi_compare
+    return kpi_compare(
+        organization_id=caller.organization_id,
+        hours=int(hours),
+    )
+
+
 @router.get("/admin/kpi/export.csv")
 def kpi_export_csv_route(
     hours: int = Query(24 * 7, ge=1, le=24 * 90),
