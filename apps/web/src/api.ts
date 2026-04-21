@@ -42,6 +42,10 @@ export interface Me {
   full_name: string | null;
   role: Role;
   organization_id: number;
+  // Wave 7 — server-side authorization for final physician approval.
+  // Independent of role. When true, the user may type their exact
+  // stored name to perform final approval on a signed note.
+  is_authorized_final_signer: boolean;
 }
 
 export interface User {
@@ -802,9 +806,11 @@ export type InputProcessingStatus =
 export type NoteDraftStatus =
   | "draft"
   | "provider_review"
+  | "reviewed"
   | "revised"
   | "signed"
-  | "exported";
+  | "exported"
+  | "amended";
 
 export type NoteFormat = "soap" | "assessment_plan" | "consult_note" | "freeform";
 
@@ -871,6 +877,29 @@ export interface NoteVersion {
   exported_at: string | null;
   created_at: string;
   updated_at: string;
+  // Phase 49 — lifecycle governance columns. All nullable because
+  // notes that predate the migration + notes that have not been
+  // reviewed / signed / amended carry nulls for their respective
+  // stamps.
+  reviewed_at?: string | null;
+  reviewed_by_user_id?: number | null;
+  content_fingerprint?: string | null;
+  attestation_text?: string | null;
+  amended_at?: string | null;
+  amended_by_user_id?: number | null;
+  amended_from_note_id?: number | null;
+  amendment_reason?: string | null;
+  superseded_at?: string | null;
+  superseded_by_note_id?: number | null;
+  // Phase 52 — Wave 7 final-approval columns. All nullable. Legacy
+  // signed rows (predate Wave 7) keep `final_approval_status = null`
+  // and are not gated; freshly signed rows enter with `"pending"`.
+  final_approval_status?: "pending" | "approved" | "invalidated" | null;
+  final_approved_at?: string | null;
+  final_approved_by_user_id?: number | null;
+  final_approval_signature_text?: string | null;
+  final_approval_invalidated_at?: string | null;
+  final_approval_invalidated_reason?: string | null;
 }
 
 export interface NoteWithFindings {
@@ -1884,5 +1913,121 @@ export function probeAuditSink(email: string): Promise<AuditSinkProbeResponse> {
   return request("/admin/security/audit-sink/test", {
     email,
     method: "POST",
+  });
+}
+
+// =====================================================================
+// Phase 49 — note lifecycle governance (wave 3)
+// =====================================================================
+
+export type BlockerSeverity = "error" | "warn";
+
+export interface NoteReleaseBlocker {
+  code: string;
+  message: string;
+  severity: BlockerSeverity;
+  field?: string;
+}
+
+export interface ReleaseBlockersResponse {
+  note_id: number;
+  current_status: string;
+  target: string;
+  blockers: NoteReleaseBlocker[];
+  /** `null` when the note has no stored fingerprint (not yet signed);
+   *  `true` when the live note_text matches the stored fingerprint;
+   *  `false` when silent post-sign drift is detected. */
+  fingerprint_ok: boolean | null;
+}
+
+export interface NoteAmendmentBody {
+  note_text: string;
+  reason: string;
+}
+
+export interface AmendmentChainResponse {
+  note_id: number;
+  chain: NoteVersion[];
+}
+
+export function getNoteReleaseBlockers(
+  email: string,
+  noteId: number,
+  target: NoteDraftStatus = "signed"
+): Promise<ReleaseBlockersResponse> {
+  return request(
+    `/note-versions/${noteId}/release-blockers?target=${encodeURIComponent(
+      target
+    )}`,
+    { email }
+  );
+}
+
+export function reviewNoteVersion(
+  email: string,
+  noteId: number
+): Promise<NoteVersion> {
+  return request(`/note-versions/${noteId}/review`, {
+    email,
+    method: "POST",
+  });
+}
+
+export function amendNoteVersion(
+  email: string,
+  noteId: number,
+  body: NoteAmendmentBody
+): Promise<NoteVersion> {
+  return request(`/note-versions/${noteId}/amend`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function getAmendmentChain(
+  email: string,
+  noteId: number
+): Promise<AmendmentChainResponse> {
+  return request(`/note-versions/${noteId}/amendment-chain`, { email });
+}
+
+// =====================================================================
+// Phase 52 — Wave 7 final physician approval
+// =====================================================================
+
+export interface NoteFinalApprovalBody {
+  /** The exact string the doctor types. Compared case-sensitively to
+   *  `users.full_name` on the server. Only leading/trailing whitespace
+   *  is trimmed; interior whitespace is preserved. */
+  signature_text: string;
+}
+
+/**
+ * POST /note-versions/:id/final-approve
+ * Server-authoritative final approval. Requires:
+ *   - caller.is_authorized_final_signer === true
+ *   - note is in a signed/exported/amended state and not superseded
+ *   - signature_text === caller.full_name (case-sensitive)
+ *
+ * Error envelopes the UI should distinguish:
+ *   403 role_cannot_final_approve     — caller not authorized
+ *   422 signature_mismatch            — typed name did not match
+ *   422 signature_required            — typed string was empty
+ *   400 signer_has_no_stored_name     — users.full_name is null
+ *   409 already_approved              — note is already approved
+ *   409 not_signable_state            — note is draft/review-stage
+ *   409 note_superseded               — note has been amended
+ *   404 note_not_found                — cross-org probe or missing id
+ */
+export function finalApproveNoteVersion(
+  email: string,
+  noteId: number,
+  body: NoteFinalApprovalBody
+): Promise<NoteVersion> {
+  return request(`/note-versions/${noteId}/final-approve`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(body),
   });
 }

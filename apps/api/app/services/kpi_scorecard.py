@@ -152,7 +152,10 @@ def _kpi_overview_range(
           nv.signed_at,
           nv.exported_at,
           nv.generated_by,
-          nv.missing_data_flags
+          nv.missing_data_flags,
+          nv.reviewed_at,
+          nv.amended_at,
+          nv.amended_from_note_id
         FROM note_versions nv
         JOIN encounters e ON e.id = nv.encounter_id
         WHERE e.organization_id = :org
@@ -166,8 +169,12 @@ def _kpi_overview_range(
     transcript_to_draft: list[float] = []
     draft_to_sign: list[float] = []
     total_time_to_sign: list[float] = []
+    draft_to_review: list[float] = []
+    review_to_sign: list[float] = []
+    sign_to_export: list[float] = []
     notes_with_missing = 0
     notes_total = 0
+    amendment_rows = 0
     revisions_per_sign: list[int] = []
 
     # Group by encounter.
@@ -190,8 +197,12 @@ def _kpi_overview_range(
     for enc_id, versions in per_encounter_versions.items():
         first_draft = None
         first_signed = None
+        first_reviewed = None
+        first_exported = None
         for v in versions:
             notes_total += 1
+            if v.get("amended_from_note_id"):
+                amendment_rows += 1
             # Missing-data flags are stored as JSON text or CSV depending on
             # dialect writes; accept both and count "non-empty" conservatively.
             mdf = v.get("missing_data_flags")
@@ -199,8 +210,12 @@ def _kpi_overview_range(
                 notes_with_missing += 1
             if first_draft is None and v.get("created_at"):
                 first_draft = _parse_iso(v["created_at"])
+            if first_reviewed is None and v.get("reviewed_at"):
+                first_reviewed = _parse_iso(v["reviewed_at"])
             if first_signed is None and v.get("signed_at"):
                 first_signed = _parse_iso(v["signed_at"])
+            if first_exported is None and v.get("exported_at"):
+                first_exported = _parse_iso(v["exported_at"])
 
         input_at = first_completed_input.get(enc_id)
         if input_at and first_draft:
@@ -215,6 +230,19 @@ def _kpi_overview_range(
             d3 = _delta_minutes(input_at, first_signed)
             if d3 is not None:
                 total_time_to_sign.append(d3)
+        # Phase 49 lifecycle latencies.
+        if first_draft and first_reviewed:
+            dr = _delta_minutes(first_draft, first_reviewed)
+            if dr is not None:
+                draft_to_review.append(dr)
+        if first_reviewed and first_signed:
+            drs = _delta_minutes(first_reviewed, first_signed)
+            if drs is not None:
+                review_to_sign.append(drs)
+        if first_signed and first_exported:
+            dex = _delta_minutes(first_signed, first_exported)
+            if dex is not None:
+                sign_to_export.append(dex)
         if first_signed:
             revisions_per_sign.append(max(0, len(versions) - 1))
 
@@ -231,6 +259,21 @@ def _kpi_overview_range(
 
     total_seconds = max(0, (until - since).total_seconds())
     hours_window = round(total_seconds / 3600.0, 2)
+
+    # Phase 49 — blocked-sign attempts + amendment rate (pilot lifecycle
+    # governance). Reads the same `security_audit_events` table every
+    # other audit surface reads; no schema change.
+    blocked_row = fetch_one(
+        "SELECT COUNT(*) AS n FROM security_audit_events "
+        "WHERE organization_id = :org "
+        "  AND event_type = 'note_sign_blocked' "
+        "  AND created_at >= :since AND created_at < :until",
+        {"org": organization_id, "since": since_iso, "until": until_iso},
+    )
+    blocked_sign_attempts = int(dict(blocked_row or {}).get("n") or 0)
+    amendment_rate = (
+        (amendment_rows / notes_total) if notes_total else None
+    )
 
     return {
         "organization_id": organization_id,
@@ -249,6 +292,10 @@ def _kpi_overview_range(
             "transcript_to_draft": _summ(transcript_to_draft),
             "draft_to_sign": _summ(draft_to_sign),
             "total_time_to_sign": _summ(total_time_to_sign),
+            # Phase 49 lifecycle latencies.
+            "draft_to_review": _summ(draft_to_review),
+            "review_to_sign": _summ(review_to_sign),
+            "sign_to_export": _summ(sign_to_export),
         },
         "quality": {
             "missing_data_rate": _pct(missing_rate),
@@ -260,6 +307,10 @@ def _kpi_overview_range(
                 if revisions_per_sign
                 else None
             ),
+            # Phase 49 governance counters.
+            "blocked_sign_attempts": blocked_sign_attempts,
+            "amendment_rate": _pct(amendment_rate),
+            "amendment_count": amendment_rows,
         },
     }
 

@@ -94,6 +94,7 @@ const ADMIN1: api.Me = {
   full_name: "ChartNav Admin",
   role: "admin",
   organization_id: 1,
+  is_authorized_final_signer: false,
 };
 const CLIN1: api.Me = { ...ADMIN1, user_id: 2, email: "clin@chartnav.local", role: "clinician", full_name: "Casey C." };
 const REV1: api.Me = { ...ADMIN1, user_id: 3, email: "rev@chartnav.local", role: "reviewer", full_name: "Riley R." };

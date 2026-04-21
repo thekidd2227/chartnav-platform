@@ -75,6 +75,7 @@ const ADMIN: api.Me = {
   full_name: "Admin",
   role: "admin",
   organization_id: 1,
+  is_authorized_final_signer: false,
 };
 const CLIN: api.Me = { ...ADMIN, user_id: 2, email: "clin@chartnav.local", role: "clinician" };
 const REV: api.Me = { ...ADMIN, user_id: 3, email: "rev@chartnav.local", role: "reviewer" };

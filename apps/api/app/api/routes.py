@@ -364,6 +364,10 @@ def me(caller: Caller = Depends(require_caller)) -> dict:
         "full_name": caller.full_name,
         "role": caller.role,
         "organization_id": caller.organization_id,
+        # Wave 7: explicit org-granted privilege to perform final
+        # physician approval. UI uses this to surface the dedicated
+        # approval affordance and hide it for everyone else.
+        "is_authorized_final_signer": bool(caller.is_authorized_final_signer),
     }
 
 
@@ -1790,7 +1794,16 @@ NOTE_COLUMNS = (
     "note_text, generated_note_text, source_input_id, "
     "extracted_findings_id, generated_by, "
     "provider_review_required, missing_data_flags, signed_at, "
-    "signed_by_user_id, exported_at, created_at, updated_at"
+    "signed_by_user_id, exported_at, created_at, updated_at, "
+    # Phase 49 — lifecycle governance columns.
+    "reviewed_at, reviewed_by_user_id, content_fingerprint, "
+    "attestation_text, amended_at, amended_by_user_id, "
+    "amended_from_note_id, amendment_reason, "
+    "superseded_at, superseded_by_note_id, "
+    # Phase 52 — Wave 7 final-approval columns.
+    "final_approval_status, final_approved_at, final_approved_by_user_id, "
+    "final_approval_signature_text, final_approval_invalidated_at, "
+    "final_approval_invalidated_reason"
 )
 
 
@@ -2237,6 +2250,14 @@ def sign_note(
 ) -> dict:
     # Only admin + clinician can sign — reviewers can read notes but
     # cannot legally attest to the content.
+    from app.services.note_lifecycle import (
+        compute_release_blockers,
+        content_fingerprint,
+        default_attestation_text,
+        hard_blockers,
+        role_permits_edge,
+    )
+
     if caller.role not in {"admin", "clinician"}:
         raise _err(
             "role_cannot_sign",
@@ -2244,14 +2265,77 @@ def sign_note(
             403,
         )
     note = _load_note_for_caller(note_id, caller)
-    if note["draft_status"] == "signed":
-        raise _err("note_already_signed", "note is already signed", 409)
-    if note["draft_status"] not in {"draft", "provider_review", "revised"}:
+    current_status = note["draft_status"]
+
+    if not role_permits_edge(current_status, "signed", caller.role):
         raise _err(
-            "invalid_note_transition",
-            f"cannot sign from {note['draft_status']!r}",
-            400,
+            "role_cannot_sign_from_state",
+            f"role {caller.role!r} cannot drive sign from state "
+            f"{current_status!r}",
+            403,
         )
+
+    # Release-gate check. Blockers with severity=error stop the sign;
+    # warn-level blockers (e.g. low extraction confidence) surface in
+    # the response but do not block — the pre-sign UI checkpoint is
+    # where the clinician explicitly acknowledges them.
+    findings_row = None
+    fid = note.get("extracted_findings_id")
+    if fid:
+        frow = fetch_one(
+            f"SELECT {FINDINGS_COLUMNS} FROM extracted_findings WHERE id = :id",
+            {"id": fid},
+        )
+        findings_row = dict(frow) if frow else None
+    blockers = compute_release_blockers(note, findings_row, target="signed")
+    hard = hard_blockers(blockers)
+    if hard:
+        from app import audit as _audit
+        _audit.record(
+            event_type="note_sign_blocked",
+            request_id=None,
+            actor_email=caller.email,
+            actor_user_id=caller.user_id,
+            organization_id=caller.organization_id,
+            path=f"/note-versions/{note_id}/sign",
+            method="POST",
+            error_code="sign_blocked_by_gate",
+            detail=(
+                f"note_id={note_id} version={note['version_number']} "
+                f"blockers={sorted({b.code for b in hard})}"
+            ),
+        )
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error_code": "sign_blocked_by_gate",
+                "reason": "one or more release gates are blocking this sign",
+                "blockers": [b.as_dict() for b in blockers],
+            },
+        )
+
+    # Freeze the attestation statement + content fingerprint at the
+    # moment of the transaction so future reads reproduce what the
+    # signer actually attested to. Prefer `full_name` when available
+    # — it is the real clinician identifier visible on the chart —
+    # and fall back to email for dev/header-auth mode where a user
+    # row may have been seeded without full_name.
+    signer_display = (caller.full_name or caller.email).strip() or caller.email
+    signed_at_iso_preview = datetime.now(timezone.utc).isoformat()
+    attestation = default_attestation_text(
+        signer_display=signer_display,
+        signed_at_iso=signed_at_iso_preview,
+    )
+    fingerprint = content_fingerprint(note.get("note_text"))
+
+    # Wave 7: every freshly signed note enters the final-approval
+    # gate in state `pending`. Export will be blocked until an
+    # authorized doctor performs final approval. This is
+    # server-authoritative and additive — downstream systems that
+    # do not care about the gate simply observe the `signed` state
+    # as before.
+    from app.services.note_final_approval import approval_state_on_sign
+    initial_final_approval = approval_state_on_sign()
 
     with transaction() as conn:
         conn.execute(
@@ -2260,10 +2344,24 @@ def sign_note(
                 "draft_status = 'signed', "
                 "signed_at = CURRENT_TIMESTAMP, "
                 "signed_by_user_id = :uid, "
+                "content_fingerprint = :fp, "
+                "attestation_text = :att, "
+                "final_approval_status = :fa_status, "
+                "final_approved_at = NULL, "
+                "final_approved_by_user_id = NULL, "
+                "final_approval_signature_text = NULL, "
+                "final_approval_invalidated_at = NULL, "
+                "final_approval_invalidated_reason = NULL, "
                 "updated_at = CURRENT_TIMESTAMP "
                 "WHERE id = :id"
             ),
-            {"id": note_id, "uid": caller.user_id},
+            {
+                "id": note_id,
+                "uid": caller.user_id,
+                "fp": fingerprint,
+                "att": attestation,
+                "fa_status": initial_final_approval,
+            },
         )
 
     from app import audit as _audit
@@ -2275,7 +2373,10 @@ def sign_note(
         organization_id=caller.organization_id,
         path=f"/note-versions/{note_id}/sign",
         method="POST",
-        detail=f"note_id={note_id} version={note['version_number']}",
+        detail=(
+            f"note_id={note_id} version={note['version_number']} "
+            f"fingerprint={fingerprint[:12]}"
+        ),
     )
     return _load_note_for_caller(note_id, caller)
 
@@ -2285,19 +2386,59 @@ def export_note(
     note_id: int,
     caller: Caller = Depends(require_caller),
 ) -> dict:
-    """Mark a signed note as handed off (copy/download/paste etc.).
+    """Mark a signed or amended note as handed off (copy/download/paste etc.).
 
     Export is a separate state from sign: the provider may sign at
     11:07 and hand off to the EHR at 11:30, and we want both timestamps.
+    Amendments (draft_status='amended') can also be exported — once
+    an amendment is itself signed upstream, the export action carries
+    it through the same audit path.
     """
     require_create_event(caller)
     note = _load_note_for_caller(note_id, caller)
-    if note["draft_status"] != "signed":
+    if note["draft_status"] not in {"signed", "amended"}:
         raise _err(
             "note_not_signed",
-            "only signed notes can be exported",
+            "only signed or amended notes can be exported",
             409,
         )
+
+    # Wave 7 — final-approval gate. `compute_release_blockers(...,
+    # target="exported")` returns a `final_approval_pending` or
+    # `final_approval_invalidated` blocker when the signed row has
+    # not yet been approved by an authorized doctor. Legacy rows
+    # (status NULL) pass through untouched.
+    from app.services.note_lifecycle import (
+        compute_release_blockers,
+        hard_blockers,
+    )
+    export_blockers = compute_release_blockers(note, None, target="exported")
+    export_hard = hard_blockers(export_blockers)
+    if export_hard:
+        from app import audit as _audit
+        _audit.record(
+            event_type="note_export_blocked",
+            request_id=None,
+            actor_email=caller.email,
+            actor_user_id=caller.user_id,
+            organization_id=caller.organization_id,
+            path=f"/note-versions/{note_id}/export",
+            method="POST",
+            error_code="export_blocked_by_gate",
+            detail=(
+                f"note_id={note_id} version={note['version_number']} "
+                f"blockers={sorted({b.code for b in export_hard})}"
+            ),
+        )
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error_code": "export_blocked_by_gate",
+                "reason": "one or more release gates are blocking this export",
+                "blockers": [b.as_dict() for b in export_blockers],
+            },
+        )
+
     with transaction() as conn:
         conn.execute(
             text(
@@ -2318,6 +2459,413 @@ def export_note(
         path=f"/note-versions/{note_id}/export",
         method="POST",
         detail=f"note_id={note_id}",
+    )
+    return _load_note_for_caller(note_id, caller)
+
+
+# ---------------------------------------------------------------------------
+# Phase 49 — lifecycle governance routes
+# ---------------------------------------------------------------------------
+
+class NoteAmendBody(BaseModel):
+    note_text: str = Field(..., min_length=10, max_length=40_000)
+    reason: str = Field(..., min_length=4, max_length=500)
+
+
+class NoteFinalApprovalBody(BaseModel):
+    # Wave 7 — typed signature. The doctor types their exact stored
+    # `full_name`; server compares case-sensitively. `max_length` is a
+    # defence-in-depth cap; the actual `users.full_name` column is
+    # VARCHAR(255). `min_length=1` is enforced purely to give pydantic
+    # a non-empty string; the real mismatch error path comes from the
+    # signature comparison service, so the caller sees a consistent
+    # structured reason whether they sent "", " ", or a wrong name.
+    signature_text: str = Field(..., min_length=1, max_length=255)
+
+
+@router.get("/note-versions/{note_id}/release-blockers")
+def note_release_blockers(
+    note_id: int,
+    target: str = Query("signed"),
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Return the live list of release blockers for this note + target.
+    Empty list means the note is clear to transition to `target`."""
+    from app.services.note_lifecycle import (
+        LIFECYCLE_STATES,
+        compute_release_blockers,
+        fingerprint_matches,
+    )
+    if target not in LIFECYCLE_STATES:
+        raise _err(
+            "invalid_target_state",
+            f"target must be one of {sorted(LIFECYCLE_STATES)}",
+            400,
+        )
+    note = _load_note_for_caller(note_id, caller)
+    findings_row = None
+    fid = note.get("extracted_findings_id")
+    if fid:
+        frow = fetch_one(
+            f"SELECT {FINDINGS_COLUMNS} FROM extracted_findings WHERE id = :id",
+            {"id": fid},
+        )
+        findings_row = dict(frow) if frow else None
+    blockers = compute_release_blockers(note, findings_row, target=target)
+    fp_status = fingerprint_matches(note)
+    return {
+        "note_id": note_id,
+        "current_status": note.get("draft_status"),
+        "target": target,
+        "blockers": [b.as_dict() for b in blockers],
+        "fingerprint_ok": fp_status,
+    }
+
+
+@router.post("/note-versions/{note_id}/review")
+def review_note(
+    note_id: int,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Reviewer (or admin) attests to having reviewed the draft.
+
+    Advances the draft_status to `reviewed` when the transition is
+    permitted, and sets `reviewed_at` / `reviewed_by_user_id`. This
+    is a first-class governance marker — separate from the
+    `provider_review` workflow stage, which only indicates the note
+    is *awaiting* review."""
+    from app.services.note_lifecycle import (
+        can_transition,
+        role_permits_edge,
+    )
+    if caller.role not in {"admin", "reviewer"}:
+        raise _err(
+            "role_cannot_review",
+            "only admin or reviewer may mark a note as reviewed",
+            403,
+        )
+    note = _load_note_for_caller(note_id, caller)
+    current = note["draft_status"]
+    # Check the lifecycle-order invariant BEFORE the role-from-state
+    # guard so the error message the caller sees reflects the real
+    # problem (the edge is invalid, not the role).
+    edge_err = can_transition(current, "reviewed")
+    if edge_err is not None:
+        raise _err("invalid_note_transition", edge_err, 400)
+    if not role_permits_edge(current, "reviewed", caller.role):
+        raise _err(
+            "role_cannot_review_from_state",
+            f"role {caller.role!r} cannot advance to reviewed from "
+            f"state {current!r}",
+            403,
+        )
+    with transaction() as conn:
+        conn.execute(
+            text(
+                "UPDATE note_versions SET "
+                "draft_status = 'reviewed', "
+                "reviewed_at = CURRENT_TIMESTAMP, "
+                "reviewed_by_user_id = :uid, "
+                "updated_at = CURRENT_TIMESTAMP "
+                "WHERE id = :id"
+            ),
+            {"id": note_id, "uid": caller.user_id},
+        )
+
+    from app import audit as _audit
+    _audit.record(
+        event_type="note_version_reviewed",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path=f"/note-versions/{note_id}/review",
+        method="POST",
+        detail=f"note_id={note_id} version={note['version_number']}",
+    )
+    return _load_note_for_caller(note_id, caller)
+
+
+@router.post("/note-versions/{note_id}/amend", status_code=status.HTTP_201_CREATED)
+def amend_note(
+    note_id: int,
+    payload: NoteAmendBody,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Create an amendment of a signed (or previously amended) note.
+    Returns the NEW note_versions row. The original is marked
+    superseded. Only admin + clinician may amend."""
+    if caller.role not in {"admin", "clinician"}:
+        raise _err(
+            "role_cannot_amend",
+            "only admin or clinician may amend a signed note",
+            403,
+        )
+    original = _load_note_for_caller(note_id, caller)
+    from app.services.note_amendments import AmendmentError, amend_signed_note
+    try:
+        new_row = amend_signed_note(
+            original_note=original,
+            new_text=payload.note_text,
+            reason=payload.reason,
+            caller_user_id=caller.user_id,
+        )
+    except AmendmentError as e:
+        raise _err(e.code, e.message, 409)
+
+    # Wave 7 — invalidate prior final approval on the superseded row.
+    #
+    # An amendment means the original signed record is no longer the
+    # record of care. Any final physician approval that existed on it
+    # is therefore no longer attested to the active version; flip its
+    # final_approval_status to 'invalidated' and stamp a reason. The
+    # original's existing `final_approved_at` / signature text are
+    # preserved — the invalidation is additive so the audit trail
+    # still shows that approval once existed.
+    prior_status = original.get("final_approval_status")
+    prior_was_approved = (prior_status == "approved")
+    if prior_status in {"approved", "pending"}:
+        from app.services.note_final_approval import (
+            invalidation_reason_for_amendment,
+        )
+        invalidation_reason = invalidation_reason_for_amendment()
+        with transaction() as conn:
+            conn.execute(
+                text(
+                    "UPDATE note_versions SET "
+                    "final_approval_status = 'invalidated', "
+                    "final_approval_invalidated_at = CURRENT_TIMESTAMP, "
+                    "final_approval_invalidated_reason = :reason, "
+                    "updated_at = CURRENT_TIMESTAMP "
+                    "WHERE id = :id"
+                ),
+                {"id": note_id, "reason": invalidation_reason},
+            )
+
+    from app import audit as _audit
+    _audit.record(
+        event_type="note_version_amended",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path=f"/note-versions/{note_id}/amend",
+        method="POST",
+        detail=(
+            f"original_note_id={note_id} "
+            f"amended_note_id={new_row.get('id')} "
+            f"reason={(payload.reason or '').strip()[:120]}"
+        ),
+    )
+    if prior_was_approved:
+        _audit.record(
+            event_type="note_final_approval_invalidated",
+            request_id=None,
+            actor_email=caller.email,
+            actor_user_id=caller.user_id,
+            organization_id=caller.organization_id,
+            path=f"/note-versions/{note_id}/amend",
+            method="POST",
+            detail=(
+                f"original_note_id={note_id} "
+                f"amended_note_id={new_row.get('id')} "
+                "cause=amendment"
+            ),
+        )
+    return _load_note_for_caller(int(new_row["id"]), caller)
+
+
+@router.get("/note-versions/{note_id}/amendment-chain")
+def note_amendment_chain(
+    note_id: int,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Walk the full amendment chain for this note. The caller must
+    have access to the underlying encounter via the existing
+    `_load_note_for_caller` guard."""
+    _load_note_for_caller(note_id, caller)  # enforces same-org
+    from app.services.note_amendments import amendment_chain
+    chain = amendment_chain(note_id)
+    return {"note_id": note_id, "chain": chain}
+
+
+# ---------------------------------------------------------------------------
+# Phase 52 — Wave 7 final physician approval route
+# ---------------------------------------------------------------------------
+
+@router.post("/note-versions/{note_id}/final-approve")
+def note_final_approve(
+    note_id: int,
+    payload: NoteFinalApprovalBody,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Perform final physician approval on a signed note.
+
+    Required conditions (all enforced server-side):
+
+      1. The caller is an authorized final signer for their org
+         (`users.is_authorized_final_signer = true`). Role alone is
+         insufficient.
+      2. The note exists, is same-org, and is in a signable state
+         (signed / exported / amended) and not superseded.
+      3. The note is not already approved (idempotent guard).
+      4. The typed signature string equals `caller.full_name`
+         EXACTLY. Comparison is case-sensitive; leading/trailing
+         whitespace is trimmed on both sides but interior whitespace
+         is preserved.
+
+    Every failure path emits an audit event. Success stamps the four
+    final-approval columns and emits `note_final_approved`.
+    """
+    from app.services.note_final_approval import (
+        can_attempt_final_approval,
+        compare_typed_signature,
+        is_authorized_final_signer,
+    )
+    from app import audit as _audit
+
+    # -- 1. Org-scope first (404 on cross-org, per existence-hiding policy).
+    # This must run before authz so a cross-org caller cannot probe
+    # the existence of notes in other organizations by comparing
+    # 403 vs. 404.
+    note = _load_note_for_caller(note_id, caller)
+
+    # -- 2. Caller authz -----------------------------------------------
+    caller_row = fetch_one(
+        "SELECT id, email, full_name, role, organization_id, "
+        "is_active, is_authorized_final_signer "
+        "FROM users WHERE id = :uid",
+        {"uid": caller.user_id},
+    )
+    if not is_authorized_final_signer(dict(caller_row) if caller_row else {}):
+        _audit.record(
+            event_type="note_final_approval_unauthorized",
+            request_id=None,
+            actor_email=caller.email,
+            actor_user_id=caller.user_id,
+            organization_id=caller.organization_id,
+            path=f"/note-versions/{note_id}/final-approve",
+            method="POST",
+            error_code="role_cannot_final_approve",
+            detail=(
+                f"note_id={note_id} role={caller.role!r} "
+                "reason=caller_not_authorized_final_signer"
+            ),
+        )
+        raise _err(
+            "role_cannot_final_approve",
+            (
+                "final physician approval requires an authorized final "
+                "signer; this account does not carry that privilege"
+            ),
+            403,
+        )
+
+    # -- 3. Note exists + acceptable state (org-scope already enforced)
+    pre = can_attempt_final_approval(note)
+    if not pre.ok:
+        _audit.record(
+            event_type="note_final_approval_invalid_state",
+            request_id=None,
+            actor_email=caller.email,
+            actor_user_id=caller.user_id,
+            organization_id=caller.organization_id,
+            path=f"/note-versions/{note_id}/final-approve",
+            method="POST",
+            error_code=pre.reason or "invalid_state",
+            detail=(
+                f"note_id={note_id} version={note['version_number']} "
+                f"reason={pre.reason}"
+            ),
+        )
+        # 409 for state conflict (already approved, superseded,
+        # unsigned) so the client can distinguish from authz failures.
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error_code": pre.reason or "invalid_state",
+                "reason": pre.detail or "invalid state for final approval",
+            },
+        )
+
+    # -- 3. Signature match (case-sensitive exact) --------------------
+    cmp = compare_typed_signature(
+        typed=payload.signature_text,
+        stored_full_name=caller.full_name,
+    )
+    if not cmp.matched:
+        # Never include the typed value in the audit detail — it may
+        # include a misspelled name that is not interesting to log.
+        _audit.record(
+            event_type="note_final_approval_signature_mismatch",
+            request_id=None,
+            actor_email=caller.email,
+            actor_user_id=caller.user_id,
+            organization_id=caller.organization_id,
+            path=f"/note-versions/{note_id}/final-approve",
+            method="POST",
+            error_code=cmp.reason or "signature_mismatch",
+            detail=(
+                f"note_id={note_id} version={note['version_number']} "
+                f"reason={cmp.reason}"
+            ),
+        )
+        # 422 for a signature mismatch — it is a validation failure
+        # on the payload rather than a state or authz conflict.
+        # 400 if the stored name is missing (it is a system setup
+        # problem; no amount of retyping will fix it).
+        status_code = 400 if cmp.expected_empty else 422
+        raise HTTPException(
+            status_code=status_code,
+            detail={
+                "error_code": cmp.reason or "signature_mismatch",
+                "reason": (
+                    "no stored full_name on this account; cannot perform "
+                    "final approval until a name is recorded"
+                )
+                if cmp.expected_empty
+                else (
+                    "typed signature does not match the doctor's stored "
+                    "name exactly (case-sensitive)"
+                ),
+            },
+        )
+
+    # -- 4. Persist approval + audit ----------------------------------
+    # Preserve the typed signature verbatim — not the stored name —
+    # so the audit trail reflects exactly what the doctor typed.
+    signature_verbatim = (payload.signature_text or "").strip()
+    with transaction() as conn:
+        conn.execute(
+            text(
+                "UPDATE note_versions SET "
+                "final_approval_status = 'approved', "
+                "final_approved_at = CURRENT_TIMESTAMP, "
+                "final_approved_by_user_id = :uid, "
+                "final_approval_signature_text = :sig, "
+                "final_approval_invalidated_at = NULL, "
+                "final_approval_invalidated_reason = NULL, "
+                "updated_at = CURRENT_TIMESTAMP "
+                "WHERE id = :id"
+            ),
+            {
+                "id": note_id,
+                "uid": caller.user_id,
+                "sig": signature_verbatim,
+            },
+        )
+
+    _audit.record(
+        event_type="note_final_approved",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path=f"/note-versions/{note_id}/final-approve",
+        method="POST",
+        detail=(
+            f"note_id={note_id} version={note['version_number']}"
+        ),
     )
     return _load_note_for_caller(note_id, caller)
 

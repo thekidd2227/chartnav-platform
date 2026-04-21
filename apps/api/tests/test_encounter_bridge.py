@@ -236,6 +236,17 @@ def test_full_wedge_runs_on_bridged_encounter(test_db, monkeypatch):
         assert r.status_code == 200, r.text
         assert r.json()["draft_status"] == "signed"
 
+        # 4b. Final physician approval (Wave 7). Export is gated on
+        # this step now that the approval column exists on the signed
+        # row.
+        r = client.post(
+            f"/note-versions/{note_id}/final-approve",
+            json={"signature_text": "Casey Clinician"},
+            headers=CLIN1,
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["final_approval_status"] == "approved"
+
         # 5. Export.
         r = client.post(f"/note-versions/{note_id}/export", headers=CLIN1)
         assert r.status_code == 200, r.text

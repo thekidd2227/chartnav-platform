@@ -272,8 +272,13 @@ def test_export_only_from_signed(client):
     r = client.post(f"/note-versions/{note_id}/export", headers=CLIN1)
     assert r.status_code == 409
     assert r.json()["detail"]["error_code"] == "note_not_signed"
-    # Sign then export.
+    # Sign, then final-approve (Wave 7 gate), then export.
     client.post(f"/note-versions/{note_id}/sign", headers=CLIN1)
+    client.post(
+        f"/note-versions/{note_id}/final-approve",
+        json={"signature_text": "Casey Clinician"},
+        headers=CLIN1,
+    )
     r = client.post(f"/note-versions/{note_id}/export", headers=CLIN1)
     assert r.status_code == 200
     exp = r.json()
@@ -307,6 +312,14 @@ def test_generate_sign_export_emit_audit_events(client):
     body = _ingest_and_generate(client)
     note_id = body["note"]["id"]
     client.post(f"/note-versions/{note_id}/sign", headers=CLIN1)
+    # Wave 7: export is gated on final physician approval. Perform
+    # the approval step first so the export actually fires and the
+    # note_version_exported audit event is emitted.
+    client.post(
+        f"/note-versions/{note_id}/final-approve",
+        json={"signature_text": "Casey Clinician"},
+        headers=CLIN1,
+    )
     client.post(f"/note-versions/{note_id}/export", headers=CLIN1)
 
     r = client.get(

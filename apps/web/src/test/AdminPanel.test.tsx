@@ -40,6 +40,7 @@ const ADMIN1: api.Me = {
   full_name: "Org1 Admin",
   role: "admin",
   organization_id: 1,
+  is_authorized_final_signer: false,
 };
 
 const USERS: api.User[] = [

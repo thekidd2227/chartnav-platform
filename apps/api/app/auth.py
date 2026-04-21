@@ -45,6 +45,10 @@ class Caller:
     full_name: Optional[str]
     role: str
     organization_id: int
+    # Wave 7: explicit org-granted privilege to perform final
+    # physician approval. Independent of role. Defaults to False so
+    # no existing caller is silently granted the privilege.
+    is_authorized_final_signer: bool = False
 
 
 # --- Error shape ---------------------------------------------------------
@@ -62,12 +66,16 @@ def _caller_from_row(row: dict) -> Caller:
         full_name=row["full_name"],
         role=row["role"],
         organization_id=row["organization_id"],
+        is_authorized_final_signer=bool(
+            row.get("is_authorized_final_signer") or False
+        ),
     )
 
 
 def _user_by_email(email: str) -> Optional[Caller]:
     row = fetch_one(
-        "SELECT id, email, full_name, role, organization_id "
+        "SELECT id, email, full_name, role, organization_id, "
+        "is_authorized_final_signer "
         "FROM users WHERE email = :email",
         {"email": email},
     )

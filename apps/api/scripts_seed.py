@@ -17,10 +17,15 @@ ORGS = [
         "slug": "demo-eye-clinic",
         "name": "Demo Eye Clinic",
         "location": "Main Clinic",
+        # Wave 7: 4th tuple element is is_authorized_final_signer.
+        # Defaults to False when omitted. Casey Clinician is the only
+        # authorized final signer in the demo org; Riley Reviewer and
+        # the admin are NOT — final approval is an explicit privilege
+        # independent of role.
         "users": [
-            ("admin@chartnav.local", "ChartNav Admin", "admin"),
-            ("clin@chartnav.local", "Casey Clinician", "clinician"),
-            ("rev@chartnav.local", "Riley Reviewer", "reviewer"),
+            ("admin@chartnav.local", "ChartNav Admin", "admin", False),
+            ("clin@chartnav.local", "Casey Clinician", "clinician", True),
+            ("rev@chartnav.local", "Riley Reviewer", "reviewer", False),
         ],
         "patients": [
             {
@@ -79,9 +84,12 @@ ORGS = [
         "slug": "northside-retina",
         "name": "Northside Retina Center",
         "location": "Northside HQ",
+        # Wave 7: Noa Clinician is intentionally NOT an authorized
+        # final signer. This gives tests an org where no clinician
+        # may final-approve, exercising the unauthorized-attempt path.
         "users": [
-            ("admin@northside.local", "Northside Admin", "admin"),
-            ("clin@northside.local", "Noa Clinician", "clinician"),
+            ("admin@northside.local", "Northside Admin", "admin", False),
+            ("clin@northside.local", "Noa Clinician", "clinician", False),
         ],
         "patients": [
             {
@@ -137,7 +145,14 @@ def _get_or_create_location(conn, org_id: int, name: str) -> int:
     )
 
 
-def _ensure_user(conn, org_id: int, email: str, full_name: str, role: str) -> None:
+def _ensure_user(
+    conn,
+    org_id: int,
+    email: str,
+    full_name: str,
+    role: str,
+    is_authorized_final_signer: bool = False,
+) -> None:
     row = conn.execute(
         text("SELECT id FROM users WHERE email = :email"),
         {"email": email},
@@ -151,15 +166,24 @@ def _ensure_user(conn, org_id: int, email: str, full_name: str, role: str) -> No
                 "email": email,
                 "full_name": full_name,
                 "role": role,
+                "is_authorized_final_signer": bool(is_authorized_final_signer),
             },
         )
     else:
         conn.execute(
             text(
                 "UPDATE users SET role = :role, organization_id = :org, "
-                "full_name = :full_name WHERE email = :email"
+                "full_name = :full_name, "
+                "is_authorized_final_signer = :final_signer "
+                "WHERE email = :email"
             ),
-            {"role": role, "org": org_id, "full_name": full_name, "email": email},
+            {
+                "role": role,
+                "org": org_id,
+                "full_name": full_name,
+                "final_signer": bool(is_authorized_final_signer),
+                "email": email,
+            },
         )
 
 
@@ -317,8 +341,24 @@ def main() -> None:
         for org_fx in ORGS:
             org_id = _get_or_create_org(conn, org_fx["slug"], org_fx["name"])
             loc_id = _get_or_create_location(conn, org_id, org_fx["location"])
-            for email, full_name, role in org_fx["users"]:
-                _ensure_user(conn, org_id, email, full_name, role)
+            for u in org_fx["users"]:
+                # Wave 7: accept either (email, full_name, role) or
+                # (email, full_name, role, is_authorized_final_signer).
+                # Older callers / fixtures without the fourth slot
+                # default to non-authorized.
+                if len(u) == 4:
+                    email, full_name, role, final_signer = u
+                else:
+                    email, full_name, role = u
+                    final_signer = False
+                _ensure_user(
+                    conn,
+                    org_id,
+                    email,
+                    full_name,
+                    role,
+                    is_authorized_final_signer=bool(final_signer),
+                )
 
             # Native clinical objects (phase 18).
             patient_ids: dict[str, int] = {}
