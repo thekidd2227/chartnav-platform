@@ -52,6 +52,15 @@ import { Timeline } from "./Timeline";
 import { DayView } from "./DayView";
 import { WallDisplay } from "./WallDisplay";
 import { EncounterSlip } from "./EncounterSlip";
+// ROI wave 1 — operational queue + triage cards + role split.
+import { QueuePresets } from "./QueuePresets";
+import { ReadinessBadge } from "./ReadinessBadge";
+import {
+  QueuePreset,
+  QUEUE_PRESETS,
+  deriveReadiness,
+  presetsForAudience,
+} from "./readiness";
 
 type Banner =
   | { kind: "ok"; msg: string }
@@ -103,6 +112,11 @@ export default function App() {
   const [showSlipFor, setShowSlipFor] = useState<Encounter | null>(null);
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
 
+  // ROI wave 1 — queue preset state. Applied as a client-side
+  // predicate on top of the existing filter/pagination. Default is
+  // "all" so nothing changes for existing flows until the user opts in.
+  const [queuePreset, setQueuePreset] = useState<QueuePreset>("all");
+
   // Shared locations cache, used by the wall display, encounter slip,
   // and the create-encounter modal. Loads once per identity; the
   // modal still provides its own loading indicator for first paint.
@@ -116,6 +130,72 @@ export default function App() {
       .catch(() => { if (!cancelled) setLocationsCache([]); });
     return () => { cancelled = true; };
   }, [identity]);
+
+  // ROI wave 1 — item 8. Role-aware default experience:
+  //   front_desk → day view + scheduling-oriented presets
+  //   reviewer / clinician / admin → list view + clinical presets
+  //
+  // Only adjust on first `me` resolve so the user's later manual
+  // switches are preserved. We persist the view per-identity so
+  // returning doctors keep their last choice.
+  const roleInitRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!me) return;
+    if (roleInitRef.current === me.email) return;
+    roleInitRef.current = me.email;
+    // Only force a default when the user hasn't already chosen.
+    let stored: string | null = null;
+    try { stored = localStorage.getItem(`chartnav.view.${me.email}`); } catch {}
+    if (!stored) {
+      if (me.role === "front_desk") setView("day");
+      else setView("list");
+    }
+    let storedPreset: string | null = null;
+    try { storedPreset = localStorage.getItem(`chartnav.preset.${me.email}`); } catch {}
+    if (!storedPreset) {
+      // Only force an opinionated default for front desk — they
+      // benefit from seeing arriving patients first. Clinical roles
+      // keep "all" so existing flows (and vitest expectations) stay
+      // unchanged.
+      if (me.role === "front_desk") setQueuePreset("arriving_soon");
+      else setQueuePreset("all");
+    } else if (QUEUE_PRESETS.some((p) => p.key === storedPreset)) {
+      setQueuePreset(storedPreset as QueuePreset);
+    }
+  }, [me]);
+  // Persist per-user choices so role-driven defaults don't overwrite
+  // an explicit user preference on next login.
+  useEffect(() => {
+    if (!me) return;
+    try { localStorage.setItem(`chartnav.view.${me.email}`, view); } catch {}
+  }, [view, me]);
+  useEffect(() => {
+    if (!me) return;
+    try { localStorage.setItem(`chartnav.preset.${me.email}`, queuePreset); } catch {}
+  }, [queuePreset, me]);
+
+  // Audience driving the QueuePresets surface.
+  const presetAudience: "all" | "front_desk" | "clinical" = useMemo(() => {
+    if (!me) return "all";
+    if (me.role === "front_desk") return "front_desk";
+    return "clinical";
+  }, [me]);
+
+  // Apply preset + compute per-preset counts against the current
+  // loaded page. Counts are a live badge, not a server query.
+  const nowMs = useMemo(() => Date.now(), [encounters]);
+  const presetCounts = useMemo(() => {
+    const counts: Partial<Record<QueuePreset, number>> = {};
+    for (const p of QUEUE_PRESETS) {
+      counts[p.key] = encounters.filter((e) => p.match(e, nowMs)).length;
+    }
+    return counts;
+  }, [encounters, nowMs]);
+  const visibleEncounters = useMemo(() => {
+    const preset = QUEUE_PRESETS.find((p) => p.key === queuePreset);
+    if (!preset) return encounters;
+    return encounters.filter((e) => preset.match(e, nowMs));
+  }, [encounters, queuePreset, nowMs]);
 
   // ---- loaders ---------------------------------------------------------
 
@@ -434,6 +514,26 @@ export default function App() {
         </div>
         <div className="header-meta">
           <IdentityBadge me={me} meError={meError} meLoading={meLoading} />
+          {me && (
+            <span
+              className="role-chip"
+              data-role={me.role}
+              data-testid="role-chip"
+              title={
+                me.role === "front_desk"
+                  ? "Front desk workspace — scheduling oriented"
+                  : me.role === "reviewer"
+                  ? "Reviewer workspace — chart review"
+                  : me.role === "clinician"
+                  ? "Clinician workspace — charting"
+                  : "Admin workspace"
+              }
+            >
+              {me.role === "front_desk"
+                ? "Front desk"
+                : me.role.charAt(0).toUpperCase() + me.role.slice(1)}
+            </span>
+          )}
           <span className="chip">API {API_URL}</span>
           <div
             className="pref-picker"
@@ -509,7 +609,22 @@ export default function App() {
       </header>
 
       <div className="layout">
-        <aside className="layout__list">
+        <aside
+          className="layout__list"
+          data-role={
+            me?.role === "front_desk"
+              ? "front_desk"
+              : me?.role === "reviewer" || me?.role === "clinician"
+              ? "clinical"
+              : undefined
+          }
+        >
+          <QueuePresets
+            presets={presetsForAudience(presetAudience)}
+            value={queuePreset}
+            counts={presetCounts}
+            onChange={setQueuePreset}
+          />
           <FilterBar
             value={filters}
             onChange={(next) => {
@@ -548,7 +663,7 @@ export default function App() {
             </div>
           )}
           <EncounterList
-            rows={encounters}
+            rows={visibleEncounters}
             loading={listLoading}
             error={listError}
             selectedId={selectedId}
@@ -601,7 +716,7 @@ export default function App() {
           )}
           {view === "day" ? (
             <DayView
-              encounters={encounters}
+              encounters={visibleEncounters}
               date={dayDate}
               onDateChange={setDayDate}
               onPick={(id) => { setSelectedId(id); setView("list"); }}
@@ -902,12 +1017,17 @@ function EncounterList({
       </div>
     );
 
+  const now = Date.now();
   return (
     <div className="enc-list" data-testid="enc-list">
-      {rows.map((e) => (
+      {rows.map((e) => {
+        const r = deriveReadiness(e, now);
+        const activityIso =
+          e.started_at ?? e.scheduled_at ?? e.created_at ?? null;
+        return (
         <div
           key={e.id}
-          className={"enc-row" + (selectedId === e.id ? " is-active" : "")}
+          className={"enc-card enc-row" + (selectedId === e.id ? " is-active" : "")}
           onClick={() => onSelect(e.id)}
           role="button"
           tabIndex={0}
@@ -919,7 +1039,7 @@ function EncounterList({
           {onBulkToggle && (
             <input
               type="checkbox"
-              className="enc-row__select"
+              className="enc-row__select enc-card__select"
               aria-label={`Select encounter ${e.id}`}
               data-testid={`enc-row-select-${e.id}`}
               checked={bulkSelected?.has(String(e.id)) ?? false}
@@ -927,18 +1047,39 @@ function EncounterList({
               onChange={() => onBulkToggle(e.id)}
             />
           )}
-          <div>
-            <div className="enc-row__pid">
-              #{e.id} · {e.patient_identifier}
+          <div className="enc-card__body">
+            <div className="enc-card__top">
+              <span className="enc-row__pid enc-card__id">
+                #{e.id} · {e.patient_identifier}
+              </span>
+              <span className="enc-row__name enc-card__name">
+                {e.patient_name ?? "—"}
+              </span>
             </div>
-            <div className="enc-row__name">{e.patient_name ?? "—"}</div>
-            <div className="enc-row__provider">{e.provider_name}</div>
+            <div className="enc-card__meta">
+              <span className="enc-row__provider">{e.provider_name}</span>
+              {e.location_id != null && <span>· Loc #{e.location_id}</span>}
+              {e._source && e._source !== "chartnav" && (
+                <span className="enc-card__src" title={`source=${e._source}`}>
+                  · {String(e._source)}
+                </span>
+              )}
+              {activityIso && (
+                <span className="enc-card__age" title={activityIso}>
+                  · {relativeAge(activityIso, now)}
+                </span>
+              )}
+            </div>
           </div>
-          <span className="status-pill" data-status={e.status}>
-            {e.status.replace(/_/g, " ")}
-          </span>
+          <div className="enc-card__pills">
+            <ReadinessBadge r={r} />
+            <span className="status-pill" data-status={e.status}>
+              {e.status.replace(/_/g, " ")}
+            </span>
+          </div>
         </div>
-      ))}
+      );
+      })}
     </div>
   );
 }
@@ -1497,6 +1638,23 @@ function fmt(iso: string | null | undefined): string {
   const d = new Date(iso.replace(" ", "T"));
   if (isNaN(d.getTime())) return iso;
   return d.toLocaleString();
+}
+
+/** Short relative-time helper for triage cards. */
+function relativeAge(iso: string | null | undefined, now: number): string {
+  if (!iso) return "";
+  const d = new Date(iso.replace(" ", "T"));
+  if (isNaN(d.getTime())) return "";
+  const diff = now - d.getTime();
+  const abs = Math.abs(diff);
+  const m = 60 * 1000;
+  const h = 60 * m;
+  const day = 24 * h;
+  const tag = diff >= 0 ? "ago" : "from now";
+  if (abs < 60 * 1000) return `just now`;
+  if (abs < h) return `${Math.round(abs / m)}m ${tag}`;
+  if (abs < day) return `${Math.round(abs / h)}h ${tag}`;
+  return `${Math.round(abs / day)}d ${tag}`;
 }
 
 function renderEventData(ev: WorkflowEvent): string {

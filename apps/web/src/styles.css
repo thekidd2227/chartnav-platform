@@ -1852,3 +1852,353 @@ html[data-theme="dark"] .banner--error { color: #FCA5A5; }
 .voicemode__btn[aria-pressed="true"] {
   background: var(--cn-primary); color: var(--cn-surface);
 }
+
+/* ============================================================
+   ROI wave 1 — doctor + staff + card UX
+   ============================================================ */
+
+/* ---- ExamSummary (one-glance summary) ---- */
+.exam-summary {
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-lg);
+  background: var(--cn-surface);
+  padding: 18px 20px 20px;
+  margin-bottom: 18px;
+  box-shadow: var(--cn-shadow-sm);
+}
+.exam-summary__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.exam-summary__head h3 {
+  margin: 0 0 2px;
+  font-size: 20px;
+  letter-spacing: -0.01em;
+  color: var(--cn-fg);
+}
+.exam-summary__sub {
+  font-size: 13px;
+  color: var(--cn-muted);
+}
+.exam-summary__lat {
+  color: var(--cn-primary);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-size: 12px;
+  padding: 2px 8px;
+  background: var(--cn-primary-soft);
+  border-radius: var(--cn-radius-pill);
+  border: 1px solid var(--cn-primary-tint);
+}
+.exam-summary__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  max-width: 60%;
+}
+.exam-summary__absent { color: var(--cn-dim); font-style: italic; }
+.exam-summary__absent-note {
+  padding: 10px 12px;
+  background: var(--cn-surface-alt);
+  border: 1px dashed var(--cn-line);
+  border-radius: var(--cn-radius-md);
+  color: var(--cn-muted);
+  font-size: 13px;
+}
+.exam-summary__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px 24px;
+  margin: 0;
+}
+.exam-summary__grid > div {
+  border-bottom: 1px solid var(--cn-line);
+  padding-bottom: 8px;
+}
+.exam-summary__grid-wide { grid-column: span 2; }
+.exam-summary__grid dt {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--cn-muted);
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+.exam-summary__grid dd {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--cn-fg);
+  line-height: 1.45;
+  word-break: break-word;
+}
+.exam-summary__segments {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--cn-line);
+}
+.exam-summary__segments h4 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--cn-muted);
+  font-weight: 700;
+}
+.exam-summary__segments dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px 20px;
+}
+.exam-summary__segments dt {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--cn-muted);
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.exam-summary__segments dd {
+  margin: 0;
+  font-size: 13px;
+  color: var(--cn-fg);
+}
+
+/* ---- Next best action rail ---- */
+.nba {
+  border: 1px solid var(--cn-primary-tint);
+  border-left: 4px solid var(--cn-primary);
+  border-radius: var(--cn-radius-lg);
+  background: linear-gradient(135deg, var(--cn-primary-soft), var(--cn-surface));
+  padding: 14px 18px 16px;
+  margin-bottom: 16px;
+}
+.nba[data-kind="sign"]    { border-left-color: var(--cn-primary); }
+.nba[data-kind="review"]  { border-left-color: var(--cn-info); }
+.nba[data-kind="retry"]   { border-left-color: var(--cn-danger); background: linear-gradient(135deg, var(--cn-danger-tint), var(--cn-surface)); }
+.nba[data-kind="transmit"]{ border-left-color: var(--cn-accent); }
+.nba[data-kind="done"]    { border-left-color: var(--cn-success); background: var(--cn-success-tint); }
+.nba__body {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.nba__label { flex: 1 1 340px; min-width: 0; }
+.nba__eyebrow {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cn-primary-active);
+}
+.nba__title {
+  margin: 2px 0 4px;
+  font-size: 17px;
+  color: var(--cn-fg);
+  letter-spacing: -0.005em;
+}
+.nba__explain { margin: 0; font-size: 13px; color: var(--cn-muted); line-height: 1.45; }
+.nba__cta { flex: 0 0 auto; min-width: 160px; }
+
+/* ---- Pre-sign safety checkpoint ---- */
+.presign__list {
+  list-style: disc inside;
+  padding: 10px 14px;
+  margin: 0 0 12px;
+  background: var(--cn-warning-tint);
+  border: 1px solid #FCD34D;
+  border-radius: var(--cn-radius-md);
+  font-size: 13px;
+  color: var(--cn-fg);
+}
+.presign__list li { margin-bottom: 4px; }
+.presign__list li:last-child { margin-bottom: 0; }
+.presign__ack {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-md);
+  background: var(--cn-surface-alt);
+  font-size: 13px;
+  cursor: pointer;
+}
+.presign__ack input[type="checkbox"] { margin-top: 3px; }
+
+/* ---- Queue presets ---- */
+.queue-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 12px 10px;
+  border-bottom: 1px solid var(--cn-line);
+  background: var(--cn-surface);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.queue-presets__chip {
+  font: inherit;
+  font-size: 11.5px;
+  padding: 4px 10px;
+  border: 1px solid var(--cn-line-strong);
+  border-radius: var(--cn-radius-pill);
+  background: var(--cn-surface);
+  color: var(--cn-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s var(--cn-ease);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.queue-presets__chip:hover { color: var(--cn-primary); border-color: var(--cn-primary); }
+.queue-presets__chip[data-active="true"] {
+  background: var(--cn-primary);
+  color: var(--cn-surface);
+  border-color: var(--cn-primary);
+}
+.queue-presets__chip[data-active="true"] .queue-presets__count {
+  background: rgba(255, 255, 255, 0.22);
+  color: var(--cn-surface);
+}
+.queue-presets__count {
+  font-variant-numeric: tabular-nums;
+  font-size: 10.5px;
+  padding: 1px 6px;
+  border-radius: var(--cn-radius-pill);
+  background: var(--cn-surface-alt);
+  color: var(--cn-fg);
+  border: 1px solid var(--cn-line);
+  min-width: 18px;
+  text-align: center;
+}
+
+/* ---- Readiness / exception badge on rows ---- */
+.readiness-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: var(--cn-radius-pill);
+  border: 1px solid var(--cn-line);
+  background: var(--cn-surface);
+  color: var(--cn-muted);
+  white-space: nowrap;
+  line-height: 1.3;
+}
+.readiness-badge[data-severity="ok"]    { background: var(--cn-success-tint); color: var(--cn-success); border-color: rgba(21, 128, 61, 0.3); }
+.readiness-badge[data-severity="info"]  { background: var(--cn-info-tint);    color: var(--cn-info);    border-color: #BFDBFE; }
+.readiness-badge[data-severity="warn"]  { background: var(--cn-warning-tint); color: #92400E;           border-color: #FCD34D; }
+.readiness-badge[data-severity="error"] { background: var(--cn-danger-tint);  color: var(--cn-danger);  border-color: #FECACA; }
+.readiness-badge[data-severity="muted"] { background: var(--cn-surface-alt); }
+
+/* ---- Triage-style encounter card (replaces .enc-row) ---- */
+.enc-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 6px 10px;
+  align-items: start;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--cn-line);
+  cursor: pointer;
+  background: var(--cn-bg-alt);
+  transition: background 0.15s var(--cn-ease), border-color 0.15s var(--cn-ease);
+}
+.enc-card:hover { background: var(--cn-primary-soft); }
+.enc-card.is-active {
+  background: var(--cn-surface);
+  border-left: 3px solid var(--cn-primary);
+  padding-left: 13px;
+}
+.enc-card__select { margin-top: 2px; }
+.enc-card__body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.enc-card__top {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.enc-card__id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--cn-dim);
+  letter-spacing: -0.01em;
+}
+.enc-card__name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--cn-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.enc-card__meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+  color: var(--cn-muted);
+}
+.enc-card__meta strong { color: var(--cn-fg); font-weight: 500; }
+.enc-card__pills {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+  justify-content: flex-start;
+  flex-shrink: 0;
+}
+.enc-card__age {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 10.5px;
+  color: var(--cn-dim);
+  letter-spacing: -0.01em;
+}
+.enc-card__src {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cn-muted);
+}
+
+/* Role-specific rail tint. Applied on the layout__list element. */
+.layout__list[data-role="front_desk"] { background: var(--cn-surface-alt); }
+.layout__list[data-role="clinical"]   { background: var(--cn-bg-alt); }
+
+/* Role chip shown in header so operators always know which
+   default workspace they're in. */
+.role-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: var(--cn-radius-pill);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid var(--cn-line);
+  background: var(--cn-surface-alt);
+  color: var(--cn-muted);
+}
+.role-chip[data-role="clinician"]  { color: var(--cn-primary); border-color: var(--cn-primary-tint); background: var(--cn-primary-soft); }
+.role-chip[data-role="reviewer"]   { color: #1E3A8A;           border-color: #BFDBFE; background: var(--cn-info-tint); }
+.role-chip[data-role="admin"]      { color: var(--cn-fg);      background: var(--cn-surface-alt); }
+.role-chip[data-role="front_desk"] { color: var(--cn-warning); border-color: #FCD34D; background: var(--cn-warning-tint); }

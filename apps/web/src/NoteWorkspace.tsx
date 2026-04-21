@@ -98,6 +98,13 @@ import { NoteDiff } from "./NoteDiff";
 import { DualView } from "./DualView";
 import { VOICE_MODE_REGISTRY, VOICE_MODES, VoiceMode } from "./voiceModes";
 
+// ROI wave 1 — doctor-side additions (ExamSummary, NextBestAction,
+// PreSignCheckpoint). Implementation details live inside each
+// component; NoteWorkspace only owns the wiring.
+import { ExamSummary } from "./ExamSummary";
+import { NextBestAction } from "./NextBestAction";
+import { PreSignCheckpoint, shouldCheckpoint } from "./PreSignCheckpoint";
+
 // ---------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------
@@ -234,6 +241,13 @@ export function NoteWorkspace({
   useEffect(() => { refreshCustomShortcuts(); }, [refreshCustomShortcuts]);
 
   const [patternError, setPatternError] = useState<string | null>(null);
+
+  // ROI wave 1 — pre-sign checkpoint gate. When the note's
+  // findings confidence is not "high" or missing-data flags exist,
+  // the doctor acknowledges a compact review modal before the
+  // existing signNoteVersion call fires. The backend still
+  // enforces role + state; this is UI discipline, not a new rule.
+  const [presignOpen, setPresignOpen] = useState(false);
   const addCustomPattern = async () => {
     const body = newPatternBody.trim();
     if (!body || newPatternPending) return;
@@ -1084,6 +1098,97 @@ export function NoteWorkspace({
         </div>
       )}
 
+      {/* ROI wave 1 — item 1+4: one-glance exam summary + ophthalmology
+          structured exam block. Sits at the top so a doctor's first
+          clinically meaningful block is one dense card. */}
+      <ExamSummary
+        findings={activeFindings}
+        note={activeNote}
+        patientDisplay={patientDisplay}
+        providerDisplay={providerDisplay}
+      />
+
+      {/* ROI wave 1 — item 2: next best action rail. */}
+      <NextBestAction
+        inputs={inputs}
+        activeNote={activeNote}
+        transmitSupported={transmitSupported}
+        canSign={canSign}
+        loading={loading}
+        handlers={{
+          onFocusIngest: () => {
+            document
+              .querySelector('[data-testid="workspace-tier-transcript"]')
+              ?.scrollIntoView({ behavior: "smooth", block: "start" });
+          },
+          onProcessLatest: async () => {
+            const target =
+              [...inputs]
+                .filter(
+                  (i) =>
+                    i.processing_status === "queued" ||
+                    i.processing_status === "processing"
+                )
+                .sort((a, b) => b.id - a.id)[0] ?? null;
+            if (!target) return;
+            await onProcess(target.id);
+          },
+          onRetryLatest: async () => {
+            const target =
+              [...inputs]
+                .filter((i) => i.processing_status === "failed")
+                .sort((a, b) => b.id - a.id)[0] ?? null;
+            if (!target) return;
+            await onRetry(target.id);
+          },
+          onGenerate: onGenerate,
+          onFocusReview: () => {
+            document
+              .querySelector('[data-testid="workspace-tier-draft"]')
+              ?.scrollIntoView({ behavior: "smooth", block: "start" });
+          },
+          onRequestSign: () => {
+            if (!activeNote) return;
+            if (shouldCheckpoint(activeNote, activeFindings)) {
+              setPresignOpen(true);
+            } else {
+              onSign();
+            }
+          },
+          onExport: onExport,
+          onTransmit: async () => {
+            if (!activeNote || !transmitSupported) return;
+            setLoading(true);
+            try {
+              const row = await transmitNoteVersion(identity, activeNote.id, {
+                force: transmissions.some(
+                  (t) => t.transport_status === "succeeded"
+                ),
+              });
+              if (row.transport_status === "succeeded") {
+                showFlash(
+                  "ok",
+                  `Transmitted to ${row.adapter_key}` +
+                    (row.remote_id ? ` (remote id ${row.remote_id})` : "")
+                );
+              } else {
+                showFlash(
+                  "error",
+                  `Transmit ${row.transport_status}: ${
+                    row.last_error || row.last_error_code || "no detail"
+                  }`
+                );
+              }
+              await loadTransmissions();
+            } catch (err) {
+              showFlash("error", friendly(err));
+            } finally {
+              setLoading(false);
+            }
+          },
+        }}
+      />
+
       {/* Tier 1 — transcripts */}
       <section
         className="workspace__tier workspace__tier--transcript"
@@ -1612,7 +1717,14 @@ export function NoteWorkspace({
               {canSign && !noteSigned && (
                 <button
                   className="btn btn--primary"
-                  onClick={onSign}
+                  onClick={() => {
+                    if (!activeNote) return;
+                    if (shouldCheckpoint(activeNote, activeFindings)) {
+                      setPresignOpen(true);
+                    } else {
+                      onSign();
+                    }
+                  }}
                   disabled={loading}
                   data-testid="note-sign"
                 >
@@ -2639,6 +2751,19 @@ export function NoteWorkspace({
           )}
         </div>
       </section>
+
+      {/* ROI wave 1 — item 3: pre-sign safety checkpoint modal. */}
+      <PreSignCheckpoint
+        open={presignOpen}
+        note={activeNote}
+        findings={activeFindings}
+        pending={loading}
+        onCancel={() => setPresignOpen(false)}
+        onConfirm={async () => {
+          setPresignOpen(false);
+          await onSign();
+        }}
+      />
     </div>
   );
 }

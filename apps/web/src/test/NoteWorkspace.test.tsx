@@ -406,6 +406,13 @@ describe("NoteWorkspace", () => {
     );
 
     await user.click(screen.getByTestId("note-sign"));
+    // ROI wave 1 — pre-sign checkpoint gates sign when confidence is
+    // not "high" or missing-data flags exist (this test sets both).
+    // Acknowledge + confirm to complete the sign.
+    const presignConfirm = await screen.findByTestId("presign-confirm");
+    const presignAck = screen.getByTestId("presign-ack");
+    await user.click(presignAck);
+    await user.click(presignConfirm);
     await waitFor(() =>
       expect(api.signNoteVersion).toHaveBeenCalledWith(CLIN.email, 100)
     );
