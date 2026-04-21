@@ -36,6 +36,7 @@ import {
   updateUser,
 } from "./api";
 import { KpiPane } from "./KpiPane";
+import { SecurityPane } from "./SecurityPane";
 
 type Tab =
   | "users"
@@ -44,7 +45,8 @@ type Tab =
   | "providers"
   | "organization"
   | "audit"
-  | "kpi";
+  | "kpi"
+  | "security";
 
 export function AdminPanel({ identity, me, onClose }: {
   identity: string;
@@ -152,6 +154,13 @@ export function AdminPanel({ identity, me, onClose }: {
           >
             KPI scorecard
           </button>
+          <button
+            className={"btn " + (tab === "security" ? "btn--primary" : "")}
+            data-testid="admin-tab-security"
+            onClick={() => setTab("security")}
+          >
+            Security
+          </button>
         </div>
         {banner && (
           <div
@@ -176,6 +185,7 @@ export function AdminPanel({ identity, me, onClose }: {
           )}
           {tab === "audit" && <AuditPane identity={identity} org={org} flash={flash} />}
           {tab === "kpi" && <KpiPane identity={identity} me={me} org={org} />}
+          {tab === "security" && <SecurityPane identity={identity} me={me} org={org} />}
         </div>
       </div>
     </div>

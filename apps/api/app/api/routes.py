@@ -4494,3 +4494,177 @@ def kpi_export_csv_route(
             "Content-Disposition": f'attachment; filename="{filename}"',
         },
     )
+
+
+# =====================================================================
+# Phase 48 — /admin/security/* — enterprise control-plane wave 2
+# ---------------------------------------------------------------------
+# Four surfaces, all gated by `require_security_admin`:
+#   GET  /admin/security/policy             — read org security posture
+#   PUT  /admin/security/policy             — update org security posture
+#   GET  /admin/security/sessions           — list active + revoked
+#   POST /admin/security/sessions/{id}/revoke — admin-initiated revoke
+#   POST /admin/security/audit-sink/test    — probe the configured sink
+# =====================================================================
+
+class SecurityPolicyPatchBody(BaseModel):
+    require_mfa: Optional[bool] = None
+    idle_timeout_minutes: Optional[int] = None
+    absolute_timeout_minutes: Optional[int] = None
+    audit_sink_mode: Optional[str] = None
+    audit_sink_target: Optional[str] = None
+    security_admin_emails: Optional[list[str]] = None
+
+
+class SessionRevokeBody(BaseModel):
+    reason: Optional[str] = None
+
+
+@router.get("/admin/security/policy")
+def security_policy_read(
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Read-only view of the org's security policy. Any admin can
+    READ (so the admin panel can show state on first open), but
+    only a security-admin may WRITE (see PUT below)."""
+    if caller.role != "admin":
+        raise _err(
+            "role_admin_required",
+            f"role '{caller.role}' is not permitted; requires 'admin'",
+            403,
+        )
+    from app.security_policy import resolve_security_policy, caller_is_security_admin
+    policy = resolve_security_policy(caller.organization_id)
+    return {
+        "organization_id": caller.organization_id,
+        "caller_is_security_admin": caller_is_security_admin(caller),
+        "policy": policy.as_public_dict(),
+    }
+
+
+@router.put("/admin/security/policy")
+def security_policy_update(
+    payload: SecurityPolicyPatchBody,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    from app.security_policy import (
+        PolicyValidationError,
+        caller_is_security_admin,
+        resolve_security_policy,
+        update_security_policy,
+    )
+    if not caller_is_security_admin(caller):
+        raise _err(
+            "security_admin_required",
+            "this action requires the security-admin role for this organization",
+            403,
+        )
+    patch = {k: v for k, v in payload.model_dump(exclude_unset=True).items()}
+    try:
+        updated = update_security_policy(caller.organization_id, patch)
+    except PolicyValidationError as e:
+        raise _err(e.code, e.message, 400)
+
+    from app import audit as _audit
+    _audit.record(
+        event_type="admin_security_policy_updated",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path="/admin/security/policy",
+        method="PUT",
+        detail=f"keys={sorted(patch.keys())}",
+    )
+    return {
+        "organization_id": caller.organization_id,
+        "caller_is_security_admin": True,
+        "policy": updated.as_public_dict(),
+    }
+
+
+@router.get("/admin/security/sessions")
+def security_sessions_list(
+    include_revoked: bool = Query(False),
+    limit: int = Query(200, ge=1, le=1000),
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    from app.security_policy import caller_is_security_admin
+    if not caller_is_security_admin(caller):
+        raise _err(
+            "security_admin_required",
+            "this action requires the security-admin role for this organization",
+            403,
+        )
+    from app.session_governance import list_sessions
+    rows = list_sessions(
+        organization_id=caller.organization_id,
+        include_revoked=bool(include_revoked),
+        limit=int(limit),
+    )
+    return {
+        "organization_id": caller.organization_id,
+        "include_revoked": bool(include_revoked),
+        "sessions": rows,
+    }
+
+
+@router.post("/admin/security/sessions/{session_id:int}/revoke")
+def security_sessions_revoke(
+    session_id: int,
+    payload: SessionRevokeBody,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    from app.security_policy import caller_is_security_admin
+    if not caller_is_security_admin(caller):
+        raise _err(
+            "security_admin_required",
+            "this action requires the security-admin role for this organization",
+            403,
+        )
+    from app.session_governance import admin_revoke_session
+    row = admin_revoke_session(
+        organization_id=caller.organization_id,
+        session_id=session_id,
+        reason=(payload.reason or "admin_terminated").strip() or "admin_terminated",
+        by_user_id=caller.user_id,
+    )
+    from app import audit as _audit
+    _audit.record(
+        event_type="admin_session_revoked",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path=f"/admin/security/sessions/{session_id}/revoke",
+        method="POST",
+        detail=f"session_id={session_id} reason={payload.reason or 'admin_terminated'}",
+    )
+    return {"session": row}
+
+
+@router.post("/admin/security/audit-sink/test")
+def security_audit_sink_test(
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    from app.security_policy import caller_is_security_admin
+    if not caller_is_security_admin(caller):
+        raise _err(
+            "security_admin_required",
+            "this action requires the security-admin role for this organization",
+            403,
+        )
+    from app.services.audit_sink import probe
+    result = probe(caller.organization_id)
+    from app import audit as _audit
+    _audit.record(
+        event_type="admin_audit_sink_test",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path="/admin/security/audit-sink/test",
+        method="POST",
+        detail=f"mode={result.get('mode')} ok={result.get('ok')}",
+    )
+    return result

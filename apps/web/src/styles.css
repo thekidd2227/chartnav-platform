@@ -2401,3 +2401,174 @@ html[data-theme="dark"] .banner--error { color: #FCA5A5; }
 }
 .kpi-table tbody tr:hover { background: var(--cn-primary-soft); }
 .kpi-table tbody th[scope="row"] { font-weight: 600; color: var(--cn-fg); }
+
+/* ============================================================
+   Phase 48 — Security control-plane admin pane
+   ============================================================ */
+.sec-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 14px 2px 4px;
+}
+.sec-pane__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.sec-pane__head h3 {
+  margin: 0;
+  font-size: 14px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--cn-fg);
+  font-weight: 700;
+}
+.sec-block {
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-md);
+  background: var(--cn-surface);
+  padding: 14px 16px 16px;
+}
+.sec-block__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.sec-block__head h4 {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cn-muted);
+  font-weight: 700;
+}
+.sec-block__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.sec-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: var(--cn-radius-pill);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid var(--cn-line);
+  background: var(--cn-surface-alt);
+  color: var(--cn-muted);
+}
+.sec-pill[data-sink-mode="disabled"] { color: var(--cn-muted); }
+.sec-pill[data-sink-mode="jsonl"]    { color: var(--cn-info);    background: var(--cn-info-tint);    border-color: #BFDBFE; }
+.sec-pill[data-sink-mode="webhook"]  { color: var(--cn-primary); background: var(--cn-primary-soft); border-color: var(--cn-primary-tint); }
+.sec-pill[data-sink-mode="active"]   { color: var(--cn-success); background: var(--cn-success-tint); border-color: rgba(21, 128, 61, 0.3); }
+.sec-pill[data-sink-mode="revoked"]  { color: var(--cn-warning); background: var(--cn-warning-tint); border-color: #FCD34D; }
+
+/* Policy grid */
+.sec-policy__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px 18px;
+}
+.sec-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--cn-fg);
+}
+.sec-field--wide { grid-column: 1 / -1; }
+.sec-field--check {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+}
+.sec-field strong {
+  display: block;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--cn-fg);
+}
+.sec-field .subtle-note {
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
+}
+.sec-field input[type="number"],
+.sec-field input[type="text"],
+.sec-field textarea {
+  font: inherit;
+  padding: 6px 9px;
+  border: 1px solid var(--cn-line-strong);
+  border-radius: var(--cn-radius-md);
+  background: var(--cn-surface);
+  color: var(--cn-fg);
+  font-size: 13px;
+}
+.sec-field input:disabled,
+.sec-field textarea:disabled {
+  background: var(--cn-surface-alt);
+  color: var(--cn-muted);
+  cursor: not-allowed;
+}
+.sec-field textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  line-height: 1.4;
+  resize: vertical;
+}
+
+/* Audit sink KV */
+.sec-kv {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px 20px;
+  margin: 0;
+}
+.sec-kv > div { display: flex; flex-direction: column; gap: 2px; }
+.sec-kv dt {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--cn-muted);
+  font-weight: 700;
+}
+.sec-kv dd { margin: 0; font-size: 13px; color: var(--cn-fg); word-break: break-word; }
+.sec-kv dd span[data-tone="ok"]    { color: var(--cn-success); }
+.sec-kv dd span[data-tone="error"] { color: var(--cn-danger); }
+
+/* Sessions table */
+.sec-table-wrap { overflow-x: auto; }
+.sec-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+.sec-table th,
+.sec-table td {
+  text-align: left;
+  padding: 7px 9px;
+  border-bottom: 1px solid var(--cn-line);
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+.sec-table thead th {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--cn-muted);
+  font-weight: 700;
+  background: var(--cn-surface-alt);
+  border-bottom: 1px solid var(--cn-line-strong);
+}
+.sec-table tbody tr:hover { background: var(--cn-primary-soft); }

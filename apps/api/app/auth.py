@@ -191,6 +191,25 @@ def require_caller(
     # Stash on request.state so middleware / error handlers / audit can
     # reference the resolved caller without re-running auth.
     request.state.caller = caller
+
+    # Phase 48 — session governance. Short-circuits for orgs that
+    # have not configured idle/absolute timeouts so the hot path is
+    # zero-cost by default. Raises 401 when a session is revoked or
+    # has exceeded an active timeout.
+    try:
+        from app.session_governance import track_and_enforce
+        track_and_enforce(caller, mode, authorization, request)
+    except HTTPException:
+        raise
+    except Exception:  # pragma: no cover — defensive
+        # Never let governance bookkeeping break auth. If the tracking
+        # path explodes, log and let the request through; timeout
+        # enforcement remains on via the explicit denial branch above.
+        import logging as _lg
+        _lg.getLogger("chartnav.session").warning(
+            "track_and_enforce soft-failed", exc_info=True
+        )
+
     return caller
 
 

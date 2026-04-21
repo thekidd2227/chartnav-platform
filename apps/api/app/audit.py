@@ -98,6 +98,27 @@ def record(
     except Exception as e:  # pragma: no cover — defensive
         log.error("audit.record failed: %s", e)
 
+    # Phase 48 — enterprise audit sink. Fire AFTER the authoritative
+    # DB insert so a sink outage cannot block or corrupt the
+    # internal audit trail. `dispatch(...)` swallows every error it
+    # encounters; see apps/api/app/services/audit_sink.py.
+    try:
+        from app.services.audit_sink import dispatch as _sink_dispatch
+        _sink_dispatch({
+            "event_type": event_type,
+            "request_id": request_id,
+            "actor_email": actor_email,
+            "actor_user_id": actor_user_id,
+            "organization_id": organization_id,
+            "path": path,
+            "method": method,
+            "error_code": error_code,
+            "detail": detail,
+            "remote_addr": remote_addr,
+        })
+    except Exception:  # pragma: no cover — defensive
+        pass
+
 
 def query_recent(limit: int = 50) -> list[dict[str, Any]]:
     """Read helper used only by tests / operator debugging."""

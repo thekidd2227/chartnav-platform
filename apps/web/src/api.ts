@@ -1783,3 +1783,106 @@ export async function downloadKpiCsv(email: string, hours: number): Promise<{ fi
   const blob = await res.blob();
   return { filename, blob };
 }
+
+// =====================================================================
+// Phase 48 — /admin/security/* — enterprise control-plane wave 2
+// =====================================================================
+
+export type AuditSinkMode = "disabled" | "jsonl" | "webhook";
+
+export interface SecurityPolicyPayload {
+  require_mfa: boolean;
+  idle_timeout_minutes: number | null;
+  absolute_timeout_minutes: number | null;
+  audit_sink_mode: AuditSinkMode;
+  audit_sink_target: string | null;
+  security_admin_emails: string[];
+}
+
+export interface SecurityPolicyResponse {
+  organization_id: number;
+  caller_is_security_admin: boolean;
+  policy: SecurityPolicyPayload;
+}
+
+export interface SecurityPolicyPatch {
+  require_mfa?: boolean;
+  idle_timeout_minutes?: number | null;
+  absolute_timeout_minutes?: number | null;
+  audit_sink_mode?: AuditSinkMode;
+  audit_sink_target?: string | null;
+  security_admin_emails?: string[];
+}
+
+export interface SecuritySessionRow {
+  id: number;
+  user_id: number;
+  user_email: string;
+  user_role: string;
+  session_key: string;
+  auth_mode: string;
+  created_at: string;
+  last_activity_at: string;
+  revoked_at: string | null;
+  revoked_reason: string | null;
+  remote_addr: string | null;
+  user_agent: string | null;
+}
+
+export interface SecuritySessionsResponse {
+  organization_id: number;
+  include_revoked: boolean;
+  sessions: SecuritySessionRow[];
+}
+
+export interface AuditSinkProbeResponse {
+  ok: boolean;
+  mode: AuditSinkMode;
+  target: string | null;
+  detail: string;
+}
+
+export function getSecurityPolicy(email: string): Promise<SecurityPolicyResponse> {
+  return request("/admin/security/policy", { email });
+}
+
+export function updateSecurityPolicy(
+  email: string,
+  patch: SecurityPolicyPatch
+): Promise<SecurityPolicyResponse> {
+  return request("/admin/security/policy", {
+    email,
+    method: "PUT",
+    body: JSON.stringify(patch),
+  });
+}
+
+export function listSecuritySessions(
+  email: string,
+  opts: { includeRevoked?: boolean; limit?: number } = {}
+): Promise<SecuritySessionsResponse> {
+  const qs = new URLSearchParams();
+  if (opts.includeRevoked) qs.set("include_revoked", "true");
+  if (opts.limit !== undefined) qs.set("limit", String(opts.limit));
+  const suffix = qs.toString() ? `?${qs}` : "";
+  return request(`/admin/security/sessions${suffix}`, { email });
+}
+
+export function revokeSecuritySession(
+  email: string,
+  sessionId: number,
+  reason?: string
+): Promise<{ session: SecuritySessionRow }> {
+  return request(`/admin/security/sessions/${sessionId}/revoke`, {
+    email,
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export function probeAuditSink(email: string): Promise<AuditSinkProbeResponse> {
+  return request("/admin/security/audit-sink/test", {
+    email,
+    method: "POST",
+  });
+}
