@@ -94,6 +94,10 @@ class ExceptionCategory(str, Enum):
     evidence_signing_inconsistent = "evidence_signing_inconsistent"
     evidence_sink_retry_pending = "evidence_sink_retry_pending"
 
+    # Phase 59 — operator-actionable sink failures that auto-retry
+    # will NOT clear (crossed attempt cap or operator-abandoned).
+    evidence_sink_permanent_failure = "evidence_sink_permanent_failure"
+
 
 # Map each *audit* row to a category. Keys are matched first on
 # `event_type`; for pre-auth failures the event_type IS the error
@@ -316,6 +320,17 @@ CATEGORY_METADATA: dict[ExceptionCategory, dict[str, str]] = {
             "POST /admin/operations/evidence-sink/retry-failed to "
             "attempt delivery again. The in-app chain remains "
             "authoritative either way."
+        ),
+    },
+    ExceptionCategory.evidence_sink_permanent_failure: {
+        "label": "Evidence sink permanent failure",
+        "severity": "error",
+        "next_step": (
+            "One or more evidence events exceeded the retry cap or "
+            "were abandoned by an operator. Automatic retries will "
+            "not clear these. Investigate the transport, then either "
+            "fix the target and POST /admin/operations/evidence-sink/"
+            "retry-failed again, or accept the abandonment."
         ),
     },
 }
@@ -660,6 +675,10 @@ def _security_policy_status(organization_id: int) -> dict[str, Any]:
     retention_days = getattr(
         policy, "export_snapshot_retention_days", None,
     )
+    # Phase 59 — sink retry retention.
+    sink_retention_days = getattr(
+        policy, "evidence_sink_retention_days", None,
+    )
 
     # Keyring posture (safe: returns only key ids + consistency).
     kp: dict[str, Any] = {}
@@ -691,7 +710,21 @@ def _security_policy_status(organization_id: int) -> dict[str, Any]:
         "evidence_signing_inconsistent": bool(kp.get("inconsistent")),
         "export_snapshot_retention_days": retention_days,
         "export_snapshot_retention_configured": retention_days is not None,
+        # Phase 59 — sink retry retention + max attempts constant.
+        "evidence_sink_retention_days": sink_retention_days,
+        "evidence_sink_retention_configured": sink_retention_days is not None,
+        "evidence_sink_max_attempts": _max_sink_attempts(),
     }
+
+
+def _max_sink_attempts() -> int:
+    """Best-effort lookup of the retry cap. Imported locally so a
+    defective evidence_sink module can't break the ops overview."""
+    try:
+        from app.services.evidence_sink import MAX_SINK_ATTEMPTS
+        return int(MAX_SINK_ATTEMPTS)
+    except Exception:
+        return 0
 
 
 # ---------------------------------------------------------------------
@@ -792,16 +825,33 @@ def compute_counters(
         int(fail_row["n"]) if fail_row else 0
     )
 
-    # Phase 57 — CURRENT retry backlog (not windowed). A row with
-    # sink_status='failed' is still awaiting retry regardless of
-    # when it happened.
+    # Phase 57 / 59 — CURRENT retry backlog (not windowed). We now
+    # split failed rows by disposition:
+    #   retry_pending        = sink_status=failed AND
+    #                          disposition IS NULL OR 'pending'
+    #   permanent_failure    = disposition IN ('permanent_failure',
+    #                                          'abandoned')
+    # A row sitting under 'permanent_failure' will NOT be picked up
+    # by /evidence-sink/retry-failed, so it is operator-actionable
+    # rather than auto-retry noise.
     pending_row = fetch_one(
         "SELECT COUNT(*) AS n FROM note_evidence_events "
-        "WHERE organization_id = :org AND sink_status = 'failed'",
+        "WHERE organization_id = :org AND sink_status = 'failed' "
+        "AND (sink_retry_disposition IS NULL "
+        "  OR sink_retry_disposition = 'pending')",
         {"org": organization_id},
     )
     counts[ExceptionCategory.evidence_sink_retry_pending.value] = (
         int(pending_row["n"]) if pending_row else 0
+    )
+    perm_row = fetch_one(
+        "SELECT COUNT(*) AS n FROM note_evidence_events "
+        "WHERE organization_id = :org AND sink_status = 'failed' "
+        "AND sink_retry_disposition IN ('permanent_failure', 'abandoned')",
+        {"org": organization_id},
+    )
+    counts[ExceptionCategory.evidence_sink_permanent_failure.value] = (
+        int(perm_row["n"]) if perm_row else 0
     )
 
     # Phase 57 — signing posture. We treat any inconsistency

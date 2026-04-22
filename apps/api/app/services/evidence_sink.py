@@ -123,11 +123,22 @@ def dispatch_event(
     return EvidenceSinkDeliveryResult(status="sent", error=None)
 
 
+# Phase 59 — retry disposition + cap.
+#
+# MAX_SINK_ATTEMPTS: once an event has been attempted this many
+# times without success, the retry sweep promotes it to
+# `permanent_failure` so it stops cycling through automatic retries.
+# 10 is generous: a short SIEM outage can blow through a handful of
+# retries without triggering it; a long one eventually does.
+MAX_SINK_ATTEMPTS: int = 10
+
+
 def update_sink_status(
     *,
     evidence_event_id: int,
     result: EvidenceSinkDeliveryResult,
     increment_attempt: bool = True,
+    disposition_override: Optional[str] = None,
 ) -> None:
     """Stamp the delivery outcome on the evidence row. The write is
     small and unconditional — the caller has already committed the
@@ -142,16 +153,53 @@ def update_sink_status(
     Never raises up to the caller: evidence chain correctness is
     more important than tracking delivery perfectly.
     """
+    # Phase 59 — disposition tri-state. On a 'sent' outcome, clear
+    # to no disposition (treat as completed). On a 'failed' outcome,
+    # mark pending unless the attempt count has reached the cap, at
+    # which point promote to permanent_failure. Disposition can also
+    # be explicitly overridden (e.g. the abandon action).
     try:
         with transaction() as conn:
+            # Fetch current attempt count so we can decide on the
+            # disposition without a second UPDATE. If the row is
+            # missing we just return — the row was deleted out from
+            # under us, nothing to track.
+            row = conn.execute(
+                text(
+                    "SELECT COALESCE(sink_attempt_count, 0) AS c "
+                    "FROM note_evidence_events WHERE id = :id"
+                ),
+                {"id": int(evidence_event_id)},
+            ).mappings().first()
+            if not row:
+                return
+            next_count = int(row["c"]) + (1 if increment_attempt else 0)
+
+            if disposition_override is not None:
+                disposition = disposition_override
+            elif result.status == "sent":
+                # Delivery succeeded: no longer a retry candidate.
+                disposition = None
+            elif result.status == "failed":
+                disposition = (
+                    "permanent_failure"
+                    if next_count >= MAX_SINK_ATTEMPTS
+                    else "pending"
+                )
+            elif result.status == "skipped":
+                # Transport disabled: not a failure, no disposition.
+                disposition = None
+            else:  # pragma: no cover — defensive
+                disposition = None
+
             if increment_attempt:
                 conn.execute(
                     text(
                         "UPDATE note_evidence_events SET "
                         "sink_status = :s, sink_attempted_at = :t, "
                         "sink_error = :e, "
-                        "sink_attempt_count = "
-                        "  COALESCE(sink_attempt_count, 0) + 1 "
+                        "sink_attempt_count = :c, "
+                        "sink_retry_disposition = :d "
                         "WHERE id = :id"
                     ),
                     {
@@ -159,6 +207,8 @@ def update_sink_status(
                         "s": result.status,
                         "t": datetime.now(timezone.utc).isoformat(),
                         "e": result.error,
+                        "c": next_count,
+                        "d": disposition,
                     },
                 )
             else:
@@ -166,7 +216,8 @@ def update_sink_status(
                     text(
                         "UPDATE note_evidence_events SET "
                         "sink_status = :s, sink_attempted_at = :t, "
-                        "sink_error = :e "
+                        "sink_error = :e, "
+                        "sink_retry_disposition = :d "
                         "WHERE id = :id"
                     ),
                     {
@@ -174,6 +225,7 @@ def update_sink_status(
                         "s": result.status,
                         "t": datetime.now(timezone.utc).isoformat(),
                         "e": result.error,
+                        "d": disposition,
                     },
                 )
     except Exception:  # pragma: no cover
@@ -206,8 +258,17 @@ def retry_failed_deliveries(
     *,
     max_events: int = 100,
 ) -> RetrySweepResult:
-    """Retry every event with sink_status='failed' for this org, up
-    to `max_events`. Oldest-first so backlog drains in order.
+    """Retry every event with sink_status='failed' AND
+    sink_retry_disposition in (NULL, 'pending') for this org, up to
+    `max_events`. Oldest-first so backlog drains in order.
+
+    Phase 59 — events that have crossed MAX_SINK_ATTEMPTS are NOT
+    retried automatically; they now carry
+    `sink_retry_disposition='permanent_failure'` and require an
+    operator-initiated action. Events that an operator has flagged
+    `'abandoned'` are also skipped. The retry sweep is therefore
+    bounded — it cannot re-attempt a row that has been explicitly
+    taken out of the retry pool.
 
     Guarantees:
       * does NOT touch any canonical evidence column (event_hash,
@@ -217,14 +278,18 @@ def retry_failed_deliveries(
         being marked sent; retry on a disabled sink is a no-op
       * each retry increments sink_attempt_count so operators can
         see stuck rows
+      * post-attempt, if count >= MAX_SINK_ATTEMPTS the row is
+        auto-promoted to disposition='permanent_failure'
     """
-    from sqlalchemy import text as _sql
     from app.db import fetch_all as _fa
 
     rows = _fa(
-        f"SELECT {_EVIDENCE_ROW_COLS}, sink_status, sink_attempt_count "
+        f"SELECT {_EVIDENCE_ROW_COLS}, sink_status, sink_attempt_count, "
+        "sink_retry_disposition "
         "FROM note_evidence_events "
         "WHERE organization_id = :org AND sink_status = 'failed' "
+        "AND (sink_retry_disposition IS NULL "
+        "  OR sink_retry_disposition = 'pending') "
         "ORDER BY id ASC LIMIT :lim",
         {"org": int(organization_id), "lim": int(max_events)},
     )
@@ -313,6 +378,193 @@ def probe_evidence_sink(organization_id: int) -> dict[str, Any]:
         }
 
 
+# ---------------------------------------------------------------------
+# Phase 59 — operator abandon path + retention of retry noise
+# ---------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class AbandonResult:
+    ok: bool
+    evidence_event_id: int
+    previous_disposition: Optional[str]
+    new_disposition: str
+    error_code: Optional[str] = None
+    reason: Optional[str] = None
+
+
+def abandon_event(
+    *,
+    evidence_event_id: int,
+    organization_id: int,
+    operator_reason: Optional[str],
+) -> AbandonResult:
+    """Mark a single failed evidence event as 'abandoned'.
+
+    Preconditions:
+      - the event exists and belongs to the caller's org
+      - the event's sink_status is 'failed' (otherwise there's
+        nothing to abandon — a 'sent' row needs no remediation and
+        a 'skipped' row has no delivery to abandon)
+      - the disposition is not already 'abandoned' (idempotent)
+
+    Effect:
+      - sink_retry_disposition flips to 'abandoned'
+      - sink_error remains intact (evidence of why the operator
+        abandoned) until the retention sweep clears it
+      - sink_attempt_count is NOT incremented (abandoning is not an
+        attempt)
+
+    Returns an AbandonResult; the route layer audits.
+    """
+    from app.db import fetch_one as _fo
+
+    row = _fo(
+        "SELECT id, organization_id, sink_status, sink_retry_disposition, "
+        "sink_attempt_count "
+        "FROM note_evidence_events WHERE id = :id",
+        {"id": int(evidence_event_id)},
+    )
+    if not row or int(row["organization_id"]) != int(organization_id):
+        return AbandonResult(
+            ok=False, evidence_event_id=int(evidence_event_id),
+            previous_disposition=None, new_disposition="",
+            error_code="evidence_event_not_found",
+            reason="no such evidence event in this organization",
+        )
+    prev = row.get("sink_retry_disposition")
+    if row.get("sink_status") != "failed":
+        return AbandonResult(
+            ok=False, evidence_event_id=int(evidence_event_id),
+            previous_disposition=prev, new_disposition=prev or "",
+            error_code="abandon_not_applicable",
+            reason=(
+                f"event sink_status is {row.get('sink_status')!r}; "
+                "only 'failed' rows can be abandoned"
+            ),
+        )
+    if prev == "abandoned":
+        # Idempotent no-op.
+        return AbandonResult(
+            ok=True, evidence_event_id=int(evidence_event_id),
+            previous_disposition="abandoned",
+            new_disposition="abandoned",
+        )
+
+    reason_str = (operator_reason or "").strip()[:500] or None
+    with transaction() as conn:
+        conn.execute(
+            text(
+                "UPDATE note_evidence_events SET "
+                "sink_retry_disposition = 'abandoned', "
+                "sink_error = COALESCE(:r, sink_error) "
+                "WHERE id = :id"
+            ),
+            {"id": int(evidence_event_id), "r": reason_str},
+        )
+    return AbandonResult(
+        ok=True, evidence_event_id=int(evidence_event_id),
+        previous_disposition=prev, new_disposition="abandoned",
+    )
+
+
+@dataclass(frozen=True)
+class SinkRetentionSweepResult:
+    dry_run: bool
+    organization_id: int
+    retention_days: Optional[int]
+    candidates_found: int
+    cleared: int
+    candidate_ids: list[int]
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "dry_run": self.dry_run,
+            "organization_id": self.organization_id,
+            "retention_days": self.retention_days,
+            "candidates_found": self.candidates_found,
+            "cleared": self.cleared,
+            "candidate_ids": self.candidate_ids,
+        }
+
+
+def sweep_sink_retention(
+    organization_id: int,
+    *,
+    dry_run: bool = False,
+) -> SinkRetentionSweepResult:
+    """Clear noisy `sink_error` text on abandoned / permanently-
+    failed rows once they have aged past the retention window.
+
+    SAFETY — what this function never does:
+      * never deletes an evidence row (chain references matter)
+      * never touches canonical columns (event_hash etc.)
+      * never clears the disposition itself (operators still see
+        what the final state was)
+      * never runs when retention is unconfigured
+
+    What it DOES do:
+      * clears `sink_error` (the last failure reason string) on
+        rows where `sink_retry_disposition in ('abandoned',
+        'permanent_failure')` AND the attempt age exceeds the
+        retention window. This is the "operational retry noise" —
+        once the row is finalized, the text reason is no longer
+        forensically interesting.
+
+    Policy source: `security_policy.evidence_sink_retention_days`.
+    Null → retain forever (no-op). Integer → clear after N days,
+    with a hard floor of 7 days enforced at policy write time.
+    """
+    from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+    from app.db import fetch_all as _fa
+    from app.security_policy import resolve_security_policy
+
+    policy = resolve_security_policy(organization_id)
+    days = getattr(policy, "evidence_sink_retention_days", None)
+    if not days:
+        return SinkRetentionSweepResult(
+            dry_run=dry_run, organization_id=int(organization_id),
+            retention_days=None, candidates_found=0, cleared=0,
+            candidate_ids=[],
+        )
+
+    cutoff = _dt.now(_tz.utc) - _td(days=int(days))
+    candidates = _fa(
+        "SELECT id FROM note_evidence_events "
+        "WHERE organization_id = :org "
+        "AND sink_retry_disposition IN ('abandoned', 'permanent_failure') "
+        "AND sink_error IS NOT NULL "
+        "AND sink_attempted_at < :cutoff "
+        "ORDER BY id ASC LIMIT 1000",
+        {"org": int(organization_id), "cutoff": cutoff.isoformat()},
+    )
+    ids = [int(r["id"]) for r in candidates]
+    if dry_run or not ids:
+        return SinkRetentionSweepResult(
+            dry_run=dry_run, organization_id=int(organization_id),
+            retention_days=int(days),
+            candidates_found=len(ids),
+            cleared=0, candidate_ids=ids,
+        )
+    cleared = 0
+    with transaction() as conn:
+        for sid in ids:
+            conn.execute(
+                text(
+                    "UPDATE note_evidence_events SET sink_error = NULL "
+                    "WHERE id = :id AND organization_id = :org "
+                    "AND sink_error IS NOT NULL"
+                ),
+                {"id": sid, "org": int(organization_id)},
+            )
+            cleared += 1
+    return SinkRetentionSweepResult(
+        dry_run=False, organization_id=int(organization_id),
+        retention_days=int(days),
+        candidates_found=len(ids), cleared=cleared,
+        candidate_ids=ids,
+    )
+
+
 __all__ = [
     "EvidenceSinkDeliveryResult",
     "dispatch_event",
@@ -320,4 +572,9 @@ __all__ = [
     "probe_evidence_sink",
     "RetrySweepResult",
     "retry_failed_deliveries",
+    "MAX_SINK_ATTEMPTS",
+    "AbandonResult",
+    "abandon_event",
+    "SinkRetentionSweepResult",
+    "sweep_sink_retention",
 ]

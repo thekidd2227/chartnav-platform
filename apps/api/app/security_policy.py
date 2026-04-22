@@ -89,6 +89,14 @@ class SecurityPolicy:
     # write so an org cannot accidentally configure a value that
     # would destroy current-quarter evidence.
     export_snapshot_retention_days: Optional[int] = None
+    # Phase 59 — evidence-sink retry-noise retention (days). Null =>
+    # retain the sink_error text forever. When set, the retention
+    # sweep clears sink_error on rows where the operator has taken
+    # the row out of the retry pool (abandoned/permanent_failure)
+    # and the error is older than the window. Hard floor of 7 days
+    # so the most recent failure reason always survives long enough
+    # to be useful. NEVER touches canonical evidence columns.
+    evidence_sink_retention_days: Optional[int] = None
 
     @classmethod
     def off(cls) -> "SecurityPolicy":
@@ -109,6 +117,7 @@ class SecurityPolicy:
             "evidence_signing_mode": self.evidence_signing_mode,
             "evidence_signing_key_id": self.evidence_signing_key_id,
             "export_snapshot_retention_days": self.export_snapshot_retention_days,
+            "evidence_sink_retention_days": self.evidence_sink_retention_days,
         }
 
 
@@ -227,6 +236,9 @@ def resolve_security_policy(organization_id: int) -> SecurityPolicy:
         export_snapshot_retention_days=_int(
             ["export_snapshot_retention_days"]
         ),
+        evidence_sink_retention_days=_int(
+            ["evidence_sink_retention_days"]
+        ),
     )
 
 
@@ -287,6 +299,8 @@ def _coerce_update(
         "evidence_signing_key_id",
         # Phase 57 — export snapshot retention.
         "export_snapshot_retention_days",
+        # Phase 59 — evidence sink retry-noise retention.
+        "evidence_sink_retention_days",
     }
     unknown = set(patch.keys()) - allowed
     if unknown:
@@ -439,6 +453,37 @@ def _coerce_update(
                     "use null for 'retain forever'",
                 )
             out["export_snapshot_retention_days"] = n
+
+    # Phase 59 — evidence sink retry-noise retention. Floor of 7
+    # days so the most recent failure reason survives long enough
+    # for an operator to triage after a weekend.
+    EVIDENCE_SINK_RETENTION_FLOOR_DAYS = 7
+    if "evidence_sink_retention_days" in patch:
+        raw = patch["evidence_sink_retention_days"]
+        if raw is None or raw == "":
+            out["evidence_sink_retention_days"] = None
+        else:
+            try:
+                n = int(raw)
+            except (TypeError, ValueError):
+                raise PolicyValidationError(
+                    "policy_validation_failed",
+                    "evidence_sink_retention_days must be an integer "
+                    "number of days or null",
+                )
+            if n < EVIDENCE_SINK_RETENTION_FLOOR_DAYS:
+                raise PolicyValidationError(
+                    "policy_validation_failed",
+                    "evidence_sink_retention_days must be >= "
+                    f"{EVIDENCE_SINK_RETENTION_FLOOR_DAYS} days or null",
+                )
+            if n > 365 * 10:
+                raise PolicyValidationError(
+                    "policy_validation_failed",
+                    "evidence_sink_retention_days too large; "
+                    "use null for 'retain forever'",
+                )
+            out["evidence_sink_retention_days"] = n
 
     return out
 

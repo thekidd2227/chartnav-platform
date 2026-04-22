@@ -5304,6 +5304,8 @@ class SecurityPolicyPatchBody(BaseModel):
     evidence_signing_key_id: Optional[str] = None
     # Phase 57 — export snapshot retention (days or null).
     export_snapshot_retention_days: Optional[int] = None
+    # Phase 59 — evidence sink retry-noise retention (days or null).
+    evidence_sink_retention_days: Optional[int] = None
 
 
 class SessionRevokeBody(BaseModel):
@@ -5740,8 +5742,11 @@ def note_evidence_bundle_verify(
     claimed_hash = (payload.get("envelope") or {}).get("body_hash_sha256")
     body_hash_ok = bool(claimed_hash) and (recomputed == claimed_hash)
 
-    from app.services.note_evidence import verify_signature
+    from app.services.note_evidence import (
+        classify_bundle_trust, verify_signature,
+    )
     sig_verdict = verify_signature(payload)
+    trust = classify_bundle_trust(body_hash_ok, sig_verdict)
 
     return {
         "note_id": note_id,
@@ -5750,6 +5755,10 @@ def note_evidence_bundle_verify(
         "recomputed_body_hash": recomputed,
         "claimed_body_hash": claimed_hash,
         "signature": sig_verdict,
+        # Phase 59 — unified operator-facing trust verdict. Folds
+        # body_hash + signature into one actionable category so an
+        # operator does not have to combine two fields mentally.
+        "trust": trust,
     }
 
 
@@ -6191,6 +6200,99 @@ def admin_export_snapshot_retention_sweep(
         detail=(
             f"dry_run={result.dry_run} retention_days={result.retention_days} "
             f"candidates={result.candidates_found} purged={result.purged}"
+        ),
+    )
+    return result.as_dict()
+
+
+class EvidenceEventAbandonBody(BaseModel):
+    reason: str = Field(default="", max_length=500)
+
+
+@router.post("/admin/operations/evidence-events/{event_id}/abandon")
+def admin_evidence_event_abandon(
+    event_id: int,
+    payload: EvidenceEventAbandonBody,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Operator-initiated 'give up' on a failed evidence delivery.
+
+    Flips `sink_retry_disposition` to 'abandoned' so the retry
+    sweep will not pick the row up again. The evidence chain row
+    itself is untouched; only the sink-tracking columns move.
+    Audited as `evidence_event_abandoned`."""
+    _require_security_admin_inline(caller)
+    from app.services.evidence_sink import abandon_event
+    result = abandon_event(
+        evidence_event_id=event_id,
+        organization_id=caller.organization_id,
+        operator_reason=payload.reason,
+    )
+    from app import audit as _audit
+    if result.ok:
+        _audit.record(
+            event_type="evidence_event_abandoned",
+            request_id=None,
+            actor_email=caller.email,
+            actor_user_id=caller.user_id,
+            organization_id=caller.organization_id,
+            path=f"/admin/operations/evidence-events/{event_id}/abandon",
+            method="POST",
+            detail=(
+                f"event_id={event_id} "
+                f"prev={result.previous_disposition or 'none'} "
+                f"new={result.new_disposition}"
+            ),
+        )
+        return {
+            "ok": True,
+            "evidence_event_id": result.evidence_event_id,
+            "previous_disposition": result.previous_disposition,
+            "new_disposition": result.new_disposition,
+        }
+    status_code = (
+        404 if result.error_code == "evidence_event_not_found" else 409
+    )
+    raise HTTPException(
+        status_code=status_code,
+        detail={
+            "error_code": result.error_code or "abandon_failed",
+            "reason": result.reason or "could not abandon event",
+        },
+    )
+
+
+@router.post("/admin/operations/evidence-sink/retention-sweep")
+def admin_evidence_sink_retention_sweep(
+    payload: SnapshotRetentionSweepBody,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Apply the org's `evidence_sink_retention_days` policy by
+    clearing `sink_error` on abandoned / permanent_failure rows
+    older than the window. The canonical evidence chain is
+    untouched — only the operational noise column moves.
+
+    Operator flow mirrors the snapshot retention sweep: dry_run=true
+    lists candidates; dry_run=false performs the clear."""
+    _require_security_admin_inline(caller)
+    from app.services.evidence_sink import sweep_sink_retention
+    result = sweep_sink_retention(
+        caller.organization_id, dry_run=bool(payload.dry_run),
+    )
+    from app import audit as _audit
+    _audit.record(
+        event_type="evidence_sink_retention_sweep",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path="/admin/operations/evidence-sink/retention-sweep",
+        method="POST",
+        detail=(
+            f"dry_run={result.dry_run} "
+            f"retention_days={result.retention_days} "
+            f"candidates={result.candidates_found} "
+            f"cleared={result.cleared}"
         ),
     )
     return result.as_dict()

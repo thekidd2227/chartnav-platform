@@ -1085,6 +1085,113 @@ def verify_seal_row(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# ---------------------------------------------------------------------
+# Phase 59 — unified trust verdict
+# ---------------------------------------------------------------------
+
+class BundleTrustCategory(str, Enum):
+    """Operator-facing unified verdict for a bundle's trust state.
+
+    The evidence verify endpoint (/note-versions/{id}/evidence-bundle/verify)
+    already returns `body_hash_ok` and a `signature` verdict
+    separately. Category folds both into one answer an operator can
+    act on without mentally combining two fields.
+    """
+    # Signed, body hash matches, signature verifies.
+    verified = "verified"
+    # Bundle was issued unsigned; body hash matches. Cryptographic
+    # trust is limited to what the body hash proves. Operator-
+    # visible: this is a deliberate mode, not a failure.
+    unsigned_ok = "unsigned_ok"
+    # Body hash mismatch: someone edited the bundle content without
+    # updating envelope.body_hash_sha256.
+    failed_tamper = "failed_tamper"
+    # Body hash matches but the HMAC does not. Envelope-only
+    # tampering OR signature corruption.
+    failed_signature = "failed_signature"
+    # Signature references a key id no longer in the host's keyring.
+    # Not a tamper indication by itself — the operator rotated the
+    # key out. Action: restore the key OR re-verify on another host.
+    stale_key = "stale_key"
+    # Host has signing mode enabled but no keys configured — cannot
+    # verify. Operator must restore signing config.
+    stale_config = "stale_config"
+    # Catch-all for shape/version problems (malformed signature,
+    # unknown signing mode, etc).
+    unverifiable = "unverifiable"
+
+
+def classify_bundle_trust(
+    body_hash_ok: bool,
+    signature_verdict: dict[str, Any],
+) -> dict[str, Any]:
+    """Fold body-hash + signature verdicts into a single
+    operator-facing category.
+
+    Rules:
+      - body_hash_ok=False always wins as `failed_tamper` (someone
+        mutated the body without touching the envelope).
+      - otherwise category depends on the signature branch.
+    """
+    sig_mode = (signature_verdict or {}).get("mode") or "disabled"
+    sig_ok = (signature_verdict or {}).get("ok")
+    sig_error = (signature_verdict or {}).get("error_code")
+
+    if not body_hash_ok:
+        cat = BundleTrustCategory.failed_tamper
+        reason = (
+            "the bundle body was mutated after issuance (recomputed "
+            "body hash does not match the envelope hash)"
+        )
+    elif sig_mode == "disabled":
+        cat = BundleTrustCategory.unsigned_ok
+        reason = (
+            "bundle was issued unsigned; body hash matches — trust "
+            "limited to body integrity only"
+        )
+    elif sig_error == "signing_key_not_in_keyring":
+        cat = BundleTrustCategory.stale_key
+        reason = (
+            "signing key_id referenced by the bundle is not in this "
+            "host's keyring; restore the key or verify on another "
+            "host"
+        )
+    elif sig_error == "evidence_signing_unconfigured":
+        cat = BundleTrustCategory.stale_config
+        reason = (
+            "this host has signing mode enabled but no keys "
+            "configured; cannot verify"
+        )
+    elif sig_error in {
+        "malformed_signature",
+        "unknown_signing_mode",
+        "unsigned_bundle",
+    }:
+        cat = BundleTrustCategory.unverifiable
+        reason = (
+            signature_verdict.get("reason")
+            or "bundle signature block is not verifiable"
+        )
+    elif sig_ok is True:
+        cat = BundleTrustCategory.verified
+        reason = "body hash and signature verify"
+    else:
+        cat = BundleTrustCategory.failed_signature
+        reason = (
+            signature_verdict.get("reason")
+            or "signature did not verify"
+        )
+
+    return {
+        "category": cat.value,
+        "ok": cat == BundleTrustCategory.verified
+        or cat == BundleTrustCategory.unsigned_ok,
+        "reason": reason,
+        "signature_mode": sig_mode,
+        "key_id": (signature_verdict or {}).get("key_id"),
+    }
+
+
 __all__ = [
     "EvidenceEventType",
     "EVIDENCE_EVENT_TYPES",
@@ -1105,4 +1212,7 @@ __all__ = [
     "compute_seal_hash",
     "sign_seal_hash",
     "verify_seal_row",
+    # Phase 59 additions
+    "BundleTrustCategory",
+    "classify_bundle_trust",
 ]

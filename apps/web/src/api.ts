@@ -1837,6 +1837,9 @@ export interface SecurityPolicyPayload {
   // Phase 57 — export snapshot retention (days). Null => retain
   // forever. Floor 90 days enforced server-side.
   export_snapshot_retention_days?: number | null;
+  // Phase 59 — evidence sink retry-noise retention (days). Null =>
+  // retain forever. Floor 7 days.
+  evidence_sink_retention_days?: number | null;
 }
 
 export interface SecurityPolicyResponse {
@@ -1857,6 +1860,7 @@ export interface SecurityPolicyPatch {
   evidence_signing_mode?: EvidenceSigningMode;
   evidence_signing_key_id?: string | null;
   export_snapshot_retention_days?: number | null;
+  evidence_sink_retention_days?: number | null;
 }
 
 export interface SecuritySessionRow {
@@ -2202,6 +2206,24 @@ export interface EvidenceBundleVerifyResponse {
   recomputed_body_hash: string;
   claimed_body_hash: string | null;
   signature: EvidenceBundleSignatureVerdict;
+  // Phase 59 — unified trust verdict. `category` is the single
+  // operator-facing answer that folds body_hash + signature into
+  // one actionable bucket. Older backends (pre-phase-59) may omit
+  // this field; UI code should treat it as optional.
+  trust?: {
+    category:
+      | "verified"
+      | "unsigned_ok"
+      | "failed_tamper"
+      | "failed_signature"
+      | "stale_key"
+      | "stale_config"
+      | "unverifiable";
+    ok: boolean;
+    reason: string;
+    signature_mode: string;
+    key_id: string | null;
+  };
 }
 
 export function verifyNoteEvidenceBundle(
@@ -2406,6 +2428,69 @@ export function runExportSnapshotRetentionSweep(
   dryRun: boolean = true
 ): Promise<ExportSnapshotRetentionSweepResponse> {
   return request("/admin/operations/export-snapshots/retention-sweep", {
+    email,
+    method: "POST",
+    body: JSON.stringify({ dry_run: dryRun }),
+  });
+}
+
+// =====================================================================
+// Phase 59 — bundle trust verdict, abandon action, sink retention
+// =====================================================================
+
+export type BundleTrustCategory =
+  | "verified"
+  | "unsigned_ok"
+  | "failed_tamper"
+  | "failed_signature"
+  | "stale_key"
+  | "stale_config"
+  | "unverifiable";
+
+export interface BundleTrustVerdict {
+  category: BundleTrustCategory;
+  ok: boolean;
+  reason: string;
+  signature_mode: string;
+  key_id: string | null;
+}
+
+export interface EvidenceEventAbandonResponse {
+  ok: boolean;
+  evidence_event_id: number;
+  previous_disposition: string | null;
+  new_disposition: string;
+}
+
+export function abandonEvidenceEvent(
+  email: string,
+  eventId: number,
+  reason: string = ""
+): Promise<EvidenceEventAbandonResponse> {
+  return request(
+    `/admin/operations/evidence-events/${eventId}/abandon`,
+    {
+      email,
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }
+  );
+}
+
+export interface EvidenceSinkRetentionSweepResponse {
+  dry_run: boolean;
+  organization_id: number;
+  retention_days: number | null;
+  candidates_found: number;
+  cleared: number;
+  candidate_ids: number[];
+}
+
+export function runEvidenceSinkRetentionSweep(
+  email: string,
+  dryRun: boolean = true
+): Promise<EvidenceSinkRetentionSweepResponse> {
+  return request("/admin/operations/evidence-sink/retention-sweep", {
     email,
     method: "POST",
     body: JSON.stringify({ dry_run: dryRun }),
@@ -2622,6 +2707,10 @@ export interface OperationsSecurityPolicyStatus {
   evidence_signing_inconsistent?: boolean;
   export_snapshot_retention_days?: number | null;
   export_snapshot_retention_configured?: boolean;
+  // Phase 59 — evidence sink retention + retry cap.
+  evidence_sink_retention_days?: number | null;
+  evidence_sink_retention_configured?: boolean;
+  evidence_sink_max_attempts?: number;
 }
 
 export interface OperationsOverview {

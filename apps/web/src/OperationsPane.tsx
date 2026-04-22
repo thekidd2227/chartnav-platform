@@ -414,6 +414,8 @@ function OverviewTab({
         // Phase 57 — signing keyring posture + retry backlog.
         "evidence_signing_inconsistent",
         "evidence_sink_retry_pending",
+        // Phase 59 — sink failures that auto-retry will not clear.
+        "evidence_sink_permanent_failure",
       ],
     },
   ];
