@@ -54,6 +54,10 @@ from sqlalchemy import text
 AUDIT_SINK_MODES: tuple[str, ...] = ("disabled", "jsonl", "webhook")
 
 
+EVIDENCE_SINK_MODES = ("disabled", "jsonl", "webhook")
+EVIDENCE_SIGNING_MODES = ("disabled", "hmac_sha256")
+
+
 @dataclass(frozen=True)
 class SecurityPolicy:
     """Resolved per-org security posture. All fields default to the
@@ -65,6 +69,18 @@ class SecurityPolicy:
     audit_sink_mode: str = "disabled"
     audit_sink_target: Optional[str] = None
     security_admin_emails: tuple[str, ...] = field(default_factory=tuple)
+    # Phase 56 — independent evidence-sink channel. Separate from the
+    # general audit sink because these are distinct forensic streams:
+    # one org may want observability events in a SIEM and evidence
+    # events in a WORM store, or vice versa.
+    evidence_sink_mode: str = "disabled"
+    evidence_sink_target: Optional[str] = None
+    # Phase 56 — evidence bundle signing. The HMAC secret itself
+    # lives in process config (CHARTNAV_EVIDENCE_SIGNING_HMAC_KEY),
+    # NOT in the per-org settings JSON, because that JSON is readable
+    # by org admins and the secret must not be.
+    evidence_signing_mode: str = "disabled"
+    evidence_signing_key_id: Optional[str] = None
 
     @classmethod
     def off(cls) -> "SecurityPolicy":
@@ -80,6 +96,10 @@ class SecurityPolicy:
             "audit_sink_mode": self.audit_sink_mode,
             "audit_sink_target": self.audit_sink_target,
             "security_admin_emails": list(self.security_admin_emails),
+            "evidence_sink_mode": self.evidence_sink_mode,
+            "evidence_sink_target": self.evidence_sink_target,
+            "evidence_signing_mode": self.evidence_signing_mode,
+            "evidence_signing_key_id": self.evidence_signing_key_id,
         }
 
 
@@ -165,6 +185,18 @@ def resolve_security_policy(organization_id: int) -> SecurityPolicy:
         })
     )
 
+    evidence_sink_mode = (
+        _str(["evidence_sink_mode"]) or "disabled"
+    ).lower()
+    if evidence_sink_mode not in EVIDENCE_SINK_MODES:
+        evidence_sink_mode = "disabled"
+
+    evidence_signing_mode = (
+        _str(["evidence_signing_mode"]) or "disabled"
+    ).lower()
+    if evidence_signing_mode not in EVIDENCE_SIGNING_MODES:
+        evidence_signing_mode = "disabled"
+
     return SecurityPolicy(
         require_mfa=_bool(["require_mfa"], False),
         idle_timeout_minutes=_int(
@@ -179,6 +211,10 @@ def resolve_security_policy(organization_id: int) -> SecurityPolicy:
         audit_sink_mode=mode,
         audit_sink_target=_str(["audit_sink_target"]),
         security_admin_emails=admins,
+        evidence_sink_mode=evidence_sink_mode,
+        evidence_sink_target=_str(["evidence_sink_target"]),
+        evidence_signing_mode=evidence_signing_mode,
+        evidence_signing_key_id=_str(["evidence_signing_key_id"]),
     )
 
 
@@ -232,6 +268,11 @@ def _coerce_update(
         "audit_sink_mode",
         "audit_sink_target",
         "security_admin_emails",
+        # Phase 56 — evidence sink + signing.
+        "evidence_sink_mode",
+        "evidence_sink_target",
+        "evidence_signing_mode",
+        "evidence_signing_key_id",
     }
     unknown = set(patch.keys()) - allowed
     if unknown:
@@ -304,6 +345,51 @@ def _coerce_update(
             "policy_validation_failed",
             f"audit_sink_target is required when audit_sink_mode is "
             f"{out['audit_sink_mode']!r}",
+        )
+
+    # Phase 56 — evidence-sink + signing patch handling.
+    if "evidence_sink_mode" in patch:
+        mode = str(patch["evidence_sink_mode"] or "").strip().lower()
+        if mode not in EVIDENCE_SINK_MODES:
+            raise PolicyValidationError(
+                "policy_validation_failed",
+                f"evidence_sink_mode must be one of "
+                f"{list(EVIDENCE_SINK_MODES)}",
+            )
+        out["evidence_sink_mode"] = mode
+
+    if "evidence_sink_target" in patch:
+        tgt = patch["evidence_sink_target"]
+        if tgt is None or tgt == "":
+            out["evidence_sink_target"] = None
+        else:
+            out["evidence_sink_target"] = str(tgt).strip()
+
+    if "evidence_signing_mode" in patch:
+        mode = str(patch["evidence_signing_mode"] or "").strip().lower()
+        if mode not in EVIDENCE_SIGNING_MODES:
+            raise PolicyValidationError(
+                "policy_validation_failed",
+                f"evidence_signing_mode must be one of "
+                f"{list(EVIDENCE_SIGNING_MODES)}",
+            )
+        out["evidence_signing_mode"] = mode
+
+    if "evidence_signing_key_id" in patch:
+        kid = patch["evidence_signing_key_id"]
+        if kid is None or kid == "":
+            out["evidence_signing_key_id"] = None
+        else:
+            out["evidence_signing_key_id"] = str(kid).strip()
+
+    if (
+        out.get("evidence_sink_mode", "disabled") != "disabled"
+        and not out.get("evidence_sink_target")
+    ):
+        raise PolicyValidationError(
+            "policy_validation_failed",
+            f"evidence_sink_target is required when evidence_sink_mode "
+            f"is {out['evidence_sink_mode']!r}",
         )
 
     return out
@@ -388,6 +474,8 @@ def require_security_admin(
 
 __all__ = [
     "AUDIT_SINK_MODES",
+    "EVIDENCE_SINK_MODES",
+    "EVIDENCE_SIGNING_MODES",
     "SecurityPolicy",
     "PolicyValidationError",
     "resolve_security_policy",

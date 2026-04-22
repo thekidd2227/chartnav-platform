@@ -141,6 +141,7 @@ def record_evidence_event(
     final_approval_status: Optional[str],
     content_fingerprint: Optional[str],
     detail: Optional[dict[str, Any]] = None,
+    dispatch_to_sink: bool = True,
 ) -> EvidenceWriteResult:
     """Append a new evidence event, linked to the org's previous
     event. Returns the new row's id + its hash.
@@ -226,11 +227,51 @@ def record_evidence_event(
             },
         ).mappings().first()
 
-    return EvidenceWriteResult(
+    result = EvidenceWriteResult(
         id=int(new_row["id"]),
         event_hash=event_hash,
         prev_event_hash=prev_event_hash,
     )
+
+    # Phase 56 — attempt external sink delivery AFTER the chain write
+    # has committed. The chain is authoritative; the sink is
+    # best-effort and the per-event sink_status column tracks the
+    # outcome. Callers that want to batch deliveries (e.g. a test
+    # that writes many events) can pass dispatch_to_sink=False.
+    if dispatch_to_sink:
+        try:
+            from app.services.evidence_sink import (
+                dispatch_event,
+                update_sink_status,
+            )
+            row_for_sink = {
+                "id": result.id,
+                "organization_id": organization_id,
+                "note_version_id": note_version_id,
+                "encounter_id": encounter_id,
+                "event_type": event_type,
+                "actor_user_id": actor_user_id,
+                "actor_email": actor_email,
+                "occurred_at": occurred_at_iso,
+                "draft_status": draft_status,
+                "final_approval_status": final_approval_status,
+                "content_fingerprint": content_fingerprint,
+                "detail_json": detail_json,
+                "prev_event_hash": prev_event_hash,
+                "event_hash": event_hash,
+            }
+            dr = dispatch_event(
+                organization_id=organization_id,
+                event_row=row_for_sink,
+            )
+            update_sink_status(evidence_event_id=result.id, result=dr)
+        except Exception:  # pragma: no cover
+            import logging as _lg
+            _lg.getLogger("chartnav.evidence_sink").warning(
+                "evidence_sink_dispatch_unexpected_error", exc_info=True
+            )
+
+    return result
 
 
 # ---------------------------------------------------------------------
@@ -287,6 +328,13 @@ class ChainVerification:
     first_event_hash: Optional[str]
     last_event_hash: Optional[str]
 
+    @property
+    def ok(self) -> bool:
+        """True when no break was detected. Mirrors the `ok` key in
+        `as_dict()` so callers that hold the dataclass directly don't
+        have to serialize first."""
+        return self.broken_at_event_id is None
+
     def as_dict(self) -> dict[str, Any]:
         return {
             "organization_id": self.organization_id,
@@ -296,7 +344,7 @@ class ChainVerification:
             "broken_reason": self.broken_reason,
             "first_event_hash": self.first_event_hash,
             "last_event_hash": self.last_event_hash,
-            "ok": self.broken_at_event_id is None,
+            "ok": self.ok,
         }
 
 
@@ -461,6 +509,135 @@ def _iso(dt: Any) -> Optional[str]:
 # ---------------------------------------------------------------------
 
 BUNDLE_VERSION = "chartnav.evidence.v1"
+
+
+# ---------------------------------------------------------------------
+# Phase 56 — HMAC signing
+# ---------------------------------------------------------------------
+
+class EvidenceSigningError(Exception):
+    """Raised when signing is required but the environment can not
+    produce a signature (e.g. signing key missing)."""
+    def __init__(self, error_code: str, reason: str):
+        super().__init__(reason)
+        self.error_code = error_code
+        self.reason = reason
+
+
+def _compute_hmac_signature(
+    body_hash: str,
+    hmac_key: str,
+) -> str:
+    """HMAC-SHA256 over the bundle body hash. We sign the body hash
+    rather than the raw body so signature verification is cheap and
+    independent of JSON serialization quirks — the body hash itself
+    is the canonical anchor."""
+    import hmac as _hmac
+    return _hmac.new(
+        hmac_key.encode("utf-8"),
+        body_hash.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def _resolve_signing(organization_id: int) -> dict[str, Any]:
+    """Return signing parameters for the org, or a disabled marker.
+
+    Looks up the org's policy (`evidence_signing_mode` +
+    `evidence_signing_key_id`) and the process-level HMAC key from
+    `app.config.settings`. Raises `EvidenceSigningError` when the
+    org requires signing but the process lacks the key.
+    """
+    from app.security_policy import resolve_security_policy
+    from app.config import settings
+
+    policy = resolve_security_policy(organization_id)
+    mode = (policy.evidence_signing_mode or "disabled").lower()
+
+    if mode == "disabled":
+        return {"mode": "disabled", "key_id": None}
+
+    if mode == "hmac_sha256":
+        if not settings.evidence_signing_hmac_key:
+            raise EvidenceSigningError(
+                "evidence_signing_unconfigured",
+                "evidence_signing_mode is hmac_sha256 but "
+                "CHARTNAV_EVIDENCE_SIGNING_HMAC_KEY is not set",
+            )
+        return {
+            "mode": "hmac_sha256",
+            "key_id": policy.evidence_signing_key_id or "default",
+            "hmac_key": settings.evidence_signing_hmac_key,
+        }
+
+    # Unknown mode → treat as disabled rather than fail closed; the
+    # policy validator already rejects unknown modes on write.
+    return {"mode": "disabled", "key_id": None}
+
+
+def verify_signature(bundle: dict[str, Any]) -> dict[str, Any]:
+    """Re-compute the HMAC over the bundle's body_hash and compare
+    it to the stored signature. Returns a structured verdict.
+
+    This function is stateless w.r.t. the DB; it reads the HMAC key
+    from process config. An org that wants to verify an OLD bundle
+    after a key rotation must keep the old key available via the
+    same env variable (key rotation is out of scope for this pass —
+    documented).
+    """
+    signature_block = bundle.get("signature") or {}
+    mode = signature_block.get("mode")
+    if not mode or mode == "disabled":
+        return {
+            "mode": mode or "disabled",
+            "ok": False,
+            "error_code": "unsigned_bundle",
+            "reason": "bundle carries no signature",
+        }
+    if mode != "hmac_sha256":
+        return {
+            "mode": mode,
+            "ok": False,
+            "error_code": "unknown_signing_mode",
+            "reason": f"unrecognised signing mode {mode!r}",
+        }
+
+    claimed_hash = (bundle.get("envelope") or {}).get("body_hash_sha256")
+    claimed_sig = signature_block.get("signature_hex")
+    if not claimed_hash or not claimed_sig:
+        return {
+            "mode": mode,
+            "ok": False,
+            "error_code": "malformed_signature",
+            "reason": "bundle missing body_hash or signature_hex",
+        }
+
+    from app.config import settings
+    if not settings.evidence_signing_hmac_key:
+        return {
+            "mode": mode,
+            "ok": False,
+            "error_code": "evidence_signing_unconfigured",
+            "reason": (
+                "HMAC key not configured on this host; cannot verify"
+            ),
+        }
+
+    expected = _compute_hmac_signature(
+        claimed_hash, settings.evidence_signing_hmac_key
+    )
+    import hmac as _hmac
+    ok = _hmac.compare_digest(expected, claimed_sig)
+    return {
+        "mode": mode,
+        "key_id": signature_block.get("key_id"),
+        "ok": bool(ok),
+        "error_code": None if ok else "signature_mismatch",
+        "reason": None if ok else (
+            "HMAC did not match — bundle has been tampered with or "
+            "the signing key has rotated"
+        ),
+    }
 
 
 def build_evidence_bundle(
@@ -630,6 +807,30 @@ def build_evidence_bundle(
         "body_hash_sha256": body_hash,
         "hash_inputs": "json(body,sort_keys,compact,utf8)",
     }
+
+    # Phase 56 — optional HMAC signing. When the org has enabled
+    # evidence signing and the process HMAC key is set, attach a
+    # signature block. When enabled-but-key-missing, raise
+    # EvidenceSigningError — the route layer maps this to 503 so the
+    # operator sees a clear misconfiguration signal instead of a
+    # silently-unsigned bundle.
+    signing = _resolve_signing(int(encounter_row["organization_id"]))
+    if signing["mode"] == "hmac_sha256":
+        sig_hex = _compute_hmac_signature(body_hash, signing["hmac_key"])
+        body["signature"] = {
+            "mode": "hmac_sha256",
+            "key_id": signing["key_id"],
+            "signature_inputs": "envelope.body_hash_sha256",
+            "signature_hex": sig_hex,
+        }
+    else:
+        body["signature"] = {
+            "mode": "disabled",
+            "key_id": None,
+            "signature_inputs": None,
+            "signature_hex": None,
+        }
+
     return body
 
 
@@ -646,4 +847,6 @@ __all__ = [
     "NoteEvidenceHealth",
     "build_evidence_bundle",
     "BUNDLE_VERSION",
+    "EvidenceSigningError",
+    "verify_signature",
 ]

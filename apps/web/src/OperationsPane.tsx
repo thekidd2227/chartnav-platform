@@ -407,6 +407,10 @@ function OverviewTab({
         // overview so admins see chain breakage without having to
         // call /admin/operations/evidence-chain-verify explicitly.
         "evidence_chain_broken",
+        // Phase 56 — external evidence sink + export snapshot
+        // operational visibility.
+        "evidence_sink_delivery_failed",
+        "export_snapshot_missing",
       ],
     },
   ];

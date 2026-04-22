@@ -122,6 +122,15 @@ class Settings:
     # CHARTNAV_INTEGRATION_ADAPTER is exposed.
     stt_provider: str
 
+    # Phase 56 — evidence bundle signing secret.
+    # When an org sets `evidence_signing_mode = "hmac_sha256"` and
+    # this value is non-empty, bundle issuance produces an HMAC
+    # signature alongside the body hash. The secret lives in process
+    # env (NOT per-org JSON) so admins cannot read the signing
+    # material directly. Unset → signing mode degrades to 503
+    # `evidence_signing_unconfigured` when an org requires signing.
+    evidence_signing_hmac_key: str | None
+
 
 _DEFAULT_CORS = (
     "http://localhost:5173,http://127.0.0.1:5173,"
@@ -247,6 +256,8 @@ def _load() -> Settings:
     # Settings object records the config without instantiating the
     # adapter so bootstrapping doesn't require a live FHIR server.
 
+    evidence_signing_hmac_key = _env("CHARTNAV_EVIDENCE_SIGNING_HMAC_KEY")
+
     return Settings(
         env=env,
         database_url=database_url,
@@ -267,6 +278,7 @@ def _load() -> Settings:
         audio_upload_max_bytes=audio_upload_max_bytes,
         audio_ingest_mode=audio_ingest_mode,
         stt_provider=stt_provider,
+        evidence_signing_hmac_key=evidence_signing_hmac_key,
     )
 
 

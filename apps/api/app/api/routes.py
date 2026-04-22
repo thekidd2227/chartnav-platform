@@ -2501,12 +2501,14 @@ def export_note(
         detail=f"note_id={note_id}",
     )
     # Phase 55 — evidence chain append.
+    # Phase 56 — export snapshot capture (linked to the chain event).
+    evidence_event_id: Optional[int] = None
     try:
         from app.services.note_evidence import (
             EvidenceEventType,
             record_evidence_event,
         )
-        record_evidence_event(
+        ev = record_evidence_event(
             organization_id=caller.organization_id,
             note_version_id=note_id,
             encounter_id=int(note["encounter_id"]),
@@ -2518,11 +2520,62 @@ def export_note(
             content_fingerprint=note.get("content_fingerprint"),
             detail={"version_number": note["version_number"]},
         )
+        evidence_event_id = ev.id
     except Exception:  # pragma: no cover
         import logging as _lg
         _lg.getLogger("chartnav.evidence").warning(
             "evidence chain append failed on export", exc_info=True
         )
+
+    # Phase 56 — export snapshot. Build the canonical artifact using
+    # the existing Phase-25 builder and persist the byte-exact JSON +
+    # SHA-256 so the record of what we actually handed off survives
+    # later amendments or drift on the source row.
+    try:
+        from app.services.note_artifact import (
+            ArtifactError,
+            build_artifact,
+        )
+        from app.services.note_export_snapshots import persist_snapshot
+        artifact = build_artifact(
+            note_id=note_id,
+            caller_email=caller.email,
+            caller_user_id=caller.user_id,
+            caller_organization_id=caller.organization_id,
+        )
+        # Re-read the row post-export-transition so the snapshot
+        # reflects draft_status='exported' + exported_at.
+        refreshed = _load_note_for_caller(note_id, caller)
+        persist_snapshot(
+            organization_id=caller.organization_id,
+            note_row=refreshed,
+            artifact=artifact,
+            evidence_chain_event_id=evidence_event_id,
+            issued_by_user_id=caller.user_id,
+            issued_by_email=caller.email,
+        )
+    except ArtifactError:
+        # The artifact gate refused the build — this should not happen
+        # immediately after a successful export, but if it does, the
+        # export state already committed and we emit an audit-only
+        # trace so the admin plane surfaces the missing snapshot.
+        from app import audit as _audit
+        _audit.record(
+            event_type="note_export_snapshot_failed",
+            request_id=None,
+            actor_email=caller.email,
+            actor_user_id=caller.user_id,
+            organization_id=caller.organization_id,
+            path=f"/note-versions/{note_id}/export",
+            method="POST",
+            detail=f"note_id={note_id} reason=artifact_gate_refused",
+        )
+    except Exception:  # pragma: no cover
+        import logging as _lg
+        _lg.getLogger("chartnav.evidence").warning(
+            "export snapshot persist failed", exc_info=True
+        )
+
     return _load_note_for_caller(note_id, caller)
 
 
@@ -5591,15 +5644,29 @@ def note_evidence_bundle(
             {"id": note["final_approved_by_user_id"]},
         )
 
-    from app.services.note_evidence import build_evidence_bundle
-    bundle = build_evidence_bundle(
-        note_row=note,
-        encounter_row=dict(encounter),
-        signer_row=dict(signer) if signer else None,
-        final_approver_row=dict(final_approver) if final_approver else None,
-        caller_email=caller.email,
-        caller_user_id=caller.user_id,
+    from app.services.note_evidence import (
+        EvidenceSigningError,
+        build_evidence_bundle,
     )
+    try:
+        bundle = build_evidence_bundle(
+            note_row=note,
+            encounter_row=dict(encounter),
+            signer_row=dict(signer) if signer else None,
+            final_approver_row=dict(final_approver) if final_approver else None,
+            caller_email=caller.email,
+            caller_user_id=caller.user_id,
+        )
+    except EvidenceSigningError as e:
+        # Org requires signing but the process has no HMAC key.
+        # Returning 503 signals a misconfiguration, not a client bug.
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error_code": e.error_code,
+                "reason": e.reason,
+            },
+        )
 
     from app import audit as _audit
     _audit.record(
@@ -5616,6 +5683,67 @@ def note_evidence_bundle(
         ),
     )
     return bundle
+
+
+@router.post("/note-versions/{note_id}/evidence-bundle/verify")
+def note_evidence_bundle_verify(
+    note_id: int,
+    payload: dict,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Verify a previously-issued evidence bundle.
+
+    Body: the bundle JSON as returned by
+    GET /note-versions/{id}/evidence-bundle.
+
+    Returns a structured verdict:
+      { "body_hash_ok": bool, "signature": {...}, "note_id_match": bool }
+
+    `body_hash_ok` is recomputed locally over the bundle body (minus
+    envelope) — it confirms the payload has not been mutated in
+    transit. `signature` reports whether the HMAC signature
+    verifies against the host's signing key. `note_id_match`
+    confirms the bundle references the URL path note_id; a mismatch
+    indicates a caller tried to verify a bundle against the wrong
+    resource.
+    """
+    _load_note_for_caller(note_id, caller)  # org scope + 404
+    if not isinstance(payload, dict):
+        raise _err(
+            "malformed_bundle",
+            "request body must be the JSON bundle as issued",
+            400,
+        )
+    claimed_note_id = (payload.get("note") or {}).get("id")
+    note_match = (int(claimed_note_id) == note_id) if claimed_note_id else False
+
+    # Recompute the body hash locally. Copy the bundle and strip
+    # envelope + signature before hashing — those are metadata about
+    # the issuance, not the body proper.
+    import json as _json
+    body_only = {
+        k: v for k, v in payload.items()
+        if k not in ("envelope", "signature")
+    }
+    canonical = _json.dumps(
+        body_only, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+    )
+    import hashlib as _hashlib
+    recomputed = _hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    claimed_hash = (payload.get("envelope") or {}).get("body_hash_sha256")
+    body_hash_ok = bool(claimed_hash) and (recomputed == claimed_hash)
+
+    from app.services.note_evidence import verify_signature
+    sig_verdict = verify_signature(payload)
+
+    return {
+        "note_id": note_id,
+        "note_id_match": note_match,
+        "body_hash_ok": body_hash_ok,
+        "recomputed_body_hash": recomputed,
+        "claimed_body_hash": claimed_hash,
+        "signature": sig_verdict,
+    }
 
 
 @router.get("/admin/operations/evidence-chain-verify")
@@ -5643,6 +5771,222 @@ def admin_note_evidence_health(
     note = _load_note_for_caller(note_id, caller)
     from app.services.note_evidence import note_evidence_health
     return note_evidence_health(note).as_dict()
+
+
+# ---------------------------------------------------------------------------
+# Phase 56 — export snapshots + chain seals + evidence-sink probe
+# ---------------------------------------------------------------------------
+
+@router.get("/note-versions/{note_id}/export-snapshots")
+def note_export_snapshots_list(
+    note_id: int,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Snapshot history for this note. Most-recent-first. Same
+    org-scope contract as every other note read."""
+    _load_note_for_caller(note_id, caller)
+    from app.services.note_export_snapshots import list_snapshots_for_note
+    rows = list_snapshots_for_note(note_id)
+    return {
+        "note_id": note_id,
+        "snapshots": [
+            {
+                "id": int(r["id"]),
+                "evidence_chain_event_id": r.get("evidence_chain_event_id"),
+                "artifact_hash_sha256": r.get("artifact_hash_sha256"),
+                "content_fingerprint": r.get("content_fingerprint"),
+                "issued_at": (
+                    r["issued_at"].isoformat()
+                    if hasattr(r.get("issued_at"), "isoformat")
+                    else r.get("issued_at")
+                ),
+                "issued_by_user_id": r.get("issued_by_user_id"),
+                "issued_by_email": r.get("issued_by_email"),
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.get("/note-versions/{note_id}/export-snapshots/{snapshot_id}")
+def note_export_snapshot_get(
+    note_id: int,
+    snapshot_id: int,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Return a specific snapshot including the captured artifact
+    JSON. Org-scope enforced on both the note and the snapshot —
+    snapshot must belong to the same org as the caller."""
+    _load_note_for_caller(note_id, caller)
+    from app.services.note_export_snapshots import get_snapshot
+    snap = get_snapshot(snapshot_id)
+    if not snap or int(snap["note_version_id"]) != note_id:
+        raise _err(
+            "snapshot_not_found",
+            "no such export snapshot for this note",
+            404,
+        )
+    if int(snap["organization_id"]) != caller.organization_id:
+        raise _err("snapshot_not_found", "no such export snapshot", 404)
+    # artifact_json is stored as compact canonical text; parse for
+    # transport convenience.
+    import json as _json
+    try:
+        artifact = _json.loads(snap["artifact_json"])
+    except Exception:
+        artifact = None
+    return {
+        "id": int(snap["id"]),
+        "note_version_id": int(snap["note_version_id"]),
+        "encounter_id": int(snap["encounter_id"]),
+        "evidence_chain_event_id": snap.get("evidence_chain_event_id"),
+        "artifact_hash_sha256": snap["artifact_hash_sha256"],
+        "content_fingerprint": snap.get("content_fingerprint"),
+        "issued_at": (
+            snap["issued_at"].isoformat()
+            if hasattr(snap.get("issued_at"), "isoformat")
+            else snap.get("issued_at")
+        ),
+        "issued_by_user_id": snap.get("issued_by_user_id"),
+        "issued_by_email": snap.get("issued_by_email"),
+        "artifact": artifact,
+    }
+
+
+class EvidenceChainSealBody(BaseModel):
+    # Optional human-readable note on what was being sealed.
+    note: str = Field(default="", max_length=500)
+
+
+@router.post("/admin/operations/evidence-chain/seal")
+def admin_evidence_chain_seal(
+    payload: EvidenceChainSealBody,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Seal the current tip of the org's evidence chain. Persists
+    the tip event_id + event_hash + event_count so subsequent
+    verification runs can detect silent rewinds (drop an event,
+    re-hash the chain: the tip hash changes but a stored seal says
+    what it WAS)."""
+    _require_security_admin_inline(caller)
+    tip = fetch_one(
+        "SELECT id, event_hash FROM note_evidence_events "
+        "WHERE organization_id = :org "
+        "ORDER BY id DESC LIMIT 1",
+        {"org": caller.organization_id},
+    )
+    if not tip:
+        raise _err(
+            "evidence_chain_empty",
+            "no evidence events exist for this organization; "
+            "cannot seal an empty chain",
+            409,
+        )
+    cnt_row = fetch_one(
+        "SELECT COUNT(*) AS n FROM note_evidence_events "
+        "WHERE organization_id = :org",
+        {"org": caller.organization_id},
+    )
+    event_count = int(cnt_row["n"]) if cnt_row else 0
+
+    with transaction() as conn:
+        new_row = conn.execute(
+            text(
+                "INSERT INTO evidence_chain_seals ("
+                " organization_id, tip_event_id, tip_event_hash, "
+                " event_count, sealed_by_user_id, sealed_by_email, note"
+                ") VALUES ("
+                " :org, :tid, :th, :n, :uid, :email, :note"
+                ") RETURNING id, sealed_at"
+            ),
+            {
+                "org": caller.organization_id,
+                "tid": int(tip["id"]),
+                "th": tip["event_hash"],
+                "n": event_count,
+                "uid": caller.user_id,
+                "email": caller.email,
+                "note": (payload.note or "").strip()[:500] or None,
+            },
+        ).mappings().first()
+
+    from app import audit as _audit
+    _audit.record(
+        event_type="evidence_chain_sealed",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path="/admin/operations/evidence-chain/seal",
+        method="POST",
+        detail=(
+            f"tip_event_id={tip['id']} event_count={event_count} "
+            f"tip_hash={str(tip['event_hash'])[:12]}"
+        ),
+    )
+    return {
+        "id": int(new_row["id"]),
+        "organization_id": caller.organization_id,
+        "tip_event_id": int(tip["id"]),
+        "tip_event_hash": tip["event_hash"],
+        "event_count": event_count,
+        "sealed_at": (
+            new_row["sealed_at"].isoformat()
+            if hasattr(new_row.get("sealed_at"), "isoformat")
+            else new_row.get("sealed_at")
+        ),
+    }
+
+
+@router.get("/admin/operations/evidence-chain/seals")
+def admin_evidence_chain_seals(
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """List recorded seals, newest first."""
+    _require_security_admin_inline(caller)
+    rows = fetch_all(
+        "SELECT id, tip_event_id, tip_event_hash, event_count, sealed_at, "
+        "sealed_by_user_id, sealed_by_email, note "
+        "FROM evidence_chain_seals WHERE organization_id = :org "
+        "ORDER BY id DESC LIMIT 200",
+        {"org": caller.organization_id},
+    )
+    out = []
+    for r in rows:
+        r = dict(r)
+        if hasattr(r.get("sealed_at"), "isoformat"):
+            r["sealed_at"] = r["sealed_at"].isoformat()
+        out.append(r)
+    return {
+        "organization_id": caller.organization_id,
+        "seals": out,
+    }
+
+
+@router.post("/admin/operations/evidence-sink/test")
+def admin_evidence_sink_test(
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Probe the configured evidence sink with a synthetic event.
+    Does NOT touch the DB chain — this is a transport test only."""
+    _require_security_admin_inline(caller)
+    from app.services.evidence_sink import probe_evidence_sink
+    result = probe_evidence_sink(caller.organization_id)
+    from app import audit as _audit
+    _audit.record(
+        event_type="admin_evidence_sink_test",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path="/admin/operations/evidence-sink/test",
+        method="POST",
+        detail=(
+            f"mode={result.get('mode')} ok={result.get('ok')} "
+            f"error={result.get('error_code') or '-'}"
+        ),
+    )
+    return result
 
 
 @router.get("/admin/operations/categories")

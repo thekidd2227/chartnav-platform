@@ -86,6 +86,10 @@ class ExceptionCategory(str, Enum):
     # Phase 55 — evidence-chain integrity
     evidence_chain_broken = "evidence_chain_broken"
 
+    # Phase 56 — evidence-sink delivery failures + export snapshots
+    evidence_sink_delivery_failed = "evidence_sink_delivery_failed"
+    export_snapshot_missing = "export_snapshot_missing"
+
 
 # Map each *audit* row to a category. Keys are matched first on
 # `event_type`; for pre-auth failures the event_type IS the error
@@ -267,6 +271,27 @@ CATEGORY_METADATA: dict[ExceptionCategory, dict[str, str]] = {
             "re-verification. Some row has been mutated or deleted. "
             "Re-run /admin/operations/evidence-chain-verify for the "
             "first-broken event id and investigate the DB."
+        ),
+    },
+    ExceptionCategory.evidence_sink_delivery_failed: {
+        "label": "Evidence sink delivery failed",
+        "severity": "warning",
+        "next_step": (
+            "One or more evidence events failed to reach the "
+            "configured external sink. The in-app chain is still "
+            "authoritative; re-verify transport config or probe "
+            "the sink from /admin/operations/evidence-sink/test."
+        ),
+    },
+    ExceptionCategory.export_snapshot_missing: {
+        "label": "Export without snapshot",
+        "severity": "warning",
+        "next_step": (
+            "A note_exported evidence event exists with no "
+            "corresponding export snapshot row. The exported state "
+            "was recorded but the point-in-time artifact bytes were "
+            "not captured. Re-export if the record of care needs "
+            "an immutable snapshot."
         ),
     },
 }
@@ -599,6 +624,14 @@ def _security_policy_status(organization_id: int) -> dict[str, Any]:
     # enterprise gates are on. This is the signal the ops card uses.
     unconfigured = not (session_tracking_on or sink_on or allowlist_on or mfa_on)
 
+    # Phase 56 — surface evidence-sink and signing status so the
+    # admin UI can tell an operator at a glance what external
+    # integrations are on.
+    ev_sink_mode = getattr(policy, "evidence_sink_mode", "disabled") or "disabled"
+    ev_sink_on = ev_sink_mode != "disabled"
+    ev_sign_mode = getattr(policy, "evidence_signing_mode", "disabled") or "disabled"
+    ev_sign_on = ev_sign_mode != "disabled"
+
     return {
         "session_tracking_configured": session_tracking_on,
         "audit_sink_configured": sink_on,
@@ -609,6 +642,11 @@ def _security_policy_status(organization_id: int) -> dict[str, Any]:
         "audit_sink_mode": sink_mode,
         "security_admin_allowlist_count": len(allowlist),
         "unconfigured": unconfigured,
+        # Phase 56 — evidence posture.
+        "evidence_sink_mode": ev_sink_mode,
+        "evidence_sink_configured": ev_sink_on,
+        "evidence_signing_mode": ev_sign_mode,
+        "evidence_signing_configured": ev_sign_on,
     }
 
 
@@ -697,6 +735,37 @@ def compute_counters(
         # A verification error itself is surfaced as a broken chain —
         # either way, an operator needs to look.
         counts[ExceptionCategory.evidence_chain_broken.value] = 1
+
+    # Phase 56 — evidence-sink delivery failures, windowed.
+    fail_row = fetch_one(
+        "SELECT COUNT(*) AS n FROM note_evidence_events "
+        "WHERE organization_id = :org "
+        "AND sink_status = 'failed' "
+        "AND occurred_at >= :since",
+        {"org": organization_id, "since": since.isoformat()},
+    )
+    counts[ExceptionCategory.evidence_sink_delivery_failed.value] = (
+        int(fail_row["n"]) if fail_row else 0
+    )
+
+    # Phase 56 — exports missing a snapshot. We find note_exported
+    # evidence events in the window whose note_version_id has no
+    # corresponding row in note_export_snapshots.
+    missing_snap_row = fetch_one(
+        "SELECT COUNT(*) AS n FROM note_evidence_events ev "
+        "WHERE ev.organization_id = :org "
+        "AND ev.event_type = 'note_exported' "
+        "AND ev.occurred_at >= :since "
+        "AND NOT EXISTS ("
+        "  SELECT 1 FROM note_export_snapshots s "
+        "  WHERE s.note_version_id = ev.note_version_id "
+        "  AND s.id >= 1"
+        ")",
+        {"org": organization_id, "since": since.isoformat()},
+    )
+    counts[ExceptionCategory.export_snapshot_missing.value] = (
+        int(missing_snap_row["n"]) if missing_snap_row else 0
+    )
 
     # A coarse "anything open" number for the nav badge. We
     # intentionally EXCLUDE pure-session categories (idle / absolute

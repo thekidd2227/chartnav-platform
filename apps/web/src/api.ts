@@ -1819,6 +1819,9 @@ export async function downloadKpiCsv(email: string, hours: number): Promise<{ fi
 
 export type AuditSinkMode = "disabled" | "jsonl" | "webhook";
 
+export type EvidenceSinkMode = "disabled" | "jsonl" | "webhook";
+export type EvidenceSigningMode = "disabled" | "hmac_sha256";
+
 export interface SecurityPolicyPayload {
   require_mfa: boolean;
   idle_timeout_minutes: number | null;
@@ -1826,6 +1829,11 @@ export interface SecurityPolicyPayload {
   audit_sink_mode: AuditSinkMode;
   audit_sink_target: string | null;
   security_admin_emails: string[];
+  // Phase 56 — evidence sink + signing. Independent of audit sink.
+  evidence_sink_mode?: EvidenceSinkMode;
+  evidence_sink_target?: string | null;
+  evidence_signing_mode?: EvidenceSigningMode;
+  evidence_signing_key_id?: string | null;
 }
 
 export interface SecurityPolicyResponse {
@@ -1841,6 +1849,10 @@ export interface SecurityPolicyPatch {
   audit_sink_mode?: AuditSinkMode;
   audit_sink_target?: string | null;
   security_admin_emails?: string[];
+  evidence_sink_mode?: EvidenceSinkMode;
+  evidence_sink_target?: string | null;
+  evidence_signing_mode?: EvidenceSigningMode;
+  evidence_signing_key_id?: string | null;
 }
 
 export interface SecuritySessionRow {
@@ -2167,6 +2179,129 @@ export function getNoteEvidenceHealth(
 }
 
 // =====================================================================
+// Phase 56 — external evidence sink, signed bundles, export snapshots,
+// chain seals
+// =====================================================================
+
+export interface EvidenceBundleSignatureVerdict {
+  mode: string;
+  key_id?: string | null;
+  ok: boolean;
+  error_code: string | null;
+  reason: string | null;
+}
+
+export interface EvidenceBundleVerifyResponse {
+  note_id: number;
+  note_id_match: boolean;
+  body_hash_ok: boolean;
+  recomputed_body_hash: string;
+  claimed_body_hash: string | null;
+  signature: EvidenceBundleSignatureVerdict;
+}
+
+export function verifyNoteEvidenceBundle(
+  email: string,
+  noteId: number,
+  bundle: EvidenceBundle
+): Promise<EvidenceBundleVerifyResponse> {
+  return request(`/note-versions/${noteId}/evidence-bundle/verify`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(bundle),
+  });
+}
+
+export interface ExportSnapshotSummary {
+  id: number;
+  evidence_chain_event_id: number | null;
+  artifact_hash_sha256: string;
+  content_fingerprint: string | null;
+  issued_at: string | null;
+  issued_by_user_id: number | null;
+  issued_by_email: string | null;
+}
+
+export interface ExportSnapshotListResponse {
+  note_id: number;
+  snapshots: ExportSnapshotSummary[];
+}
+
+export interface ExportSnapshotDetail extends ExportSnapshotSummary {
+  note_version_id: number;
+  encounter_id: number;
+  artifact: Record<string, unknown> | null;
+}
+
+export function listNoteExportSnapshots(
+  email: string,
+  noteId: number
+): Promise<ExportSnapshotListResponse> {
+  return request(`/note-versions/${noteId}/export-snapshots`, { email });
+}
+
+export function getNoteExportSnapshot(
+  email: string,
+  noteId: number,
+  snapshotId: number
+): Promise<ExportSnapshotDetail> {
+  return request(
+    `/note-versions/${noteId}/export-snapshots/${snapshotId}`,
+    { email }
+  );
+}
+
+export interface EvidenceSinkProbeResponse {
+  ok: boolean;
+  mode: EvidenceSinkMode;
+  target: string | null;
+  error_code: string | null;
+  reason: string | null;
+}
+
+export function probeEvidenceSink(
+  email: string
+): Promise<EvidenceSinkProbeResponse> {
+  return request("/admin/operations/evidence-sink/test", {
+    email,
+    method: "POST",
+  });
+}
+
+export interface EvidenceChainSeal {
+  id: number;
+  tip_event_id: number;
+  tip_event_hash: string;
+  event_count: number;
+  sealed_at: string | null;
+  sealed_by_user_id: number | null;
+  sealed_by_email: string | null;
+  note: string | null;
+}
+
+export interface EvidenceChainSealsResponse {
+  organization_id: number;
+  seals: EvidenceChainSeal[];
+}
+
+export function sealEvidenceChain(
+  email: string,
+  note: string = ""
+): Promise<EvidenceChainSeal> {
+  return request("/admin/operations/evidence-chain/seal", {
+    email,
+    method: "POST",
+    body: JSON.stringify({ note }),
+  });
+}
+
+export function listEvidenceChainSeals(
+  email: string
+): Promise<EvidenceChainSealsResponse> {
+  return request("/admin/operations/evidence-chain/seals", { email });
+}
+
+// =====================================================================
 // Phase 53 — Wave 8 operations & exceptions control plane
 // =====================================================================
 
@@ -2216,6 +2351,12 @@ export interface OperationsSecurityPolicyStatus {
   audit_sink_mode: string;
   security_admin_allowlist_count: number;
   unconfigured: boolean;
+  // Phase 56 — evidence posture summary. Optional because older
+  // backends that predate this build returned the shape above.
+  evidence_sink_mode?: string;
+  evidence_sink_configured?: boolean;
+  evidence_signing_mode?: string;
+  evidence_signing_configured?: boolean;
 }
 
 export interface OperationsOverview {
