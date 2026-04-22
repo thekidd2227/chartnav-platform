@@ -2,11 +2,19 @@
 #
 # Use:
 #   cd infra/docker
-#   docker compose -f docker-compose.prod.yml up --build
+#   docker compose --env-file ../../<path-to-.env.prod> \
+#     -f docker-compose.prod.yml up -d
 #
-# Env contract (see .env.example). Everything below is overridable.
-# The compose file ships with dev-safe defaults for local parity tests;
-# real deployments should supply these from a secret store.
+# Env contract: see `.env.prod.example` in this directory.
+# Every env documented there is forwarded into the api container
+# so the production config validator (CHARTNAV_ENV=production)
+# sees what the operator configured. Missing REQUIRED env → the
+# container fails loudly at import time; preflight catches this
+# BEFORE boot.
+#
+# Dev-safe defaults remain available for local parity tests
+# (`make docker-up` with no env file); they are NOT production-
+# acceptable — `deploy_preflight.sh` refuses them.
 
 services:
   db:
@@ -28,22 +36,49 @@ services:
     restart: unless-stopped
 
   api:
+    # Production should pull the tag-pinned image from GHCR. Local
+    # parity builds can use `make docker-build` to tag the image
+    # as `chartnav-api:local` and then override `image:` via the
+    # compose file's `build:` stanza.
+    image: "ghcr.io/${CHARTNAV_IMAGE_OWNER:-thekidd2227}/chartnav-api:${CHARTNAV_IMAGE_TAG:-latest}"
     build:
       context: ../../apps/api
       dockerfile: Dockerfile
     container_name: chartnav-api
     environment:
+      # ---------- Core runtime ----------
       CHARTNAV_ENV: ${CHARTNAV_ENV:-prod}
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://chartnav:chartnav@db:5432/chartnav}
-      # Default to dev-auth so the container starts locally without
-      # production identity wired. Flip to `bearer` when JWT validation
-      # is implemented AND these env vars are set.
+      CHARTNAV_RUN_SEED: ${CHARTNAV_RUN_SEED:-0}
+      API_PORT: 8000
+      # ---------- Auth ----------
+      # Default `header` is DEV-ONLY. Production MUST set bearer +
+      # the JWT trio; preflight refuses otherwise.
       CHARTNAV_AUTH_MODE: ${CHARTNAV_AUTH_MODE:-header}
       CHARTNAV_JWT_ISSUER: ${CHARTNAV_JWT_ISSUER:-}
       CHARTNAV_JWT_AUDIENCE: ${CHARTNAV_JWT_AUDIENCE:-}
       CHARTNAV_JWT_JWKS_URL: ${CHARTNAV_JWT_JWKS_URL:-}
-      CHARTNAV_RUN_SEED: ${CHARTNAV_RUN_SEED:-0}
-      API_PORT: 8000
+      CHARTNAV_JWT_USER_CLAIM: ${CHARTNAV_JWT_USER_CLAIM:-email}
+      # ---------- CORS + rate limit + retention ----------
+      CHARTNAV_CORS_ALLOW_ORIGINS: ${CHARTNAV_CORS_ALLOW_ORIGINS:-}
+      CHARTNAV_RATE_LIMIT_PER_MINUTE: ${CHARTNAV_RATE_LIMIT_PER_MINUTE:-120}
+      CHARTNAV_AUDIT_RETENTION_DAYS: ${CHARTNAV_AUDIT_RETENTION_DAYS:-0}
+      # ---------- Platform mode + integration adapter ----------
+      CHARTNAV_PLATFORM_MODE: ${CHARTNAV_PLATFORM_MODE:-standalone}
+      CHARTNAV_INTEGRATION_ADAPTER: ${CHARTNAV_INTEGRATION_ADAPTER:-stub}
+      CHARTNAV_FHIR_BASE_URL: ${CHARTNAV_FHIR_BASE_URL:-}
+      CHARTNAV_FHIR_AUTH_TYPE: ${CHARTNAV_FHIR_AUTH_TYPE:-none}
+      CHARTNAV_FHIR_BEARER_TOKEN: ${CHARTNAV_FHIR_BEARER_TOKEN:-}
+      # ---------- Audio intake ----------
+      CHARTNAV_AUDIO_UPLOAD_DIR: ${CHARTNAV_AUDIO_UPLOAD_DIR:-/var/lib/chartnav/audio}
+      CHARTNAV_AUDIO_UPLOAD_MAX_BYTES: ${CHARTNAV_AUDIO_UPLOAD_MAX_BYTES:-26214400}
+      CHARTNAV_AUDIO_INGEST_MODE: ${CHARTNAV_AUDIO_INGEST_MODE:-async}
+      CHARTNAV_STT_PROVIDER: ${CHARTNAV_STT_PROVIDER:-stub}
+      # ---------- Evidence signing (Phase 56/57) ----------
+      # Either the legacy single-key env OR the keyring JSON. When
+      # neither is set, bundles are issued unsigned.
+      CHARTNAV_EVIDENCE_SIGNING_HMAC_KEY: ${CHARTNAV_EVIDENCE_SIGNING_HMAC_KEY:-}
+      CHARTNAV_EVIDENCE_SIGNING_HMAC_KEYS: ${CHARTNAV_EVIDENCE_SIGNING_HMAC_KEYS:-}
     ports:
       - "${API_PORT:-8000}:8000"
     depends_on:

@@ -251,3 +251,58 @@ def test_env_prod_example_exists_and_has_required_keys():
     body = p.read_text()
     for k in REQUIRED_KEYS:
         assert k in body, f"missing required key {k} in {p}"
+
+
+# -------- compose/env integration contract --------------------------
+
+# Operator-visible env vars documented in .env.prod.example that
+# are not forwarded by compose are silent no-ops. This guard
+# catches the drift automatically.
+_COMPOSE_EXEMPT = {
+    # These are meta-settings read by compose itself, not passed
+    # to the container.
+    "CHARTNAV_IMAGE_OWNER",
+    "CHARTNAV_IMAGE_TAG",
+    "POSTGRES_DB",
+    "POSTGRES_USER",
+    "POSTGRES_PASSWORD",
+    "POSTGRES_PORT",
+}
+
+
+def test_compose_forwards_every_documented_env():
+    """Every CHARTNAV_* or DATABASE_URL env documented in
+    .env.prod.example must appear in docker-compose.prod.yml's
+    api.environment block. Prevents silent no-op regressions where
+    an operator sets an env that never reaches the container."""
+    import re
+    example = (REPO_ROOT / "infra" / "docker" / ".env.prod.example").read_text()
+    compose_body = (
+        REPO_ROOT / "infra" / "docker" / "docker-compose.prod.yml"
+    ).read_text()
+
+    documented = set()
+    for line in example.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        # Some entries are intentionally commented out; accept both
+        # `KEY=val` and `# KEY=` patterns so the guard is about
+        # "the key exists in this doc" rather than whether it is
+        # uncommented today.
+        m = re.match(r"^#?\s*([A-Z_][A-Z_0-9]*)\s*=", line)
+        if m:
+            documented.add(m.group(1))
+
+    # Only enforce on the CHARTNAV_* namespace + DATABASE_URL.
+    enforced = {
+        k for k in documented
+        if (k.startswith("CHARTNAV_") or k == "DATABASE_URL")
+        and k not in _COMPOSE_EXEMPT
+    }
+
+    missing = [k for k in sorted(enforced) if k not in compose_body]
+    assert not missing, (
+        "docker-compose.prod.yml does not forward env keys "
+        "documented in .env.prod.example: " + ", ".join(missing)
+    )
