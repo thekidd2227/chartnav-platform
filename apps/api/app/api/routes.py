@@ -6222,6 +6222,277 @@ def admin_evidence_sink_test(
     return result
 
 
+# ---------------------------------------------------------------------------
+# Phase 58 — practice backup / restore / reinstall recovery
+# ---------------------------------------------------------------------------
+
+class PracticeBackupCreateBody(BaseModel):
+    # Optional operator note (e.g. "quarterly archive") — stored on
+    # the history record, not inside the bundle.
+    note: str = Field(default="", max_length=500)
+
+
+@router.post("/admin/practice-backup/create")
+def practice_backup_create(
+    payload: PracticeBackupCreateBody,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Assemble a backup bundle for the caller's org. Returns the
+    bundle JSON directly so the browser can save-as via a download
+    prompt. The server does NOT persist the bundle bytes — only a
+    small metadata record."""
+    if caller.role != "admin":
+        raise _err(
+            "role_admin_required",
+            "only admin may create a practice backup",
+            403,
+        )
+    from app.services.practice_backup import build_backup, record_history
+    built = build_backup(
+        organization_id=caller.organization_id,
+        issued_by_user_id=caller.user_id,
+        issued_by_email=caller.email,
+    )
+    record_id = record_history(
+        organization_id=caller.organization_id,
+        event_type="backup_created",
+        created_by_user_id=caller.user_id,
+        created_by_email=caller.email,
+        bundle_version=built.payload.get("bundle_version") or "",
+        schema_version=built.payload.get("schema_version") or "",
+        artifact_bytes_size=len(built.canonical_bytes),
+        artifact_hash_sha256=built.hash_sha256,
+        counts=built.counts,
+        note=(payload.note or "").strip() or None,
+    )
+
+    from app import audit as _audit
+    _audit.record(
+        event_type="practice_backup_created",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path="/admin/practice-backup/create",
+        method="POST",
+        detail=(
+            f"record_id={record_id} hash={built.hash_sha256[:12]} "
+            f"bytes={len(built.canonical_bytes)}"
+        ),
+    )
+    return {
+        "record_id": record_id,
+        "bundle": built.payload,
+        "hash_sha256": built.hash_sha256,
+        "bytes_size": len(built.canonical_bytes),
+        "counts": built.counts,
+    }
+
+
+@router.get("/admin/practice-backup/download")
+def practice_backup_download(
+    caller: Caller = Depends(require_caller),
+):
+    """Same bundle as /create, delivered as an attachment so the
+    browser shows a native Save-As dialog. The endpoint is
+    idempotent (no write) but still audited since it exposes
+    cross-table org state to a file on the operator's disk."""
+    if caller.role != "admin":
+        raise _err(
+            "role_admin_required",
+            "only admin may download a practice backup",
+            403,
+        )
+    from app.services.practice_backup import build_backup, record_history
+    built = build_backup(
+        organization_id=caller.organization_id,
+        issued_by_user_id=caller.user_id,
+        issued_by_email=caller.email,
+    )
+    record_history(
+        organization_id=caller.organization_id,
+        event_type="backup_created",
+        created_by_user_id=caller.user_id,
+        created_by_email=caller.email,
+        bundle_version=built.payload.get("bundle_version") or "",
+        schema_version=built.payload.get("schema_version") or "",
+        artifact_bytes_size=len(built.canonical_bytes),
+        artifact_hash_sha256=built.hash_sha256,
+        counts=built.counts,
+        note="download",
+    )
+    from app import audit as _audit
+    _audit.record(
+        event_type="practice_backup_downloaded",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path="/admin/practice-backup/download",
+        method="GET",
+        detail=(
+            f"hash={built.hash_sha256[:12]} "
+            f"bytes={len(built.canonical_bytes)}"
+        ),
+    )
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    filename = f"chartnav-backup-org{caller.organization_id}-{stamp}.json"
+    return Response(
+        content=built.canonical_bytes,
+        media_type="application/vnd.chartnav.practice-backup+json",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-ChartNav-Backup-Hash-SHA256": built.hash_sha256,
+            "X-ChartNav-Backup-Version": built.payload.get("bundle_version") or "",
+        },
+    )
+
+
+@router.get("/admin/practice-backup/history")
+def practice_backup_history(
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Metadata history of backup + restore events for this org.
+    The bundle bytes themselves are not server-persisted; this
+    endpoint returns the hashes + timestamps so an operator can
+    correlate a downloaded file against what was issued."""
+    if caller.role != "admin":
+        raise _err(
+            "role_admin_required",
+            "only admin may view practice backup history",
+            403,
+        )
+    from app.services.practice_backup import list_history
+    return {
+        "organization_id": caller.organization_id,
+        "history": list_history(caller.organization_id),
+    }
+
+
+class PracticeBackupValidateBody(BaseModel):
+    bundle: dict
+
+
+@router.post("/admin/practice-backup/validate")
+def practice_backup_validate(
+    payload: PracticeBackupValidateBody,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Validate an uploaded bundle WITHOUT writing. Returns the
+    structured verdict. Admins use this to verify a downloaded file
+    round-trips correctly before attempting restore."""
+    if caller.role != "admin":
+        raise _err(
+            "role_admin_required",
+            "only admin may validate a practice backup",
+            403,
+        )
+    from app.services.practice_backup import validate_backup
+    verdict = validate_backup(
+        payload.bundle,
+        expected_organization_id=caller.organization_id,
+    )
+    return verdict.as_dict()
+
+
+class PracticeBackupRestoreBody(BaseModel):
+    bundle: dict
+    # Default 'empty_target_only' — the only supported mode today.
+    mode: str = Field(default="empty_target_only", max_length=32)
+    # Hard default true for safety: a missing flag defaults to
+    # dry-run, so an accidental POST never destroys anything.
+    dry_run: bool = True
+    # Must be explicitly true for a real write.
+    confirm_destructive: bool = False
+
+
+@router.post("/admin/practice-backup/restore")
+def practice_backup_restore(
+    payload: PracticeBackupRestoreBody,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Restore a bundle into the caller's org.
+
+    SAFETY (enforced at the route layer):
+      - security-admin only (separate from plain admin).
+      - bundle must validate (hash + shape + version).
+      - source organization in the bundle must equal caller's org.
+      - target org must be empty (no encounters/patients/notes).
+      - dry_run=true returns counts without writing.
+      - confirm_destructive=true required for a real write.
+
+    Returns a RestoreResult. On failure raises a 4xx with a
+    precise error_code so the operator can diagnose."""
+    _require_security_admin_inline(caller)
+
+    from app.services.practice_backup import (
+        RestoreError, restore_backup, validate_backup, record_history,
+    )
+    verdict = validate_backup(
+        payload.bundle, expected_organization_id=caller.organization_id,
+    )
+    if not verdict.ok:
+        raise HTTPException(
+            status_code=(
+                404
+                if verdict.error_code == "backup_org_mismatch"
+                else 400
+            ),
+            detail={
+                "error_code": verdict.error_code or "invalid_bundle",
+                "reason": verdict.reason or "bundle failed validation",
+            },
+        )
+
+    try:
+        result = restore_backup(
+            bundle=payload.bundle,
+            target_organization_id=caller.organization_id,
+            mode=payload.mode,
+            confirm_destructive=bool(payload.confirm_destructive),
+            dry_run=bool(payload.dry_run),
+        )
+    except RestoreError as e:
+        raise HTTPException(
+            status_code=e.status_code,
+            detail={"error_code": e.code, "reason": e.reason},
+        )
+
+    if not result.dry_run:
+        record_history(
+            organization_id=caller.organization_id,
+            event_type="restore_applied",
+            created_by_user_id=caller.user_id,
+            created_by_email=caller.email,
+            bundle_version=verdict.bundle_version or "",
+            schema_version=verdict.schema_version or "",
+            artifact_bytes_size=None,
+            artifact_hash_sha256=verdict.claimed_hash,
+            counts=result.applied_counts,
+            note=f"mode={result.mode}",
+        )
+
+    from app import audit as _audit
+    _audit.record(
+        event_type=(
+            "practice_backup_restore_dry_run"
+            if result.dry_run else "practice_backup_restore_applied"
+        ),
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path="/admin/practice-backup/restore",
+        method="POST",
+        detail=(
+            f"dry_run={result.dry_run} mode={result.mode} "
+            f"hash={(verdict.claimed_hash or '')[:12]} "
+            f"applied={sum(result.applied_counts.values())}"
+        ),
+    )
+    return result.as_dict()
+
+
 @router.get("/admin/operations/categories")
 def admin_operations_categories(
     caller: Caller = Depends(require_caller),

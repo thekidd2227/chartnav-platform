@@ -35,6 +35,7 @@ import {
   updateOrganization,
   updateUser,
 } from "./api";
+import { BackupPane } from "./BackupPane";
 import { KpiPane } from "./KpiPane";
 import { OperationsPane } from "./OperationsPane";
 import { SecurityPane } from "./SecurityPane";
@@ -48,7 +49,8 @@ type Tab =
   | "audit"
   | "kpi"
   | "security"
-  | "operations";
+  | "operations"
+  | "backup";
 
 export function AdminPanel({ identity, me, onClose }: {
   identity: string;
@@ -170,6 +172,13 @@ export function AdminPanel({ identity, me, onClose }: {
           >
             Operations
           </button>
+          <button
+            className={"btn " + (tab === "backup" ? "btn--primary" : "")}
+            data-testid="admin-tab-backup"
+            onClick={() => setTab("backup")}
+          >
+            Backup
+          </button>
         </div>
         {banner && (
           <div
@@ -196,6 +205,7 @@ export function AdminPanel({ identity, me, onClose }: {
           {tab === "kpi" && <KpiPane identity={identity} me={me} org={org} />}
           {tab === "security" && <SecurityPane identity={identity} me={me} org={org} />}
           {tab === "operations" && <OperationsPane identity={identity} me={me} />}
+          {tab === "backup" && <BackupPane identity={identity} me={me} />}
         </div>
       </div>
     </div>

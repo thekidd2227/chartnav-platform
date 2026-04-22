@@ -2413,6 +2413,152 @@ export function runExportSnapshotRetentionSweep(
 }
 
 // =====================================================================
+// Phase 58 — practice backup / restore / reinstall recovery
+// =====================================================================
+
+export interface PracticeBackupCounts {
+  users: number;
+  locations: number;
+  patients: number;
+  providers: number;
+  encounters: number;
+  encounter_inputs: number;
+  extracted_findings: number;
+  note_versions: number;
+}
+
+/** The bundle itself is deliberately typed as a loose record — the
+ *  UI treats it as opaque JSON to round-trip to disk, and the server
+ *  is the single source of truth for its shape. */
+export type PracticeBackupBundle = Record<string, unknown>;
+
+export interface PracticeBackupCreateResponse {
+  record_id: number;
+  bundle: PracticeBackupBundle;
+  hash_sha256: string;
+  bytes_size: number;
+  counts: PracticeBackupCounts;
+}
+
+export function createPracticeBackup(
+  email: string,
+  note: string = ""
+): Promise<PracticeBackupCreateResponse> {
+  return request("/admin/practice-backup/create", {
+    email,
+    method: "POST",
+    body: JSON.stringify({ note }),
+  });
+}
+
+export interface PracticeBackupHistoryRow {
+  id: number;
+  event_type: "backup_created" | "restore_applied";
+  created_by_user_id: number | null;
+  created_by_email: string | null;
+  created_at: string | null;
+  bundle_version: string;
+  schema_version: string;
+  artifact_bytes_size: number | null;
+  artifact_hash_sha256: string | null;
+  encounter_count: number | null;
+  note_version_count: number | null;
+  user_count: number | null;
+  note: string | null;
+}
+
+export interface PracticeBackupHistoryResponse {
+  organization_id: number;
+  history: PracticeBackupHistoryRow[];
+}
+
+export function getPracticeBackupHistory(
+  email: string
+): Promise<PracticeBackupHistoryResponse> {
+  return request("/admin/practice-backup/history", { email });
+}
+
+export interface PracticeBackupValidationVerdict {
+  ok: boolean;
+  error_code: string | null;
+  reason: string | null;
+  bundle_version: string | null;
+  schema_version: string | null;
+  source_organization_id: number | null;
+  recomputed_hash: string | null;
+  claimed_hash: string | null;
+  body_hash_ok: boolean | null;
+  counts: PracticeBackupCounts;
+}
+
+export function validatePracticeBackup(
+  email: string,
+  bundle: PracticeBackupBundle
+): Promise<PracticeBackupValidationVerdict> {
+  return request("/admin/practice-backup/validate", {
+    email,
+    method: "POST",
+    body: JSON.stringify({ bundle }),
+  });
+}
+
+export interface PracticeBackupRestoreResponse {
+  dry_run: boolean;
+  mode: string;
+  source_organization_id: number;
+  target_organization_id: number;
+  applied_counts: PracticeBackupCounts;
+  skipped_counts: PracticeBackupCounts;
+}
+
+export function restorePracticeBackup(
+  email: string,
+  bundle: PracticeBackupBundle,
+  opts: { dryRun?: boolean; confirmDestructive?: boolean; mode?: string } = {}
+): Promise<PracticeBackupRestoreResponse> {
+  return request("/admin/practice-backup/restore", {
+    email,
+    method: "POST",
+    body: JSON.stringify({
+      bundle,
+      mode: opts.mode || "empty_target_only",
+      dry_run: opts.dryRun ?? true,
+      confirm_destructive: opts.confirmDestructive ?? false,
+    }),
+  });
+}
+
+/**
+ * Build a user-initiated download of a backup bundle. Uses the
+ * blob/anchor download trick because ChartNav is browser-only; the
+ * user sees a native Save-As dialog. Returns the filename used.
+ */
+export function downloadPracticeBackupBundle(
+  bundle: PracticeBackupBundle,
+  hash_sha256: string,
+  organization_id: number
+): string {
+  const canonical = JSON.stringify(bundle);
+  const blob = new Blob([canonical], {
+    type: "application/vnd.chartnav.practice-backup+json",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const stamp = new Date()
+    .toISOString()
+    .replace(/[-:]/g, "")
+    .replace(/\.\d+Z$/, "Z");
+  const filename = `chartnav-backup-org${organization_id}-${stamp}-${hash_sha256.slice(0, 8)}.json`;
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  return filename;
+}
+
+// =====================================================================
 // Phase 53 — Wave 8 operations & exceptions control plane
 // =====================================================================
 
