@@ -131,13 +131,45 @@ def _enable_webhook_sink_failing(
     )
 
 
-def _enable_signing(test_db, organization_id: int, key_id: str = "k1") -> None:
+def _enable_signing(
+    test_db,
+    organization_id: int,
+    key_id: str = "k1",
+    *,
+    populate_keyring: bool = True,
+) -> None:
+    """Enable HMAC signing for an org and make sure the named key
+    exists in the process keyring.
+
+    Phase 57 tightened the signing seam: if an org names a key_id
+    that is not in CHARTNAV_EVIDENCE_SIGNING_HMAC_KEYS (or aliased
+    under 'default' from the legacy single-key env), bundle issuance
+    503s. These phase-56 tests rely on the legacy single-key env
+    being implicitly usable — so when a non-'default' key_id is
+    requested, we add a matching entry to the keyring env and
+    reload config so the keyring sees it."""
     _set_org_settings(
         test_db,
         organization_id,
         {"evidence_signing_mode": "hmac_sha256",
          "evidence_signing_key_id": key_id},
     )
+    if populate_keyring and key_id != "default":
+        import json as _json
+        import os
+        import importlib
+        import app.config as _cfg
+        existing = {}
+        existing_raw = os.environ.get("CHARTNAV_EVIDENCE_SIGNING_HMAC_KEYS")
+        if existing_raw:
+            try:
+                existing = _json.loads(existing_raw)
+            except Exception:
+                existing = {}
+        legacy = os.environ.get("CHARTNAV_EVIDENCE_SIGNING_HMAC_KEY")
+        existing.setdefault(key_id, legacy or "test-hmac-secret")
+        os.environ["CHARTNAV_EVIDENCE_SIGNING_HMAC_KEYS"] = _json.dumps(existing)
+        importlib.reload(_cfg)
 
 
 def _read_evidence_rows(test_db, organization_id: int) -> list[dict]:
@@ -409,11 +441,16 @@ def test_signed_bundle_signature_tamper_detected(
 def test_signing_enabled_without_key_returns_503(
     client, test_db, monkeypatch,
 ):
+    """Signing enabled but the process has neither a legacy env nor
+    a keyring → 503 evidence_signing_unconfigured. We must clear
+    BOTH env sources in this test; `populate_keyring=False` stops
+    the helper from adding the key it would otherwise provision."""
     monkeypatch.delenv("CHARTNAV_EVIDENCE_SIGNING_HMAC_KEY", raising=False)
+    monkeypatch.delenv("CHARTNAV_EVIDENCE_SIGNING_HMAC_KEYS", raising=False)
     import importlib
     import app.config as _cfg
     importlib.reload(_cfg)
-    _enable_signing(test_db, 1)
+    _enable_signing(test_db, 1, populate_keyring=False)
 
     note = _ingest_generate(client)
     _clear_missing_flags(test_db, note["id"])

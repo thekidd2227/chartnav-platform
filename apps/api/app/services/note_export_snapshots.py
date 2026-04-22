@@ -123,7 +123,7 @@ def list_snapshots_for_note(note_version_id: int) -> list[dict[str, Any]]:
         "SELECT id, organization_id, note_version_id, encounter_id, "
         "evidence_chain_event_id, artifact_hash_sha256, "
         "content_fingerprint, issued_at, issued_by_user_id, "
-        "issued_by_email "
+        "issued_by_email, artifact_purged_at, artifact_purged_reason "
         "FROM note_export_snapshots WHERE note_version_id = :nvid "
         "ORDER BY id DESC",
         {"nvid": int(note_version_id)},
@@ -135,11 +135,127 @@ def get_snapshot(snapshot_id: int) -> Optional[dict[str, Any]]:
         "SELECT id, organization_id, note_version_id, encounter_id, "
         "evidence_chain_event_id, artifact_json, artifact_hash_sha256, "
         "content_fingerprint, issued_at, issued_by_user_id, "
-        "issued_by_email "
+        "issued_by_email, artifact_purged_at, artifact_purged_reason "
         "FROM note_export_snapshots WHERE id = :id",
         {"id": int(snapshot_id)},
     )
     return dict(row) if row else None
+
+
+# ---------------------------------------------------------------------
+# Phase 57 — retention / soft-purge sweep
+# ---------------------------------------------------------------------
+
+from dataclasses import dataclass as _dataclass
+from datetime import datetime, timedelta, timezone
+
+
+@_dataclass(frozen=True)
+class RetentionSweepResult:
+    dry_run: bool
+    organization_id: int
+    retention_days: Optional[int]
+    candidates_found: int
+    purged: int
+    candidate_ids: list[int]
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "dry_run": self.dry_run,
+            "organization_id": self.organization_id,
+            "retention_days": self.retention_days,
+            "candidates_found": self.candidates_found,
+            "purged": self.purged,
+            "candidate_ids": self.candidate_ids,
+        }
+
+
+def sweep_retention(
+    organization_id: int,
+    *,
+    dry_run: bool = False,
+) -> RetentionSweepResult:
+    """Apply the org's retention policy to its export snapshots.
+
+    Policy: when the org's `export_snapshot_retention_days` is set,
+    soft-purge (clear artifact_json + stamp purge metadata) all
+    snapshots whose `issued_at < now() - retention_days` AND whose
+    artifact_json is still present.
+
+    SAFETY — what this function never does:
+      * never deletes a snapshot row (the id is referenced by
+        evidence chain events; the row must remain resolvable)
+      * never purges when the org has no retention configured
+      * never purges rows already purged (idempotent)
+      * never touches artifact_hash_sha256 or linkage columns, so
+        integrity checks against the chain still hold
+
+    When `dry_run=True`, returns the candidate ids without mutating
+    anything. Operators are expected to dry-run first.
+    """
+    from app.security_policy import resolve_security_policy
+
+    policy = resolve_security_policy(organization_id)
+    days = getattr(policy, "export_snapshot_retention_days", None)
+    if not days:
+        return RetentionSweepResult(
+            dry_run=dry_run,
+            organization_id=organization_id,
+            retention_days=None,
+            candidates_found=0,
+            purged=0,
+            candidate_ids=[],
+        )
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=int(days))
+    candidates = fetch_all(
+        "SELECT id FROM note_export_snapshots "
+        "WHERE organization_id = :org "
+        "AND artifact_purged_at IS NULL "
+        "AND issued_at < :cutoff "
+        "ORDER BY id ASC LIMIT 1000",
+        {"org": int(organization_id), "cutoff": cutoff.isoformat()},
+    )
+    ids = [int(r["id"]) for r in candidates]
+    if dry_run or not ids:
+        return RetentionSweepResult(
+            dry_run=True if dry_run else False,
+            organization_id=organization_id,
+            retention_days=int(days),
+            candidates_found=len(ids),
+            purged=0,
+            candidate_ids=ids,
+        )
+
+    purged = 0
+    reason = (
+        f"retention_sweep:days={days};retained_hash_only"
+    )
+    from sqlalchemy import text as _sql
+    with transaction() as conn:
+        for sid in ids:
+            conn.execute(
+                _sql(
+                    "UPDATE note_export_snapshots SET "
+                    "artifact_json = '', "
+                    "artifact_purged_at = CURRENT_TIMESTAMP, "
+                    "artifact_purged_reason = :r "
+                    "WHERE id = :id "
+                    "AND organization_id = :org "
+                    "AND artifact_purged_at IS NULL"
+                ),
+                {"id": sid, "org": int(organization_id), "r": reason},
+            )
+            purged += 1
+
+    return RetentionSweepResult(
+        dry_run=False,
+        organization_id=organization_id,
+        retention_days=int(days),
+        candidates_found=len(ids),
+        purged=purged,
+        candidate_ids=ids,
+    )
 
 
 __all__ = [
@@ -147,4 +263,6 @@ __all__ = [
     "persist_snapshot",
     "list_snapshots_for_note",
     "get_snapshot",
+    "RetentionSweepResult",
+    "sweep_retention",
 ]

@@ -5297,6 +5297,13 @@ class SecurityPolicyPatchBody(BaseModel):
     audit_sink_mode: Optional[str] = None
     audit_sink_target: Optional[str] = None
     security_admin_emails: Optional[list[str]] = None
+    # Phase 56 — evidence sink + signing keys.
+    evidence_sink_mode: Optional[str] = None
+    evidence_sink_target: Optional[str] = None
+    evidence_signing_mode: Optional[str] = None
+    evidence_signing_key_id: Optional[str] = None
+    # Phase 57 — export snapshot retention (days or null).
+    export_snapshot_retention_days: Optional[int] = None
 
 
 class SessionRevokeBody(BaseModel):
@@ -5802,6 +5809,14 @@ def note_export_snapshots_list(
                 ),
                 "issued_by_user_id": r.get("issued_by_user_id"),
                 "issued_by_email": r.get("issued_by_email"),
+                # Phase 57 — purge metadata. `artifact_purged_at`
+                # null means the heavy body is still present.
+                "artifact_purged_at": (
+                    r["artifact_purged_at"].isoformat()
+                    if hasattr(r.get("artifact_purged_at"), "isoformat")
+                    else r.get("artifact_purged_at")
+                ),
+                "artifact_purged_reason": r.get("artifact_purged_reason"),
             }
             for r in rows
         ],
@@ -5829,12 +5844,18 @@ def note_export_snapshot_get(
     if int(snap["organization_id"]) != caller.organization_id:
         raise _err("snapshot_not_found", "no such export snapshot", 404)
     # artifact_json is stored as compact canonical text; parse for
-    # transport convenience.
+    # transport convenience. Phase 57 — a purged snapshot keeps the
+    # row but clears artifact_json; return null body in that case so
+    # the consumer sees the honest "body no longer present" state
+    # without having to parse an empty string.
     import json as _json
-    try:
-        artifact = _json.loads(snap["artifact_json"])
-    except Exception:
-        artifact = None
+    raw = snap.get("artifact_json") or ""
+    artifact = None
+    if raw:
+        try:
+            artifact = _json.loads(raw)
+        except Exception:
+            artifact = None
     return {
         "id": int(snap["id"]),
         "note_version_id": int(snap["note_version_id"]),
@@ -5850,6 +5871,12 @@ def note_export_snapshot_get(
         "issued_by_user_id": snap.get("issued_by_user_id"),
         "issued_by_email": snap.get("issued_by_email"),
         "artifact": artifact,
+        "artifact_purged_at": (
+            snap["artifact_purged_at"].isoformat()
+            if hasattr(snap.get("artifact_purged_at"), "isoformat")
+            else snap.get("artifact_purged_at")
+        ),
+        "artifact_purged_reason": snap.get("artifact_purged_reason"),
     }
 
 
@@ -5889,14 +5916,51 @@ def admin_evidence_chain_seal(
     )
     event_count = int(cnt_row["n"]) if cnt_row else 0
 
+    # Phase 57 — compute the seal hash at write time. We stamp a
+    # known sealed_at so the hash is deterministic relative to what
+    # gets stored. Then optionally sign it with the org's active
+    # HMAC key.
+    from datetime import datetime, timezone
+    from app.services.note_evidence import (
+        EvidenceSigningError,
+        compute_seal_hash,
+        sign_seal_hash,
+    )
+    sealed_at = datetime.now(timezone.utc)
+    sealed_at_iso = sealed_at.isoformat()
+    note_str = (payload.note or "").strip()[:500] or None
+    seal_hash = compute_seal_hash(
+        organization_id=caller.organization_id,
+        tip_event_id=int(tip["id"]),
+        tip_event_hash=tip["event_hash"],
+        event_count=event_count,
+        sealed_at_iso=sealed_at_iso,
+        sealed_by_user_id=caller.user_id,
+        sealed_by_email=caller.email,
+        note=note_str,
+    )
+    try:
+        signed = sign_seal_hash(seal_hash, caller.organization_id)
+    except EvidenceSigningError as e:
+        raise HTTPException(
+            status_code=503,
+            detail={"error_code": e.error_code, "reason": e.reason},
+        )
+    sig_hex = signed["signature_hex"] if signed else None
+    sig_kid = signed["signing_key_id"] if signed else None
+
     with transaction() as conn:
         new_row = conn.execute(
             text(
                 "INSERT INTO evidence_chain_seals ("
                 " organization_id, tip_event_id, tip_event_hash, "
-                " event_count, sealed_by_user_id, sealed_by_email, note"
+                " event_count, sealed_at, sealed_by_user_id, "
+                " sealed_by_email, note, "
+                " seal_hash_sha256, seal_signature_hex, "
+                " seal_signing_key_id"
                 ") VALUES ("
-                " :org, :tid, :th, :n, :uid, :email, :note"
+                " :org, :tid, :th, :n, :sa, :uid, :email, :note, "
+                " :sh, :ss, :kid"
                 ") RETURNING id, sealed_at"
             ),
             {
@@ -5904,9 +5968,13 @@ def admin_evidence_chain_seal(
                 "tid": int(tip["id"]),
                 "th": tip["event_hash"],
                 "n": event_count,
+                "sa": sealed_at_iso,
                 "uid": caller.user_id,
                 "email": caller.email,
-                "note": (payload.note or "").strip()[:500] or None,
+                "note": note_str,
+                "sh": seal_hash,
+                "ss": sig_hex,
+                "kid": sig_kid,
             },
         ).mappings().first()
 
@@ -5921,7 +5989,9 @@ def admin_evidence_chain_seal(
         method="POST",
         detail=(
             f"tip_event_id={tip['id']} event_count={event_count} "
-            f"tip_hash={str(tip['event_hash'])[:12]}"
+            f"tip_hash={str(tip['event_hash'])[:12]} "
+            f"seal_hash={seal_hash[:12]} "
+            f"signed={'yes' if sig_hex else 'no'}"
         ),
     )
     return {
@@ -5930,37 +6000,200 @@ def admin_evidence_chain_seal(
         "tip_event_id": int(tip["id"]),
         "tip_event_hash": tip["event_hash"],
         "event_count": event_count,
-        "sealed_at": (
-            new_row["sealed_at"].isoformat()
-            if hasattr(new_row.get("sealed_at"), "isoformat")
-            else new_row.get("sealed_at")
-        ),
+        "sealed_at": sealed_at_iso,
+        "seal_hash_sha256": seal_hash,
+        "seal_signature_hex": sig_hex,
+        "seal_signing_key_id": sig_kid,
     }
 
 
 @router.get("/admin/operations/evidence-chain/seals")
 def admin_evidence_chain_seals(
+    verify: bool = Query(default=False),
     caller: Caller = Depends(require_caller),
 ) -> dict:
-    """List recorded seals, newest first."""
+    """List recorded seals, newest first.
+
+    Phase 57 — pass `?verify=true` to re-verify each seal's hash
+    (and signature if present) as part of the response. When
+    verify=false (default) the call is a cheap read; verify=true is
+    O(N) hash computations — safe at the operational scale but not
+    the default.
+    """
     _require_security_admin_inline(caller)
     rows = fetch_all(
-        "SELECT id, tip_event_id, tip_event_hash, event_count, sealed_at, "
-        "sealed_by_user_id, sealed_by_email, note "
+        "SELECT id, organization_id, tip_event_id, tip_event_hash, "
+        "event_count, sealed_at, sealed_by_user_id, sealed_by_email, "
+        "note, seal_hash_sha256, seal_signature_hex, "
+        "seal_signing_key_id "
         "FROM evidence_chain_seals WHERE organization_id = :org "
         "ORDER BY id DESC LIMIT 200",
         {"org": caller.organization_id},
     )
+    from app.services.note_evidence import verify_seal_row
     out = []
     for r in rows:
         r = dict(r)
         if hasattr(r.get("sealed_at"), "isoformat"):
             r["sealed_at"] = r["sealed_at"].isoformat()
+        if verify:
+            r["verification"] = verify_seal_row(r)
         out.append(r)
     return {
         "organization_id": caller.organization_id,
         "seals": out,
     }
+
+
+@router.get("/admin/operations/evidence-chain/seals/{seal_id}/verify")
+def admin_evidence_chain_seal_verify(
+    seal_id: int,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Verify a single seal row. Returns the verification verdict
+    plus the seal payload itself so the admin can see what was
+    recomputed from what."""
+    _require_security_admin_inline(caller)
+    row = fetch_one(
+        "SELECT id, organization_id, tip_event_id, tip_event_hash, "
+        "event_count, sealed_at, sealed_by_user_id, sealed_by_email, "
+        "note, seal_hash_sha256, seal_signature_hex, "
+        "seal_signing_key_id "
+        "FROM evidence_chain_seals WHERE id = :id",
+        {"id": int(seal_id)},
+    )
+    if not row or int(row["organization_id"]) != caller.organization_id:
+        raise _err("seal_not_found", "no such chain seal", 404)
+    row = dict(row)
+    if hasattr(row.get("sealed_at"), "isoformat"):
+        row["sealed_at"] = row["sealed_at"].isoformat()
+
+    from app.services.note_evidence import verify_seal_row
+    verdict = verify_seal_row(row)
+    # Strip the signature columns from the returned seal payload so
+    # the verdict is the single source of truth for signed state.
+    return {
+        "seal": {
+            "id": int(row["id"]),
+            "tip_event_id": int(row["tip_event_id"]),
+            "tip_event_hash": row["tip_event_hash"],
+            "event_count": int(row["event_count"]),
+            "sealed_at": row.get("sealed_at"),
+            "sealed_by_user_id": row.get("sealed_by_user_id"),
+            "sealed_by_email": row.get("sealed_by_email"),
+            "note": row.get("note"),
+        },
+        "verification": verdict,
+    }
+
+
+@router.get("/admin/operations/signing-posture")
+def admin_signing_posture(
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Safe read-only view of the org's signing posture. Never
+    exposes secret material; only key ids + consistency verdict."""
+    _require_security_admin_inline(caller)
+    from app.services.note_evidence import keyring_posture
+    return keyring_posture(caller.organization_id)
+
+
+class EvidenceSinkRetryBody(BaseModel):
+    # Small, bounded retry window so a stuck backlog can't turn
+    # into a giant single transaction. 100 per call is the cap.
+    max_events: int = Field(default=100, ge=1, le=500)
+
+
+@router.post("/admin/operations/evidence-sink/retry-failed")
+def admin_evidence_sink_retry(
+    payload: EvidenceSinkRetryBody,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Retry evidence events whose previous sink delivery failed.
+
+    Scope:
+      - only events in this org
+      - only rows with sink_status='failed'
+      - up to `max_events` per call (default 100, cap 500)
+      - increments sink_attempt_count on each row touched
+      - NEVER modifies any canonical evidence column
+      - audited per-call with `evidence_sink_retry_attempted`
+
+    Returns `{attempted, sent, failed, skipped, events}` so the
+    operator sees both the per-call summary and the per-row outcome
+    for support diagnosis.
+    """
+    _require_security_admin_inline(caller)
+    from app.services.evidence_sink import retry_failed_deliveries
+    result = retry_failed_deliveries(
+        caller.organization_id, max_events=payload.max_events,
+    )
+    from app import audit as _audit
+    _audit.record(
+        event_type="evidence_sink_retry_attempted",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path="/admin/operations/evidence-sink/retry-failed",
+        method="POST",
+        detail=(
+            f"attempted={result.attempted} sent={result.sent} "
+            f"failed={result.failed} skipped={result.skipped}"
+        ),
+    )
+    return {
+        "attempted": result.attempted,
+        "sent": result.sent,
+        "failed": result.failed,
+        "skipped": result.skipped,
+        "events": result.events,
+    }
+
+
+class SnapshotRetentionSweepBody(BaseModel):
+    # Operator-initiated sweep. Default dry_run=True so an accident
+    # does not soft-purge anything without a deliberate second call.
+    dry_run: bool = True
+
+
+@router.post("/admin/operations/export-snapshots/retention-sweep")
+def admin_export_snapshot_retention_sweep(
+    payload: SnapshotRetentionSweepBody,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Apply the org's export-snapshot retention policy.
+
+    Operator flow:
+      1. POST with dry_run=true → see candidate ids + counts.
+      2. POST with dry_run=false → soft-purge those bodies.
+
+    Safety:
+      - retention must be explicitly configured (null → no-op)
+      - floor 90 days enforced at policy-write time
+      - row + hash + linkage preserved; only artifact_json cleared
+      - audited with `export_snapshot_retention_sweep`
+    """
+    _require_security_admin_inline(caller)
+    from app.services.note_export_snapshots import sweep_retention
+    result = sweep_retention(
+        caller.organization_id, dry_run=payload.dry_run,
+    )
+    from app import audit as _audit
+    _audit.record(
+        event_type="export_snapshot_retention_sweep",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path="/admin/operations/export-snapshots/retention-sweep",
+        method="POST",
+        detail=(
+            f"dry_run={result.dry_run} retention_days={result.retention_days} "
+            f"candidates={result.candidates_found} purged={result.purged}"
+        ),
+    )
+    return result.as_dict()
 
 
 @router.post("/admin/operations/evidence-sink/test")

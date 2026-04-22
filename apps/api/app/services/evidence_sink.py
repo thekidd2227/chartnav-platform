@@ -127,32 +127,145 @@ def update_sink_status(
     *,
     evidence_event_id: int,
     result: EvidenceSinkDeliveryResult,
+    increment_attempt: bool = True,
 ) -> None:
     """Stamp the delivery outcome on the evidence row. The write is
     small and unconditional — the caller has already committed the
     row, and this is an independent columnar update on the same id.
+
+    Phase 57 — also increments `sink_attempt_count`. The initial
+    append after `record_evidence_event` sets the count to 1; each
+    retry increments. Callers that wish to record a status WITHOUT
+    consuming an attempt (e.g. a config migration) can pass
+    `increment_attempt=False`.
 
     Never raises up to the caller: evidence chain correctness is
     more important than tracking delivery perfectly.
     """
     try:
         with transaction() as conn:
-            conn.execute(
-                text(
-                    "UPDATE note_evidence_events SET "
-                    "sink_status = :s, sink_attempted_at = :t, "
-                    "sink_error = :e "
-                    "WHERE id = :id"
-                ),
-                {
-                    "id": int(evidence_event_id),
-                    "s": result.status,
-                    "t": datetime.now(timezone.utc).isoformat(),
-                    "e": result.error,
-                },
-            )
+            if increment_attempt:
+                conn.execute(
+                    text(
+                        "UPDATE note_evidence_events SET "
+                        "sink_status = :s, sink_attempted_at = :t, "
+                        "sink_error = :e, "
+                        "sink_attempt_count = "
+                        "  COALESCE(sink_attempt_count, 0) + 1 "
+                        "WHERE id = :id"
+                    ),
+                    {
+                        "id": int(evidence_event_id),
+                        "s": result.status,
+                        "t": datetime.now(timezone.utc).isoformat(),
+                        "e": result.error,
+                    },
+                )
+            else:
+                conn.execute(
+                    text(
+                        "UPDATE note_evidence_events SET "
+                        "sink_status = :s, sink_attempted_at = :t, "
+                        "sink_error = :e "
+                        "WHERE id = :id"
+                    ),
+                    {
+                        "id": int(evidence_event_id),
+                        "s": result.status,
+                        "t": datetime.now(timezone.utc).isoformat(),
+                        "e": result.error,
+                    },
+                )
     except Exception:  # pragma: no cover
         log.warning("evidence_sink_status_update_failed", exc_info=True)
+
+
+# ---------------------------------------------------------------------
+# Phase 57 — retry path
+# ---------------------------------------------------------------------
+
+_EVIDENCE_ROW_COLS = (
+    "id, organization_id, note_version_id, encounter_id, "
+    "event_type, actor_user_id, actor_email, occurred_at, "
+    "draft_status, final_approval_status, content_fingerprint, "
+    "detail_json, prev_event_hash, event_hash"
+)
+
+
+@dataclass(frozen=True)
+class RetrySweepResult:
+    attempted: int
+    sent: int
+    failed: int
+    skipped: int
+    events: list[dict[str, Any]]
+
+
+def retry_failed_deliveries(
+    organization_id: int,
+    *,
+    max_events: int = 100,
+) -> RetrySweepResult:
+    """Retry every event with sink_status='failed' for this org, up
+    to `max_events`. Oldest-first so backlog drains in order.
+
+    Guarantees:
+      * does NOT touch any canonical evidence column (event_hash,
+        prev_event_hash, content_fingerprint, etc.) — ONLY the
+        sink_* tracking columns
+      * skipped (sink disabled) events stay skipped rather than
+        being marked sent; retry on a disabled sink is a no-op
+      * each retry increments sink_attempt_count so operators can
+        see stuck rows
+    """
+    from sqlalchemy import text as _sql
+    from app.db import fetch_all as _fa
+
+    rows = _fa(
+        f"SELECT {_EVIDENCE_ROW_COLS}, sink_status, sink_attempt_count "
+        "FROM note_evidence_events "
+        "WHERE organization_id = :org AND sink_status = 'failed' "
+        "ORDER BY id ASC LIMIT :lim",
+        {"org": int(organization_id), "lim": int(max_events)},
+    )
+
+    attempted = 0
+    sent = 0
+    failed = 0
+    skipped = 0
+    per_event: list[dict[str, Any]] = []
+    for row in rows:
+        attempted += 1
+        result = dispatch_event(
+            organization_id=int(row["organization_id"]),
+            event_row=dict(row),
+        )
+        if result.status == "sent":
+            sent += 1
+        elif result.status == "failed":
+            failed += 1
+        elif result.status == "skipped":
+            skipped += 1
+        update_sink_status(
+            evidence_event_id=int(row["id"]),
+            result=result,
+            increment_attempt=True,
+        )
+        per_event.append(
+            {
+                "evidence_event_id": int(row["id"]),
+                "event_type": row.get("event_type"),
+                "status": result.status,
+                "error": result.error,
+            }
+        )
+    return RetrySweepResult(
+        attempted=attempted,
+        sent=sent,
+        failed=failed,
+        skipped=skipped,
+        events=per_event,
+    )
 
 
 def probe_evidence_sink(organization_id: int) -> dict[str, Any]:
@@ -205,4 +318,6 @@ __all__ = [
     "dispatch_event",
     "update_sink_status",
     "probe_evidence_sink",
+    "RetrySweepResult",
+    "retry_failed_deliveries",
 ]

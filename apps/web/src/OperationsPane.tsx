@@ -411,6 +411,9 @@ function OverviewTab({
         // operational visibility.
         "evidence_sink_delivery_failed",
         "export_snapshot_missing",
+        // Phase 57 — signing keyring posture + retry backlog.
+        "evidence_signing_inconsistent",
+        "evidence_sink_retry_pending",
       ],
     },
   ];

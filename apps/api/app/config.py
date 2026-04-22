@@ -122,14 +122,38 @@ class Settings:
     # CHARTNAV_INTEGRATION_ADAPTER is exposed.
     stt_provider: str
 
-    # Phase 56 — evidence bundle signing secret.
+    # Phase 56 — evidence bundle signing secret (single-key legacy).
     # When an org sets `evidence_signing_mode = "hmac_sha256"` and
     # this value is non-empty, bundle issuance produces an HMAC
     # signature alongside the body hash. The secret lives in process
     # env (NOT per-org JSON) so admins cannot read the signing
     # material directly. Unset → signing mode degrades to 503
     # `evidence_signing_unconfigured` when an org requires signing.
+    #
+    # PHASE 57 — this single-key env var is still honoured (legacy
+    # deploys keep working). Prefer the keyring below for rotation.
     evidence_signing_hmac_key: str | None
+
+    # Phase 57 — evidence signing keyring.
+    # Format: a JSON object mapping key_id → secret, e.g.
+    #   CHARTNAV_EVIDENCE_SIGNING_HMAC_KEYS={"k1":"a...","k2":"b..."}
+    # Every listed key is a VALID VERIFICATION key; whichever key the
+    # org's `evidence_signing_key_id` names is the ACTIVE signing
+    # key for new bundles.
+    #
+    # Rotation flow (operator contract):
+    #   1. add the new key to the keyring env (deploy); old + new
+    #      both in the ring.
+    #   2. update the org's `evidence_signing_key_id` to the new id.
+    #   3. old bundles still verify against the old key because it
+    #      remains in the ring.
+    #   4. when no more bundles need the old key, drop it from the
+    #      keyring env.
+    #
+    # Legacy single-key env (`CHARTNAV_EVIDENCE_SIGNING_HMAC_KEY`) is
+    # auto-mapped to key_id "default" so pre-rotation deploys remain
+    # signature-verifiable without any config changes.
+    evidence_signing_hmac_keyring: dict[str, str]
 
 
 _DEFAULT_CORS = (
@@ -258,6 +282,44 @@ def _load() -> Settings:
 
     evidence_signing_hmac_key = _env("CHARTNAV_EVIDENCE_SIGNING_HMAC_KEY")
 
+    # Phase 57 — keyring. The env var is a JSON object. If it is
+    # malformed, we refuse to silently down-degrade — emit a
+    # RuntimeError because misparsed key material is always worse
+    # than a visible bootstrap failure.
+    keyring_raw = _env("CHARTNAV_EVIDENCE_SIGNING_HMAC_KEYS")
+    evidence_signing_hmac_keyring: dict[str, str] = {}
+    if keyring_raw and keyring_raw.strip():
+        import json as _json
+        try:
+            parsed = _json.loads(keyring_raw)
+        except Exception as e:
+            raise RuntimeError(
+                "CHARTNAV_EVIDENCE_SIGNING_HMAC_KEYS must be a JSON "
+                f"object mapping key_id to secret: {e}"
+            )
+        if not isinstance(parsed, dict):
+            raise RuntimeError(
+                "CHARTNAV_EVIDENCE_SIGNING_HMAC_KEYS must be a JSON "
+                "object, not a list or scalar"
+            )
+        for kid, secret in parsed.items():
+            if not isinstance(kid, str) or not kid.strip():
+                raise RuntimeError(
+                    "CHARTNAV_EVIDENCE_SIGNING_HMAC_KEYS key ids must "
+                    "be non-empty strings"
+                )
+            if not isinstance(secret, str) or not secret:
+                raise RuntimeError(
+                    f"CHARTNAV_EVIDENCE_SIGNING_HMAC_KEYS value for "
+                    f"{kid!r} must be a non-empty string"
+                )
+            evidence_signing_hmac_keyring[kid.strip()] = secret
+    # Back-compat: the legacy single-key env is always aliased under
+    # key_id "default" in the keyring so old bundles carrying
+    # key_id="default" remain verifiable without any config change.
+    if evidence_signing_hmac_key and "default" not in evidence_signing_hmac_keyring:
+        evidence_signing_hmac_keyring["default"] = evidence_signing_hmac_key
+
     return Settings(
         env=env,
         database_url=database_url,
@@ -279,6 +341,7 @@ def _load() -> Settings:
         audio_ingest_mode=audio_ingest_mode,
         stt_provider=stt_provider,
         evidence_signing_hmac_key=evidence_signing_hmac_key,
+        evidence_signing_hmac_keyring=evidence_signing_hmac_keyring,
     )
 
 

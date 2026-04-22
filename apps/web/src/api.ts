@@ -1834,6 +1834,9 @@ export interface SecurityPolicyPayload {
   evidence_sink_target?: string | null;
   evidence_signing_mode?: EvidenceSigningMode;
   evidence_signing_key_id?: string | null;
+  // Phase 57 — export snapshot retention (days). Null => retain
+  // forever. Floor 90 days enforced server-side.
+  export_snapshot_retention_days?: number | null;
 }
 
 export interface SecurityPolicyResponse {
@@ -1853,6 +1856,7 @@ export interface SecurityPolicyPatch {
   evidence_sink_target?: string | null;
   evidence_signing_mode?: EvidenceSigningMode;
   evidence_signing_key_id?: string | null;
+  export_snapshot_retention_days?: number | null;
 }
 
 export interface SecuritySessionRow {
@@ -2220,6 +2224,9 @@ export interface ExportSnapshotSummary {
   issued_at: string | null;
   issued_by_user_id: number | null;
   issued_by_email: string | null;
+  // Phase 57 — soft-purge metadata.
+  artifact_purged_at?: string | null;
+  artifact_purged_reason?: string | null;
 }
 
 export interface ExportSnapshotListResponse {
@@ -2296,9 +2303,113 @@ export function sealEvidenceChain(
 }
 
 export function listEvidenceChainSeals(
-  email: string
+  email: string,
+  opts: { verify?: boolean } = {}
 ): Promise<EvidenceChainSealsResponse> {
-  return request("/admin/operations/evidence-chain/seals", { email });
+  const qs = opts.verify ? "?verify=true" : "";
+  return request(`/admin/operations/evidence-chain/seals${qs}`, { email });
+}
+
+// =====================================================================
+// Phase 57 — keyring posture, signed-seal verify, sink retry,
+// snapshot retention sweep
+// =====================================================================
+
+export interface SigningPostureResponse {
+  mode: string;
+  active_key_id: string | null;
+  active_key_present: boolean | null;
+  keyring_key_ids: string[];
+  keyring_size: number;
+  inconsistent: boolean;
+}
+
+export function getSigningPosture(
+  email: string
+): Promise<SigningPostureResponse> {
+  return request("/admin/operations/signing-posture", { email });
+}
+
+export interface SealVerificationVerdict {
+  mode: string;
+  ok: boolean;
+  hash_ok: boolean | null;
+  signature_ok: boolean | null;
+  recomputed_hash?: string;
+  stored_hash?: string;
+  key_id?: string | null;
+  error_code: string | null;
+  reason: string | null;
+}
+
+export interface SealVerifyResponse {
+  seal: {
+    id: number;
+    tip_event_id: number;
+    tip_event_hash: string;
+    event_count: number;
+    sealed_at: string | null;
+    sealed_by_user_id: number | null;
+    sealed_by_email: string | null;
+    note: string | null;
+  };
+  verification: SealVerificationVerdict;
+}
+
+export function verifyEvidenceChainSeal(
+  email: string,
+  sealId: number
+): Promise<SealVerifyResponse> {
+  return request(
+    `/admin/operations/evidence-chain/seals/${sealId}/verify`,
+    { email }
+  );
+}
+
+export interface EvidenceSinkRetryEvent {
+  evidence_event_id: number;
+  event_type: string | null;
+  status: string;
+  error: string | null;
+}
+
+export interface EvidenceSinkRetryResponse {
+  attempted: number;
+  sent: number;
+  failed: number;
+  skipped: number;
+  events: EvidenceSinkRetryEvent[];
+}
+
+export function retryFailedEvidenceSinkDeliveries(
+  email: string,
+  maxEvents: number = 100
+): Promise<EvidenceSinkRetryResponse> {
+  return request("/admin/operations/evidence-sink/retry-failed", {
+    email,
+    method: "POST",
+    body: JSON.stringify({ max_events: maxEvents }),
+  });
+}
+
+export interface ExportSnapshotRetentionSweepResponse {
+  dry_run: boolean;
+  organization_id: number;
+  retention_days: number | null;
+  candidates_found: number;
+  purged: number;
+  candidate_ids: number[];
+}
+
+export function runExportSnapshotRetentionSweep(
+  email: string,
+  dryRun: boolean = true
+): Promise<ExportSnapshotRetentionSweepResponse> {
+  return request("/admin/operations/export-snapshots/retention-sweep", {
+    email,
+    method: "POST",
+    body: JSON.stringify({ dry_run: dryRun }),
+  });
 }
 
 // =====================================================================
@@ -2357,6 +2468,14 @@ export interface OperationsSecurityPolicyStatus {
   evidence_sink_configured?: boolean;
   evidence_signing_mode?: string;
   evidence_signing_configured?: boolean;
+  // Phase 57 — signing keyring + retention posture. Optional so
+  // older backends still parse.
+  evidence_signing_active_key_id?: string | null;
+  evidence_signing_active_key_present?: boolean | null;
+  evidence_signing_keyring_key_ids?: string[];
+  evidence_signing_inconsistent?: boolean;
+  export_snapshot_retention_days?: number | null;
+  export_snapshot_retention_configured?: boolean;
 }
 
 export interface OperationsOverview {

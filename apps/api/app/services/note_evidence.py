@@ -540,16 +540,38 @@ def _compute_hmac_signature(
     ).hexdigest()
 
 
+def _resolve_keyring() -> dict[str, str]:
+    """Return the merged keyring from process config: the Phase-57
+    JSON ring plus the legacy single-key env under `default`.
+    Pure lookup; returns {} when no signing material is configured.
+    """
+    from app.config import settings
+    ring = dict(getattr(settings, "evidence_signing_hmac_keyring", {}) or {})
+    legacy = getattr(settings, "evidence_signing_hmac_key", None)
+    if legacy and "default" not in ring:
+        ring["default"] = legacy
+    return ring
+
+
 def _resolve_signing(organization_id: int) -> dict[str, Any]:
     """Return signing parameters for the org, or a disabled marker.
 
-    Looks up the org's policy (`evidence_signing_mode` +
-    `evidence_signing_key_id`) and the process-level HMAC key from
-    `app.config.settings`. Raises `EvidenceSigningError` when the
-    org requires signing but the process lacks the key.
+    Phase 57 — keyring-aware. The org's `evidence_signing_key_id`
+    names the ACTIVE key within the process-wide keyring. If the
+    named key is absent the bundle route returns 503 with a precise
+    reason so the operator sees "the signing configuration is
+    inconsistent" rather than a silent downgrade.
+
+    Rules:
+      - mode=disabled → {mode: "disabled"}.
+      - mode=hmac_sha256 but keyring empty → 503
+        `evidence_signing_unconfigured`.
+      - mode=hmac_sha256 + key_id missing in ring → 503
+        `evidence_signing_key_unknown`.
+      - mode=hmac_sha256 + key_id="" → fall back to "default" (the
+        legacy alias) so pre-rotation deploys keep working.
     """
     from app.security_policy import resolve_security_policy
-    from app.config import settings
 
     policy = resolve_security_policy(organization_id)
     mode = (policy.evidence_signing_mode or "disabled").lower()
@@ -557,33 +579,47 @@ def _resolve_signing(organization_id: int) -> dict[str, Any]:
     if mode == "disabled":
         return {"mode": "disabled", "key_id": None}
 
-    if mode == "hmac_sha256":
-        if not settings.evidence_signing_hmac_key:
-            raise EvidenceSigningError(
-                "evidence_signing_unconfigured",
-                "evidence_signing_mode is hmac_sha256 but "
-                "CHARTNAV_EVIDENCE_SIGNING_HMAC_KEY is not set",
-            )
-        return {
-            "mode": "hmac_sha256",
-            "key_id": policy.evidence_signing_key_id or "default",
-            "hmac_key": settings.evidence_signing_hmac_key,
-        }
+    if mode != "hmac_sha256":
+        # Unknown mode → treat as disabled. Policy writer already
+        # rejects unknown modes so this branch only fires on legacy
+        # rows.
+        return {"mode": "disabled", "key_id": None}
 
-    # Unknown mode → treat as disabled rather than fail closed; the
-    # policy validator already rejects unknown modes on write.
-    return {"mode": "disabled", "key_id": None}
+    ring = _resolve_keyring()
+    if not ring:
+        raise EvidenceSigningError(
+            "evidence_signing_unconfigured",
+            "evidence_signing_mode is hmac_sha256 but no HMAC keys "
+            "are configured (set CHARTNAV_EVIDENCE_SIGNING_HMAC_KEYS "
+            "or the legacy CHARTNAV_EVIDENCE_SIGNING_HMAC_KEY)",
+        )
+
+    active_kid = (policy.evidence_signing_key_id or "default").strip() or "default"
+    if active_kid not in ring:
+        raise EvidenceSigningError(
+            "evidence_signing_key_unknown",
+            f"evidence_signing_key_id {active_kid!r} is not present "
+            f"in the keyring; available: {sorted(ring.keys())}",
+        )
+
+    return {
+        "mode": "hmac_sha256",
+        "key_id": active_kid,
+        "hmac_key": ring[active_kid],
+    }
 
 
 def verify_signature(bundle: dict[str, Any]) -> dict[str, Any]:
-    """Re-compute the HMAC over the bundle's body_hash and compare
-    it to the stored signature. Returns a structured verdict.
+    """Re-compute the HMAC over the bundle's body_hash using the
+    keyring entry the bundle *names* (not whatever the active key
+    is right now). Returns a structured verdict.
 
-    This function is stateless w.r.t. the DB; it reads the HMAC key
-    from process config. An org that wants to verify an OLD bundle
-    after a key rotation must keep the old key available via the
-    same env variable (key rotation is out of scope for this pass —
-    documented).
+    Phase 57 — this function is now key-id-aware. The bundle's
+    `signature.key_id` picks the correct entry from the process
+    keyring; old bundles remain verifiable after a rotation as
+    long as the old key is still present in the ring.
+
+    Stateless with respect to the DB; pure config lookup.
     """
     signature_block = bundle.get("signature") or {}
     mode = signature_block.get("mode")
@@ -604,38 +640,57 @@ def verify_signature(bundle: dict[str, Any]) -> dict[str, Any]:
 
     claimed_hash = (bundle.get("envelope") or {}).get("body_hash_sha256")
     claimed_sig = signature_block.get("signature_hex")
+    claimed_key_id = (signature_block.get("key_id") or "default").strip() or "default"
     if not claimed_hash or not claimed_sig:
         return {
             "mode": mode,
+            "key_id": claimed_key_id,
             "ok": False,
             "error_code": "malformed_signature",
             "reason": "bundle missing body_hash or signature_hex",
         }
 
-    from app.config import settings
-    if not settings.evidence_signing_hmac_key:
+    ring = _resolve_keyring()
+    if not ring:
         return {
             "mode": mode,
+            "key_id": claimed_key_id,
             "ok": False,
             "error_code": "evidence_signing_unconfigured",
             "reason": (
-                "HMAC key not configured on this host; cannot verify"
+                "no HMAC keys configured on this host; cannot verify"
             ),
         }
 
-    expected = _compute_hmac_signature(
-        claimed_hash, settings.evidence_signing_hmac_key
-    )
+    secret = ring.get(claimed_key_id)
+    if secret is None:
+        # Phase 57 — precise "key rotated out" signal. The bundle
+        # was signed by a key that is no longer in the ring; either
+        # the operator purged it prematurely or the bundle was
+        # issued by a different deploy. Either way the operator
+        # needs to know which key_id was expected.
+        return {
+            "mode": mode,
+            "key_id": claimed_key_id,
+            "ok": False,
+            "error_code": "signing_key_not_in_keyring",
+            "reason": (
+                f"signing key_id {claimed_key_id!r} is not in this host's "
+                f"keyring; available: {sorted(ring.keys())}"
+            ),
+        }
+
+    expected = _compute_hmac_signature(claimed_hash, secret)
     import hmac as _hmac
     ok = _hmac.compare_digest(expected, claimed_sig)
     return {
         "mode": mode,
-        "key_id": signature_block.get("key_id"),
+        "key_id": claimed_key_id,
         "ok": bool(ok),
         "error_code": None if ok else "signature_mismatch",
         "reason": None if ok else (
             "HMAC did not match — bundle has been tampered with or "
-            "the signing key has rotated"
+            "the keyring entry for this key_id has changed"
         ),
     }
 
@@ -834,6 +889,202 @@ def build_evidence_bundle(
     return body
 
 
+def keyring_posture(organization_id: int) -> dict[str, Any]:
+    """Safe admin view of the signing posture.
+
+    NEVER exposes secret material — only key_ids. Consumers:
+    operations overview + a dedicated /admin/operations/signing-posture
+    endpoint. The admin can see which keys are loaded, which is the
+    active signer for the org, and whether rotation is in a
+    consistent state (active key present in ring).
+    """
+    from app.security_policy import resolve_security_policy
+
+    policy = resolve_security_policy(organization_id)
+    mode = (policy.evidence_signing_mode or "disabled").lower()
+    active_kid = (policy.evidence_signing_key_id or "").strip() or "default"
+    ring = _resolve_keyring()
+    ring_ids = sorted(ring.keys())
+    active_present = active_kid in ring
+
+    # Inconsistent := org wants signing but the keyring is empty, OR
+    # the active key is named but not in the ring.
+    inconsistent = (mode == "hmac_sha256") and (
+        not ring or not active_present
+    )
+    return {
+        "mode": mode,
+        "active_key_id": active_kid if mode == "hmac_sha256" else None,
+        "active_key_present": active_present if mode == "hmac_sha256" else None,
+        "keyring_key_ids": ring_ids,
+        "keyring_size": len(ring_ids),
+        "inconsistent": inconsistent,
+    }
+
+
+# ---------------------------------------------------------------------
+# Phase 57 — signed chain seals
+# ---------------------------------------------------------------------
+
+def _canonical_seal_payload(
+    *,
+    organization_id: int,
+    tip_event_id: int,
+    tip_event_hash: str,
+    event_count: int,
+    sealed_at_iso: str,
+    sealed_by_user_id: Optional[int],
+    sealed_by_email: Optional[str],
+    note: Optional[str],
+) -> str:
+    payload = {
+        "organization_id": int(organization_id),
+        "tip_event_id": int(tip_event_id),
+        "tip_event_hash": tip_event_hash,
+        "event_count": int(event_count),
+        "sealed_at": sealed_at_iso,
+        "sealed_by_user_id": (
+            int(sealed_by_user_id) if sealed_by_user_id is not None else None
+        ),
+        "sealed_by_email": sealed_by_email,
+        "note": note,
+    }
+    return json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+    ) + "\n"
+
+
+def compute_seal_hash(
+    *,
+    organization_id: int,
+    tip_event_id: int,
+    tip_event_hash: str,
+    event_count: int,
+    sealed_at_iso: str,
+    sealed_by_user_id: Optional[int],
+    sealed_by_email: Optional[str],
+    note: Optional[str],
+) -> str:
+    """Public: the canonical SHA-256 over a seal's content. Used at
+    write time to stamp `seal_hash_sha256` and at verify time to
+    recompute and compare."""
+    canonical = _canonical_seal_payload(
+        organization_id=organization_id,
+        tip_event_id=tip_event_id,
+        tip_event_hash=tip_event_hash,
+        event_count=event_count,
+        sealed_at_iso=sealed_at_iso,
+        sealed_by_user_id=sealed_by_user_id,
+        sealed_by_email=sealed_by_email,
+        note=note,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def sign_seal_hash(seal_hash: str, organization_id: int) -> Optional[dict[str, Any]]:
+    """Optionally produce an HMAC signature over a seal_hash using
+    the org's active signing key. Returns None when the org has
+    signing disabled. Raises EvidenceSigningError when signing is
+    required but inconsistent — the route maps to 503 so the
+    operator sees a precise reason instead of a silently-unsigned
+    seal."""
+    signing = _resolve_signing(organization_id)
+    if signing["mode"] != "hmac_sha256":
+        return None
+    sig_hex = _compute_hmac_signature(seal_hash, signing["hmac_key"])
+    return {
+        "signature_hex": sig_hex,
+        "signing_key_id": signing["key_id"],
+    }
+
+
+def verify_seal_row(row: dict[str, Any]) -> dict[str, Any]:
+    """Verify a stored chain-seal row.
+
+    Two checks:
+      (a) recompute seal_hash_sha256 over the row's canonical
+          content and compare to the stored value. Any mismatch
+          means someone mutated the seal after it was written.
+      (b) if the row carries a signature, re-verify it against the
+          keyring entry named in `seal_signing_key_id`.
+
+    Returns a structured verdict; pre-Phase-57 seals (with
+    seal_hash_sha256 NULL) are reported as `legacy` — operator-
+    visible, not silently "ok".
+    """
+    stored_hash = row.get("seal_hash_sha256")
+    if stored_hash is None:
+        return {
+            "mode": "legacy",
+            "ok": False,
+            "hash_ok": None,
+            "signature_ok": None,
+            "error_code": "legacy_seal_without_hash",
+            "reason": (
+                "seal predates Phase 57 and carries no integrity hash"
+            ),
+        }
+
+    sealed_at = row.get("sealed_at")
+    if isinstance(sealed_at, datetime):
+        sealed_at_iso = sealed_at.isoformat()
+    else:
+        sealed_at_iso = str(sealed_at) if sealed_at is not None else ""
+
+    recomputed = compute_seal_hash(
+        organization_id=int(row["organization_id"]),
+        tip_event_id=int(row["tip_event_id"]),
+        tip_event_hash=row["tip_event_hash"],
+        event_count=int(row["event_count"]),
+        sealed_at_iso=sealed_at_iso,
+        sealed_by_user_id=row.get("sealed_by_user_id"),
+        sealed_by_email=row.get("sealed_by_email"),
+        note=row.get("note"),
+    )
+    hash_ok = (recomputed == stored_hash)
+
+    # Signature verification, if present.
+    signature_ok: Optional[bool] = None
+    sig_error_code: Optional[str] = None
+    sig_hex = row.get("seal_signature_hex")
+    kid = row.get("seal_signing_key_id")
+    if sig_hex and kid:
+        ring = _resolve_keyring()
+        secret = ring.get(kid)
+        if secret is None:
+            signature_ok = False
+            sig_error_code = "signing_key_not_in_keyring"
+        else:
+            expected = _compute_hmac_signature(stored_hash, secret)
+            import hmac as _hmac
+            signature_ok = _hmac.compare_digest(expected, sig_hex)
+            if not signature_ok:
+                sig_error_code = "signature_mismatch"
+
+    ok = hash_ok and (signature_ok is not False)
+    error_code: Optional[str] = None
+    if not hash_ok:
+        error_code = "seal_hash_mismatch"
+    elif sig_error_code:
+        error_code = sig_error_code
+
+    return {
+        "mode": "signed" if sig_hex else "hashed",
+        "ok": bool(ok),
+        "hash_ok": hash_ok,
+        "signature_ok": signature_ok,
+        "recomputed_hash": recomputed,
+        "stored_hash": stored_hash,
+        "key_id": kid,
+        "error_code": error_code,
+        "reason": None if ok else (
+            "seal content was mutated after write"
+            if not hash_ok else
+            "signature failed verification"
+        ),
+    }
+
+
 __all__ = [
     "EvidenceEventType",
     "EVIDENCE_EVENT_TYPES",
@@ -849,4 +1100,9 @@ __all__ = [
     "BUNDLE_VERSION",
     "EvidenceSigningError",
     "verify_signature",
+    # Phase 57 additions
+    "keyring_posture",
+    "compute_seal_hash",
+    "sign_seal_hash",
+    "verify_seal_row",
 ]

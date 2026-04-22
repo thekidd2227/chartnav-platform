@@ -90,6 +90,10 @@ class ExceptionCategory(str, Enum):
     evidence_sink_delivery_failed = "evidence_sink_delivery_failed"
     export_snapshot_missing = "export_snapshot_missing"
 
+    # Phase 57 — signing posture + retry backlog + retention.
+    evidence_signing_inconsistent = "evidence_signing_inconsistent"
+    evidence_sink_retry_pending = "evidence_sink_retry_pending"
+
 
 # Map each *audit* row to a category. Keys are matched first on
 # `event_type`; for pre-auth failures the event_type IS the error
@@ -292,6 +296,26 @@ CATEGORY_METADATA: dict[ExceptionCategory, dict[str, str]] = {
             "was recorded but the point-in-time artifact bytes were "
             "not captured. Re-export if the record of care needs "
             "an immutable snapshot."
+        ),
+    },
+    ExceptionCategory.evidence_signing_inconsistent: {
+        "label": "Evidence signing configuration inconsistent",
+        "severity": "error",
+        "next_step": (
+            "The org has signing enabled but the active "
+            "evidence_signing_key_id is not present in the process "
+            "keyring. New bundles will 503 until the keyring entry "
+            "is restored or the active key_id is changed."
+        ),
+    },
+    ExceptionCategory.evidence_sink_retry_pending: {
+        "label": "Evidence sink retries pending",
+        "severity": "warning",
+        "next_step": (
+            "One or more evidence events have sink_status='failed'. "
+            "POST /admin/operations/evidence-sink/retry-failed to "
+            "attempt delivery again. The in-app chain remains "
+            "authoritative either way."
         ),
     },
 }
@@ -632,6 +656,19 @@ def _security_policy_status(organization_id: int) -> dict[str, Any]:
     ev_sign_mode = getattr(policy, "evidence_signing_mode", "disabled") or "disabled"
     ev_sign_on = ev_sign_mode != "disabled"
 
+    # Phase 57 — signing posture + retention.
+    retention_days = getattr(
+        policy, "export_snapshot_retention_days", None,
+    )
+
+    # Keyring posture (safe: returns only key ids + consistency).
+    kp: dict[str, Any] = {}
+    try:
+        from app.services.note_evidence import keyring_posture as _kp
+        kp = _kp(organization_id)
+    except Exception:
+        kp = {}
+
     return {
         "session_tracking_configured": session_tracking_on,
         "audit_sink_configured": sink_on,
@@ -647,6 +684,13 @@ def _security_policy_status(organization_id: int) -> dict[str, Any]:
         "evidence_sink_configured": ev_sink_on,
         "evidence_signing_mode": ev_sign_mode,
         "evidence_signing_configured": ev_sign_on,
+        # Phase 57 — signing keyring + retention posture.
+        "evidence_signing_active_key_id": kp.get("active_key_id"),
+        "evidence_signing_active_key_present": kp.get("active_key_present"),
+        "evidence_signing_keyring_key_ids": kp.get("keyring_key_ids") or [],
+        "evidence_signing_inconsistent": bool(kp.get("inconsistent")),
+        "export_snapshot_retention_days": retention_days,
+        "export_snapshot_retention_configured": retention_days is not None,
     }
 
 
@@ -747,6 +791,30 @@ def compute_counters(
     counts[ExceptionCategory.evidence_sink_delivery_failed.value] = (
         int(fail_row["n"]) if fail_row else 0
     )
+
+    # Phase 57 — CURRENT retry backlog (not windowed). A row with
+    # sink_status='failed' is still awaiting retry regardless of
+    # when it happened.
+    pending_row = fetch_one(
+        "SELECT COUNT(*) AS n FROM note_evidence_events "
+        "WHERE organization_id = :org AND sink_status = 'failed'",
+        {"org": organization_id},
+    )
+    counts[ExceptionCategory.evidence_sink_retry_pending.value] = (
+        int(pending_row["n"]) if pending_row else 0
+    )
+
+    # Phase 57 — signing posture. We treat any inconsistency
+    # (signing mode on, active key missing from ring, or ring
+    # empty) as a hard error the admin must see.
+    try:
+        from app.services.note_evidence import keyring_posture
+        kp = keyring_posture(organization_id)
+        counts[ExceptionCategory.evidence_signing_inconsistent.value] = (
+            1 if kp.get("inconsistent") else 0
+        )
+    except Exception:
+        counts[ExceptionCategory.evidence_signing_inconsistent.value] = 0
 
     # Phase 56 — exports missing a snapshot. We find note_exported
     # evidence events in the window whose note_version_id has no

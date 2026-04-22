@@ -81,6 +81,14 @@ class SecurityPolicy:
     # by org admins and the secret must not be.
     evidence_signing_mode: str = "disabled"
     evidence_signing_key_id: Optional[str] = None
+    # Phase 57 — export snapshot retention (days). Null => retain
+    # indefinitely. When set, a retention sweep soft-purges the
+    # heavy `artifact_json` body on snapshots older than this window;
+    # the row + hash + issuer stay so evidence-chain references
+    # remain valid. There is a hard floor (90 days) enforced on
+    # write so an org cannot accidentally configure a value that
+    # would destroy current-quarter evidence.
+    export_snapshot_retention_days: Optional[int] = None
 
     @classmethod
     def off(cls) -> "SecurityPolicy":
@@ -100,6 +108,7 @@ class SecurityPolicy:
             "evidence_sink_target": self.evidence_sink_target,
             "evidence_signing_mode": self.evidence_signing_mode,
             "evidence_signing_key_id": self.evidence_signing_key_id,
+            "export_snapshot_retention_days": self.export_snapshot_retention_days,
         }
 
 
@@ -215,6 +224,9 @@ def resolve_security_policy(organization_id: int) -> SecurityPolicy:
         evidence_sink_target=_str(["evidence_sink_target"]),
         evidence_signing_mode=evidence_signing_mode,
         evidence_signing_key_id=_str(["evidence_signing_key_id"]),
+        export_snapshot_retention_days=_int(
+            ["export_snapshot_retention_days"]
+        ),
     )
 
 
@@ -273,6 +285,8 @@ def _coerce_update(
         "evidence_sink_target",
         "evidence_signing_mode",
         "evidence_signing_key_id",
+        # Phase 57 — export snapshot retention.
+        "export_snapshot_retention_days",
     }
     unknown = set(patch.keys()) - allowed
     if unknown:
@@ -391,6 +405,40 @@ def _coerce_update(
             f"evidence_sink_target is required when evidence_sink_mode "
             f"is {out['evidence_sink_mode']!r}",
         )
+
+    # Phase 57 — retention floor. We reject values below 90 days so
+    # an operator cannot accidentally configure a window that would
+    # strip current-quarter evidence bodies. Null is fine (retain
+    # forever). This is deliberately a hard floor; if a regulator
+    # or policy requires shorter retention, that is a separate
+    # conversation and should be an explicit config override.
+    EXPORT_SNAPSHOT_RETENTION_FLOOR_DAYS = 90
+    if "export_snapshot_retention_days" in patch:
+        raw = patch["export_snapshot_retention_days"]
+        if raw is None or raw == "":
+            out["export_snapshot_retention_days"] = None
+        else:
+            try:
+                n = int(raw)
+            except (TypeError, ValueError):
+                raise PolicyValidationError(
+                    "policy_validation_failed",
+                    "export_snapshot_retention_days must be an integer "
+                    "number of days or null",
+                )
+            if n < EXPORT_SNAPSHOT_RETENTION_FLOOR_DAYS:
+                raise PolicyValidationError(
+                    "policy_validation_failed",
+                    "export_snapshot_retention_days must be >= "
+                    f"{EXPORT_SNAPSHOT_RETENTION_FLOOR_DAYS} days or null",
+                )
+            if n > 365 * 50:  # 50-year ceiling; beyond that, use null
+                raise PolicyValidationError(
+                    "policy_validation_failed",
+                    "export_snapshot_retention_days too large; "
+                    "use null for 'retain forever'",
+                )
+            out["export_snapshot_retention_days"] = n
 
     return out
 
