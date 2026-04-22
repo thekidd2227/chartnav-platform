@@ -94,6 +94,19 @@ def amend_signed_note(
             "amendment_reason_too_long",
             "amendment_reason must be <= 500 characters",
         )
+    # Phase 54 — evidentiary hardening. A bare 4-char filler like
+    # "asdf", "....", or "1111" passes the length check but is
+    # meaningless as a corrective record. Require the reason to
+    # contain at least two distinct alphanumeric characters; this
+    # catches placeholder strings without blocking legitimate short
+    # reasons like "typo" or "fix IOP".
+    alnum = [c for c in reason_clean if c.isalnum()]
+    if len(alnum) < 4 or len(set(alnum)) < 2:
+        raise AmendmentError(
+            "amendment_reason_insufficient",
+            "amendment_reason must contain a real corrective reason, not "
+            "placeholder characters",
+        )
     new_text_clean = (new_text or "").strip()
     if len(new_text_clean) < 10:
         raise AmendmentError(
@@ -206,6 +219,11 @@ def amendment_chain(note_id: int) -> list[dict[str, Any]]:
         seen.add(int(prev))
         root_id = int(prev)
     # Now walk forward via superseded_by_note_id.
+    # Phase 54 — include final-approval columns so the chain carries
+    # complete evidentiary state for every link, not just the
+    # signing metadata. Consumers can tell which link was approved,
+    # which was invalidated, and what reason was recorded — without
+    # re-querying row-by-row.
     cursor = root_id
     while True:
         row = fetch_one(
@@ -213,7 +231,10 @@ def amendment_chain(note_id: int) -> list[dict[str, Any]]:
             "signed_at, signed_by_user_id, amended_at, amended_by_user_id, "
             "amended_from_note_id, amendment_reason, "
             "superseded_at, superseded_by_note_id, "
-            "content_fingerprint, attestation_text "
+            "content_fingerprint, attestation_text, "
+            "final_approval_status, final_approved_at, "
+            "final_approved_by_user_id, final_approval_signature_text, "
+            "final_approval_invalidated_at, final_approval_invalidated_reason "
             "FROM note_versions WHERE id = :id",
             {"id": cursor},
         )

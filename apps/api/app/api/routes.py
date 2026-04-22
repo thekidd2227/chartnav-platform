@@ -1762,18 +1762,23 @@ from app.services.note_generator import generate_draft
 INPUT_TYPES = {"audio_upload", "text_paste", "manual_entry", "imported_transcript"}
 INPUT_STATUSES = {"queued", "processing", "completed", "failed", "needs_review"}
 
-NOTE_STATUSES = {"draft", "provider_review", "revised", "signed", "exported"}
 NOTE_FORMATS = {"soap", "assessment_plan", "consult_note", "freeform"}
 
-# Allowed forward transitions on note_versions.draft_status.
-# Regeneration intentionally bypasses this table by creating a NEW row.
-NOTE_TRANSITIONS: dict[str, set[str]] = {
-    "draft": {"provider_review", "revised", "signed"},
-    "provider_review": {"revised", "signed", "draft"},
-    "revised": {"provider_review", "signed"},
-    "signed": {"exported"},
-    "exported": set(),
-}
+# Phase 54 — canonical lifecycle unification.
+#
+# The authoritative set of lifecycle states AND the allowed
+# transitions live in `app.services.note_lifecycle`. Routes MUST NOT
+# redefine either. Earlier phases kept a parallel `NOTE_STATUSES`
+# set and `NOTE_TRANSITIONS` dict here; both have been removed in
+# favour of a single source of truth.
+#
+# If you need to validate a status string: `status in LIFECYCLE_STATES`.
+# If you need to validate a transition: `can_transition(cur, tgt)`.
+# If you need to authorize a transition: `role_permits_edge(cur, tgt, role)`.
+from app.services.note_lifecycle import (  # noqa: E402 — pinned to public surface
+    LIFECYCLE_STATES as NOTE_STATUSES,
+    can_transition as _canonical_can_transition,
+)
 
 
 INPUT_COLUMNS = (
@@ -1827,15 +1832,17 @@ def _note_row_to_dict(row: dict) -> dict:
 
 
 def _assert_note_transition(current: str, target: str) -> None:
+    """Phase 54 — thin adapter that delegates to the canonical
+    lifecycle service. Kept as a named helper so existing call sites
+    (PATCH /note-versions/{id}, POST submit-for-review) read
+    identically, but the rule table they enforce is now the one and
+    only `LIFECYCLE_TRANSITIONS` in `note_lifecycle.py`.
+    """
     if current == target:
         return
-    allowed = NOTE_TRANSITIONS.get(current, set())
-    if target not in allowed:
-        raise _err(
-            "invalid_note_transition",
-            f"cannot move note from {current!r} to {target!r}",
-            400,
-        )
+    edge_err = _canonical_can_transition(current, target)
+    if edge_err is not None:
+        raise _err("invalid_note_transition", edge_err, 400)
 
 
 # ---------------------------------------------------------------------------
@@ -2157,11 +2164,16 @@ def patch_note_version(
     require_create_event(caller)
     note = _load_note_for_caller(note_id, caller)
 
-    if note["draft_status"] in {"signed", "exported"}:
+    # Phase 54 — immutability after any signed state. Wave 3
+    # introduced `amended`; a signed amendment is itself a record of
+    # care and must not be edited in place. Legacy code only guarded
+    # `signed`/`exported`, which meant PATCH silently passed through
+    # on amendment rows — that was a drift site.
+    if note["draft_status"] in {"signed", "exported", "amended"}:
         raise _err(
             "note_immutable",
             f"note is {note['draft_status']!r} and cannot be edited; "
-            "regenerate or start a revision",
+            "regenerate or issue an amendment",
             409,
         )
 
@@ -2195,6 +2207,9 @@ def patch_note_version(
                 f"draft_status must be one of {sorted(NOTE_STATUSES)}",
                 400,
             )
+        # Phase 54 — canonical transition check. Delegates to
+        # `can_transition`, so PATCH obeys exactly the same rule table
+        # as /sign, /review, /amend, /final-approve, /export.
         _assert_note_transition(note["draft_status"], payload.draft_status)
         set_parts.append("draft_status = :ds")
         params["ds"] = payload.draft_status
@@ -2396,22 +2411,23 @@ def export_note(
     """
     require_create_event(caller)
     note = _load_note_for_caller(note_id, caller)
-    if note["draft_status"] not in {"signed", "amended"}:
+
+    # Phase 54 — canonical gate. The lifecycle service already
+    # encodes "only signed or amended → exported" in
+    # `LIFECYCLE_TRANSITIONS`. Route through it rather than inlining
+    # the set here; `compute_release_blockers(..., target="exported")`
+    # then contributes the Wave 7 final-approval gate on top.
+    from app.services.note_lifecycle import (
+        compute_release_blockers,
+        hard_blockers,
+    )
+    edge_err = _canonical_can_transition(note["draft_status"], "exported")
+    if edge_err is not None:
         raise _err(
             "note_not_signed",
             "only signed or amended notes can be exported",
             409,
         )
-
-    # Wave 7 — final-approval gate. `compute_release_blockers(...,
-    # target="exported")` returns a `final_approval_pending` or
-    # `final_approval_invalidated` blocker when the signed row has
-    # not yet been approved by an authorized doctor. Legacy rows
-    # (status NULL) pass through untouched.
-    from app.services.note_lifecycle import (
-        compute_release_blockers,
-        hard_blockers,
-    )
     export_blockers = compute_release_blockers(note, None, target="exported")
     export_hard = hard_blockers(export_blockers)
     if export_hard:
@@ -2682,11 +2698,34 @@ def note_amendment_chain(
 ) -> dict:
     """Walk the full amendment chain for this note. The caller must
     have access to the underlying encounter via the existing
-    `_load_note_for_caller` guard."""
+    `_load_note_for_caller` guard.
+
+    Phase 54 — the chain is the authoritative record-of-care
+    structure. Response includes:
+      - chain: ordered list oldest → newest with signing + approval
+        state on every link
+      - current_record_of_care_note_id: the single link that is NOT
+        superseded (amendments roll forward; the tail is the current
+        record)
+      - has_invalidated_approval: convenience flag; true iff any
+        link carries final_approval_status == 'invalidated'
+    """
     _load_note_for_caller(note_id, caller)  # enforces same-org
     from app.services.note_amendments import amendment_chain
     chain = amendment_chain(note_id)
-    return {"note_id": note_id, "chain": chain}
+    current_tail: int | None = None
+    has_invalidated = False
+    for link in chain:
+        if link.get("superseded_at") is None:
+            current_tail = int(link["id"])
+        if link.get("final_approval_status") == "invalidated":
+            has_invalidated = True
+    return {
+        "note_id": note_id,
+        "chain": chain,
+        "current_record_of_care_note_id": current_tail,
+        "has_invalidated_approval": has_invalidated,
+    }
 
 
 # ---------------------------------------------------------------------------

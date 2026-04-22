@@ -133,11 +133,24 @@ def _load_note_bundle(note_id: int) -> dict[str, Any]:
     """Pull the note, its encounter, the source input (if any), and
     the extracted findings (if any) in one go so the artifact builder
     has everything it needs without the handler doing extra queries."""
+    # Phase 54 — pull every lifecycle/evidence column the artifact
+    # must reason about in ONE query: Wave 3 attestation +
+    # fingerprint + amendment/supersession fields, Wave 7 final
+    # approval fields. Prior versions of this query selected a
+    # narrower column set, which meant the artifact silently dropped
+    # approval + supersession evidence.
     note = fetch_one(
         "SELECT id, encounter_id, version_number, draft_status, "
         "note_format, note_text, generated_note_text, source_input_id, "
         "extracted_findings_id, generated_by, missing_data_flags, "
-        "signed_at, signed_by_user_id, exported_at, created_at, updated_at "
+        "signed_at, signed_by_user_id, exported_at, created_at, updated_at, "
+        "attestation_text, content_fingerprint, "
+        "reviewed_at, reviewed_by_user_id, "
+        "amended_at, amended_by_user_id, amended_from_note_id, "
+        "amendment_reason, superseded_at, superseded_by_note_id, "
+        "final_approval_status, final_approved_at, "
+        "final_approved_by_user_id, final_approval_signature_text, "
+        "final_approval_invalidated_at, final_approval_invalidated_reason "
         "FROM note_versions WHERE id = :id",
         {"id": note_id},
     )
@@ -278,12 +291,23 @@ def build_artifact(
     if caller_organization_id is None or encounter["organization_id"] != caller_organization_id:
         raise ArtifactError("note_not_found", "no such note version", 404)
 
-    if require_signed and note["draft_status"] not in {"signed", "exported"}:
+    # Phase 54 — canonical "is this record of care" gate.
+    # Reuses the lifecycle service rather than inlining a set.
+    # An amended row is itself a signed record of care (the amendment
+    # service stamps it signed), so it must be artifactable. Legacy
+    # code rejected `amended` which meant the new record of care
+    # could not produce an artifact — that was a drift site.
+    from app.services.note_lifecycle import LIFECYCLE_STATES
+    SIGNED_LIKE = {"signed", "exported", "amended"}
+    assert SIGNED_LIKE.issubset(LIFECYCLE_STATES), (
+        "artifact gate must reference canonical lifecycle states"
+    )
+    if require_signed and note["draft_status"] not in SIGNED_LIKE:
         # An unsigned artifact is meaningless — the clinician has not
         # attested. Refuse rather than emit a confusing half-artifact.
         raise ArtifactError(
             "note_not_signed",
-            "only signed or exported notes can produce an export artifact",
+            "only signed, amended, or exported notes can produce an export artifact",
             409,
         )
 
@@ -375,12 +399,52 @@ def build_artifact(
             "signed_at": _iso(note.get("signed_at")),
             "signed_by_email": signer.get("email") if signer else None,
             "signed_by_user_id": note.get("signed_by_user_id"),
+            "attestation_text": note.get("attestation_text"),
             "content_hash_sha256": content_hash(
                 version_number=note["version_number"],
                 note_format=note["note_format"],
                 clinician_final=clinician_final,
             ),
+            # Phase 54 — surface the Wave 3 frozen content fingerprint
+            # alongside the live content hash. Different purposes:
+            #   * content_hash_sha256 — canonical deterministic hash
+            #     over (version, format, text) for downstream integrity.
+            #   * content_fingerprint — the SHA-256 frozen at sign time
+            #     over the normalized note body. Drift detection.
+            "content_fingerprint_sha256": note.get("content_fingerprint"),
             "hash_inputs": "version_number|note_format|clinician_final",
+        },
+        # Phase 54 — final physician approval evidence. NULL on
+        # pre-Wave-7 rows; `pending`/`approved`/`invalidated` for rows
+        # that entered the Wave 7 flow. Downstream systems that consume
+        # the artifact (EHR, audit, reviewers) read THIS block, not
+        # `note.draft_status`, to determine whether the record has
+        # been physician-approved.
+        "final_approval": {
+            "status": note.get("final_approval_status"),
+            "approved_at": _iso(note.get("final_approved_at")),
+            "approved_by_user_id": note.get("final_approved_by_user_id"),
+            "signature_text": note.get("final_approval_signature_text"),
+            "invalidated_at": _iso(note.get("final_approval_invalidated_at")),
+            "invalidated_reason": note.get("final_approval_invalidated_reason"),
+        },
+        # Phase 54 — supersession / amendment evidence. The fields
+        # collectively describe where this row sits in the record-
+        # of-care chain. Consumers that need the full chain should
+        # call GET /note-versions/{id}/amendment-chain; this block
+        # carries the immediate links so point-in-time artifacts
+        # remain evidentiary on their own.
+        "lifecycle": {
+            "state": note["draft_status"],
+            "reviewed_at": _iso(note.get("reviewed_at")),
+            "reviewed_by_user_id": note.get("reviewed_by_user_id"),
+            "amended_at": _iso(note.get("amended_at")),
+            "amended_by_user_id": note.get("amended_by_user_id"),
+            "amended_from_note_id": note.get("amended_from_note_id"),
+            "amendment_reason": note.get("amendment_reason"),
+            "superseded_at": _iso(note.get("superseded_at")),
+            "superseded_by_note_id": note.get("superseded_by_note_id"),
+            "is_current_record_of_care": note.get("superseded_at") is None,
         },
         "export_envelope": {
             "issued_at": datetime.now(timezone.utc).isoformat(),
@@ -409,6 +473,45 @@ def render_text(artifact: dict[str, Any]) -> str:
     missing = artifact.get("missing_data_flags") or []
     missing_line = ", ".join(missing) if missing else "none"
 
+    # Phase 54 — include final-approval + supersession lines in the
+    # text artifact so the plain-text variant is evidentiarily
+    # equivalent to the JSON and FHIR variants.
+    final_approval = artifact.get("final_approval") or {}
+    lifecycle = artifact.get("lifecycle") or {}
+
+    fa_status = final_approval.get("status")
+    if fa_status == "approved":
+        fa_line = (
+            f"Final physician approval: approved at "
+            f"{final_approval.get('approved_at') or '<unknown>'} "
+            f"(user #{final_approval.get('approved_by_user_id') or '—'})\n"
+        )
+    elif fa_status == "pending":
+        fa_line = "Final physician approval: PENDING\n"
+    elif fa_status == "invalidated":
+        fa_line = (
+            f"Final physician approval: INVALIDATED at "
+            f"{final_approval.get('invalidated_at') or '<unknown>'} — "
+            f"{final_approval.get('invalidated_reason') or 'no reason recorded'}\n"
+        )
+    else:
+        # NULL on pre-Wave-7 rows — omit the line rather than invent one.
+        fa_line = ""
+
+    if lifecycle.get("superseded_at"):
+        supersession_line = (
+            f"Record-of-care status: SUPERSEDED by note_version "
+            f"#{lifecycle.get('superseded_by_note_id')} at "
+            f"{lifecycle.get('superseded_at')}\n"
+        )
+    elif lifecycle.get("amended_from_note_id"):
+        supersession_line = (
+            f"Record-of-care status: amendment of note_version "
+            f"#{lifecycle.get('amended_from_note_id')}\n"
+        )
+    else:
+        supersession_line = ""
+
     header = (
         f"ChartNav Signed Note (v{n['version_number']}, {n['format']})\n"
         f"Patient: {enc.get('patient_display') or '<unknown>'}\n"
@@ -420,8 +523,15 @@ def render_text(artifact: dict[str, Any]) -> str:
         f"Signed at: {sig.get('signed_at') or '<unsigned>'}\n"
         f"Signed by: {sig.get('signed_by_email') or '<unknown>'}\n"
         f"Content hash (sha256): {sig['content_hash_sha256']}\n"
-        f"Missing-data flags: {missing_line}\n"
-        f"Generator edit applied: {'yes' if n['edit_applied'] else 'no'}\n"
+        + (
+            f"Content fingerprint (sha256, sign-time): "
+            f"{sig.get('content_fingerprint_sha256')}\n"
+            if sig.get('content_fingerprint_sha256') else ""
+        )
+        + fa_line
+        + supersession_line
+        + f"Missing-data flags: {missing_line}\n"
+        + f"Generator edit applied: {'yes' if n['edit_applied'] else 'no'}\n"
     )
     body = n["clinician_final"] or ""
     footer = (
@@ -456,6 +566,31 @@ def render_fhir_document_reference(artifact: dict[str, Any]) -> dict[str, Any]:
     clinician_final: str = n["clinician_final"] or ""
     data_b64 = base64.b64encode(clinician_final.encode("utf-8")).decode("ascii")
 
+    lifecycle = artifact.get("lifecycle") or {}
+    final_approval = artifact.get("final_approval") or {}
+
+    # Phase 54 — FHIR docStatus semantics:
+    #   * amended  → FHIR "amended" (R4 distinct from "final")
+    #   * signed / exported + not superseded → "final"
+    #   * anything else → "preliminary"
+    # Legacy code sent `amended` rows down the `preliminary` branch,
+    # which misrepresented the record of care.
+    draft_state = n["draft_status"]
+    if draft_state == "amended":
+        doc_status = "amended"
+    elif draft_state in {"signed", "exported"} and not lifecycle.get("superseded_at"):
+        doc_status = "final"
+    elif draft_state in {"signed", "exported"} and lifecycle.get("superseded_at"):
+        # A signed row that has been superseded by an amendment is no
+        # longer the record of care; mark as "superseded" (R4 value).
+        doc_status = "superseded"
+    else:
+        doc_status = "preliminary"
+
+    # Entered-in-error maps to FHIR `entered-in-error`; ChartNav
+    # never emits this today. If/when we add a retract flow, add
+    # a branch here.
+
     resource: dict[str, Any] = {
         "resourceType": "DocumentReference",
         "identifier": [
@@ -465,7 +600,7 @@ def render_fhir_document_reference(artifact: dict[str, Any]) -> dict[str, Any]:
             }
         ],
         "status": "current",
-        "docStatus": "final" if n["draft_status"] in {"signed", "exported"} else "preliminary",
+        "docStatus": doc_status,
         "type": {"coding": [LOINC_PROGRESS_NOTE]},
         "date": sig.get("signed_at") or env["issued_at"],
         "author": [

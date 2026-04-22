@@ -1947,7 +1947,19 @@ export interface NoteAmendmentBody {
 
 export interface AmendmentChainResponse {
   note_id: number;
+  /** Ordered oldest → newest. Each link carries signing + final
+   *  approval state so a reviewer can read the full record-of-care
+   *  history without re-querying. */
   chain: NoteVersion[];
+  /** Phase 54 — the single link that is NOT superseded. Null when
+   *  the chain has no live tail (shouldn't happen in practice, but
+   *  surfaced as nullable for defensive UI handling). */
+  current_record_of_care_note_id: number | null;
+  /** Phase 54 — convenience flag; true iff ANY link has
+   *  final_approval_status === "invalidated". UI shows a badge when
+   *  this is true so reviewers know the chain contains an
+   *  invalidated approval somewhere. */
+  has_invalidated_approval: boolean;
 }
 
 export function getNoteReleaseBlockers(
