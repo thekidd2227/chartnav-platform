@@ -2393,6 +2393,30 @@ def sign_note(
             f"fingerprint={fingerprint[:12]}"
         ),
     )
+    # Phase 55 — immutable evidence chain. The general audit log is
+    # append-only-by-convention; this chain is tamper-evident.
+    try:
+        from app.services.note_evidence import (
+            EvidenceEventType,
+            record_evidence_event,
+        )
+        record_evidence_event(
+            organization_id=caller.organization_id,
+            note_version_id=note_id,
+            encounter_id=int(note["encounter_id"]),
+            event_type=EvidenceEventType.note_signed.value,
+            actor_user_id=caller.user_id,
+            actor_email=caller.email,
+            draft_status="signed",
+            final_approval_status=initial_final_approval,
+            content_fingerprint=fingerprint,
+            detail={"version_number": note["version_number"]},
+        )
+    except Exception:  # pragma: no cover — chain failures never break sign
+        import logging as _lg
+        _lg.getLogger("chartnav.evidence").warning(
+            "evidence chain append failed on sign", exc_info=True
+        )
     return _load_note_for_caller(note_id, caller)
 
 
@@ -2476,6 +2500,29 @@ def export_note(
         method="POST",
         detail=f"note_id={note_id}",
     )
+    # Phase 55 — evidence chain append.
+    try:
+        from app.services.note_evidence import (
+            EvidenceEventType,
+            record_evidence_event,
+        )
+        record_evidence_event(
+            organization_id=caller.organization_id,
+            note_version_id=note_id,
+            encounter_id=int(note["encounter_id"]),
+            event_type=EvidenceEventType.note_exported.value,
+            actor_user_id=caller.user_id,
+            actor_email=caller.email,
+            draft_status="exported",
+            final_approval_status=note.get("final_approval_status"),
+            content_fingerprint=note.get("content_fingerprint"),
+            detail={"version_number": note["version_number"]},
+        )
+    except Exception:  # pragma: no cover
+        import logging as _lg
+        _lg.getLogger("chartnav.evidence").warning(
+            "evidence chain append failed on export", exc_info=True
+        )
     return _load_note_for_caller(note_id, caller)
 
 
@@ -2687,6 +2734,76 @@ def amend_note(
                 f"amended_note_id={new_row.get('id')} "
                 "cause=amendment"
             ),
+        )
+
+    # Phase 55 — evidence chain: record the amendment from both sides
+    # (source is now superseded; the new row is an amendment) and, if
+    # prior final-approval was invalidated, record the invalidation
+    # as a distinct chain event. Three appends in the same org chain
+    # keep the forensic reconstruction clean.
+    try:
+        from app.services.note_evidence import (
+            EvidenceEventType,
+            record_evidence_event,
+        )
+        new_note_id = int(new_row["id"])
+        encounter_id = int(original["encounter_id"])
+        # (1) Source side — original is now superseded.
+        record_evidence_event(
+            organization_id=caller.organization_id,
+            note_version_id=note_id,
+            encounter_id=encounter_id,
+            event_type=EvidenceEventType.note_amended_source.value,
+            actor_user_id=caller.user_id,
+            actor_email=caller.email,
+            draft_status=original.get("draft_status"),
+            final_approval_status=(
+                "invalidated" if prior_status in {"approved", "pending"}
+                else original.get("final_approval_status")
+            ),
+            content_fingerprint=original.get("content_fingerprint"),
+            detail={
+                "superseded_by_note_id": new_note_id,
+                "amendment_reason": (payload.reason or "").strip()[:500],
+            },
+        )
+        # (2) New amendment side.
+        record_evidence_event(
+            organization_id=caller.organization_id,
+            note_version_id=new_note_id,
+            encounter_id=encounter_id,
+            event_type=EvidenceEventType.note_amended_new.value,
+            actor_user_id=caller.user_id,
+            actor_email=caller.email,
+            draft_status="amended",
+            final_approval_status=None,
+            content_fingerprint=None,  # freshly amended — not yet signed
+            detail={
+                "amended_from_note_id": note_id,
+                "amendment_reason": (payload.reason or "").strip()[:500],
+            },
+        )
+        # (3) Approval-invalidated — only when a real approval existed.
+        if prior_was_approved:
+            record_evidence_event(
+                organization_id=caller.organization_id,
+                note_version_id=note_id,
+                encounter_id=encounter_id,
+                event_type=EvidenceEventType.note_final_approval_invalidated.value,
+                actor_user_id=caller.user_id,
+                actor_email=caller.email,
+                draft_status=original.get("draft_status"),
+                final_approval_status="invalidated",
+                content_fingerprint=original.get("content_fingerprint"),
+                detail={
+                    "cause": "amendment",
+                    "amended_by_note_id": new_note_id,
+                },
+            )
+    except Exception:  # pragma: no cover
+        import logging as _lg
+        _lg.getLogger("chartnav.evidence").warning(
+            "evidence chain append failed on amend", exc_info=True
         )
     return _load_note_for_caller(int(new_row["id"]), caller)
 
@@ -2906,6 +3023,32 @@ def note_final_approve(
             f"note_id={note_id} version={note['version_number']}"
         ),
     )
+    # Phase 55 — evidence chain append.
+    try:
+        from app.services.note_evidence import (
+            EvidenceEventType,
+            record_evidence_event,
+        )
+        record_evidence_event(
+            organization_id=caller.organization_id,
+            note_version_id=note_id,
+            encounter_id=int(note["encounter_id"]),
+            event_type=EvidenceEventType.note_final_approved.value,
+            actor_user_id=caller.user_id,
+            actor_email=caller.email,
+            draft_status=note.get("draft_status"),
+            final_approval_status="approved",
+            content_fingerprint=note.get("content_fingerprint"),
+            detail={
+                "signature_text": signature_verbatim,
+                "version_number": note["version_number"],
+            },
+        )
+    except Exception:  # pragma: no cover
+        import logging as _lg
+        _lg.getLogger("chartnav.evidence").warning(
+            "evidence chain append failed on final-approve", exc_info=True
+        )
     return _load_note_for_caller(note_id, caller)
 
 
@@ -5402,6 +5545,104 @@ def admin_operations_security_config_status(
     _require_security_admin_inline(caller)
     from app.services.operations_exceptions import security_config_status
     return security_config_status(caller.organization_id)
+
+
+# ---------------------------------------------------------------------------
+# Phase 55 — immutable evidence chain + forensic bundle export
+# ---------------------------------------------------------------------------
+
+@router.get("/note-versions/{note_id}/evidence-bundle")
+def note_evidence_bundle(
+    note_id: int,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Forensic evidence bundle for a single note. Assembled from the
+    row, the encounter, the amendment chain, the per-org evidence
+    chain events that reference this note, plus a body-hash envelope
+    so consumers can re-verify the bundle independently.
+
+    Same org-scope contract as every other note read: cross-org → 404.
+    Any authenticated org member may issue a bundle for their own
+    org's notes; the result is a read + hash, not a mutation.
+    """
+    note = _load_note_for_caller(note_id, caller)
+    # Pull the encounter row (org is already enforced, but the bundle
+    # needs the whole row for patient/provider context).
+    encounter = fetch_one(
+        "SELECT id, organization_id, status, patient_identifier, "
+        "patient_name, provider_name, external_ref, external_source, "
+        "created_at FROM encounters WHERE id = :id",
+        {"id": note["encounter_id"]},
+    )
+    if encounter is None:
+        raise _err("encounter_not_found", "note has no owning encounter", 500)
+
+    signer = None
+    if note.get("signed_by_user_id"):
+        signer = fetch_one(
+            "SELECT id, email, full_name FROM users WHERE id = :id",
+            {"id": note["signed_by_user_id"]},
+        )
+
+    final_approver = None
+    if note.get("final_approved_by_user_id"):
+        final_approver = fetch_one(
+            "SELECT id, email, full_name FROM users WHERE id = :id",
+            {"id": note["final_approved_by_user_id"]},
+        )
+
+    from app.services.note_evidence import build_evidence_bundle
+    bundle = build_evidence_bundle(
+        note_row=note,
+        encounter_row=dict(encounter),
+        signer_row=dict(signer) if signer else None,
+        final_approver_row=dict(final_approver) if final_approver else None,
+        caller_email=caller.email,
+        caller_user_id=caller.user_id,
+    )
+
+    from app import audit as _audit
+    _audit.record(
+        event_type="note_evidence_bundle_issued",
+        request_id=None,
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path=f"/note-versions/{note_id}/evidence-bundle",
+        method="GET",
+        detail=(
+            f"note_id={note_id} "
+            f"body_hash={bundle['envelope']['body_hash_sha256'][:12]}"
+        ),
+    )
+    return bundle
+
+
+@router.get("/admin/operations/evidence-chain-verify")
+def admin_evidence_chain_verify(
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Re-verify the org's evidence chain end-to-end. Returns a
+    structured verdict (ok / broken + first-broken-event-id).
+    Non-destructive read; safe to call from the admin UI at any
+    time."""
+    _require_security_admin_inline(caller)
+    from app.services.note_evidence import verify_chain
+    return verify_chain(caller.organization_id).as_dict()
+
+
+@router.get("/admin/operations/notes/{note_id}/evidence-health")
+def admin_note_evidence_health(
+    note_id: int,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Per-note evidence-health card. Used by the admin lifecycle
+    surface to answer 'is this note's evidence complete?'.
+    Security-admin scoped like the rest of /admin/operations/*."""
+    _require_security_admin_inline(caller)
+    note = _load_note_for_caller(note_id, caller)
+    from app.services.note_evidence import note_evidence_health
+    return note_evidence_health(note).as_dict()
 
 
 @router.get("/admin/operations/categories")

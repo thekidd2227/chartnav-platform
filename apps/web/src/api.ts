@@ -2045,6 +2045,128 @@ export function finalApproveNoteVersion(
 }
 
 // =====================================================================
+// Phase 55 — immutable evidence chain + evidence bundle export
+// =====================================================================
+
+export interface EvidenceBundle {
+  bundle_version: string;
+  note: {
+    id: number;
+    encounter_id: number;
+    version_number: number;
+    note_format: string | null;
+    draft_status: string | null;
+    content_fingerprint: string | null;
+    fingerprint_matches_current: boolean | null;
+    attestation_text: string | null;
+    signed_at: string | null;
+    signed_by_user_id: number | null;
+    signed_by_email: string | null;
+    exported_at: string | null;
+    reviewed_at: string | null;
+    reviewed_by_user_id: number | null;
+  };
+  encounter: {
+    id: number;
+    organization_id: number;
+    patient_display: string | null;
+    provider_display: string | null;
+    external_ref: string | null;
+    external_source: string | null;
+  };
+  final_approval: {
+    status: "pending" | "approved" | "invalidated" | null;
+    approved_at: string | null;
+    approved_by_user_id: number | null;
+    approved_by_email: string | null;
+    signature_text: string | null;
+    invalidated_at: string | null;
+    invalidated_reason: string | null;
+  };
+  supersession: {
+    amended_from_note_id: number | null;
+    amended_at: string | null;
+    amended_by_user_id: number | null;
+    amendment_reason: string | null;
+    superseded_at: string | null;
+    superseded_by_note_id: number | null;
+    is_current_record_of_care: boolean;
+    chain_length: number;
+    current_record_of_care_note_id: number | null;
+    has_invalidated_approval: boolean;
+    chain: Array<Record<string, unknown>>;
+  };
+  evidence_events: Array<{
+    id: number;
+    event_type: string;
+    actor_user_id: number | null;
+    actor_email: string | null;
+    occurred_at: string | null;
+    draft_status: string | null;
+    final_approval_status: string | null;
+    content_fingerprint: string | null;
+    detail_json: string | null;
+    prev_event_hash: string | null;
+    event_hash: string;
+  }>;
+  evidence_health: EvidenceHealth;
+  chain_integrity: EvidenceChainVerdict;
+  envelope: {
+    issued_at: string;
+    issued_by_email: string | null;
+    issued_by_user_id: number | null;
+    body_hash_sha256: string;
+    hash_inputs: string;
+  };
+}
+
+export interface EvidenceHealth {
+  note_version_id: number;
+  has_signed_event: boolean;
+  has_final_approval_event: boolean;
+  has_export_event: boolean;
+  has_invalidated_approval_event: boolean;
+  content_fingerprint_present: boolean;
+  fingerprint_matches_current: boolean | null;
+  event_count: number;
+  last_event_hash: string | null;
+}
+
+export interface EvidenceChainVerdict {
+  organization_id: number;
+  total_events: number;
+  verified_events: number;
+  broken_at_event_id: number | null;
+  broken_reason: string | null;
+  first_event_hash: string | null;
+  last_event_hash: string | null;
+  ok: boolean;
+}
+
+export function getNoteEvidenceBundle(
+  email: string,
+  noteId: number
+): Promise<EvidenceBundle> {
+  return request(`/note-versions/${noteId}/evidence-bundle`, { email });
+}
+
+export function verifyEvidenceChain(
+  email: string
+): Promise<EvidenceChainVerdict> {
+  return request("/admin/operations/evidence-chain-verify", { email });
+}
+
+export function getNoteEvidenceHealth(
+  email: string,
+  noteId: number
+): Promise<EvidenceHealth> {
+  return request(
+    `/admin/operations/notes/${noteId}/evidence-health`,
+    { email }
+  );
+}
+
+// =====================================================================
 // Phase 53 — Wave 8 operations & exceptions control plane
 // =====================================================================
 

@@ -83,6 +83,9 @@ class ExceptionCategory(str, Enum):
     # Security / admin policy config
     security_policy_unconfigured = "security_policy_unconfigured"
 
+    # Phase 55 — evidence-chain integrity
+    evidence_chain_broken = "evidence_chain_broken"
+
 
 # Map each *audit* row to a category. Keys are matched first on
 # `event_type`; for pre-auth failures the event_type IS the error
@@ -254,6 +257,16 @@ CATEGORY_METADATA: dict[ExceptionCategory, dict[str, str]] = {
             "This org has no session timeouts, no audit sink, or no "
             "security-admin allowlist configured. Review the Security "
             "tab."
+        ),
+    },
+    ExceptionCategory.evidence_chain_broken: {
+        "label": "Evidence chain integrity broken",
+        "severity": "error",
+        "next_step": (
+            "The tamper-evident evidence chain for this org failed "
+            "re-verification. Some row has been mutated or deleted. "
+            "Re-run /admin/operations/evidence-chain-verify for the "
+            "first-broken event id and investigate the DB."
         ),
     },
 }
@@ -670,6 +683,20 @@ def compute_counters(
     counts[ExceptionCategory.security_policy_unconfigured.value] = (
         1 if sec["unconfigured"] else 0
     )
+
+    # Phase 55 — evidence-chain integrity. Non-zero if the chain
+    # fails re-verification. Uses the note_evidence service; the
+    # import is local to avoid hardening-time circular import risk.
+    try:
+        from app.services.note_evidence import verify_chain as _verify_chain
+        chain_verdict = _verify_chain(organization_id)
+        counts[ExceptionCategory.evidence_chain_broken.value] = (
+            0 if chain_verdict.broken_at_event_id is None else 1
+        )
+    except Exception:
+        # A verification error itself is surfaced as a broken chain —
+        # either way, an operator needs to look.
+        counts[ExceptionCategory.evidence_chain_broken.value] = 1
 
     # A coarse "anything open" number for the nav badge. We
     # intentionally EXCLUDE pure-session categories (idle / absolute

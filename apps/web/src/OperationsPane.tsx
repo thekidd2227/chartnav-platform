@@ -400,7 +400,14 @@ function OverviewTab({
     },
     {
       heading: "Infrastructure",
-      keys: ["ingest_stuck", "security_policy_unconfigured"],
+      keys: [
+        "ingest_stuck",
+        "security_policy_unconfigured",
+        // Phase 55 — evidence-chain integrity. Surfaced in the
+        // overview so admins see chain breakage without having to
+        // call /admin/operations/evidence-chain-verify explicitly.
+        "evidence_chain_broken",
+      ],
     },
   ];
   return (
