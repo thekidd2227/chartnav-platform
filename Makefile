@@ -13,7 +13,7 @@ PIP     := $(VENV)/bin/pip
 DEV_DB  := $(API_DIR)/chartnav.db
 PORT    := 8765
 
-.PHONY: help install migrate seed test boot smoke docs verify clean reset-db pg-verify docker-build docker-up docker-down web-install web-dev web-build web-typecheck web-test web-verify e2e e2e-headed e2e-ui e2e-a11y e2e-visual e2e-visual-update audit-prune sbom release-build staging-up staging-verify staging-rollback staging-down dev
+.PHONY: help install migrate seed test boot smoke docs verify clean reset-db pg-verify docker-build docker-up docker-down web-install web-dev web-build web-typecheck web-test web-verify e2e e2e-headed e2e-ui e2e-a11y e2e-visual e2e-visual-update audit-prune sbom release-build staging-up staging-verify staging-rollback staging-down dev deploy-preflight enterprise-validate prod-bootstrap prod-rollback
 
 help:
 	@awk 'BEGIN{FS=":.*?## "} /^[a-zA-Z_-]+:.*?## /{printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -128,7 +128,19 @@ docker-up: ## Start the production compose stack (API + Postgres)
 	cd infra/docker && docker compose -f docker-compose.prod.yml up --build
 
 docker-down: ## Stop the production compose stack
-	cd infra/docker && docker compose -f docker-compose.prod.yml down -v
+	cd infra/docker && docker compose -f docker-compose.prod.yml down
+
+deploy-preflight: ## Validate a production env file before deploy (usage: make deploy-preflight ENV_FILE=infra/docker/.env.prod)
+	bash scripts/deploy_preflight.sh $(ENV_FILE)
+
+enterprise-validate: ## Validate a live deployment (usage: make enterprise-validate URL=https://chart.example.com)
+	bash scripts/enterprise_validate.sh $(URL)
+
+prod-bootstrap: ## First-install: preflight + compose up + wait + validate (usage: make prod-bootstrap ENV_FILE=infra/docker/.env.prod)
+	bash scripts/bootstrap.sh $(ENV_FILE)
+
+prod-rollback: ## Pin the API image to a prior tag (usage: make prod-rollback TAG=v0.1.0 ENV_FILE=infra/docker/.env.prod)
+	bash scripts/deploy_rollback.sh $(TAG) $(ENV_FILE) -v
 
 clean: ## Remove caches + dev DB
 	rm -f $(DEV_DB)

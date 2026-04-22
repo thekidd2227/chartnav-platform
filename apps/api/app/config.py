@@ -346,3 +346,164 @@ def _load() -> Settings:
 
 
 settings = _load()
+
+
+# ---------------------------------------------------------------------
+# Phase 60 — production validator (deploy_preflight)
+# ---------------------------------------------------------------------
+
+class ProductionConfigError(RuntimeError):
+    """Raised by validate_production_config when a required field is
+    missing or insecure. Separate type so preflight scripts can
+    catch cleanly."""
+    def __init__(self, findings: list[str]):
+        self.findings = findings
+        super().__init__(
+            "production config validation failed:\n  - "
+            + "\n  - ".join(findings)
+        )
+
+
+def validate_production_config(
+    s: "Settings | None" = None,
+    *,
+    strict: bool = True,
+) -> list[dict[str, str]]:
+    """Check the loaded Settings against the production contract.
+
+    Returns a list of `{severity, key, reason}` findings. When
+    `strict=True` (default), `severity='error'` findings trigger a
+    `ProductionConfigError`. The return value is preserved so the
+    preflight script can render the full report even after a raise.
+
+    This function NEVER contacts external systems (no JWKS fetch,
+    no DB probe); it is a pure config audit. Runtime connectivity
+    checks live in `enterprise_validate.sh`.
+    """
+    s = s or settings
+    findings: list[dict[str, str]] = []
+
+    env = (s.env or "").lower()
+    is_prod = env == "production"
+
+    # --- Core / required for production ---
+
+    if is_prod and not s.database_url:
+        findings.append({
+            "severity": "error", "key": "DATABASE_URL",
+            "reason": "DATABASE_URL is required in production",
+        })
+    if is_prod and s.database_url and s.database_url.startswith("sqlite"):
+        findings.append({
+            "severity": "error", "key": "DATABASE_URL",
+            "reason": (
+                "DATABASE_URL is a SQLite URL; production must use a "
+                "durable store (postgresql+psycopg://...)"
+            ),
+        })
+
+    if is_prod and s.auth_mode != "bearer":
+        findings.append({
+            "severity": "error", "key": "CHARTNAV_AUTH_MODE",
+            "reason": (
+                f"auth_mode must be 'bearer' in production "
+                f"(got {s.auth_mode!r})"
+            ),
+        })
+
+    if is_prod and s.auth_mode == "bearer":
+        for key, val in (
+            ("CHARTNAV_JWT_ISSUER", s.jwt_issuer),
+            ("CHARTNAV_JWT_AUDIENCE", s.jwt_audience),
+            ("CHARTNAV_JWT_JWKS_URL", s.jwt_jwks_url),
+        ):
+            if not val:
+                findings.append({
+                    "severity": "error", "key": key,
+                    "reason": f"{key} is required when auth_mode=bearer",
+                })
+        # Soft: user claim should be explicit in prod.
+        if s.jwt_user_claim == "email":
+            findings.append({
+                "severity": "info", "key": "CHARTNAV_JWT_USER_CLAIM",
+                "reason": (
+                    "using default 'email' claim; confirm this matches "
+                    "your IdP mapping"
+                ),
+            })
+
+    # --- CORS must not allow localhost in production ---
+    if is_prod:
+        bad_cors = [
+            o for o in s.cors_allow_origins
+            if "localhost" in o or "127.0.0.1" in o
+        ]
+        if bad_cors:
+            findings.append({
+                "severity": "error",
+                "key": "CHARTNAV_CORS_ALLOW_ORIGINS",
+                "reason": (
+                    "production CORS must not include localhost / "
+                    f"127.0.0.1 origins (found: {bad_cors})"
+                ),
+            })
+        if not s.cors_allow_origins:
+            findings.append({
+                "severity": "error",
+                "key": "CHARTNAV_CORS_ALLOW_ORIGINS",
+                "reason": (
+                    "CHARTNAV_CORS_ALLOW_ORIGINS is empty; specify the "
+                    "frontend origin(s) explicitly in production"
+                ),
+            })
+
+    # --- Rate limit / retention sanity ---
+    if is_prod and s.rate_limit_per_minute == 0:
+        findings.append({
+            "severity": "warning",
+            "key": "CHARTNAV_RATE_LIMIT_PER_MINUTE",
+            "reason": (
+                "rate limiting disabled in production; expected a "
+                "positive request-per-minute cap"
+            ),
+        })
+    if is_prod and s.audit_retention_days == 0:
+        findings.append({
+            "severity": "info",
+            "key": "CHARTNAV_AUDIT_RETENTION_DAYS",
+            "reason": (
+                "audit retention not configured; audit rows grow "
+                "unboundedly until an operator prunes explicitly"
+            ),
+        })
+
+    # --- Evidence signing keyring ---
+    ring = getattr(s, "evidence_signing_hmac_keyring", None) or {}
+    legacy_key = getattr(s, "evidence_signing_hmac_key", None)
+    if is_prod and not ring and not legacy_key:
+        findings.append({
+            "severity": "info",
+            "key": "CHARTNAV_EVIDENCE_SIGNING_HMAC_KEYS",
+            "reason": (
+                "no evidence signing keys configured; bundles will "
+                "be issued unsigned unless an org enables signing"
+            ),
+        })
+
+    # --- Platform mode ---
+    if s.platform_mode not in {"standalone", "integrated_readthrough",
+                                "integrated_writethrough"}:
+        findings.append({
+            "severity": "error", "key": "CHARTNAV_PLATFORM_MODE",
+            "reason": (
+                f"unknown platform_mode {s.platform_mode!r}; expected "
+                "standalone | integrated_readthrough | integrated_writethrough"
+            ),
+        })
+
+    if strict and any(f["severity"] == "error" for f in findings):
+        raise ProductionConfigError(
+            [f"{f['key']}: {f['reason']}"
+             for f in findings if f["severity"] == "error"]
+        )
+    return findings
