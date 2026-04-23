@@ -2813,3 +2813,111 @@ export function getOperationsSecurityConfigStatus(
 ): Promise<OperationsSecurityPolicyStatus> {
   return request("/admin/operations/security-config-status", { email });
 }
+
+// =====================================================================
+// Phase 63 — Reminders (calendar + follow-up nudges)
+// =====================================================================
+
+export type ReminderStatus = "pending" | "completed" | "cancelled";
+
+export interface Reminder {
+  id: number;
+  organization_id: number;
+  encounter_id: number | null;
+  patient_identifier: string | null;
+  title: string;
+  body: string | null;
+  due_at: string;
+  status: ReminderStatus;
+  completed_at: string | null;
+  completed_by_user_id: number | null;
+  created_by_user_id: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReminderCreateBody {
+  title: string;
+  body?: string | null;
+  due_at: string; // ISO
+  encounter_id?: number | null;
+  patient_identifier?: string | null;
+}
+
+export interface ReminderUpdateBody {
+  title?: string;
+  body?: string | null;
+  due_at?: string;
+  status?: ReminderStatus;
+}
+
+export interface ReminderFilters {
+  status?: ReminderStatus | "pending,completed" | "pending,cancelled";
+  due_from?: string;
+  due_to?: string;
+  encounter_id?: number;
+  patient_identifier?: string;
+}
+
+function _qs(params: Record<string, string | number | undefined>): string {
+  const parts: string[] = [];
+  for (const [k, v] of Object.entries(params)) {
+    if (v === undefined || v === null || v === "") continue;
+    parts.push(`${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`);
+  }
+  return parts.length ? `?${parts.join("&")}` : "";
+}
+
+export function listReminders(
+  email: string,
+  filters: ReminderFilters = {}
+): Promise<Reminder[]> {
+  return request(`/reminders${_qs({ ...filters })}`, { email });
+}
+
+export function createReminder(
+  email: string,
+  body: ReminderCreateBody
+): Promise<Reminder> {
+  return request("/reminders", {
+    email,
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function getReminder(email: string, id: number): Promise<Reminder> {
+  return request(`/reminders/${id}`, { email });
+}
+
+export function updateReminder(
+  email: string,
+  id: number,
+  body: ReminderUpdateBody
+): Promise<Reminder> {
+  return request(`/reminders/${id}`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export function completeReminder(
+  email: string,
+  id: number
+): Promise<Reminder> {
+  return request(`/reminders/${id}/complete`, {
+    email,
+    method: "POST",
+  });
+}
+
+export function cancelReminder(
+  email: string,
+  id: number
+): Promise<Reminder> {
+  return request(`/reminders/${id}`, {
+    email,
+    method: "DELETE",
+  });
+}

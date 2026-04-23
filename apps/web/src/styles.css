@@ -3118,3 +3118,199 @@ html[data-theme="dark"] .banner--error { color: #FCA5A5; }
   background: var(--cn-surface-alt);
   border: 1px solid var(--cn-line);
 }
+
+/* -------------------------------------------------------------------
+ * Phase 63 — Calendar + Reminders
+ * -------------------------------------------------------------------*/
+.month-view {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
+  align-items: flex-start;
+}
+@media (max-width: 1100px) {
+  .month-view { grid-template-columns: 1fr; }
+}
+
+.calendar {
+  border: 1px solid var(--cn-line);
+  border-radius: 8px;
+  background: var(--cn-surface);
+  padding: 12px;
+}
+.calendar__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.calendar__month {
+  margin: 0;
+  flex: 1;
+  text-align: center;
+  font-size: 16px;
+}
+.calendar__weekday-row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--cn-muted);
+  padding: 2px 0 6px;
+}
+.calendar__weekday {
+  text-align: center;
+}
+.calendar__cells {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+.calendar__cell {
+  min-height: 96px;
+  border: 1px solid var(--cn-line);
+  border-radius: 6px;
+  padding: 6px;
+  background: var(--cn-surface-alt, #fafafa);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.calendar__cell--other-month {
+  opacity: 0.45;
+}
+.calendar__cell--today {
+  border-color: var(--cn-accent, #2a69ff);
+  box-shadow: 0 0 0 1px var(--cn-accent, #2a69ff) inset;
+}
+.calendar__cell-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 600;
+}
+.calendar__cell-count {
+  background: var(--cn-accent, #2a69ff);
+  color: white;
+  border-radius: 10px;
+  padding: 0 8px;
+  font-size: 11px;
+  line-height: 18px;
+}
+.calendar__cell-items {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.calendar__chip {
+  all: unset;
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 11px;
+  background: white;
+  border: 1px solid var(--cn-line);
+  text-align: left;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.calendar__chip:hover {
+  background: var(--cn-hover, #f3f6ff);
+}
+.calendar__chip--enc {
+  background: #e9f2ff;
+  border-color: #b6d2ff;
+}
+.calendar__chip--rem {
+  background: #fff3d6;
+  border-color: #f2d98e;
+}
+.calendar__chip--completed {
+  background: #e7f6ec;
+  border-color: #bce0c6;
+  text-decoration: line-through;
+}
+.calendar__chip-more {
+  font-size: 10px;
+  color: var(--cn-muted);
+  padding: 0 4px;
+}
+
+.reminders-panel {
+  border: 1px solid var(--cn-line);
+  border-radius: 8px;
+  background: var(--cn-surface);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.reminders-panel__head h3 { margin: 0 0 4px; }
+.reminders-panel__tabs {
+  display: flex;
+  gap: 6px;
+}
+.reminders-panel__tabs .tab {
+  flex: 1;
+  padding: 6px 8px;
+  font-size: 12px;
+  border: 1px solid var(--cn-line);
+  border-radius: 4px;
+  background: var(--cn-surface-alt, #fafafa);
+  cursor: pointer;
+  text-transform: capitalize;
+}
+.reminders-panel__tabs .tab--active {
+  background: var(--cn-accent, #2a69ff);
+  border-color: var(--cn-accent, #2a69ff);
+  color: white;
+  font-weight: 600;
+}
+.reminders-panel__create {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px dashed var(--cn-line);
+  border-radius: 6px;
+  background: var(--cn-surface-alt, #fafafa);
+}
+.reminders-panel__create label {
+  display: flex;
+  flex-direction: column;
+  font-size: 11px;
+  color: var(--cn-muted);
+}
+.reminders-panel__create input {
+  font-size: 13px;
+  padding: 6px 8px;
+  border: 1px solid var(--cn-line);
+  border-radius: 4px;
+  margin-top: 2px;
+}
+.reminders-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.reminder {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--cn-line);
+  border-radius: 6px;
+  background: var(--cn-surface-alt, #fafafa);
+}
+.reminder--completed { opacity: 0.6; }
+.reminder__title { font-weight: 600; font-size: 13px; }
+.reminder__meta { font-size: 11px; margin-top: 2px; }
+.reminder__actions { display: flex; gap: 4px; flex-direction: column; }
+.reminder__actions .btn { padding: 4px 8px; font-size: 11px; }

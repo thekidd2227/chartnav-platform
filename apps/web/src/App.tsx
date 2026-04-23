@@ -50,6 +50,9 @@ import {
 } from "./CommandPalette";
 import { Timeline } from "./Timeline";
 import { DayView } from "./DayView";
+import { Calendar, addMonths, startOfMonth } from "./Calendar";
+import { RemindersPanel } from "./RemindersPanel";
+import { Reminder, listReminders } from "./api";
 import { WallDisplay } from "./WallDisplay";
 import { EncounterSlip } from "./EncounterSlip";
 // ROI wave 1 — operational queue + triage cards + role split.
@@ -102,12 +105,50 @@ export default function App() {
   const [cmdkOpen, setCmdkOpen] = useState(false);
   useCommandPaletteShortcut(() => setCmdkOpen(true));
 
-  const [view, setView] = useState<"list" | "day">(() => {
-    try { return (localStorage.getItem("chartnav.view") as any) === "day" ? "day" : "list"; }
-    catch { return "list"; }
+  const [view, setView] = useState<"list" | "day" | "month">(() => {
+    try {
+      const v = localStorage.getItem("chartnav.view");
+      return v === "day" || v === "month" ? v : "list";
+    } catch { return "list"; }
   });
   useEffect(() => { try { localStorage.setItem("chartnav.view", view); } catch {} }, [view]);
   const [dayDate, setDayDate] = useState<Date>(() => new Date());
+
+  // Phase 63 — Calendar / Reminders state.
+  const [monthStart, setMonthStart] = useState<Date>(() => startOfMonth(new Date()));
+  const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [remindersReloadTick, setRemindersReloadTick] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    // Fetch reminders across statuses so the calendar can show
+    // both pending and completed chips on the correct day.
+    listReminders(identity, { status: "pending" as any })
+      .then(async (pending) => {
+        const completed = await listReminders(identity, { status: "completed" as any })
+          .catch(() => [] as Reminder[]);
+        if (!cancelled) setReminders([...pending, ...completed]);
+      })
+      .catch(() => { if (!cancelled) setReminders([]); });
+    return () => { cancelled = true; };
+  }, [identity, remindersReloadTick]);
+  const reloadReminders = useCallback(
+    () => setRemindersReloadTick((t) => t + 1),
+    [],
+  );
+  const onSelectPatient = useCallback((patientIdentifier: string) => {
+    // Find the first (newest) encounter for this patient in the
+    // currently-loaded page; fall back to switching to list.
+    const match = encounters.find(
+      (e) => e.patient_identifier === patientIdentifier,
+    );
+    if (match) {
+      setView("list");
+      setSelectedId(match.id);
+    } else {
+      setView("list");
+      setFilters((f) => ({ ...f, q: patientIdentifier }));
+    }
+  }, [encounters]);
   const [showWall, setShowWall] = useState(false);
   const [showSlipFor, setShowSlipFor] = useState<Encounter | null>(null);
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
@@ -561,6 +602,16 @@ export default function App() {
             >
               Day
             </button>
+            <button
+              type="button"
+              className="pref-picker__btn"
+              role="tab"
+              aria-pressed={view === "month"}
+              data-testid="view-month"
+              onClick={() => setView("month")}
+            >
+              Month
+            </button>
           </div>
           <button
             type="button"
@@ -714,7 +765,25 @@ export default function App() {
               {banner.msg}
             </div>
           )}
-          {view === "day" ? (
+          {view === "month" ? (
+            <div className="month-view" data-testid="month-view">
+              <Calendar
+                monthStart={monthStart}
+                encounters={encounters}
+                reminders={reminders}
+                onMonthPrev={() => setMonthStart((d) => addMonths(d, -1))}
+                onMonthNext={() => setMonthStart((d) => addMonths(d, 1))}
+                onMonthToday={() => setMonthStart(startOfMonth(new Date()))}
+                onSelectEncounter={(id) => { setSelectedId(id); setView("list"); }}
+                onSelectPatient={onSelectPatient}
+              />
+              <RemindersPanel
+                identity={identity}
+                onPatientSelect={onSelectPatient}
+                onMutation={reloadReminders}
+              />
+            </div>
+          ) : view === "day" ? (
             <DayView
               encounters={visibleEncounters}
               date={dayDate}

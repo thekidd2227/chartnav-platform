@@ -6613,3 +6613,265 @@ def admin_operations_categories(
             for c in ExceptionCategory
         ],
     }
+
+
+# =====================================================================
+# Phase 63 — Reminders (calendar + follow-up nudges)
+# =====================================================================
+#
+# A `reminder` is a lightweight clinician work item with a due date.
+# It can attach to a specific encounter, a specific patient (by MRN
+# string), or nothing in particular (a free-floating operational
+# nudge). Reminders are org-scoped and show up on the calendar alongside
+# encounters, so "what still needs attention today / this week" is
+# one glanceable surface.
+#
+# Contract:
+#   GET    /reminders                  list (filter by status + date range)
+#   POST   /reminders                  create (admin | clinician)
+#   GET    /reminders/{id}             read one
+#   PATCH  /reminders/{id}             update title/body/due_at/status
+#   POST   /reminders/{id}/complete    mark completed (sets completed_*)
+#   DELETE /reminders/{id}             soft: flips status to 'cancelled'
+#
+# All routes enforce `organization_id == caller.organization_id`.
+
+REMINDER_COLUMNS = (
+    "id, organization_id, encounter_id, patient_identifier, title, "
+    "body, due_at, status, completed_at, completed_by_user_id, "
+    "created_by_user_id, created_at, updated_at"
+)
+
+_REMINDER_STATUSES = {"pending", "completed", "cancelled"}
+
+
+class ReminderCreate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=256)
+    body: Optional[str] = Field(default=None, max_length=4000)
+    due_at: datetime
+    encounter_id: Optional[int] = None
+    patient_identifier: Optional[str] = Field(default=None, max_length=64)
+
+
+class ReminderUpdate(BaseModel):
+    title: Optional[str] = Field(default=None, min_length=1, max_length=256)
+    body: Optional[str] = Field(default=None, max_length=4000)
+    due_at: Optional[datetime] = None
+    status: Optional[str] = None
+
+
+def _reminder_row_to_dict(r: dict) -> dict:
+    # SQLite returns datetimes as strings; leave them for the client.
+    return dict(r)
+
+
+def _assert_reminder_encounter_in_org(
+    caller: Caller, encounter_id: Optional[int]
+) -> None:
+    if encounter_id is None:
+        return
+    enc = fetch_one(
+        "SELECT id, organization_id FROM encounters WHERE id = :id",
+        {"id": encounter_id},
+    )
+    if not enc:
+        raise _err("encounter_not_found", "encounter does not exist", 404)
+    ensure_same_org(caller, int(enc["organization_id"]))
+
+
+@router.get("/reminders")
+def list_reminders(
+    response: Response,
+    caller: Caller = Depends(require_caller),
+    limit: int = Query(default=200, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    status_in: Optional[str] = Query(default=None, alias="status"),
+    due_from: Optional[datetime] = Query(default=None),
+    due_to: Optional[datetime] = Query(default=None),
+    encounter_id: Optional[int] = Query(default=None),
+    patient_identifier: Optional[str] = Query(default=None, max_length=64),
+) -> list[dict]:
+    clauses = ["organization_id = :org"]
+    params: dict[str, Any] = {"org": caller.organization_id}
+    if status_in:
+        # Comma-separated list; ignore unknowns.
+        wanted = [
+            s.strip() for s in status_in.split(",")
+            if s.strip() in _REMINDER_STATUSES
+        ]
+        if wanted:
+            placeholders = ",".join(f":s{i}" for i in range(len(wanted)))
+            clauses.append(f"status IN ({placeholders})")
+            for i, s in enumerate(wanted):
+                params[f"s{i}"] = s
+    if due_from is not None:
+        clauses.append("due_at >= :from")
+        params["from"] = due_from
+    if due_to is not None:
+        clauses.append("due_at <= :to")
+        params["to"] = due_to
+    if encounter_id is not None:
+        clauses.append("encounter_id = :eid")
+        params["eid"] = encounter_id
+    if patient_identifier:
+        clauses.append("patient_identifier = :pid")
+        params["pid"] = patient_identifier
+    where = " WHERE " + " AND ".join(clauses)
+
+    total = int(
+        fetch_one(f"SELECT COUNT(*) AS n FROM reminders{where}", params)["n"]
+    )
+    rows = fetch_all(
+        f"SELECT {REMINDER_COLUMNS} FROM reminders{where} "
+        "ORDER BY due_at ASC, id ASC LIMIT :limit OFFSET :offset",
+        {**params, "limit": limit, "offset": offset},
+    )
+    response.headers["X-Total-Count"] = str(total)
+    return [_reminder_row_to_dict(r) for r in rows]
+
+
+@router.post("/reminders", status_code=status.HTTP_201_CREATED)
+def create_reminder(
+    payload: ReminderCreate,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    if caller.role not in {"admin", "clinician"}:
+        raise _err("role_forbidden", "admin or clinician only", 403)
+    _assert_reminder_encounter_in_org(caller, payload.encounter_id)
+    with transaction() as conn:
+        new_id = insert_returning_id(
+            conn,
+            "reminders",
+            {
+                "organization_id": caller.organization_id,
+                "encounter_id": payload.encounter_id,
+                "patient_identifier": payload.patient_identifier,
+                "title": payload.title,
+                "body": payload.body,
+                "due_at": payload.due_at,
+                "status": "pending",
+                "created_by_user_id": caller.user_id,
+            },
+        )
+    row = fetch_one(
+        f"SELECT {REMINDER_COLUMNS} FROM reminders WHERE id = :id",
+        {"id": new_id},
+    )
+    return _reminder_row_to_dict(row)
+
+
+def _load_reminder_for_caller(reminder_id: int, caller: Caller) -> dict:
+    row = fetch_one(
+        f"SELECT {REMINDER_COLUMNS} FROM reminders WHERE id = :id",
+        {"id": reminder_id},
+    )
+    if not row:
+        raise _err("reminder_not_found", "reminder does not exist", 404)
+    ensure_same_org(caller, int(row["organization_id"]))
+    return row
+
+
+@router.get("/reminders/{reminder_id}")
+def get_reminder(
+    reminder_id: int,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    return _reminder_row_to_dict(_load_reminder_for_caller(reminder_id, caller))
+
+
+@router.patch("/reminders/{reminder_id}")
+def update_reminder(
+    reminder_id: int,
+    payload: ReminderUpdate,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    if caller.role not in {"admin", "clinician"}:
+        raise _err("role_forbidden", "admin or clinician only", 403)
+    _load_reminder_for_caller(reminder_id, caller)
+    set_parts: list[str] = ["updated_at = CURRENT_TIMESTAMP"]
+    params: dict[str, Any] = {"id": reminder_id}
+    if payload.title is not None:
+        set_parts.append("title = :title")
+        params["title"] = payload.title
+    if payload.body is not None:
+        set_parts.append("body = :body")
+        params["body"] = payload.body
+    if payload.due_at is not None:
+        set_parts.append("due_at = :due")
+        params["due"] = payload.due_at
+    if payload.status is not None:
+        if payload.status not in _REMINDER_STATUSES:
+            raise _err(
+                "invalid_status",
+                f"status must be one of {sorted(_REMINDER_STATUSES)}",
+                400,
+            )
+        set_parts.append("status = :status")
+        params["status"] = payload.status
+        if payload.status == "completed":
+            set_parts.append("completed_at = CURRENT_TIMESTAMP")
+            set_parts.append("completed_by_user_id = :uid")
+            params["uid"] = caller.user_id
+    with transaction() as conn:
+        conn.execute(
+            text(
+                f"UPDATE reminders SET {', '.join(set_parts)} WHERE id = :id"
+            ),
+            params,
+        )
+    row = fetch_one(
+        f"SELECT {REMINDER_COLUMNS} FROM reminders WHERE id = :id",
+        {"id": reminder_id},
+    )
+    return _reminder_row_to_dict(row)
+
+
+@router.post("/reminders/{reminder_id}/complete")
+def complete_reminder(
+    reminder_id: int,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    if caller.role not in {"admin", "clinician"}:
+        raise _err("role_forbidden", "admin or clinician only", 403)
+    r = _load_reminder_for_caller(reminder_id, caller)
+    if r["status"] == "completed":
+        # Idempotent — return the existing row.
+        return _reminder_row_to_dict(r)
+    with transaction() as conn:
+        conn.execute(
+            text(
+                "UPDATE reminders SET status = 'completed', "
+                "completed_at = CURRENT_TIMESTAMP, "
+                "completed_by_user_id = :uid, "
+                "updated_at = CURRENT_TIMESTAMP WHERE id = :id"
+            ),
+            {"id": reminder_id, "uid": caller.user_id},
+        )
+    row = fetch_one(
+        f"SELECT {REMINDER_COLUMNS} FROM reminders WHERE id = :id",
+        {"id": reminder_id},
+    )
+    return _reminder_row_to_dict(row)
+
+
+@router.delete("/reminders/{reminder_id}", status_code=status.HTTP_200_OK)
+def cancel_reminder(
+    reminder_id: int,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    if caller.role not in {"admin", "clinician"}:
+        raise _err("role_forbidden", "admin or clinician only", 403)
+    _load_reminder_for_caller(reminder_id, caller)
+    with transaction() as conn:
+        conn.execute(
+            text(
+                "UPDATE reminders SET status = 'cancelled', "
+                "updated_at = CURRENT_TIMESTAMP WHERE id = :id"
+            ),
+            {"id": reminder_id},
+        )
+    row = fetch_one(
+        f"SELECT {REMINDER_COLUMNS} FROM reminders WHERE id = :id",
+        {"id": reminder_id},
+    )
+    return _reminder_row_to_dict(row)
