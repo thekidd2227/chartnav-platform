@@ -54,3 +54,11 @@ apps/web/raster_brand.mjs
 apps/web/render_docs.mjs
 apps/web/capture_upgrade_proof.mjs
 apps/web/snap_branded.mjs
+
+# Clinical Coding Intelligence raw artifacts — retained on operator
+# disk for audit; not committed to git (can be 14+ MB per release).
+apps/api/data/icd10cm/raw/
+
+# One-off snap scripts produced during clip capture
+apps/web/snap_clinical_coding.mjs
+apps/web/snap_cc_video.mjs

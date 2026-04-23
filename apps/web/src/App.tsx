@@ -53,6 +53,7 @@ import { DayView } from "./DayView";
 import { Calendar, addMonths, startOfMonth } from "./Calendar";
 import { RemindersPanel } from "./RemindersPanel";
 import { Reminder, listReminders } from "./api";
+import { ClinicalCodingPanel } from "./features/clinical-coding/ClinicalCodingPanel";
 import { WallDisplay } from "./WallDisplay";
 import { EncounterSlip } from "./EncounterSlip";
 // ROI wave 1 — operational queue + triage cards + role split.
@@ -105,10 +106,10 @@ export default function App() {
   const [cmdkOpen, setCmdkOpen] = useState(false);
   useCommandPaletteShortcut(() => setCmdkOpen(true));
 
-  const [view, setView] = useState<"list" | "day" | "month">(() => {
+  const [view, setView] = useState<"list" | "day" | "month" | "coding">(() => {
     try {
       const v = localStorage.getItem("chartnav.view");
-      return v === "day" || v === "month" ? v : "list";
+      return v === "day" || v === "month" || v === "coding" ? v : "list";
     } catch { return "list"; }
   });
   useEffect(() => { try { localStorage.setItem("chartnav.view", view); } catch {} }, [view]);
@@ -612,6 +613,17 @@ export default function App() {
             >
               Month
             </button>
+            <button
+              type="button"
+              className="pref-picker__btn"
+              role="tab"
+              aria-pressed={view === "coding"}
+              data-testid="view-coding"
+              onClick={() => setView("coding")}
+              title="Clinical Coding Intelligence"
+            >
+              Coding
+            </button>
           </div>
           <button
             type="button"
@@ -765,7 +777,12 @@ export default function App() {
               {banner.msg}
             </div>
           )}
-          {view === "month" ? (
+          {view === "coding" ? (
+            <ClinicalCodingPanel
+              identity={identity}
+              role={me?.role ?? "clinician"}
+            />
+          ) : view === "month" ? (
             <div className="month-view" data-testid="month-view">
               <Calendar
                 monthStart={monthStart}
