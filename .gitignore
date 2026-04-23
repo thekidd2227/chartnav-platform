@@ -40,3 +40,17 @@ dist/release/
 # Phase 33 — runtime audio upload directory. Never commit blobs.
 apps/api/audio_uploads/
 audio_uploads/
+
+# ----------------------------------------------------------------------
+# Added 2026-04-22 — media artifacts (proof screenshots + video clips)
+# live in the central delivery folder on Desktop, not in the repo.
+# ----------------------------------------------------------------------
+artifacts/
+
+# One-off probe / branding scripts (kept locally only; rebuild from
+# the checked-in record_*.mjs if needed)
+apps/web/probe_*.mjs
+apps/web/raster_brand.mjs
+apps/web/render_docs.mjs
+apps/web/capture_upgrade_proof.mjs
+apps/web/snap_branded.mjs
