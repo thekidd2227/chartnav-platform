@@ -17,25 +17,48 @@ from .conftest import ADMIN1, CLIN1, REV1
 FIXTURE = (
     Path(__file__).parent / "fixtures" / "icd10cm" / "icd10cm-order-2026.txt"
 )
+FIXTURE_APRIL = (
+    Path(__file__).parent / "fixtures" / "icd10cm" / "icd10cm-order-2026-april.txt"
+)
+
+
+OCTOBER_LABEL = "ICD-10-CM FY2026 (October 2025)"
+APRIL_LABEL = "ICD-10-CM FY2026 (April 2026 Update)"
+
+
+def _pick_fixture(source):
+    # Route each source to the fixture whose filename matches the
+    # source's primary_order_file, so the October-vs-April split
+    # produces two distinct DB rows.
+    name = source["primary_order_file"]
+    if "april" in name.lower():
+        return FIXTURE_APRIL
+    return FIXTURE
 
 
 @pytest.fixture()
 def ingested(client, monkeypatch):
-    """Run the real ingestion pipeline against the bundled fixture
-    file so tests exercise the full code path end-to-end."""
+    """Ingest the October FY2026 release against the bundled fixture."""
     import app.services.clinical_coding.ingest as ingest
-    # Point the ingest service at the test fixture regardless of the
-    # source_url in the release table.
-    monkeypatch.setattr(
-        ingest, "_fixture_for", lambda source: FIXTURE,
-    )
+    monkeypatch.setattr(ingest, "_fixture_for", _pick_fixture)
     from app.services.clinical_coding import run_sync
-    result = run_sync(
-        version_label="ICD-10-CM FY2026", allow_network=False,
-    )
+    result = run_sync(version_label=OCTOBER_LABEL, allow_network=False)
     assert result["status"] == "ready"
     assert result["records_parsed"] > 30
     return result
+
+
+@pytest.fixture()
+def ingested_both(client, monkeypatch):
+    """Ingest BOTH FY2026 slices (October + April update)."""
+    import app.services.clinical_coding.ingest as ingest
+    monkeypatch.setattr(ingest, "_fixture_for", _pick_fixture)
+    from app.services.clinical_coding import run_sync
+    first = run_sync(version_label=OCTOBER_LABEL, allow_network=False)
+    second = run_sync(version_label=APRIL_LABEL, allow_network=False)
+    assert first["status"] == "ready"
+    assert second["status"] == "ready"
+    return {"october": first, "april": second}
 
 
 # -------- parser unit sanity ---------------------------------------
@@ -64,7 +87,7 @@ def test_ingest_sync_idempotent(client, ingested, monkeypatch):
     monkeypatch.setattr(
         ingest, "_fixture_for", lambda source: FIXTURE,
     )
-    again = run_sync(version_label="ICD-10-CM FY2026", allow_network=False)
+    again = run_sync(version_label=OCTOBER_LABEL, allow_network=False)
     assert again["status"] in {"ready", "skipped_already_ready"}
     v = active_version()
     assert v["is_active"] == 1
@@ -77,18 +100,19 @@ def test_active_version_route(client, ingested):
     r = client.get("/clinical-coding/version/active", headers=CLIN1)
     assert r.status_code == 200
     body = r.json()
-    assert body["version_label"] == "ICD-10-CM FY2026"
+    assert body["version_label"] == OCTOBER_LABEL
     assert body["source_authority"].startswith("CMS")
     assert body["is_active"] == 1
 
 
 def test_version_by_date(client, ingested):
+    # DOS inside the October FY2026 window resolves cleanly.
     r = client.get(
-        "/clinical-coding/version/by-date?dateOfService=2026-04-01",
+        "/clinical-coding/version/by-date?dateOfService=2026-01-15",
         headers=CLIN1,
     )
     assert r.status_code == 200
-    assert r.json()["version_label"] == "ICD-10-CM FY2026"
+    assert r.json()["version_label"] == OCTOBER_LABEL
 
 
 def test_search_by_description(client, ingested):
@@ -100,7 +124,7 @@ def test_search_by_description(client, ingested):
     body = r.json()
     assert body["result_count"] > 0
     assert any("glaucoma" in x["long_description"].lower() for x in body["results"])
-    assert body["version"]["version_label"] == "ICD-10-CM FY2026"
+    assert body["version"]["version_label"] == OCTOBER_LABEL
 
 
 def test_search_by_code_prefix(client, ingested):
@@ -197,7 +221,7 @@ def test_favorites_reviewer_forbidden(client, ingested):
 def test_admin_sync_requires_admin(client, ingested):
     r = client.post(
         "/admin/clinical-coding/sync",
-        json={"version_label": "ICD-10-CM FY2026", "allow_network": False},
+        json={"version_label": OCTOBER_LABEL, "allow_network": False},
         headers=CLIN1,
     )
     assert r.status_code == 403
@@ -208,7 +232,7 @@ def test_admin_sync_as_admin(client, ingested, monkeypatch):
     monkeypatch.setattr(ingest, "_fixture_for", lambda source: FIXTURE)
     r = client.post(
         "/admin/clinical-coding/sync",
-        json={"version_label": "ICD-10-CM FY2026", "allow_network": False},
+        json={"version_label": OCTOBER_LABEL, "allow_network": False},
         headers=ADMIN1,
     )
     assert r.status_code == 202
@@ -222,7 +246,7 @@ def test_admin_sync_status(client, ingested):
     )
     assert r.status_code == 200
     body = r.json()
-    assert body["active_version"]["version_label"] == "ICD-10-CM FY2026"
+    assert body["active_version"]["version_label"] == OCTOBER_LABEL
     assert isinstance(body["recent_jobs"], list)
     assert len(body["recent_jobs"]) >= 1
 
@@ -238,3 +262,140 @@ def test_admin_audit_includes_version_and_checksum(client, ingested):
     # Source URL is always present (even when a fixture was the
     # effective source, we keep the documented upstream URL)
     assert v["source_url"].startswith("http")
+
+
+# ==================================================================
+# Effective-date verification (October / April FY2026 split)
+# ==================================================================
+
+def test_fy2026_october_release_has_bounded_effective_end(client, ingested_both):
+    r = client.get(
+        "/clinical-coding/version/by-date?dateOfService=2026-02-15",
+        headers=CLIN1,
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["version_label"] == OCTOBER_LABEL
+    assert body["effective_start_date"] == "2026-10-01" or body["effective_start_date"] == "2025-10-01"
+    # The fix: end is NOT None. It is 2026-03-31.
+    assert body["effective_end_date"] == "2026-03-31"
+
+
+def test_fy2026_april_update_has_bounded_window(client, ingested_both):
+    r = client.get(
+        "/clinical-coding/version/by-date?dateOfService=2026-05-10",
+        headers=CLIN1,
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["version_label"] == APRIL_LABEL
+    assert body["effective_start_date"] == "2026-04-01"
+    assert body["effective_end_date"] == "2026-09-30"
+
+
+def test_dos_march_15_resolves_october_release(client, ingested_both):
+    r = client.get(
+        "/clinical-coding/version/by-date?dateOfService=2026-03-15",
+        headers=CLIN1,
+    )
+    assert r.status_code == 200
+    assert r.json()["version_label"] == OCTOBER_LABEL
+
+
+def test_dos_april_15_resolves_april_release(client, ingested_both):
+    r = client.get(
+        "/clinical-coding/version/by-date?dateOfService=2026-04-15",
+        headers=CLIN1,
+    )
+    assert r.status_code == 200
+    assert r.json()["version_label"] == APRIL_LABEL
+
+
+def test_search_uses_the_dos_resolved_version(client, ingested_both):
+    """Search should run against the code set valid on the DOS, NOT
+    against whichever version happens to be active. The April
+    release contains an addendum code that is absent from the October
+    release; we use that as the oracle."""
+    # April 15 → April release → addendum code is present
+    r_april = client.get(
+        "/clinical-coding/search?q=H35.8A&dateOfService=2026-04-15",
+        headers=CLIN1,
+    )
+    assert r_april.status_code == 200
+    april_body = r_april.json()
+    assert april_body["version"]["version_label"] == APRIL_LABEL
+    assert any(x["code"].startswith("H35.8A") for x in april_body["results"])
+
+    # March 15 → October release → addendum code is absent
+    r_march = client.get(
+        "/clinical-coding/search?q=H35.8A&dateOfService=2026-03-15",
+        headers=CLIN1,
+    )
+    assert r_march.status_code == 200
+    march_body = r_march.json()
+    assert march_body["version"]["version_label"] == OCTOBER_LABEL
+    assert march_body["result_count"] == 0
+
+
+def test_october_release_not_openended_once_april_loaded(client, ingested_both):
+    """Once both slices are loaded, the audit surface must show a
+    bounded end date on the October release."""
+    r = client.get("/admin/clinical-coding/audit", headers=ADMIN1)
+    assert r.status_code == 200
+    versions = {v["version_label"]: v for v in r.json()["versions"]}
+    assert OCTOBER_LABEL in versions
+    assert APRIL_LABEL in versions
+    oct_v = versions[OCTOBER_LABEL]
+    apr_v = versions[APRIL_LABEL]
+    assert oct_v["effective_end_date"] == "2026-03-31", (
+        f"October release should end 2026-03-31, got {oct_v['effective_end_date']!r}"
+    )
+    assert apr_v["effective_end_date"] == "2026-09-30"
+    # No overlap: October ends before April starts
+    assert oct_v["effective_end_date"] < apr_v["effective_start_date"]
+
+
+def test_legacy_label_migrates_to_october(client, monkeypatch):
+    """A pre-correction deployment stored the October release with
+    the legacy label 'ICD-10-CM FY2026' and effective_end=None. The
+    next sync must rename that row in place and set a bounded end
+    date — not create a duplicate."""
+    import app.services.clinical_coding.ingest as ingest
+    monkeypatch.setattr(ingest, "_fixture_for", _pick_fixture)
+    from app.services.clinical_coding import run_sync
+
+    # 1. Simulate the legacy state: insert a row with the old label
+    #    + open-ended effective_end via the service's current writer.
+    import sqlalchemy as _sa
+    from app.db import engine, transaction
+    with transaction() as conn:
+        conn.execute(
+            _sa.text(
+                "INSERT INTO icd10cm_versions "
+                "(version_label, source_authority, source_url, release_date, "
+                "effective_start_date, effective_end_date, is_active, "
+                "manifest_json, checksum_sha256, downloaded_at, parse_status) "
+                "VALUES ('ICD-10-CM FY2026', 'CMS', 'http://legacy/', "
+                "'2025-06-20', '2025-10-01', NULL, 1, '[]', "
+                "'deadbeef00000000000000000000000000000000000000000000000000000000', "
+                "CURRENT_TIMESTAMP, 'ready')"
+            )
+        )
+
+    # 2. Run sync for the corrected October label. The pre-step should
+    #    rename the legacy row and drop the open-ended window.
+    result = run_sync(version_label=OCTOBER_LABEL, allow_network=False)
+    assert result["status"] in {"ready", "skipped_already_ready"}
+
+    # 3. There must be exactly one row with either label, and it must
+    #    carry the corrected window.
+    r = client.get("/admin/clinical-coding/audit", headers=ADMIN1)
+    assert r.status_code == 200
+    labels = [v["version_label"] for v in r.json()["versions"]]
+    assert "ICD-10-CM FY2026" not in labels, (
+        "legacy label must not survive after sync"
+    )
+    oct_row = next(
+        v for v in r.json()["versions"] if v["version_label"] == OCTOBER_LABEL
+    )
+    assert oct_row["effective_end_date"] == "2026-03-31"

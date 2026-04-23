@@ -24,9 +24,12 @@ Below 1180 px the layout stacks to a single column.
 
 ## Persistent labels (always visible)
 
-- Version label: `ICD-10-CM FY2026`
+- Version label: e.g. `ICD-10-CM FY2026 (October 2025)` or `ICD-10-CM FY2026 (April 2026 Update)`
 - Source authority: `CMS` (or `CMS (local fixture)`)
-- Effective window: `2025-10-01 → open`
+- Effective window: the resolved release's bounded window, e.g.
+  `2025-10-01 → 2026-03-31` for the October release or
+  `2026-04-01 → 2026-09-30` for the April update. Windows are never
+  "open" once the superseding release is loaded.
 - Last sync: local-formatted datetime from `downloaded_at`
 
 Source-attribution also appears at the foot of every code-detail

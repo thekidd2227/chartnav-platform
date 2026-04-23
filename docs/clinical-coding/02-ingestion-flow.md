@@ -13,7 +13,18 @@ Current catalog (extend as new releases publish):
 | Label | Authority | Effective | Source URL |
 |-------|-----------|-----------|------------|
 | ICD-10-CM FY2025 | CMS | 2024-10-01 → 2025-09-30 | `https://www.cms.gov/files/zip/2025-code-descriptions-tabular-order.zip` |
-| ICD-10-CM FY2026 | CMS | 2025-10-01 → open | `https://www.cms.gov/files/zip/2026-code-descriptions-tabular-order.zip` |
+| ICD-10-CM FY2026 (October 2025) | CMS | 2025-10-01 → 2026-03-31 | `https://www.cms.gov/files/zip/2026-code-descriptions-tabular-order.zip` |
+| ICD-10-CM FY2026 (April 2026 Update) | CMS | 2026-04-01 → 2026-09-30 | operator-confirmed at sync time (CMS publishes the zip URL when the update ships) |
+
+### Why two rows for FY2026
+
+CDC/NCHS/CMS publishes ICD-10-CM on a fiscal-year cycle starting
+each October 1, with a mid-year addendum effective the following
+April 1. The October release is **superseded** on April 1 — not
+extended indefinitely. Treating the October release as open-ended
+silently maps April-1-or-later encounters to the outdated code set
+and hides any newly-added codes. The two-row model preserves the
+correct effective window per date of service.
 
 These are the stable CMS mirror URLs. The CDC/NCHS FTP paths
 (`ftp.cdc.gov/pub/Health_Statistics/NCHS/Publications/ICD10CM/`)

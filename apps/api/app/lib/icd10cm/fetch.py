@@ -60,14 +60,35 @@ CDC_NCHS_RELEASE_SOURCES: list[dict] = [
         "effective_end": "2025-09-30",
         "primary_order_file": "icd10cm-order-2025.txt",
     },
+    # FY2026 ships in TWO parts per CDC/NCHS/CMS:
+    #   October 1, 2025 release     — valid through 2026-03-31
+    #   April 1, 2026 update        — valid 2026-04-01 through 2026-09-30
+    # The April update adds mid-year codes; the October release is
+    # superseded on April 1, NOT open-ended. Treating the October
+    # release as open-ended silently maps April-1-or-later encounters
+    # to the outdated code set and hides any newly-added codes.
     {
-        "version_label": "ICD-10-CM FY2026",
+        "version_label": "ICD-10-CM FY2026 (October 2025)",
         "source_authority": "CMS",
-        "source_url": "https://www.cms.gov/files/zip/2026-code-descriptions-tabular-order-updated-02-01-2025.zip",
+        "source_url": "https://www.cms.gov/files/zip/2026-code-descriptions-tabular-order.zip",
         "release_date": "2025-06-20",
         "effective_start": "2025-10-01",
-        "effective_end": None,
+        "effective_end": "2026-03-31",
         "primary_order_file": "icd10cm-order-2026.txt",
+        "legacy_labels": ["ICD-10-CM FY2026"],
+    },
+    {
+        "version_label": "ICD-10-CM FY2026 (April 2026 Update)",
+        "source_authority": "CMS",
+        # CMS publishes mid-year updates under a URL operators confirm
+        # at download time; the exact zip name is not stable before
+        # publication. The operator overrides this URL via the admin
+        # sync body or by pre-staging the raw artifacts.
+        "source_url": "https://www.cms.gov/medicare/coding-billing/icd-10-codes/2026-icd-10-cm",
+        "release_date": "2026-04-01",
+        "effective_start": "2026-04-01",
+        "effective_end": "2026-09-30",
+        "primary_order_file": "icd10cm-order-2026-april.txt",
     },
 ]
 

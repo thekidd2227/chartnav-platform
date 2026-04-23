@@ -42,14 +42,20 @@ RAW_ROOT.mkdir(parents=True, exist_ok=True)
 def _find_source(version_label: str | None) -> dict:
     """Pick the source to ingest. If no label is given, we pick the
     release whose effective window contains today; otherwise we fall
-    back to the newest release in the list."""
+    back to the newest release in the list.
+
+    Legacy labels (e.g. the pre-correction "ICD-10-CM FY2026") route
+    to the October 2025 release, which carries that label in its
+    ``legacy_labels`` list."""
     if version_label:
         for s in CDC_NCHS_RELEASE_SOURCES:
             if s["version_label"] == version_label:
                 return s
+            if version_label in s.get("legacy_labels", []):
+                return s
         raise ValueError(f"unknown version_label: {version_label}")
     today = date.today().isoformat()
-    # Prefer the release whose [effective_start, effective_end) wraps today.
+    # Prefer the release whose [effective_start, effective_end] wraps today.
     for s in CDC_NCHS_RELEASE_SOURCES:
         start = s["effective_start"]
         end = s.get("effective_end") or "9999-12-31"
@@ -60,9 +66,44 @@ def _find_source(version_label: str | None) -> dict:
                   key=lambda s: s["effective_start"])[-1]
 
 
+def _rename_legacy_rows(conn, source: dict) -> None:
+    """Before looking up or creating an icd10cm_versions row for
+    ``source``, migrate any legacy row whose label we've superseded.
+
+    Example: pre-correction deployments stored the October 2025
+    release as ``"ICD-10-CM FY2026"`` with ``effective_end_date = NULL``.
+    The corrected source is ``"ICD-10-CM FY2026 (October 2025)"`` with
+    ``effective_end_date = '2026-03-31'``. This function rewrites
+    the row in place so downstream idempotency checks still hit it.
+    """
+    legacy = source.get("legacy_labels") or []
+    if not legacy:
+        return
+    for legacy_label in legacy:
+        conn.execute(
+            text(
+                "UPDATE icd10cm_versions "
+                "SET version_label = :new_label, "
+                "    effective_start_date = :start, "
+                "    effective_end_date = :end, "
+                "    source_url = :src "
+                "WHERE version_label = :old_label"
+            ),
+            {
+                "new_label": source["version_label"],
+                "start": source["effective_start"],
+                "end": source.get("effective_end"),
+                "src": source["source_url"],
+                "old_label": legacy_label,
+            },
+        )
+
+
 def _fixture_for(source: dict) -> Path | None:
     """Return the local fixture path for this source if one exists.
-    Fixtures live under `tests/fixtures/icd10cm/`."""
+    Fixtures live under `tests/fixtures/icd10cm/` keyed by
+    ``source["primary_order_file"]``. A missing fixture returns None
+    and the caller falls through to a hard network requirement."""
     name = source["primary_order_file"]
     candidate = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "icd10cm" / name
     return candidate if candidate.exists() else None
@@ -103,6 +144,10 @@ def run_sync(
         )
 
     try:
+        # Migrate any legacy-labeled rows before idempotency check
+        with transaction() as conn:
+            _rename_legacy_rows(conn, source)
+
         # Step 2+3 — fetch (with fixture fallback)
         manifest = fetch_release(
             source,
@@ -146,7 +191,11 @@ def run_sync(
                         "downloaded_at = :now, "
                         "checksum_sha256 = :cs, "
                         "manifest_json = :mf, "
-                        "source_url = :src "
+                        "source_url = :src, "
+                        "source_authority = :auth, "
+                        "release_date = :rdate, "
+                        "effective_start_date = :estart, "
+                        "effective_end_date = :eend "
                         "WHERE id = :id"
                     ),
                     {
@@ -154,6 +203,10 @@ def run_sync(
                         "cs": manifest.checksum_sha256,
                         "mf": manifest.to_json(),
                         "src": manifest.source_url,
+                        "auth": manifest.source_authority,
+                        "rdate": manifest.release_date,
+                        "estart": manifest.effective_start,
+                        "eend": manifest.effective_end,
                         "id": existing["id"],
                     },
                 )

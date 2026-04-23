@@ -39,6 +39,7 @@ buyer or auditor could reasonably encounter it.
 |---|---|
 | CDC changes the order-file column layout | Committed fixture matches the real FY2026 column layout byte-for-byte; parser tests will fail on any drift before production sees it. |
 | Stale release in production | Admin audit surface shows `downloaded_at` + checksum; sync is rerunnable and idempotent. |
+| Mid-year update (e.g. April addendum) silently masked | Each fiscal-year release is stored as two rows — the October release with `effective_end_date = 2026-03-31` and the April update with `effective_start_date = 2026-04-01`. A date-of-service query always resolves to exactly one release. Neither window is open-ended once both are loaded. |
 | Operator trusts a fixture-derived release | Version row is labeled `source_authority="CMS (local fixture)"` whenever the fixture supplied the file; UI renders the authority string literally. |
 | Advisory hint mistaken for payer policy | Hint rows carry a `source_reference` column; hints that reference CMS LCDs explicitly say "verify current payer policy". |
 | User deletes another user's favorite | Favorite routes filter by `user_id = caller.user_id`; no cross-user mutation is possible. |

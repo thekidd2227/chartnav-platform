@@ -1,0 +1,124 @@
+{
+  "schema_version": "clinical-coding/proof@1",
+  "generated_at": "2026-04-23T23:16:20.640796Z",
+  "effective_date_boundaries": {
+    "october_release_ends": "2026-03-31",
+    "april_release_starts": "2026-04-01",
+    "april_release_ends": "2026-09-30"
+  },
+  "active_version": {
+    "id": 1,
+    "version_label": "ICD-10-CM FY2026 (October 2025)",
+    "source_authority": "CMS",
+    "source_url": "https://www.cms.gov/files/zip/2026-code-descriptions-tabular-order.zip",
+    "release_date": "2025-06-20",
+    "effective_start_date": "2025-10-01",
+    "effective_end_date": "2026-03-31",
+    "parse_status": "ready",
+    "is_active": 1,
+    "checksum_sha256": "35b5cce13fb6928773e1fd41b231bcd8b34c8cc269a182ca986a342b5009969d"
+  },
+  "resolution_cases": {
+    "dos_2026-03-15": {
+      "id": 1,
+      "version_label": "ICD-10-CM FY2026 (October 2025)",
+      "source_authority": "CMS",
+      "source_url": "https://www.cms.gov/files/zip/2026-code-descriptions-tabular-order.zip",
+      "release_date": "2025-06-20",
+      "effective_start_date": "2025-10-01",
+      "effective_end_date": "2026-03-31",
+      "parse_status": "ready",
+      "is_active": 1,
+      "checksum_sha256": "35b5cce13fb6928773e1fd41b231bcd8b34c8cc269a182ca986a342b5009969d"
+    },
+    "dos_2026-04-15": {
+      "id": 2,
+      "version_label": "ICD-10-CM FY2026 (April 2026 Update)",
+      "source_authority": "CMS (local fixture)",
+      "source_url": "https://www.cms.gov/medicare/coding-billing/icd-10-codes/2026-icd-10-cm",
+      "release_date": "2026-04-01",
+      "effective_start_date": "2026-04-01",
+      "effective_end_date": "2026-09-30",
+      "parse_status": "ready",
+      "is_active": 0,
+      "checksum_sha256": "c44b10b749fe6da7e2c936ad6866cb2eb85f930822794bd6ab3f67ca8fd96130"
+    }
+  },
+  "ingestion_results": [
+    {
+      "version_id": 1,
+      "version_label": "ICD-10-CM FY2026 (October 2025)",
+      "status": "ready",
+      "records_parsed": 40,
+      "raw_dir": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/apps/api/data/icd10cm/raw/ICD-10-CM_FY2026_(October_2025)",
+      "checksum_sha256": "35b5cce13fb6928773e1fd41b231bcd8b34c8cc269a182ca986a342b5009969d",
+      "job_id": 1
+    },
+    {
+      "version_id": 2,
+      "version_label": "ICD-10-CM FY2026 (April 2026 Update)",
+      "status": "ready",
+      "records_parsed": 26,
+      "raw_dir": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/apps/api/data/icd10cm/raw/ICD-10-CM_FY2026_(April_2026_Update)",
+      "checksum_sha256": "c44b10b749fe6da7e2c936ad6866cb2eb85f930822794bd6ab3f67ca8fd96130",
+      "job_id": 2
+    }
+  ],
+  "search_probe_glaucoma": {
+    "march_release": [
+      {
+        "code": "H40.001",
+        "short_description": "Preglaucoma unspecified right eye"
+      },
+      {
+        "code": "H40.002",
+        "short_description": "Preglaucoma unspecified left eye"
+      },
+      {
+        "code": "H40.003",
+        "short_description": "Preglaucoma unspecified bilateral"
+      }
+    ],
+    "april_release": [
+      {
+        "code": "H40.001",
+        "short_description": "Preglaucoma unspecified right eye"
+      },
+      {
+        "code": "H40.002",
+        "short_description": "Preglaucoma unspecified left eye"
+      },
+      {
+        "code": "H40.1110",
+        "short_description": "Prim open-angle glaucoma right eye mild stage"
+      }
+    ]
+  },
+  "addendum_code_check": {
+    "code": "H35.8A1",
+    "present_in_april": true,
+    "present_in_october": false
+  },
+  "recent_sync_jobs": [
+    {
+      "id": 2,
+      "job_type": "scheduled",
+      "status": "succeeded",
+      "version_id": 2,
+      "records_parsed": 26,
+      "completed_at": "2026-04-23 23:16:20.636525"
+    },
+    {
+      "id": 1,
+      "job_type": "scheduled",
+      "status": "succeeded",
+      "version_id": 1,
+      "records_parsed": 40,
+      "completed_at": "2026-04-23 23:16:20.480834"
+    }
+  ],
+  "assertions": {
+    "passed": true,
+    "failures": []
+  }
+}
