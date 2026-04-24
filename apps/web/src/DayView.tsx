@@ -10,6 +10,7 @@
 // handler (same one the list uses).
 
 import { Encounter } from "./api";
+import { patientDisplayName, formatProvider } from "./labels";
 
 interface Props {
   encounters: Encounter[];
@@ -19,11 +20,11 @@ interface Props {
 }
 
 const LANES: { status: string; title: string }[] = [
-  { status: "scheduled", title: "Waiting / arrived" },
-  { status: "in_progress", title: "In workup" },
+  { status: "scheduled", title: "Scheduled" },
+  { status: "in_progress", title: "In progress" },
   { status: "draft_ready", title: "Draft ready" },
-  { status: "review_needed", title: "Review needed" },
-  { status: "completed", title: "Completed" },
+  { status: "review_needed", title: "Ready for review" },
+  { status: "completed", title: "Signed" },
 ];
 
 function sameDay(a: Date, b: Date): boolean {
@@ -164,10 +165,10 @@ export function DayView({ encounters, date, onPick, onDateChange }: Props) {
                   >
                     <span className="dayview__card__main">
                       <span className="dayview__card__name">
-                        {e.patient_name ?? e.patient_identifier}
+                        {patientDisplayName(e)}
                       </span>
                       <span className="dayview__card__meta">
-                        {e.provider_name}
+                        {formatProvider(e.provider_name)}
                       </span>
                     </span>
                     <span className="dayview__card__time">

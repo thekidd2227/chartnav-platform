@@ -6875,3 +6875,279 @@ def cancel_reminder(
         {"id": reminder_id},
     )
     return _reminder_row_to_dict(row)
+
+
+# =====================================================================
+# Phase 64 — Clinical Coding Intelligence (ICD-10-CM)
+# =====================================================================
+#
+# Advisory ICD-10-CM search + versioning surface for the clinician
+# charting workspace and the biller/coder review UI. SOURCE OF TRUTH
+# for diagnosis codes is CDC/NCHS; the official release bundles are
+# downloaded, retained as raw artifacts for audit, parsed into
+# icd10cm_codes, and versioned by effective date.
+#
+# Safety posture (also surfaced in the UI):
+#  * no autonomous coding
+#  * no reimbursement guarantees
+#  * no payer-policy certainty
+#  * advisory workflow support only — the clinician owns the chart
+#
+# Routes below are grouped under /clinical-coding (read paths) and
+# /admin/clinical-coding (sync + audit paths).
+
+from app.services import clinical_coding as _cc
+
+
+def _require_ready_version_for_date(date_of_service: Optional[str]) -> dict:
+    v = _cc.resolve_version_for_date(date_of_service) if date_of_service \
+        else _cc.active_version()
+    if not v:
+        raise _err(
+            "no_icd10cm_version_loaded",
+            "No ICD-10-CM version has been ingested yet. Run the admin sync.",
+            503,
+        )
+    return v
+
+
+@router.get("/clinical-coding/version/active")
+def clinical_coding_version_active(
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    v = _cc.active_version()
+    if not v:
+        raise _err(
+            "no_icd10cm_version_loaded",
+            "No ICD-10-CM version has been ingested yet.",
+            503,
+        )
+    return v
+
+
+@router.get("/clinical-coding/version/by-date")
+def clinical_coding_version_by_date(
+    dateOfService: str = Query(..., min_length=10, max_length=10),
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    v = _cc.resolve_version_for_date(dateOfService)
+    if not v:
+        raise _err(
+            "no_icd10cm_version_loaded",
+            "No ICD-10-CM version has been ingested yet.",
+            503,
+        )
+    return v
+
+
+@router.get("/clinical-coding/search")
+def clinical_coding_search(
+    q: str = Query(..., min_length=1, max_length=120),
+    dateOfService: Optional[str] = Query(default=None),
+    limit: int = Query(default=25, ge=1, le=100),
+    specialtyTag: Optional[str] = Query(default=None),
+    billableOnly: bool = Query(default=False),
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    v = _require_ready_version_for_date(dateOfService)
+    results = _cc.search_codes(
+        q, version_id=int(v["id"]), limit=limit,
+        specialty_tag=specialtyTag, billable_only=billableOnly,
+    )
+    return {
+        "version": {
+            "id": v["id"],
+            "version_label": v["version_label"],
+            "source_authority": v["source_authority"],
+            "source_url": v["source_url"],
+            "effective_start_date": v["effective_start_date"],
+            "effective_end_date": v["effective_end_date"],
+        },
+        "query": q,
+        "limit": limit,
+        "results": results,
+        "result_count": len(results),
+    }
+
+
+@router.get("/clinical-coding/code/{code}")
+def clinical_coding_code_detail(
+    code: str,
+    dateOfService: Optional[str] = Query(default=None),
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    v = _require_ready_version_for_date(dateOfService)
+    detail = _cc.get_code_detail(code, version_id=int(v["id"]))
+    if not detail:
+        raise _err(
+            "code_not_found",
+            f"code {code!r} not present in {v['version_label']}",
+            404,
+        )
+    return {
+        "version": {
+            "id": v["id"],
+            "version_label": v["version_label"],
+            "source_authority": v["source_authority"],
+            "effective_start_date": v["effective_start_date"],
+            "effective_end_date": v["effective_end_date"],
+        },
+        "code": detail,
+    }
+
+
+@router.get("/clinical-coding/specialties")
+def clinical_coding_specialties(
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    return {
+        "specialties": _cc.ALL_SPECIALTY_TAGS,
+        "bundles": _cc.list_specialty_bundles(),
+    }
+
+
+@router.get("/clinical-coding/specialty/{tag}/codes")
+def clinical_coding_specialty_codes(
+    tag: str,
+    dateOfService: Optional[str] = Query(default=None),
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    if tag not in _cc.ALL_SPECIALTY_TAGS:
+        raise _err("unknown_specialty_tag",
+                   f"unknown specialty tag {tag!r}", 400)
+    v = _require_ready_version_for_date(dateOfService)
+    bundles = _cc.specialty_bundle_codes(tag)
+    # Expand each bundle pattern into concrete codes so the UI can
+    # render immediately without making a search round-trip per entry.
+    expanded: list[dict] = []
+    for b in bundles:
+        pattern = b["pattern"].replace(".", "").upper()
+        sql_like = pattern
+        rows = fetch_all(
+            "SELECT code, short_description, is_billable, specificity_flags "
+            "FROM icd10cm_codes WHERE version_id = :v "
+            "AND normalized_code LIKE :pat "
+            "AND is_billable = 1 "
+            "ORDER BY code LIMIT 30",
+            {"v": int(v["id"]), "pat": sql_like},
+        )
+        expanded.append({**b, "codes": rows})
+    return {
+        "version": {
+            "id": v["id"],
+            "version_label": v["version_label"],
+            "effective_start_date": v["effective_start_date"],
+            "effective_end_date": v["effective_end_date"],
+        },
+        "specialty_tag": tag,
+        "bundles": expanded,
+    }
+
+
+# --- Provider favorites -----------------------------------------------
+
+class ClinicalCodingFavoriteBody(BaseModel):
+    code: str = Field(..., min_length=1, max_length=16)
+    specialty_tag: Optional[str] = Field(default=None, max_length=32)
+    is_pinned: Optional[bool] = None
+    bump_usage: Optional[bool] = False
+
+
+@router.get("/clinical-coding/favorites")
+def clinical_coding_favorites_list(
+    caller: Caller = Depends(require_caller),
+) -> list[dict]:
+    return _cc.list_favorites(
+        user_id=caller.user_id,
+        organization_id=caller.organization_id,
+    )
+
+
+@router.post("/clinical-coding/favorites", status_code=status.HTTP_201_CREATED)
+def clinical_coding_favorites_upsert(
+    body: ClinicalCodingFavoriteBody,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    if caller.role not in {"admin", "clinician"}:
+        raise _err("role_forbidden",
+                   "admin or clinician only", 403)
+    if body.specialty_tag and body.specialty_tag not in _cc.ALL_SPECIALTY_TAGS:
+        raise _err("unknown_specialty_tag",
+                   f"unknown specialty tag {body.specialty_tag!r}", 400)
+    return _cc.upsert_favorite(
+        user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        code=body.code,
+        specialty_tag=body.specialty_tag,
+        is_pinned=body.is_pinned,
+        bump_usage=bool(body.bump_usage),
+    )
+
+
+@router.delete("/clinical-coding/favorites/{fav_id}",
+               status_code=status.HTTP_200_OK)
+def clinical_coding_favorites_delete(
+    fav_id: int,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    ok = _cc.remove_favorite(fav_id=fav_id, user_id=caller.user_id)
+    return {"deleted": bool(ok), "id": fav_id}
+
+
+# --- Admin: sync trigger, sync status, audit trail --------------------
+
+def _require_admin_role(caller: Caller) -> None:
+    if caller.role != "admin":
+        raise _err("role_forbidden", "admin only", 403)
+
+
+class ClinicalCodingSyncBody(BaseModel):
+    version_label: Optional[str] = Field(default=None, max_length=64)
+    allow_network: bool = True
+
+
+@router.post("/admin/clinical-coding/sync", status_code=status.HTTP_202_ACCEPTED)
+def clinical_coding_admin_sync(
+    body: ClinicalCodingSyncBody,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    _require_admin_role(caller)
+    try:
+        result = _cc.run_sync(
+            version_label=body.version_label,
+            triggered_by_user_id=caller.user_id,
+            allow_network=body.allow_network,
+        )
+    except Exception as e:
+        raise _err("sync_failed", f"{type(e).__name__}: {e}", 500)
+    return result
+
+
+@router.get("/admin/clinical-coding/sync/status")
+def clinical_coding_admin_sync_status(
+    limit: int = Query(default=10, ge=1, le=50),
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    _require_admin_role(caller)
+    return {
+        "active_version": _cc.active_version(),
+        "recent_jobs": _cc.list_sync_jobs(limit=limit),
+    }
+
+
+@router.get("/admin/clinical-coding/audit")
+def clinical_coding_admin_audit(
+    limit: int = Query(default=50, ge=1, le=500),
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    _require_admin_role(caller)
+    versions = fetch_all(
+        "SELECT id, version_label, source_authority, source_url, release_date, "
+        "effective_start_date, effective_end_date, is_active, parse_status, "
+        "checksum_sha256, downloaded_at, parsed_at, activated_at, created_at "
+        "FROM icd10cm_versions ORDER BY id DESC"
+    )
+    return {
+        "versions": versions,
+        "recent_jobs": _cc.list_sync_jobs(limit=limit),
+    }

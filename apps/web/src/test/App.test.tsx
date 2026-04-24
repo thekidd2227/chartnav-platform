@@ -219,7 +219,7 @@ describe("ChartNav frontend", () => {
     await user.click(await screen.findByTestId("enc-row-1"));
 
     await screen.findByTestId("encounter-detail");
-    expect(screen.getByTestId("detail-status")).toHaveTextContent("in progress");
+    expect(screen.getByTestId("detail-status")).toHaveTextContent("In progress");
     // Timeline shows our mocked event_data
     expect(screen.getByText(/encounter_created/)).toBeInTheDocument();
   });

@@ -53,6 +53,16 @@ import { DayView } from "./DayView";
 import { Calendar, addMonths, startOfMonth } from "./Calendar";
 import { RemindersPanel } from "./RemindersPanel";
 import { Reminder, listReminders } from "./api";
+import {
+  formatStatus,
+  formatLocation,
+  formatProvider,
+  formatRole,
+  nextActionFor,
+  patientDisplayName,
+  patientMrnSecondary,
+} from "./labels";
+import { ClinicalCodingPanel } from "./features/clinical-coding/ClinicalCodingPanel";
 import { WallDisplay } from "./WallDisplay";
 import { EncounterSlip } from "./EncounterSlip";
 // ROI wave 1 — operational queue + triage cards + role split.
@@ -105,10 +115,10 @@ export default function App() {
   const [cmdkOpen, setCmdkOpen] = useState(false);
   useCommandPaletteShortcut(() => setCmdkOpen(true));
 
-  const [view, setView] = useState<"list" | "day" | "month">(() => {
+  const [view, setView] = useState<"list" | "day" | "month" | "coding">(() => {
     try {
       const v = localStorage.getItem("chartnav.view");
-      return v === "day" || v === "month" ? v : "list";
+      return v === "day" || v === "month" || v === "coding" ? v : "list";
     } catch { return "list"; }
   });
   useEffect(() => { try { localStorage.setItem("chartnav.view", view); } catch {} }, [view]);
@@ -390,7 +400,7 @@ export default function App() {
     setShowCreate(false);
     setBanner({
       kind: "ok",
-      msg: `Encounter #${created.id} created (${created.patient_identifier})`,
+      msg: `Visit created for ${patientDisplayName(created as any)} (Encounter #${created.id}).`,
     });
   };
 
@@ -612,6 +622,17 @@ export default function App() {
             >
               Month
             </button>
+            <button
+              type="button"
+              className="pref-picker__btn"
+              role="tab"
+              aria-pressed={view === "coding"}
+              data-testid="view-coding"
+              onClick={() => setView("coding")}
+              title="Clinical Coding Intelligence"
+            >
+              Coding
+            </button>
           </div>
           <button
             type="button"
@@ -719,6 +740,7 @@ export default function App() {
             error={listError}
             selectedId={selectedId}
             onSelect={setSelectedId}
+            locations={locationsCache as any}
             bulkSelected={bulkSelected}
             onBulkToggle={(id) => {
               const key = String(id);
@@ -765,7 +787,12 @@ export default function App() {
               {banner.msg}
             </div>
           )}
-          {view === "month" ? (
+          {view === "coding" ? (
+            <ClinicalCodingPanel
+              identity={identity}
+              role={me?.role ?? "clinician"}
+            />
+          ) : view === "month" ? (
             <div className="month-view" data-testid="month-view">
               <Calendar
                 monthStart={monthStart}
@@ -812,6 +839,7 @@ export default function App() {
               onAddEvent={onAddEvent}
               onRefreshDetail={() => refreshDetail(selectedId)}
               onPrintSlip={(e) => setShowSlipFor(e)}
+              locations={locationsCache as any}
             />
           )}
         </section>
@@ -1054,6 +1082,7 @@ function EncounterList({
   onSelect,
   bulkSelected,
   onBulkToggle,
+  locations,
 }: {
   rows: Encounter[];
   loading: boolean;
@@ -1062,6 +1091,7 @@ function EncounterList({
   onSelect: (id: number | string) => void;
   bulkSelected?: Set<string>;
   onBulkToggle?: (id: number | string) => void;
+  locations: { id: number; name: string }[];
 }) {
   if (loading && rows.length === 0)
     return (
@@ -1118,16 +1148,21 @@ function EncounterList({
           )}
           <div className="enc-card__body">
             <div className="enc-card__top">
-              <span className="enc-row__pid enc-card__id">
-                #{e.id} · {e.patient_identifier}
-              </span>
               <span className="enc-row__name enc-card__name">
-                {e.patient_name ?? "—"}
+                {patientDisplayName(e)}
+              </span>
+              <span
+                className="enc-row__pid enc-card__id"
+                title={`Encounter #${e.id}`}
+              >
+                {patientMrnSecondary(e) || `Encounter #${e.id}`}
               </span>
             </div>
             <div className="enc-card__meta">
-              <span className="enc-row__provider">{e.provider_name}</span>
-              {e.location_id != null && <span>· Loc #{e.location_id}</span>}
+              <span className="enc-row__provider">{formatProvider(e.provider_name)}</span>
+              {e.location_id != null && (
+                <span>· {formatLocation(e.location_id, locations)}</span>
+              )}
               {e._source && e._source !== "chartnav" && (
                 <span className="enc-card__src" title={`source=${e._source}`}>
                   · {String(e._source)}
@@ -1143,7 +1178,7 @@ function EncounterList({
           <div className="enc-card__pills">
             <ReadinessBadge r={r} />
             <span className="status-pill" data-status={e.status}>
-              {e.status.replace(/_/g, " ")}
+              {formatStatus(e.status)}
             </span>
           </div>
         </div>
@@ -1164,6 +1199,7 @@ function EncounterDetail({
   onAddEvent,
   onRefreshDetail,
   onPrintSlip,
+  locations,
 }: {
   loading: boolean;
   error: string | null;
@@ -1175,6 +1211,7 @@ function EncounterDetail({
   onAddEvent: (type: string, data: string) => Promise<void> | void;
   onRefreshDetail: () => void;
   onPrintSlip?: (e: Encounter) => void;
+  locations: { id: number; name: string }[];
 }) {
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
   const [pendingEvent, setPendingEvent] = useState(false);
@@ -1197,15 +1234,18 @@ function EncounterDetail({
     role && nativeEncounter ? allowedNextStatuses(role, encounter.status) : [];
   const eventAllowed = role ? canCreateEvent(role) : false;
 
+  const nextHint = nextActionFor(encounter.status);
   return (
     <div data-testid="encounter-detail">
       <div className="detail__head">
         <div>
-          <h2>
-            #{encounter.id} · {encounter.patient_name ?? encounter.patient_identifier}
-          </h2>
+          <h2>{patientDisplayName(encounter)}</h2>
           <div className="sub">
-            {encounter.patient_identifier} · {encounter.provider_name}
+            {[
+              patientMrnSecondary(encounter),
+              formatProvider(encounter.provider_name),
+              `Encounter #${encounter.id}`,
+            ].filter(Boolean).join(" · ")}
           </div>
         </div>
         <div className="detail__head-right">
@@ -1214,7 +1254,7 @@ function EncounterDetail({
             data-status={encounter.status}
             data-testid="detail-status"
           >
-            {encounter.status.replace(/_/g, " ")}
+            {formatStatus(encounter.status)}
           </span>
           <span
             className="source-chip"
@@ -1243,9 +1283,18 @@ function EncounterDetail({
         />
       )}
 
+      {nextHint && (
+        <p
+          className="detail__next-action subtle-note"
+          data-testid="detail-next-action"
+        >
+          <strong>Next:</strong> {nextHint}
+        </p>
+      )}
+
       <dl className="detail__facts">
-        <div><dt>Organization</dt><dd>#{encounter.organization_id}</dd></div>
-        <div><dt>Location</dt><dd>#{encounter.location_id}</dd></div>
+        <div><dt>Clinic</dt><dd>{formatLocation(encounter.location_id, locations)}</dd></div>
+        <div><dt>Provider</dt><dd>{formatProvider(encounter.provider_name)}</dd></div>
         <div><dt>Scheduled</dt><dd>{fmt(encounter.scheduled_at)}</dd></div>
         <div><dt>Started</dt><dd>{fmt(encounter.started_at)}</dd></div>
         <div><dt>Completed</dt><dd>{fmt(encounter.completed_at)}</dd></div>
@@ -1253,7 +1302,7 @@ function EncounterDetail({
       </dl>
 
       <section className="section">
-        <h3>Allowed transitions ({role ?? "—"})</h3>
+        <h3>Move this visit forward ({formatRole(role)})</h3>
         {nextStatuses.length ? (
           <div className="actions" data-testid="transitions">
             {nextStatuses.map((s) => (
@@ -1271,15 +1320,14 @@ function EncounterDetail({
                   }
                 }}
               >
-                {pendingStatus === s ? "…" : `Move to ${s.replace(/_/g, " ")}`}
+                {pendingStatus === s ? "…" : `Move to ${formatStatus(s)}`}
               </button>
             ))}
           </div>
         ) : (
           <div className="subtle-note">
-            No transitions available from <code>{encounter.status}</code> for role{" "}
-            <code>{role}</code>. (The backend is the source of truth — it will
-            reject anything it disallows.)
+            No next step available from <strong>{formatStatus(encounter.status)}</strong> for{" "}
+            <strong>{formatRole(role)}</strong>. Ask an admin if you expected an action here.
           </div>
         )}
       </section>

@@ -1,0 +1,26 @@
+00001 H40     0 Glaucoma                                                     Glaucoma
+00002 H4000   0 Preglaucoma unspecified                                      Preglaucoma, unspecified
+00003 H40001  1 Preglaucoma unspecified right eye                            Preglaucoma, unspecified, right eye
+00004 H40002  1 Preglaucoma unspecified left eye                             Preglaucoma, unspecified, left eye
+00005 H4011   0 Primary open-angle glaucoma                                  Primary open-angle glaucoma
+00006 H401110 1 Prim open-angle glaucoma right eye mild stage                Primary open-angle glaucoma, right eye, mild stage
+00007 H401120 1 Prim open-angle glaucoma right eye moderate stg              Primary open-angle glaucoma, right eye, moderate stage
+00008 H35     0 Other retinal disorders                                      Other retinal disorders
+00009 H353    0 Degeneration of macula and posterior pole                    Degeneration of macula and posterior pole of retina
+00010 H3530   1 Unspecified macular degeneration                             Unspecified macular degeneration
+00011 H25     0 Age-related cataract                                         Age-related cataract
+00012 H25011  1 Cortical age-related cataract right eye                      Cortical age-related cataract, right eye
+00013 H25012  1 Cortical age-related cataract left eye                       Cortical age-related cataract, left eye
+00014 H16     0 Keratitis                                                    Keratitis
+00015 H02     0 Other disorders of eyelid                                    Other disorders of eyelid
+00016 H024    0 Ptosis of eyelid                                             Ptosis of eyelid
+00017 H02401  1 Unspecified ptosis of right eyelid                           Unspecified ptosis of right eyelid
+00018 H02402  1 Unspecified ptosis of left eyelid                            Unspecified ptosis of left eyelid
+00019 Z0100   1 Enc exam eyes and vision no abn findings                     Encounter for examination of eyes and vision without abnormal findings
+00020 Z0101   1 Enc exam eyes and vision w abnormal findings                 Encounter for examination of eyes and vision with abnormal findings
+00021 H52     0 Disorders of refraction and accommodation                    Disorders of refraction and accommodation
+00022 H521    1 Myopia                                                       Myopia
+00023 E11     0 Type 2 diabetes mellitus                                     Type 2 diabetes mellitus
+00024 E113    0 Type 2 diabetes mellitus w ophthalmic compl                  Type 2 diabetes mellitus with ophthalmic complications
+00025 H358A1  1 Macular neovascularization right eye Apr2026                 Macular neovascularization (April 2026 addendum), right eye
+00026 H358A2  1 Macular neovascularization left eye Apr2026                  Macular neovascularization (April 2026 addendum), left eye
