@@ -6,6 +6,7 @@
 // caller already has.
 
 import { Encounter, Location } from "./api";
+import { patientDisplayName, patientMrnSecondary } from "./labels";
 
 interface Props {
   encounter: Encounter;
@@ -47,10 +48,10 @@ export function EncounterSlip({ encounter, location, onClose }: Props) {
           <div className="slip" data-testid="encounter-slip">
             <div className="slip__head">
               <div>
-                <h2>
-                  #{encounter.id} · {encounter.patient_name ?? encounter.patient_identifier}
-                </h2>
-                <div className="subtle-note">{encounter.patient_identifier}</div>
+                <h2>{patientDisplayName(encounter)}</h2>
+                <div className="subtle-note">
+                  {patientMrnSecondary(encounter) || `Encounter #${encounter.id}`}
+                </div>
               </div>
               <div className="subtle-note" style={{ textAlign: "right" }}>
                 Printed {new Date().toLocaleString()}

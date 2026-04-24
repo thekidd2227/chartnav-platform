@@ -15,6 +15,7 @@
 
 import { useMemo } from "react";
 import { Encounter, Reminder } from "./api";
+import { patientDisplayName, formatProvider } from "./labels";
 
 interface Props {
   monthStart: Date;
@@ -188,9 +189,9 @@ export function Calendar({
                       className="calendar__chip calendar__chip--enc"
                       onClick={() => onSelectEncounter(Number(e.id))}
                       data-testid={`calendar-encounter-${e.id}`}
-                      title={`${e.patient_name ?? e.patient_identifier} · ${e.provider_name}`}
+                      title={`${patientDisplayName(e)} · ${formatProvider(e.provider_name)}`}
                     >
-                      📅 {e.patient_name ?? e.patient_identifier}
+                      📅 {patientDisplayName(e)}
                     </button>
                   ))}
                   {rems.slice(0, 3).map((r) => (

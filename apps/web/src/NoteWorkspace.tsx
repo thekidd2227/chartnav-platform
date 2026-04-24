@@ -1063,10 +1063,9 @@ export function NoteWorkspace({
   return (
     <div className="workspace" data-testid="note-workspace">
       <div className="workspace__header">
-        <h3>Encounter workspace</h3>
+        <h3>{patientDisplay} — visit workspace</h3>
         <div className="workspace__meta subtle-note">
-          Patient: <strong>{patientDisplay}</strong> · Provider:{" "}
-          <strong>{providerDisplay}</strong>
+          Provider: <strong>{providerDisplay}</strong>
         </div>
         <p className="workspace__trust subtle-note">
           <strong>Trust model:</strong>{" "}
