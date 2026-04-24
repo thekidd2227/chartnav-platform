@@ -14,7 +14,21 @@ Current catalog (extend as new releases publish):
 |-------|-----------|-----------|------------|
 | ICD-10-CM FY2025 | CMS | 2024-10-01 → 2025-09-30 | `https://www.cms.gov/files/zip/2025-code-descriptions-tabular-order.zip` |
 | ICD-10-CM FY2026 (October 2025) | CMS | 2025-10-01 → 2026-03-31 | `https://www.cms.gov/files/zip/2026-code-descriptions-tabular-order.zip` |
-| ICD-10-CM FY2026 (April 2026 Update) | CMS | 2026-04-01 → 2026-09-30 | operator-confirmed at sync time (CMS publishes the zip URL when the update ships) |
+| ICD-10-CM FY2026 (April 2026 Update) | CMS | 2026-04-01 → 2026-09-30 | catalog records the stable CMS ICD-10-CM hub (`https://www.cms.gov/medicare/coding-billing/icd-10-codes`); operator overrides the exact zip URL at sync time (see below) |
+
+### Operator override for the April update
+
+The exact CMS file URL for the April mid-year update is not stable before publication. Until the operator confirms the published zip:
+
+- the ingestion pipeline uses the committed fixture at
+  `apps/api/tests/fixtures/icd10cm/icd10cm-order-2026-april.txt` and labels
+  the resulting version accordingly (`source_authority = "CMS (local fixture)"`);
+- a real-data sync requires either (a) `POST /admin/clinical-coding/sync`
+  with `{"version_label": "ICD-10-CM FY2026 (April 2026 Update)", "allow_network": true}`
+  after the catalog `source_url` has been edited to the published zip, or
+  (b) pre-staging the raw artifacts into
+  `apps/api/data/icd10cm/raw/ICD-10-CM_FY2026_(April_2026_Update)/` and
+  re-running the sync with `allow_network=false`.
 
 ### Why two rows for FY2026
 

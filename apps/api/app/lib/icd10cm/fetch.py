@@ -80,11 +80,17 @@ CDC_NCHS_RELEASE_SOURCES: list[dict] = [
     {
         "version_label": "ICD-10-CM FY2026 (April 2026 Update)",
         "source_authority": "CMS",
-        # CMS publishes mid-year updates under a URL operators confirm
-        # at download time; the exact zip name is not stable before
-        # publication. The operator overrides this URL via the admin
-        # sync body or by pre-staging the raw artifacts.
-        "source_url": "https://www.cms.gov/medicare/coding-billing/icd-10-codes/2026-icd-10-cm",
+        # CMS publishes mid-year updates under a zip URL whose exact
+        # filename varies and is not announced before publication.
+        # The catalog records the stable CMS ICD-10-CM hub here so a
+        # click from an audit log lands on a real CMS page; the
+        # operator overrides this URL with the actual zip URL via
+        # the admin sync body, or pre-stages the raw artifacts under
+        # `apps/api/data/icd10cm/raw/ICD-10-CM_FY2026_(April_2026_Update)/`
+        # before running the sync. Until override, the ingestion
+        # pipeline uses the bundled fixture and labels the version
+        # accordingly.
+        "source_url": "https://www.cms.gov/medicare/coding-billing/icd-10-codes",
         "release_date": "2026-04-01",
         "effective_start": "2026-04-01",
         "effective_end": "2026-09-30",
