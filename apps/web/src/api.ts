@@ -2970,6 +2970,35 @@ export function cancelReminder(
   });
 }
 
+// ---------- Phase 2 item 5: Post-visit summary ----------
+
+export interface PostVisitSummaryGenerateResponse {
+  id: number;
+  encounter_id: number;
+  note_version_id: number;
+  expires_at: string;
+  read_link_token?: string | null;
+  _idempotent?: boolean;
+}
+
+export function generatePostVisitSummary(
+  email: string,
+  noteVersionId: number
+): Promise<PostVisitSummaryGenerateResponse> {
+  return request(`/note-versions/${noteVersionId}/post-visit-summary`, {
+    email,
+    method: "POST",
+  });
+}
+
+export function postVisitSummaryPdfUrl(summaryId: number): string {
+  return `${API_URL}/post-visit-summaries/${summaryId}/pdf`;
+}
+
+export function publicSummaryUrl(token: string): string {
+  return `/summary/${encodeURIComponent(token)}`;
+}
+
 // ---------- Phase 2 item 3: Digital intake ----------
 
 export interface IntakeTokenIssue {

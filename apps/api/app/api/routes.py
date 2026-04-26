@@ -7840,3 +7840,79 @@ def transition_message(
     except MessagingError as e:
         raise _err(e.code, "messaging error", e.http_status)
     return dict(out)
+
+
+# =====================================================================
+# Phase 2 item 5 — Minimum patient portal + post-visit summary.
+# Spec: docs/chartnav/closure/PHASE_B_Minimum_Patient_Portal_and_Post_Visit_Summary.md
+# =====================================================================
+
+@router.post("/note-versions/{note_version_id}/post-visit-summary",
+             status_code=201)
+def create_post_visit_summary(
+    note_version_id: int,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    if caller.role not in {"admin", "clinician"}:
+        raise _err(
+            "role_cannot_generate_summary",
+            f"role '{caller.role}' may not generate a post-visit summary",
+            403,
+        )
+    from app.services.post_visit_summary import (
+        PostVisitSummaryError, generate_for_note_version,
+    )
+    try:
+        out = generate_for_note_version(
+            note_version_id=note_version_id,
+            organization_id=caller.organization_id,
+        )
+    except PostVisitSummaryError as e:
+        raise HTTPException(
+            status_code=e.http_status,
+            detail={"error_code": e.code, "reason": "post-visit summary unavailable"},
+        )
+    return out
+
+
+@router.get("/post-visit-summaries/{summary_id}/pdf")
+def download_post_visit_summary_pdf(
+    summary_id: int,
+    caller: Caller = Depends(require_caller),
+) -> Response:
+    row = fetch_one(
+        "SELECT id, organization_id, pdf_bytes "
+        "FROM post_visit_summaries WHERE id = :id",
+        {"id": summary_id},
+    )
+    if not row or row["organization_id"] != caller.organization_id:
+        raise _err(
+            "post_visit_summary_not_found",
+            "no such post-visit summary in your organization",
+            404,
+        )
+    return Response(content=row["pdf_bytes"], media_type="application/pdf")
+
+
+@router.get("/summary/{token}", include_in_schema=True)
+def public_view_post_visit_summary(token: str) -> Response:
+    """Public unauthenticated read. Returns the summary as a PDF
+    (the simplest, most universally-readable surface we can ship
+    for Phase B). 404 unknown / 410 expired.
+
+    PHI hygiene: we never echo the token in the error body."""
+    from app.services.post_visit_summary import (
+        PostVisitSummaryError, lookup_by_token, stamp_first_view,
+    )
+    try:
+        row = lookup_by_token(token)
+    except PostVisitSummaryError as e:
+        raise HTTPException(
+            status_code=e.http_status,
+            detail={
+                "error_code": e.code,
+                "reason": "post-visit summary unavailable",
+            },
+        )
+    stamp_first_view(row["id"])
+    return Response(content=row["pdf_bytes"], media_type="application/pdf")
