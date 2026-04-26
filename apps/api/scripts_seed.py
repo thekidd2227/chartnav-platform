@@ -26,6 +26,12 @@ ORGS = [
             ("admin@chartnav.local", "ChartNav Admin", "admin", False),
             ("clin@chartnav.local", "Casey Clinician", "clinician", True),
             ("rev@chartnav.local", "Riley Reviewer", "reviewer", False),
+            # Phase A item 2 — RBAC role expansion. Tech and biller-coder
+            # seeded only in org1 to preserve the cross-org separation
+            # proof that org2 doesn't carry these roles.
+            # Spec: docs/chartnav/closure/PHASE_A_RBAC_and_Audit_Trail_Spec.md
+            ("tech@chartnav.local", "Taylor Technician", "technician", False),
+            ("billing@chartnav.local", "Bailey Biller", "biller_coder", False),
         ],
         "patients": [
             {

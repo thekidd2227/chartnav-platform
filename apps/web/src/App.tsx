@@ -569,11 +569,19 @@ export default function App() {
                   ? "Reviewer workspace — chart review"
                   : me.role === "clinician"
                   ? "Clinician workspace — charting"
+                  : me.role === "technician"
+                  ? "Technician workspace — pre-charting and vitals"
+                  : me.role === "biller_coder"
+                  ? "Biller / Coder workspace — codes and handoff export"
                   : "Admin workspace"
               }
             >
               {me.role === "front_desk"
                 ? "Front desk"
+                : me.role === "biller_coder"
+                ? "Biller / Coder"
+                : me.role === "technician"
+                ? "Technician"
                 : me.role.charAt(0).toUpperCase() + me.role.slice(1)}
             </span>
           )}

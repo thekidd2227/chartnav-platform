@@ -22,7 +22,15 @@ export class ApiError extends Error {
   }
 }
 
-export type Role = "admin" | "clinician" | "reviewer" | "front_desk";
+export type Role =
+  | "admin"
+  | "clinician"
+  | "reviewer"
+  | "front_desk"
+  // Phase A item 2 — RBAC role expansion.
+  // docs/chartnav/closure/PHASE_A_RBAC_and_Audit_Trail_Spec.md
+  | "technician"
+  | "biller_coder";
 
 export const ALL_ROLES: Role[] = ["admin", "clinician", "reviewer", "front_desk"];
 

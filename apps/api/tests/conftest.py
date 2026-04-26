@@ -78,6 +78,9 @@ CLIN1 = {"X-User-Email": "clin@chartnav.local"}
 REV1 = {"X-User-Email": "rev@chartnav.local"}
 ADMIN2 = {"X-User-Email": "admin@northside.local"}
 CLIN2 = {"X-User-Email": "clin@northside.local"}
+# Phase A item 2 — RBAC role expansion seed identities (org1 only).
+TECH1 = {"X-User-Email": "tech@chartnav.local"}
+BILLING1 = {"X-User-Email": "billing@chartnav.local"}
 
 
 @pytest.fixture()
