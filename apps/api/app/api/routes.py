@@ -374,6 +374,10 @@ def me(caller: Caller = Depends(require_caller)) -> dict:
         # physician approval. UI uses this to surface the dedicated
         # approval affordance and hide it for everyone else.
         "is_authorized_final_signer": bool(caller.is_authorized_final_signer),
+        # Phase 2 item 2: clinician-lead attribute. The UI uses this
+        # to render the Operations / admin-dashboard entry point for
+        # non-admin clinicians.
+        "is_lead": bool(getattr(caller, "is_lead", False)),
     }
 
 
@@ -7394,3 +7398,31 @@ def download_consult_letter_pdf(
             404,
         )
     return Response(content=row["pdf_bytes"], media_type="application/pdf")
+
+
+# =====================================================================
+# Phase 2 item 2 — Admin dashboard + operational metrics
+# Spec: docs/chartnav/closure/PHASE_B_Admin_Dashboard_and_Operational_Metrics.md
+# =====================================================================
+
+@router.get("/admin/dashboard/summary")
+def admin_dashboard_summary(
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    from app.authz import require_admin_or_clinician_lead
+    # Re-use the dependency body manually because we need the same
+    # caller for the org scoping below.
+    require_admin_or_clinician_lead(caller)
+    from app.services.admin_dashboard import summary
+    return summary(caller.organization_id)
+
+
+@router.get("/admin/dashboard/trend")
+def admin_dashboard_trend(
+    days: int = 14,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    from app.authz import require_admin_or_clinician_lead
+    require_admin_or_clinician_lead(caller)
+    from app.services.admin_dashboard import trend
+    return trend(caller.organization_id, days)

@@ -49,6 +49,10 @@ class Caller:
     # physician approval. Independent of role. Defaults to False so
     # no existing caller is silently granted the privilege.
     is_authorized_final_signer: bool = False
+    # Phase 2 item 2 — Admin Dashboard. Spec §3 requires that
+    # `clinician AND is_lead` callers may view the admin dashboard
+    # while general clinicians may not.
+    is_lead: bool = False
 
 
 # --- Error shape ---------------------------------------------------------
@@ -69,13 +73,14 @@ def _caller_from_row(row: dict) -> Caller:
         is_authorized_final_signer=bool(
             row.get("is_authorized_final_signer") or False
         ),
+        is_lead=bool(row.get("is_lead") or False),
     )
 
 
 def _user_by_email(email: str) -> Optional[Caller]:
     row = fetch_one(
         "SELECT id, email, full_name, role, organization_id, "
-        "is_authorized_final_signer "
+        "is_authorized_final_signer, is_lead "
         "FROM users WHERE email = :email",
         {"email": email},
     )

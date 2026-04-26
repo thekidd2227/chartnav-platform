@@ -33,6 +33,7 @@ import {
   updateEncounterStatus,
 } from "./api";
 import { AdminPanel } from "./AdminPanel";
+import { AdminDashboard } from "./AdminDashboard";
 import { NoteWorkspace } from "./NoteWorkspace";
 import { SEEDED_IDENTITIES, loadIdentity, saveIdentity } from "./identity";
 import {
@@ -94,6 +95,8 @@ export default function App() {
   const [banner, setBanner] = useState<Banner>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
+  // Phase 2 item 2 — Admin dashboard surface.
+  const [showAdminDashboard, setShowAdminDashboard] = useState(false);
 
   // Pagination
   const PAGE_SIZE = 25;
@@ -661,6 +664,15 @@ export default function App() {
               Admin
             </button>
           )}
+          {(canAdmin || (me && me.role === "clinician" && (me as any).is_lead)) && (
+            <button
+              className="btn"
+              onClick={() => setShowAdminDashboard(true)}
+              data-testid="open-admin-dashboard"
+            >
+              Operations
+            </button>
+          )}
           <PreferenceControls
             density={density}
             theme={theme}
@@ -843,6 +855,26 @@ export default function App() {
           me={me}
           onClose={() => setShowAdmin(false)}
         />
+      )}
+      {showAdminDashboard && me && (
+        <div
+          className="modal-shade"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Admin dashboard"
+        >
+          <div className="modal-card modal-card--wide">
+            <button
+              className="btn"
+              onClick={() => setShowAdminDashboard(false)}
+              data-testid="close-admin-dashboard"
+              style={{ float: "right" }}
+            >
+              Close
+            </button>
+            <AdminDashboard identity={identity} me={me} />
+          </div>
+        </div>
       )}
 
       <CommandPalette

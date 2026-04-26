@@ -152,6 +152,29 @@ def require_admin(caller: Caller = Depends(require_caller)) -> Caller:
     return caller
 
 
+def require_admin_or_clinician_lead(
+    caller: Caller = Depends(require_caller),
+) -> Caller:
+    """Phase 2 item 2 — Admin Dashboard.
+
+    Spec: PHASE_B_Admin_Dashboard_and_Operational_Metrics.md §3.
+
+    Allows `admin` callers and `clinician AND is_lead = True`. All
+    other roles (reviewer, front_desk, technician, biller_coder,
+    general clinician) are forbidden with the dashboard-specific
+    error code so frontends can render the documented "not
+    available for your role" empty state.
+    """
+    if caller.role == ROLE_ADMIN:
+        return caller
+    if caller.role == ROLE_CLINICIAN and getattr(caller, "is_lead", False):
+        return caller
+    raise forbidden(
+        "role_cannot_view_admin_dashboard",
+        f"role '{caller.role}' is not permitted; admin or clinician-lead required",
+    )
+
+
 def require_create_encounter(caller: Caller = Depends(require_caller)) -> Caller:
     if caller.role not in CAN_CREATE_ENCOUNTER:
         raise forbidden(

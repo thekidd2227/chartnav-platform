@@ -54,6 +54,9 @@ export interface Me {
   // Independent of role. When true, the user may type their exact
   // stored name to perform final approval on a signed note.
   is_authorized_final_signer: boolean;
+  // Phase 2 item 2 — clinician-lead attribute. Drives access to the
+  // admin dashboard for non-admin clinicians.
+  is_lead?: boolean;
 }
 
 export interface User {
@@ -2965,4 +2968,38 @@ export function cancelReminder(
     email,
     method: "DELETE",
   });
+}
+
+// ---------- Phase 2 item 2: Admin dashboard ----------
+
+export interface AdminDashboardSummary {
+  encounters_signed_today: number;
+  encounters_signed_7d: number;
+  median_sign_to_export_minutes_7d: number | null;
+  missing_flags_open: number;
+  missing_flag_resolution_rate_14d: number;
+  reminders_overdue: number;
+}
+
+export interface AdminDashboardTrendBucket {
+  date: string;
+  encounters_signed: number;
+  missing_flag_resolution_rate: number;
+}
+
+export interface AdminDashboardTrend {
+  series: AdminDashboardTrendBucket[];
+}
+
+export function getAdminDashboardSummary(
+  email: string
+): Promise<AdminDashboardSummary> {
+  return request("/admin/dashboard/summary", { email });
+}
+
+export function getAdminDashboardTrend(
+  email: string,
+  days: number = 14
+): Promise<AdminDashboardTrend> {
+  return request(`/admin/dashboard/trend?days=${days}`, { email });
 }
