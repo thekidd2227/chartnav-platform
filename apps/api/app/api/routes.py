@@ -7167,3 +7167,230 @@ def cancel_reminder(
         {"id": reminder_id},
     )
     return _reminder_row_to_dict(row)
+
+
+# =====================================================================
+# Phase 2 item 1 — Referring providers + consult letters
+# Spec: docs/chartnav/closure/PHASE_B_Referring_Provider_Communication.md
+# =====================================================================
+
+REFERRING_PROVIDER_COLUMNS = (
+    "id, organization_id, name, practice, npi_10, phone, fax, email, "
+    "created_at"
+)
+
+CONSULT_LETTER_COLUMNS = (
+    "id, organization_id, encounter_id, note_version_id, "
+    "referring_provider_id, rendered_pdf_storage_ref, delivery_status, "
+    "delivered_via, sent_at, created_at"
+)
+
+
+class ReferringProviderCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    practice: Optional[str] = Field(default=None, max_length=255)
+    npi_10: str = Field(..., min_length=10, max_length=10)
+    phone: Optional[str] = Field(default=None, max_length=64)
+    fax: Optional[str] = Field(default=None, max_length=64)
+    email: Optional[str] = Field(default=None, max_length=255)
+
+
+class ConsultLetterCreate(BaseModel):
+    referring_provider_id: int
+    delivery_channel: str = Field(default="download")
+
+
+@router.get("/referring-providers")
+def list_referring_providers(
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    rows = fetch_all(
+        f"SELECT {REFERRING_PROVIDER_COLUMNS} FROM referring_providers "
+        f"WHERE organization_id = :oid ORDER BY name",
+        {"oid": caller.organization_id},
+    )
+    return {"items": [dict(r) for r in rows]}
+
+
+@router.post("/referring-providers", status_code=201)
+def create_referring_provider(
+    body: ReferringProviderCreate,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    if caller.role not in {"admin", "clinician"}:
+        raise _err(
+            "role_forbidden",
+            "only admin or clinician may register referring providers",
+            403,
+        )
+    from app.services.consult_letters import is_valid_npi10
+    if not is_valid_npi10(body.npi_10):
+        raise _err(
+            "invalid_npi_10",
+            "NPI must be a 10-digit number passing the CMS Luhn check",
+            400,
+        )
+    existing = fetch_one(
+        "SELECT id FROM referring_providers "
+        "WHERE organization_id = :oid AND npi_10 = :npi",
+        {"oid": caller.organization_id, "npi": body.npi_10},
+    )
+    if existing:
+        raise _err(
+            "duplicate_referring_provider",
+            "a referring provider with that NPI already exists in your "
+            "organization",
+            409,
+        )
+    with transaction() as conn:
+        new_id = insert_returning_id(
+            conn,
+            "referring_providers",
+            {
+                "organization_id": caller.organization_id,
+                "name": body.name,
+                "practice": body.practice,
+                "npi_10": body.npi_10,
+                "phone": body.phone,
+                "fax": body.fax,
+                "email": body.email,
+            },
+        )
+    row = fetch_one(
+        f"SELECT {REFERRING_PROVIDER_COLUMNS} FROM referring_providers "
+        f"WHERE id = :id",
+        {"id": new_id},
+    )
+    return dict(row)
+
+
+@router.post("/note-versions/{note_version_id}/consult-letter", status_code=201)
+def create_consult_letter(
+    note_version_id: int,
+    body: ConsultLetterCreate,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Render (or return the existing) consult letter for a signed note
+    and a referring provider.
+
+    - 422 if the note version is not signed.
+    - 404 if the note version is in a different org.
+    - 404 if the referring provider is in a different org.
+    - 200 (idempotent) if a letter already exists for this
+      (note_version_id, referring_provider_id) pair.
+    - 400 on unknown delivery_channel.
+    """
+    from app.services.consult_letters import (
+        VALID_CHANNELS,
+        dispatch_delivery,
+        render_letter_pdf,
+    )
+    note = fetch_one(
+        "SELECT nv.id, nv.encounter_id, nv.signed_at, nv.note_text, "
+        "e.organization_id, e.patient_identifier, e.patient_name, "
+        "e.provider_name, e.scheduled_at, e.completed_at "
+        "FROM note_versions nv JOIN encounters e ON nv.encounter_id = e.id "
+        "WHERE nv.id = :id",
+        {"id": note_version_id},
+    )
+    if not note or note["organization_id"] != caller.organization_id:
+        raise _err(
+            "note_version_not_found",
+            "no such note version in your organization",
+            404,
+        )
+    if not note.get("signed_at"):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error_code": "note_not_signed",
+                "reason": "consult letter requires a signed note version",
+            },
+        )
+    if body.delivery_channel not in VALID_CHANNELS:
+        raise _err(
+            "invalid_delivery_channel",
+            f"delivery_channel must be one of {VALID_CHANNELS}",
+            400,
+        )
+    rp = fetch_one(
+        f"SELECT {REFERRING_PROVIDER_COLUMNS} FROM referring_providers "
+        f"WHERE id = :id",
+        {"id": body.referring_provider_id},
+    )
+    if not rp or rp["organization_id"] != caller.organization_id:
+        raise _err(
+            "referring_provider_not_found",
+            "no such referring provider in your organization",
+            404,
+        )
+
+    existing = fetch_one(
+        f"SELECT {CONSULT_LETTER_COLUMNS} FROM consult_letters "
+        f"WHERE note_version_id = :nv AND referring_provider_id = :rp",
+        {"nv": note_version_id, "rp": body.referring_provider_id},
+    )
+    if existing:
+        return {**dict(existing), "_idempotent": True}
+
+    org_row = fetch_one(
+        "SELECT name FROM organizations WHERE id = :id",
+        {"id": caller.organization_id},
+    ) or {"name": ""}
+    pdf_bytes = render_letter_pdf(
+        encounter=dict(note),
+        note_text=note.get("note_text") or "",
+        referring_provider=dict(rp),
+        org_name=org_row.get("name", ""),
+    )
+
+    delivery = dispatch_delivery(
+        channel=body.delivery_channel,
+        referring_provider=dict(rp),
+    )
+    storage_ref = (
+        f"consult-letters/{note_version_id}/{body.referring_provider_id}.pdf"
+    )
+    with transaction() as conn:
+        new_id = insert_returning_id(
+            conn,
+            "consult_letters",
+            {
+                "organization_id": caller.organization_id,
+                "encounter_id": note["encounter_id"],
+                "note_version_id": note_version_id,
+                "referring_provider_id": body.referring_provider_id,
+                "rendered_pdf_storage_ref": storage_ref,
+                "pdf_bytes": pdf_bytes,
+                "delivery_status": delivery["delivery_status"],
+                "delivered_via": delivery["delivered_via"],
+                "sent_at": delivery["sent_at"],
+            },
+        )
+    row = fetch_one(
+        f"SELECT {CONSULT_LETTER_COLUMNS} FROM consult_letters WHERE id = :id",
+        {"id": new_id},
+    )
+    return {
+        **dict(row),
+        "advisory": delivery["advisory"],
+    }
+
+
+@router.get("/consult-letters/{letter_id}/pdf")
+def download_consult_letter_pdf(
+    letter_id: int,
+    caller: Caller = Depends(require_caller),
+) -> Response:
+    row = fetch_one(
+        "SELECT id, organization_id, pdf_bytes "
+        "FROM consult_letters WHERE id = :id",
+        {"id": letter_id},
+    )
+    if not row or row["organization_id"] != caller.organization_id:
+        raise _err(
+            "consult_letter_not_found",
+            "no such consult letter in your organization",
+            404,
+        )
+    return Response(content=row["pdf_bytes"], media_type="application/pdf")
