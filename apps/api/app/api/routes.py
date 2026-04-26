@@ -800,6 +800,82 @@ def patch_encounter(
     return _load_encounter_for_caller(encounter_id, caller)
 
 
+# ---------- Phase A item 4 — PM/RCM continuity export ------------------
+#
+# Spec: docs/chartnav/closure/PHASE_A_PM_RCM_Continuity_and_Integration_Path.md
+#
+# Truth boundary repeated: NO PM/RCM integration ships in Phase A.
+# Nothing in this code path sends a claim. The export is a manual
+# handoff bundle the biller imports by hand.
+
+@router.post("/encounters/{encounter_id}/export", status_code=200)
+def export_encounter_handoff(
+    encounter_id: int,
+    fmt: str = "json",
+    caller: Caller = Depends(require_caller),
+) -> Any:
+    """Produce the canonical handoff payload for a signed encounter.
+
+    Query string ``fmt`` selects the response shape:
+      json (default) — JSON object
+      csv            — text/csv (single-row superbill)
+      pdf            — application/pdf (single-page minimal PDF)
+      manifest       — JSON object describing the available formats
+
+    Refused with 409 if the encounter is not signed yet.
+    Refused with 403 if the caller's role is not in CAN_EXPORT_HANDOFF.
+    """
+    from app.authz import CAN_EXPORT_HANDOFF
+    from app.services.handoff_export import (
+        build_handoff_payload,
+        render_csv,
+        render_pdf_body,
+        render_pdf_bytes,
+        get_signed_note_text,
+    )
+    encounter = _load_encounter_for_caller(encounter_id, caller)
+
+    if caller.role not in CAN_EXPORT_HANDOFF:
+        raise _err(
+            "role_cannot_export_handoff",
+            f"role '{caller.role}' may not export the PM/RCM handoff bundle",
+            403,
+        )
+
+    try:
+        payload = build_handoff_payload(encounter_id)
+    except ValueError as e:
+        # No signed-attestation row yet ⇒ encounter is not signed.
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error_code": "encounter_not_signed",
+                "reason": str(e),
+            },
+        )
+
+    if fmt == "csv":
+        body = render_csv(payload)
+        return Response(content=body, media_type="text/csv")
+    if fmt == "pdf":
+        text_body = render_pdf_body(payload, get_signed_note_text(encounter_id))
+        body = render_pdf_bytes(text_body)
+        return Response(content=body, media_type="application/pdf")
+    if fmt == "manifest":
+        return {
+            "encounter_id": encounter_id,
+            "schema_version": payload["schema_version"],
+            "formats": {
+                "json": f"/encounters/{encounter_id}/export?fmt=json",
+                "csv": f"/encounters/{encounter_id}/export?fmt=csv",
+                "pdf": f"/encounters/{encounter_id}/export?fmt=pdf",
+            },
+            "advisory_only": True,
+            "no_pm_rcm_integration": True,
+        }
+    return payload
+
+
 @router.get("/encounters/{encounter_id}/revisions")
 def list_encounter_revisions(
     encounter_id: int,

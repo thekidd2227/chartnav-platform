@@ -1,0 +1,26 @@
+{
+  "_truth_statement": "ChartNav-curated example of how the v1.0 canonical handoff payload maps to NextGen Practice Management's encounter+claim shape. NO certification, NO live integration. Phase A documentation only.",
+  "EncounterID": "enc_01HXXXXXXXX",
+  "EncounterDate": "2026-04-22",
+  "PracticeName": "Example Eye Associates",
+  "PracticeNPI": "1234567890",
+  "RenderingProvider": {
+    "FullName": "Jane Roe, MD",
+    "NPI": "9876543210"
+  },
+  "PatientMRN": "MRN-00042",
+  "PatientName": "Patient Sample",
+  "PlaceOfService": "11",
+  "ServiceLines": [
+    {"CPT": "92014", "Modifiers": [], "Units": 1},
+    {"CPT": "92134", "Modifiers": ["RT"], "Units": 1}
+  ],
+  "Diagnoses": [
+    {"ICD10": "H35.31", "Rank": 1}
+  ],
+  "Attestation": {
+    "SignedAt": "2026-04-22T19:02:14Z",
+    "Hash": "sha256:0123456789abcdef..."
+  },
+  "_advisory_only": true
+}

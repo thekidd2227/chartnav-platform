@@ -1,0 +1,28 @@
+{
+  "_truth_statement": "ChartNav-curated example of how the v1.0 canonical handoff payload maps to AdvancedMD's encounter shape. NO certification, NO live integration. Phase A documentation only.",
+  "encounter_external_id": "enc_01HXXXXXXXX",
+  "service_date": "2026-04-22",
+  "practice": {
+    "name": "Example Eye Associates",
+    "npi": "1234567890"
+  },
+  "rendering_provider": {
+    "name": "Jane Roe, MD",
+    "npi": "9876543210"
+  },
+  "patient": {
+    "chart_number": "MRN-00042",
+    "name": "Patient Sample"
+  },
+  "place_of_service": "11",
+  "procedures": [
+    {"cpt": "92014", "modifiers": [], "units": 1},
+    {"cpt": "92134", "modifiers": ["RT"], "units": 1}
+  ],
+  "diagnoses": ["H35.31"],
+  "attestation": {
+    "signed_at": "2026-04-22T19:02:14Z",
+    "snapshot_hash": "sha256:0123456789abcdef..."
+  },
+  "_advisory_only": true
+}
