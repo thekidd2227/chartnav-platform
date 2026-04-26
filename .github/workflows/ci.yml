@@ -276,3 +276,16 @@ jobs:
             docs/final/chartnav-workflow-state-machine-build.html
             docs/final/chartnav-workflow-state-machine-build.pdf
           if-no-files-found: error
+
+  # Phase 2 item 7 — pilot doc completeness lint.
+  pilot-docs:
+    name: Pilot docs — completeness lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run pilot-docs lint
+        run: python scripts/check_pilot_docs.py
