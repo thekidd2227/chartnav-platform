@@ -689,6 +689,146 @@ def list_encounter_events(
     return [_hydrate_event(r) for r in rows]
 
 
+# ---------- Phase A item 3 — encounter revisions + immutability ----------
+#
+# Spec: docs/chartnav/closure/PHASE_A_Structured_Charting_and_Attestation.md
+#
+# §4 Acceptance criteria:
+#   - GET /encounters/{id}/revisions  -> revision list, newest first
+#     Visible to admin / clinician (author or same-org) / reviewer
+#     same-org. Forbidden for front_desk and technician.
+#   - PATCH /encounters/{id} on a signed encounter -> 409 with
+#     {"error_code": "ENCOUNTER_LOCKED_AFTER_SIGN", "signed_at": ...}.
+
+class EncounterPatchBody(BaseModel):
+    """Mutable fields on the encounter row.
+
+    Phase A only exposes ``template_key`` here — the only structured
+    field on the row today. Future structured-fields work attaches via
+    the same gate. Identity/scheduling fields live on dedicated
+    routes and are not patchable through this surface.
+    """
+    template_key: Optional[str] = Field(default=None, max_length=64)
+    reason: Optional[str] = Field(default=None, max_length=512)
+
+
+@router.patch("/encounters/{encounter_id}")
+def patch_encounter(
+    encounter_id: int,
+    payload: EncounterPatchBody,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Patch an encounter's structured fields. Refused after sign."""
+    from app.services.encounter_audit import (
+        is_encounter_signed,
+        encounter_signed_at,
+        record_revision,
+    )
+    from app.services.encounter_templates import is_valid_template_key
+
+    encounter = _load_encounter_for_caller(encounter_id, caller)
+
+    # §4 immutability gate. The encounter is "signed" once any of its
+    # note_versions has a non-null signed_at OR the encounter status
+    # is `completed`. We surface the older of the two timestamps so
+    # auditors can reproduce the lock decision.
+    if is_encounter_signed(encounter):
+        with transaction() as conn:
+            sa_ts = encounter_signed_at(conn, encounter_id) or str(
+                encounter.get("completed_at") or encounter.get("created_at")
+            )
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error_code": "ENCOUNTER_LOCKED_AFTER_SIGN",
+                "reason": "this encounter has been signed; further "
+                          "structured-field mutations are refused",
+                "signed_at": sa_ts,
+            },
+        )
+
+    # Role gate: clinicians + admins can mutate template_key pre-sign.
+    # Front_desk + technician + biller_coder + reviewer cannot.
+    if caller.role not in {"admin", "clinician"}:
+        raise _err(
+            "role_cannot_patch_encounter",
+            f"role '{caller.role}' may not patch encounter structured fields",
+            403,
+        )
+
+    set_parts: list[str] = []
+    params: dict[str, Any] = {"id": encounter_id}
+    revisions_to_record: list[tuple[str, Any, Any]] = []
+
+    if payload.template_key is not None:
+        if not is_valid_template_key(payload.template_key):
+            raise _err(
+                "unknown_template_key",
+                "template_key must be one of: retina, glaucoma, "
+                "anterior_segment_cataract, general_ophthalmology",
+                400,
+            )
+        if payload.template_key != encounter.get("template_key"):
+            set_parts.append("template_key = :template_key")
+            params["template_key"] = payload.template_key
+            revisions_to_record.append(
+                ("template_key", encounter.get("template_key"), payload.template_key)
+            )
+
+    if not set_parts:
+        return encounter
+
+    with transaction() as conn:
+        conn.execute(
+            text(
+                f"UPDATE encounters SET {', '.join(set_parts)} "
+                "WHERE id = :id"
+            ),
+            params,
+        )
+        for field_path, before, after in revisions_to_record:
+            record_revision(
+                conn,
+                encounter_id=encounter_id,
+                actor_user_id=caller.user_id,
+                field_path=field_path,
+                before=before,
+                after=after,
+                reason=payload.reason,
+            )
+
+    return _load_encounter_for_caller(encounter_id, caller)
+
+
+@router.get("/encounters/{encounter_id}/revisions")
+def list_encounter_revisions(
+    encounter_id: int,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Return the encounter's edit history.
+
+    Visible to admin / clinician / reviewer same-org. Front desk +
+    technician + biller_coder are refused so the audit surface stays
+    confined to roles that read the clinical record.
+    """
+    _load_encounter_for_caller(encounter_id, caller)
+    if caller.role not in {"admin", "clinician", "reviewer"}:
+        raise _err(
+            "role_cannot_read_revisions",
+            f"role '{caller.role}' may not read encounter revisions",
+            403,
+        )
+    from app.services.encounter_audit import (
+        list_revisions_for_encounter,
+        get_attestation_for_encounter,
+    )
+    return {
+        "encounter_id": encounter_id,
+        "items": list_revisions_for_encounter(encounter_id),
+        "attestation": get_attestation_for_encounter(encounter_id),
+    }
+
+
 def _assert_encounter_write_allowed() -> None:
     """Refuse encounter-creation mutations honestly in integrated modes.
 
@@ -2430,6 +2570,30 @@ def sign_note(
                 "fa_status": initial_final_approval,
             },
         )
+
+        # Phase A item 3 — write the first-class attestation row so
+        # the attestation is auditable independently of the note body.
+        # docs/chartnav/closure/PHASE_A_Structured_Charting_and_Attestation.md
+        from app.services.encounter_audit import record_attestation
+        encounter_row = conn.execute(
+            text(
+                "SELECT id, organization_id, location_id, "
+                "patient_identifier, patient_name, provider_name, "
+                "status, scheduled_at, started_at, completed_at, "
+                "created_at, template_key "
+                "FROM encounters WHERE id = :eid"
+            ),
+            {"eid": int(note["encounter_id"])},
+        ).mappings().first()
+        if encounter_row:
+            record_attestation(
+                conn,
+                encounter_id=int(note["encounter_id"]),
+                encounter_snapshot=dict(encounter_row),
+                attested_by_user_id=caller.user_id,
+                typed_name=signer_display,
+                attestation_text=attestation,
+            )
 
     from app import audit as _audit
     _audit.record(
