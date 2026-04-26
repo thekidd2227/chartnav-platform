@@ -29,6 +29,20 @@ migrate: ## Apply Alembic migrations to the dev SQLite DB
 seed: ## Run the idempotent seed against the dev DB
 	cd $(API_DIR) && .venv/bin/python scripts_seed.py
 
+# Phase 2 item 6 — Demo environment + pilot demo seed.
+demo-seed: migrate seed ## Layer the deterministic pilot-demo seed on top of the standard seed
+	cd $(API_DIR) && .venv/bin/python scripts_seed_demo.py
+
+demo-up: ## Bring up the demo stack (SQLite-backed). Use demo-down to stop.
+	docker compose -f docker-compose.demo.yml up --build
+
+demo-down: ## Stop the demo stack.
+	docker compose -f docker-compose.demo.yml down
+
+# Phase 2 item 7 — pilot-docs lint.
+pilot-docs: ## Verify pilot doc completeness (no TBD/TODO/FIXME)
+	$(PY) scripts/check_pilot_docs.py
+
 test: ## Run the full pytest suite
 	cd $(API_DIR) && .venv/bin/pytest tests/ -v
 

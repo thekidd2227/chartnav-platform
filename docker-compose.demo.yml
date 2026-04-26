@@ -1,0 +1,43 @@
+# Phase 2 item 6 — Demo environment.
+#
+# Spec: docs/chartnav/closure/PHASE_B_Demo_Environment_and_Pilot_Scope.md
+#
+# Goal: a single command that brings up the API + a frontend dev
+# server backed by SQLite (no Postgres), with the pilot-demo seed
+# pre-loaded so the demo journey runs end-to-end.
+#
+# The compose file deliberately keeps SQLite as the persistence
+# layer. Production deployments (infra/docker/docker-compose.prod.yml)
+# wire Postgres; the demo file is for sales calls and pilot kickoff
+# previews — not for production.
+services:
+  api:
+    build: ./apps/api
+    image: chartnav-api:demo
+    environment:
+      DATABASE_URL: "sqlite:////data/chartnav-demo.db"
+      CHARTNAV_AUTH_MODE: "header"
+      CHARTNAV_RATE_LIMIT_PER_MINUTE: "0"
+    volumes:
+      - chartnav-demo-db:/data
+    ports:
+      - "8088:8000"
+    command: >
+      sh -c "
+        alembic upgrade head &&
+        python scripts_seed.py &&
+        python scripts_seed_demo.py &&
+        uvicorn app.main:app --host 0.0.0.0 --port 8000 --log-level warning
+      "
+  web:
+    build: ./apps/web
+    image: chartnav-web:demo
+    depends_on: [api]
+    environment:
+      VITE_API_URL: "http://localhost:8088"
+    ports:
+      - "5180:5173"
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"]
+
+volumes:
+  chartnav-demo-db:
