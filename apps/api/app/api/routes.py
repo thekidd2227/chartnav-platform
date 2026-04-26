@@ -7660,3 +7660,183 @@ def reject_intake(
             detail={"error_code": e.code, "reason": "intake submission unavailable"},
         )
     return {"status": "rejected", "submission_id": submission_id}
+
+
+# =====================================================================
+# Phase 2 item 4 — Messaging hardening (messages + preferences +
+#                  StubProvider).
+# Spec: docs/chartnav/closure/PHASE_B_Reminders_and_Patient_Communication_Hardening.md
+# =====================================================================
+
+class PreferenceUpdate(BaseModel):
+    channel: str = Field(..., min_length=1, max_length=32)
+    opted_in: bool
+    source: str = Field(default="staff-recorded", min_length=1, max_length=64)
+
+
+class InboundSimulate(BaseModel):
+    patient_identifier: str = Field(..., min_length=1, max_length=255)
+    channel: str = Field(..., min_length=1, max_length=32)
+    body: str = Field(..., min_length=1, max_length=2000)
+
+
+class OutboundEnqueue(BaseModel):
+    patient_identifier: str = Field(..., min_length=1, max_length=255)
+    channel: str = Field(..., min_length=1, max_length=32)
+    body: str = Field(..., min_length=1, max_length=2000)
+    reminder_id: Optional[int] = None
+
+
+@router.get("/messages")
+def list_messages_route(
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    if caller.role != "admin":
+        raise _err("role_admin_required", "messages log is admin-only", 403)
+    from app.services.messaging import list_messages
+    return {"items": list_messages(organization_id=caller.organization_id)}
+
+
+@router.get("/patients/{patient_identifier}/preferences")
+def get_patient_preferences(
+    patient_identifier: str,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    from app.services.messaging import ALLOWED_CHANNELS, get_preference
+    out: list[dict] = []
+    for ch in sorted(ALLOWED_CHANNELS):
+        pref = get_preference(
+            organization_id=caller.organization_id,
+            patient_identifier=patient_identifier,
+            channel=ch,
+        )
+        if pref:
+            out.append(dict(pref))
+        else:
+            out.append({
+                "organization_id": caller.organization_id,
+                "patient_identifier": patient_identifier,
+                "channel": ch,
+                "opted_in": False,
+                "opted_out_at": None,
+                "opt_out_source": None,
+            })
+    return {"items": out}
+
+
+@router.patch("/patients/{patient_identifier}/preferences")
+def patch_patient_preferences(
+    patient_identifier: str,
+    body: PreferenceUpdate,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    if caller.role not in {"admin", "front_desk", "clinician"}:
+        raise _err(
+            "role_cannot_update_preferences",
+            f"role '{caller.role}' may not update communication preferences",
+            403,
+        )
+    from app.services.messaging import (
+        ALLOWED_CHANNELS, MessagingError, upsert_preference,
+    )
+    if body.channel not in ALLOWED_CHANNELS:
+        raise _err("invalid_channel", "channel must be sms_stub or email_stub", 400)
+    try:
+        pref = upsert_preference(
+            organization_id=caller.organization_id,
+            patient_identifier=patient_identifier,
+            channel=body.channel,
+            opted_in=body.opted_in,
+            source=body.source,
+        )
+    except MessagingError as e:
+        raise _err(e.code, "messaging error", e.http_status)
+    return dict(pref)
+
+
+@router.post("/messages/inbound", status_code=201)
+def simulate_inbound_message(
+    body: InboundSimulate,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Phase B simulator for an inbound message. In Phase C this is
+    replaced by a vendor webhook. Admin / front-desk only because
+    in pilot it is the staff acting on behalf of a patient call."""
+    if caller.role not in {"admin", "front_desk"}:
+        raise _err(
+            "role_cannot_simulate_inbound",
+            f"role '{caller.role}' may not simulate inbound messages",
+            403,
+        )
+    from app.services.messaging import MessagingError, record_inbound
+    try:
+        out = record_inbound(
+            organization_id=caller.organization_id,
+            patient_identifier=body.patient_identifier,
+            channel=body.channel,
+            body=body.body,
+        )
+    except MessagingError as e:
+        raise _err(e.code, "messaging error", e.http_status)
+    return out
+
+
+@router.post("/messages/enqueue", status_code=201)
+def enqueue_outbound_route(
+    body: OutboundEnqueue,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Admin / front-desk enqueue. Honors opt-out: an opted-out
+    patient receives status='opt_out' and no provider call is made.
+    Spec §3 — `messaging_enabled` org-level flag is the future
+    Phase C gate; in Phase B every enqueue is allowed but the only
+    provider wired is StubProvider."""
+    if caller.role not in {"admin", "front_desk"}:
+        raise _err(
+            "role_cannot_enqueue_message",
+            f"role '{caller.role}' may not enqueue outbound messages",
+            403,
+        )
+    from app.services.messaging import (
+        ALLOWED_CHANNELS, MessagingError, enqueue_outbound,
+    )
+    if body.channel not in ALLOWED_CHANNELS:
+        raise _err("invalid_channel", "channel must be sms_stub or email_stub", 400)
+    try:
+        out = enqueue_outbound(
+            organization_id=caller.organization_id,
+            patient_identifier=body.patient_identifier,
+            channel=body.channel,
+            body=body.body,
+            reminder_id=body.reminder_id,
+        )
+    except MessagingError as e:
+        raise _err(e.code, "messaging error", e.http_status)
+    return dict(out)
+
+
+@router.post("/messages/{message_id}/transition", status_code=200)
+def transition_message(
+    message_id: int,
+    body: dict,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Drive the documented status state machine. 409 on illegal."""
+    if caller.role != "admin":
+        raise _err("role_admin_required", "transition is admin-only", 403)
+    new_status = body.get("status")
+    if not isinstance(new_status, str):
+        raise _err("status_required", "body.status is required", 400)
+    # Org-scope check.
+    row = fetch_one(
+        "SELECT organization_id FROM messages WHERE id = :id",
+        {"id": message_id},
+    )
+    if not row or row["organization_id"] != caller.organization_id:
+        raise _err("message_not_found", "no such message in your organization", 404)
+    from app.services.messaging import MessagingError, transition_message_status
+    try:
+        out = transition_message_status(message_id, new_status=new_status)
+    except MessagingError as e:
+        raise _err(e.code, "messaging error", e.http_status)
+    return dict(out)
