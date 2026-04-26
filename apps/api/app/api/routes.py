@@ -7426,3 +7426,237 @@ def admin_dashboard_trend(
     require_admin_or_clinician_lead(caller)
     from app.services.admin_dashboard import trend
     return trend(caller.organization_id, days)
+
+
+# =====================================================================
+# Phase 2 item 3 — Digital intake (tokens + public submit + staff
+#                  accept).
+# Spec: docs/chartnav/closure/PHASE_B_Digital_Intake.md
+# =====================================================================
+
+INTAKE_STAFF_ROLES = {"admin", "front_desk"}
+
+
+class IntakeTokenIssue(BaseModel):
+    patient_identifier_candidate: Optional[str] = Field(
+        default=None, max_length=255,
+    )
+
+
+class IntakeRejectBody(BaseModel):
+    reason: Optional[str] = Field(default=None, max_length=2000)
+
+
+def _intake_pub_url(token: str) -> str:
+    """Public URL the staff member shares out-of-band with the patient.
+    Routed by the frontend at `/intake/{token}`."""
+    return f"/intake/{token}"
+
+
+@router.post("/intakes/tokens", status_code=201)
+def issue_intake_token(
+    body: IntakeTokenIssue,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    if caller.role not in INTAKE_STAFF_ROLES:
+        raise _err(
+            "role_cannot_issue_intake_token",
+            f"role '{caller.role}' may not issue intake tokens; "
+            "only admin or front_desk",
+            403,
+        )
+    from app.services.intake import issue_token
+    out = issue_token(
+        organization_id=caller.organization_id,
+        created_by_user_id=caller.user_id,
+        patient_identifier_candidate=body.patient_identifier_candidate,
+    )
+    return {
+        "id": out["id"],
+        "token": out["token"],
+        "url": _intake_pub_url(out["token"]),
+        "expires_at": out["expires_at"],
+    }
+
+
+@router.get("/intakes/{token}", include_in_schema=True)
+def public_get_intake(token: str, request: Request) -> dict:
+    """Public unauthenticated read. Returns the form schema +
+    organization branding when the token is live; 410 when used or
+    expired; 404 when unknown; 429 when rate-limited.
+
+    PHI hygiene: the response NEVER echoes the token, the candidate
+    identifier, or any submitted payload field. Branding is the org
+    name only.
+    """
+    from app.services.intake import (
+        IntakeTokenError,
+        lookup_token_row,
+        public_get_rate_limit_check,
+    )
+    client_ip = (request.client.host if request.client else "0.0.0.0")
+    if not public_get_rate_limit_check(client_ip, token):
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error_code": "rate_limited",
+                "reason": "too many requests for this intake token",
+            },
+        )
+    try:
+        row = lookup_token_row(token)
+    except IntakeTokenError as e:
+        raise HTTPException(
+            status_code=e.http_status,
+            detail={"error_code": e.code, "reason": "intake token unavailable"},
+        )
+    org = fetch_one(
+        "SELECT name FROM organizations WHERE id = :id",
+        {"id": row["organization_id"]},
+    ) or {"name": ""}
+    return {
+        "form_schema": {
+            "fields": [
+                {"name": "patient_name", "label": "Full name",
+                 "type": "text", "required": True, "max_length": 200},
+                {"name": "patient_identifier", "label": "MRN (if known)",
+                 "type": "text", "required": False, "max_length": 64},
+                {"name": "date_of_birth", "label": "Date of birth",
+                 "type": "date", "required": False},
+                {"name": "reason_for_visit",
+                 "label": "What brings you in today?",
+                 "type": "textarea", "required": True, "max_length": 1000},
+                {"name": "current_medications",
+                 "label": "Current medications",
+                 "type": "list-textarea", "required": False},
+                {"name": "allergies", "label": "Allergies",
+                 "type": "list-textarea", "required": False},
+                {"name": "hpi", "label": "History of present illness",
+                 "type": "textarea", "required": False, "max_length": 4000},
+                {"name": "consent",
+                 "label": "I confirm this information is accurate to the "
+                          "best of my knowledge.",
+                 "type": "checkbox", "required": True},
+            ],
+        },
+        "organization_branding": {
+            "name": org["name"] or "ChartNav",
+        },
+        "advisory": (
+            "This is an after-hours intake form. Please confirm the "
+            "information with our staff at check-in."
+        ),
+    }
+
+
+@router.post("/intakes/{token}/submit", status_code=201)
+def public_submit_intake(token: str, body: dict, request: Request) -> dict:
+    """Public unauthenticated write. Records the submission and
+    burns the token (single-use per spec §3).
+
+    PHI hygiene: we never echo the submitted payload back. The
+    response is a stable {"submission_id": int} so the frontend can
+    show a thank-you screen without revealing what was stored.
+    """
+    from app.services.intake import (
+        IntakeTokenError,
+        lookup_token_row,
+        record_submission,
+    )
+    if not isinstance(body, dict):
+        raise _err("intake_payload_invalid", "payload must be an object", 400)
+    # Keep payload to a sane size — spec §6 says intake is single-sitting.
+    if len(json.dumps(body)) > 32 * 1024:
+        raise _err("intake_payload_too_large", "intake payload exceeds 32KB", 413)
+    if not body.get("consent"):
+        raise _err(
+            "intake_consent_required",
+            "patient consent checkbox is required",
+            400,
+        )
+    try:
+        row = lookup_token_row(token)
+    except IntakeTokenError as e:
+        raise HTTPException(
+            status_code=e.http_status,
+            detail={"error_code": e.code, "reason": "intake token unavailable"},
+        )
+    sid = record_submission(token_row=row, payload=body)
+    return {"submission_id": sid}
+
+
+@router.get("/intakes")
+def list_intake_submissions(
+    status: str = "pending_review",
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    if caller.role not in INTAKE_STAFF_ROLES:
+        raise _err(
+            "role_cannot_review_intake",
+            f"role '{caller.role}' may not review intake submissions",
+            403,
+        )
+    rows = fetch_all(
+        "SELECT id, organization_id, token_id, status, "
+        "       submitted_at, reviewed_at, accepted_patient_id, "
+        "       accepted_encounter_id "
+        "FROM intake_submissions "
+        "WHERE organization_id = :oid AND status = :status "
+        "ORDER BY submitted_at DESC",
+        {"oid": caller.organization_id, "status": status},
+    )
+    return {"items": [dict(r) for r in rows]}
+
+
+@router.post("/intakes/{submission_id}/accept", status_code=201)
+def accept_intake(
+    submission_id: int,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    if caller.role not in INTAKE_STAFF_ROLES:
+        raise _err(
+            "role_cannot_review_intake",
+            f"role '{caller.role}' may not accept intake submissions",
+            403,
+        )
+    from app.services.intake import IntakeTokenError, accept_submission
+    try:
+        out = accept_submission(
+            submission_id=submission_id,
+            accepting_user_id=caller.user_id,
+            organization_id=caller.organization_id,
+        )
+    except IntakeTokenError as e:
+        raise HTTPException(
+            status_code=e.http_status,
+            detail={"error_code": e.code, "reason": "intake submission unavailable"},
+        )
+    return out
+
+
+@router.post("/intakes/{submission_id}/reject", status_code=200)
+def reject_intake(
+    submission_id: int,
+    body: IntakeRejectBody,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    if caller.role not in INTAKE_STAFF_ROLES:
+        raise _err(
+            "role_cannot_review_intake",
+            f"role '{caller.role}' may not reject intake submissions",
+            403,
+        )
+    from app.services.intake import IntakeTokenError, reject_submission
+    try:
+        reject_submission(
+            submission_id=submission_id,
+            reviewing_user_id=caller.user_id,
+            organization_id=caller.organization_id,
+            reason=body.reason,
+        )
+    except IntakeTokenError as e:
+        raise HTTPException(
+            status_code=e.http_status,
+            detail={"error_code": e.code, "reason": "intake submission unavailable"},
+        )
+    return {"status": "rejected", "submission_id": submission_id}

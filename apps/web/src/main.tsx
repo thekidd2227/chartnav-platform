@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import { InviteAccept } from "./InviteAccept";
+import { IntakePage } from "./IntakePage";
 import { applyPreferences, loadDensity, loadTheme } from "./preferences";
 import "./styles.css";
 // Phase A item 5 — tablet hardening sheet (safe-area + 44pt targets +
@@ -43,6 +44,13 @@ function Root() {
   const params = new URLSearchParams(window.location.search);
   if (path.endsWith("/accept") || path.endsWith("/invite") || params.has("invite")) {
     return <InviteAccept defaultToken={params.get("invite") || ""} />;
+  }
+  // Phase 2 item 3 — public unauthenticated patient intake.
+  // Match /intake/<token> (token is the rest of the path after the
+  // first slash). No app shell, no auth header.
+  const intakeMatch = path.match(/^\/intake\/([^/?#]+)/);
+  if (intakeMatch) {
+    return <IntakePage token={intakeMatch[1]} />;
   }
   return <App />;
 }

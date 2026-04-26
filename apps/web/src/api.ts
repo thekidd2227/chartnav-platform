@@ -2970,6 +2970,97 @@ export function cancelReminder(
   });
 }
 
+// ---------- Phase 2 item 3: Digital intake ----------
+
+export interface IntakeTokenIssue {
+  id: number;
+  token: string;
+  url: string;
+  expires_at: string;
+}
+
+export interface IntakeFormSchemaField {
+  name: string;
+  label: string;
+  type: string;
+  required?: boolean;
+  max_length?: number;
+}
+
+export interface IntakeFormSchema {
+  fields: IntakeFormSchemaField[];
+}
+
+export interface IntakePublicView {
+  form_schema: IntakeFormSchema;
+  organization_branding: { name: string };
+  advisory: string;
+}
+
+export interface IntakeSubmission {
+  id: number;
+  organization_id: number;
+  token_id: number;
+  status: string;
+  submitted_at: string;
+  reviewed_at?: string | null;
+  accepted_patient_id?: number | null;
+  accepted_encounter_id?: number | null;
+}
+
+export function issueIntakeToken(
+  email: string,
+  candidate?: string
+): Promise<IntakeTokenIssue> {
+  return request("/intakes/tokens", {
+    email,
+    method: "POST",
+    body: JSON.stringify(
+      candidate ? { patient_identifier_candidate: candidate } : {}
+    ),
+  });
+}
+
+export function getIntakeForm(token: string): Promise<IntakePublicView> {
+  return request(`/intakes/${encodeURIComponent(token)}`);
+}
+
+export function submitIntake(
+  token: string,
+  payload: Record<string, unknown>
+): Promise<{ submission_id: number }> {
+  return request(`/intakes/${encodeURIComponent(token)}/submit`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function listIntakeSubmissions(
+  email: string,
+  status: string = "pending_review"
+): Promise<{ items: IntakeSubmission[] }> {
+  return request(`/intakes?status=${encodeURIComponent(status)}`, { email });
+}
+
+export function acceptIntakeSubmission(
+  email: string,
+  id: number
+): Promise<{ patient_id: number; draft_encounter_id: number; submission_id: number }> {
+  return request(`/intakes/${id}/accept`, { email, method: "POST" });
+}
+
+export function rejectIntakeSubmission(
+  email: string,
+  id: number,
+  reason?: string
+): Promise<{ status: string; submission_id: number }> {
+  return request(`/intakes/${id}/reject`, {
+    email,
+    method: "POST",
+    body: JSON.stringify({ reason: reason || "" }),
+  });
+}
+
 // ---------- Phase 2 item 2: Admin dashboard ----------
 
 export interface AdminDashboardSummary {

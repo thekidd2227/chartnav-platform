@@ -34,6 +34,7 @@ import {
 } from "./api";
 import { AdminPanel } from "./AdminPanel";
 import { AdminDashboard } from "./AdminDashboard";
+import { IntakeQueue } from "./IntakeQueue";
 import { NoteWorkspace } from "./NoteWorkspace";
 import { SEEDED_IDENTITIES, loadIdentity, saveIdentity } from "./identity";
 import {
@@ -97,6 +98,8 @@ export default function App() {
   const [showAdmin, setShowAdmin] = useState(false);
   // Phase 2 item 2 — Admin dashboard surface.
   const [showAdminDashboard, setShowAdminDashboard] = useState(false);
+  // Phase 2 item 3 — Digital intake staff queue.
+  const [showIntakeQueue, setShowIntakeQueue] = useState(false);
 
   // Pagination
   const PAGE_SIZE = 25;
@@ -673,6 +676,15 @@ export default function App() {
               Operations
             </button>
           )}
+          {(canAdmin || (me && me.role === "front_desk")) && (
+            <button
+              className="btn"
+              onClick={() => setShowIntakeQueue(true)}
+              data-testid="open-intake-queue"
+            >
+              Intake
+            </button>
+          )}
           <PreferenceControls
             density={density}
             theme={theme}
@@ -875,6 +887,12 @@ export default function App() {
             <AdminDashboard identity={identity} me={me} />
           </div>
         </div>
+      )}
+      {showIntakeQueue && me && (
+        <IntakeQueue
+          identity={identity}
+          onClose={() => setShowIntakeQueue(false)}
+        />
       )}
 
       <CommandPalette
