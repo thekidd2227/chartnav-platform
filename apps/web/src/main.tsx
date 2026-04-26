@@ -4,6 +4,10 @@ import App from "./App";
 import { InviteAccept } from "./InviteAccept";
 import { applyPreferences, loadDensity, loadTheme } from "./preferences";
 import "./styles.css";
+// Phase A item 5 — tablet hardening sheet (safe-area + 44pt targets +
+// banner styling). Loaded after styles.css so the narrower-viewport
+// rules win.
+import "./styles/tablet.css";
 
 const root = document.getElementById("root");
 if (!root) {

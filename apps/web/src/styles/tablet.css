@@ -1,0 +1,101 @@
+/* Phase A item 5 — Tablet charting hardening.
+ *
+ * Spec: docs/chartnav/closure/PHASE_A_Tablet_Charting_Requirements.md
+ *
+ * Goals:
+ *   - Respect iPad safe-area insets (notch + home indicator) so primary
+ *     actions (sign / attest / export) are never covered.
+ *   - 44pt minimum touch target on every interactive element on the
+ *     encounter page (iOS HIG floor; AA-equivalent).
+ *   - Stable layout on the two reference profiles in §3.1:
+ *       * iPad Pro 12.9 portrait  — 1024 x 1366
+ *       * iPad Pro 12.9 landscape — 1366 x 1024
+ *       * iPad Air 11    portrait — 834 x 1194
+ *       * iPad Air 11    landscape — 1194 x 834
+ *   - No horizontal scrolling on the 3-tier trust UI in either
+ *     orientation at the default viewports.
+ *
+ * This sheet is additive — it does not redefine desktop styles.
+ * Importing `tablet.css` after `styles.css` is intentional so the
+ * narrower-min-width rules below can override desktop sizing.
+ */
+
+:root {
+  --tablet-touch-target: 44px;
+  --tablet-safe-top:    env(safe-area-inset-top, 0px);
+  --tablet-safe-right:  env(safe-area-inset-right, 0px);
+  --tablet-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --tablet-safe-left:   env(safe-area-inset-left, 0px);
+}
+
+/* Apply safe-area padding to the document shell so every page reserves
+ * room for notch + home indicator on iPad in both orientations. */
+html,
+body {
+  padding-top:    var(--tablet-safe-top);
+  padding-right:  var(--tablet-safe-right);
+  padding-bottom: var(--tablet-safe-bottom);
+  padding-left:   var(--tablet-safe-left);
+}
+
+/* iPad Air 11 + iPad Pro 11 portrait band (834px) and iPad Pro 12.9
+ * portrait (1024px). The encounter workspace must collapse to a
+ * single column with sticky action rail above the home indicator. */
+@media (min-width: 768px) and (max-width: 1366px) and (orientation: portrait),
+       (min-width: 1024px) and (max-width: 1366px) and (orientation: landscape) {
+
+  /* Touch target floor — every actionable element on the encounter
+   * page is at least 44 x 44 CSS pt. */
+  button,
+  [role="button"],
+  a.button,
+  input[type="checkbox"],
+  input[type="radio"],
+  select,
+  .tablet-touch-target {
+    min-height: var(--tablet-touch-target);
+    min-width:  var(--tablet-touch-target);
+  }
+
+  /* Form inputs that techs poke at with a fingertip — IOP, VA, MRN —
+   * deserve a generous tap zone too. */
+  .tablet-input,
+  input[data-tablet-input="true"] {
+    min-height: var(--tablet-touch-target);
+    font-size: 16px; /* prevents iOS Safari zoom-on-focus */
+  }
+
+  /* The 3-tier trust UI: stack transcript / findings / draft when the
+   * viewport is narrower than the desktop 3-column layout. The actual
+   * column components opt in via `data-tablet-stack="true"`. */
+  [data-tablet-stack="true"] {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* Sticky action rail — sign / attest / export must clear the home
+   * indicator. */
+  [data-testid="encounter-action-rail"] {
+    position: sticky;
+    bottom: 0;
+    padding-bottom: calc(12px + var(--tablet-safe-bottom));
+    background: var(--surface, #fff);
+    border-top: 1px solid var(--border, #e5e7eb);
+    z-index: 10;
+  }
+}
+
+/* Offline banner — always visible at the top of the viewport, below
+ * the safe-area inset. */
+[data-testid="offline-banner"] {
+  position: sticky;
+  top: var(--tablet-safe-top);
+  z-index: 50;
+  background: #fef3c7;       /* amber-100 */
+  color: #78350f;            /* amber-900 */
+  border-bottom: 1px solid #fbbf24;
+  padding: 8px 12px;
+  font-size: 14px;
+  text-align: center;
+}

@@ -55,6 +55,7 @@ import { DayView } from "./DayView";
 import { Calendar, addMonths, startOfMonth } from "./Calendar";
 import { RemindersPanel } from "./RemindersPanel";
 import { Reminder, listReminders } from "./api";
+import { OfflineBanner } from "./core/offline/OfflineBanner";
 import { WallDisplay } from "./WallDisplay";
 import { EncounterSlip } from "./EncounterSlip";
 // ROI wave 1 — operational queue + triage cards + role split.
@@ -544,6 +545,7 @@ export default function App() {
 
   return (
     <>
+      <OfflineBanner />
       <header className="app-header">
         <div className="brand">
           <img
