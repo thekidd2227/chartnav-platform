@@ -194,7 +194,8 @@ ENCOUNTER_COLUMNS = (
     "id, organization_id, location_id, patient_identifier, patient_name, "
     "provider_name, status, patient_id, provider_id, "
     "external_ref, external_source, "
-    "scheduled_at, started_at, completed_at, created_at"
+    "scheduled_at, started_at, completed_at, created_at, "
+    "template_key"
 )
 
 
@@ -220,6 +221,11 @@ class EncounterCreate(BaseModel):
     provider_name: str = Field(..., min_length=1, max_length=255)
     scheduled_at: Optional[datetime] = None
     status: str = "scheduled"
+    # Phase A item 1 — encounter templates. If unset the row defaults
+    # to "general_ophthalmology" via the column default; an unknown
+    # key is rejected with 400 so we never silently fall back to a
+    # different specialty than the caller asked for.
+    template_key: Optional[str] = Field(default=None, max_length=64)
 
 
 class EventCreate(BaseModel):
@@ -457,6 +463,40 @@ def list_users(
     return rows
 
 
+# ---------- Encounter templates (Phase A item 1) ----------
+#
+# Spec: docs/chartnav/closure/PHASE_A_Ophthalmology_Encounter_Templates.md
+#
+# Read-only catalog. Any authenticated caller may read it because the
+# template list is needed by the create-encounter modal for every
+# clinic role that can create encounters (admin / clinician / front_desk).
+# The advisor-review banner discipline lives on the frontend; backend
+# returns the truth that the list is ChartNav-curated, not a clinical
+# validation marker.
+
+@router.get("/encounter-templates")
+def list_encounter_templates(
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    """Return the four ChartNav-curated ophthalmology templates.
+
+    The response shape is intentionally stable — the frontend renders
+    the selector directly off ``items``. ``advisory_only`` is a
+    persistent reminder that templates are not clinically validated
+    until a practicing ophthalmologist advisor sign-off is recorded.
+    """
+    from app.services.encounter_templates import (  # local import to avoid cycle
+        list_templates,
+        DEFAULT_TEMPLATE_KEY,
+    )
+    return {
+        "items": list_templates(),
+        "default_key": DEFAULT_TEMPLATE_KEY,
+        "advisory_only": True,
+        "advisor_review_status": "pending",
+    }
+
+
 # ---------- Encounters (authed + org-scoped + RBAC) ----------
 
 @router.get("/encounters")
@@ -688,6 +728,19 @@ def create_encounter(
             400,
         )
 
+    # Phase A item 1 — encounter templates. Reject unknown keys with 400
+    # so a typo at the modal never silently writes the wrong specialty.
+    # If the caller omits the key the column default
+    # ("general_ophthalmology") applies on the INSERT.
+    from app.services.encounter_templates import is_valid_template_key  # local import to avoid cycle
+    if payload.template_key is not None and not is_valid_template_key(payload.template_key):
+        raise _err(
+            "unknown_template_key",
+            "template_key must be one of: retina, glaucoma, "
+            "anterior_segment_cataract, general_ophthalmology",
+            400,
+        )
+
     ensure_same_org(caller, payload.organization_id)
 
     with transaction() as conn:
@@ -706,25 +759,24 @@ def create_encounter(
 
         started_at = _now_iso() if payload.status == "in_progress" else None
 
-        new_id = insert_returning_id(
-            conn,
-            "encounters",
-            {
-                "organization_id": caller.organization_id,
-                "location_id": payload.location_id,
-                "patient_identifier": payload.patient_identifier,
-                "patient_name": payload.patient_name,
-                "provider_name": payload.provider_name,
-                "status": payload.status,
-                "scheduled_at": (
-                    payload.scheduled_at.isoformat()
-                    if payload.scheduled_at
-                    else None
-                ),
-                "started_at": started_at,
-                "completed_at": None,
-            },
-        )
+        encounter_payload: dict[str, Any] = {
+            "organization_id": caller.organization_id,
+            "location_id": payload.location_id,
+            "patient_identifier": payload.patient_identifier,
+            "patient_name": payload.patient_name,
+            "provider_name": payload.provider_name,
+            "status": payload.status,
+            "scheduled_at": (
+                payload.scheduled_at.isoformat()
+                if payload.scheduled_at
+                else None
+            ),
+            "started_at": started_at,
+            "completed_at": None,
+        }
+        if payload.template_key is not None:
+            encounter_payload["template_key"] = payload.template_key
+        new_id = insert_returning_id(conn, "encounters", encounter_payload)
 
         conn.execute(
             text(

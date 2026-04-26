@@ -28,6 +28,8 @@ import {
   listEncountersPage,
   listLocations,
   listPatients,
+  listEncounterTemplates,
+  EncounterTemplate,
   updateEncounterStatus,
 } from "./api";
 import { AdminPanel } from "./AdminPanel";
@@ -1435,6 +1437,12 @@ function CreateEncounterModal({
   const [locationId, setLocationId] = useState<number | "">("");
   const [status, setStatus] =
     useState<"scheduled" | "in_progress">("scheduled");
+  // Phase A item 1 — encounter template selector. Defaults to the
+  // backend's general_ophthalmology so the user can submit without
+  // touching the picker; real choice rejects unknown keys server-side.
+  const [templateKey, setTemplateKey] = useState<string>("general_ophthalmology");
+  const [templates, setTemplates] = useState<EncounterTemplate[]>([]);
+  const [templatesAdvisoryOnly, setTemplatesAdvisoryOnly] = useState(true);
 
   const [locations, setLocations] = useState<
     { id: number; organization_id: number; name: string }[]
@@ -1488,6 +1496,20 @@ function CreateEncounterModal({
     })();
   }, [identity]);
 
+  // Phase A item 1 — load the encounter template catalog.
+  useEffect(() => {
+    let cancelled = false;
+    listEncounterTemplates(identity)
+      .then((cat) => {
+        if (cancelled) return;
+        setTemplates(cat.items);
+        setTemplatesAdvisoryOnly(cat.advisory_only);
+        if (cat.default_key) setTemplateKey(cat.default_key);
+      })
+      .catch(() => { /* keep the safe default */ });
+    return () => { cancelled = true; };
+  }, [identity]);
+
   const canSubmit =
     !pending &&
     patientId.trim() !== "" &&
@@ -1507,6 +1529,7 @@ function CreateEncounterModal({
         patient_name: patientName.trim() || null,
         provider_name: provider.trim(),
         status,
+        template_key: templateKey,
       });
       // parent closes the modal on success
     } catch (err) {
@@ -1656,6 +1679,36 @@ function CreateEncounterModal({
                   </option>
                 ))}
               </select>
+            )}
+          </label>
+          <label>
+            Encounter template
+            <select
+              data-testid="encounter-template-select"
+              value={templateKey}
+              onChange={(e) => setTemplateKey(e.target.value)}
+            >
+              {templates.length === 0 && (
+                <option value="general_ophthalmology">
+                  General ophthalmology
+                </option>
+              )}
+              {templates.map((t) => (
+                <option key={t.key} value={t.key}>
+                  {t.display_name}
+                </option>
+              ))}
+            </select>
+            {templatesAdvisoryOnly && (
+              <p
+                className="subtle-note"
+                data-testid="encounter-template-advisor-banner"
+                style={{ marginTop: 4, fontSize: 12 }}
+              >
+                Templates are ChartNav-curated and pending advisor sign-off.
+                They support charting workflow; they do not replace
+                clinician judgment.
+              </p>
             )}
           </label>
           <label>

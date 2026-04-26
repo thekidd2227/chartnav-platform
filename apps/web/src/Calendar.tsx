@@ -186,7 +186,7 @@ export function Calendar({
                       key={`e-${e.id}`}
                       type="button"
                       className="calendar__chip calendar__chip--enc"
-                      onClick={() => onSelectEncounter(e.id)}
+                      onClick={() => onSelectEncounter(Number(e.id))}
                       data-testid={`calendar-encounter-${e.id}`}
                       title={`${e.patient_name ?? e.patient_identifier} · ${e.provider_name}`}
                     >

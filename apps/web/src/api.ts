@@ -149,6 +149,39 @@ export interface Encounter {
   _external_source?: string | null;
   _fhir_status?: string;
   _bridged?: boolean;
+  /** Phase A — encounter template key. One of:
+   *  retina, glaucoma, anterior_segment_cataract, general_ophthalmology.
+   *  Defaults to general_ophthalmology when the encounter was created
+   *  without an explicit template. NOT a clinical-validation marker. */
+  template_key?: string | null;
+}
+
+// Phase A item 1 — encounter templates catalog.
+// docs/chartnav/closure/PHASE_A_Ophthalmology_Encounter_Templates.md
+export interface EncounterTemplate {
+  key: string;
+  display_name: string;
+  description: string;
+  sections: string[];
+  required_findings: string[];
+  suggested_cpt: string[];
+  icd10_relevance: string[];
+}
+
+export interface EncounterTemplateCatalog {
+  items: EncounterTemplate[];
+  default_key: string;
+  /** True until a practicing-ophthalmologist advisor records sign-off
+   *  in docs/chartnav/clinical/template_review.md. UI must surface
+   *  the "advisor review pending" banner whenever this is true. */
+  advisory_only: boolean;
+  advisor_review_status: "pending" | "signed";
+}
+
+export function listEncounterTemplates(
+  email: string
+): Promise<EncounterTemplateCatalog> {
+  return request("/encounter-templates", { email });
 }
 
 export interface WorkflowEvent {
@@ -328,6 +361,10 @@ export interface NewEncounterInput {
   provider_name: string;
   scheduled_at?: string | null;
   status?: "scheduled" | "in_progress";
+  /** Phase A item 1 — optional template key. When omitted the
+   *  backend defaults to "general_ophthalmology". An unknown value
+   *  is rejected server-side with `unknown_template_key` (HTTP 400). */
+  template_key?: string | null;
 }
 
 export function createEncounter(
