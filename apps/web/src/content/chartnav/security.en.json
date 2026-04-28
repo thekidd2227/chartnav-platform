@@ -1,0 +1,175 @@
+{
+  "meta": {
+    "title": "ChartNav Security & AI Governance — Clinical and Enterprise Workflows",
+    "description": "ChartNav uses IBM watsonx-powered AI workflows, human review, role-based access, audit trails, and security event logging to support secure, auditable workflow automation for practices, health systems, and enterprise organizations.",
+    "canonicalPath": "/chartnav/security",
+    "keywords": [
+      "ophthalmology AI governance",
+      "healthcare AI security",
+      "clinical AI audit trail",
+      "IBM watsonx healthcare AI",
+      "role-based access control",
+      "human-in-the-loop AI",
+      "PHI-safe AI workflow",
+      "enterprise AI governance",
+      "clinical workflow security",
+      "AI audit logging"
+    ]
+  },
+
+  "hero": {
+    "eyebrow": "SECURITY & GOVERNANCE",
+    "headline": "Security and governance built into the clinical workflow.",
+    "subheadline": "ChartNav is designed for ophthalmology practices, hospitals, health systems, enterprise organizations, and government buyers that require controlled AI use, full auditability, human review, and secure workflow visibility — not blind automation."
+  },
+
+  "pillars": [
+    {
+      "id": "watsonx",
+      "eyebrow": "AI BACKBONE",
+      "headline": "IBM watsonx-Powered AI Workflows",
+      "body": "ChartNav's AI layer is built on IBM watsonx — an enterprise AI and data platform designed for regulated and high-accountability environments. Every model call is routed through watsonx-aligned governance infrastructure, providing provider/model traceability, prompt lineage, output accountability, and AI use-case inventory across the platform.",
+      "note": "ChartNav is designed to align with IBM watsonx governance principles. This does not constitute an IBM certification or partnership claim."
+    },
+    {
+      "id": "rbac",
+      "eyebrow": "ACCESS CONTROL",
+      "headline": "Role-Based Access. Least Privilege by Design.",
+      "body": "Staff see only what their role requires. Administrative security routes — including the AI audit log, security event feed, and review queue — are restricted to admin and clinician lead roles. No clinical or operational user can access governance data outside their authorized scope. Unauthorized access attempts are logged automatically."
+    },
+    {
+      "id": "audit",
+      "eyebrow": "AUDIT TRAILS",
+      "headline": "Meaningful Actions Logged. AI Output Tracked.",
+      "body": "ChartNav logs meaningful clinical and administrative events: AI output generation, human review sign-off, consult letter creation, intake acceptance and rejection, and security event triggers. Each AI call produces an immutable governance record containing the prompt hash, output hash, model ID, PHI redaction status, and a full security event log — append-only by design."
+    },
+    {
+      "id": "phi",
+      "eyebrow": "DATA HANDLING",
+      "headline": "PHI-Aware. Minimized at the Source.",
+      "body": "A dedicated redaction pipeline scans every prompt for HIPAA Safe Harbor identifiers — SSNs, dates of birth, MRNs, contact data, NPI numbers, and more — before any content reaches an AI model. Prompt and output content is never stored in the governance log; only SHA-256 hashes are retained. PHI redaction status is tracked per record. Demo data is separated from production environments."
+    },
+    {
+      "id": "human",
+      "eyebrow": "HUMAN-IN-THE-LOOP",
+      "headline": "AI Supports. Humans Decide.",
+      "body": "No AI-generated clinical content becomes final documentation without qualified human review. ChartNav's AI layer drafts, suggests, and summarizes — it does not sign, approve, or autonomously act. Human review is on by default and tracked with reviewer identity and timestamp. Final clinical and operational responsibility always remains with qualified staff."
+    },
+    {
+      "id": "isolation",
+      "eyebrow": "TENANT ISOLATION",
+      "headline": "Organization Scoping Enforced.",
+      "body": "All AI governance records, security events, and workflow data are scoped to the authenticated organization. Cross-org reads are blocked at the query layer. Unauthorized access attempts are logged and surfaced in the security event feed. Existence of records from other organizations is never exposed."
+    },
+    {
+      "id": "monitoring",
+      "eyebrow": "SECURITY MONITORING",
+      "headline": "Prompt Injection Detection. Anomaly Logging.",
+      "body": "Every inbound prompt is scanned against a detection library covering instruction overrides, persona hijacks, token boundary attacks, jailbreak attempts, bulk data exfiltration probes, review bypass attempts, and unsupported automation requests. High-severity matches hard-block the call and generate a critical security event. Soft matches are logged and queued for admin review."
+    },
+    {
+      "id": "enterprise",
+      "eyebrow": "ENTERPRISE READINESS",
+      "headline": "Built for Organizations That Cannot Afford Blind Automation.",
+      "body": "ChartNav is designed to support procurement and security conversations with ophthalmology practices, hospitals, health systems, government contractors, and enterprise technology buyers. The platform ships with implementation documentation, a security event review console, workflow governance records, and a published security roadmap. Security questionnaire packages are available upon request for assessment processes."
+    }
+  ],
+
+  "noClaimSection": {
+    "eyebrow": "WHAT CHARTNAV DOES NOT CLAIM",
+    "headline": "We say what we have. Not what we don't.",
+    "intro": "Transparency about security posture is a prerequisite for trust. The following are deliberate non-claims.",
+    "items": [
+      {
+        "label": "HIPAA Certification",
+        "body": "ChartNav does not claim HIPAA certification. HIPAA compliance is an organizational responsibility, not a platform certification. Practices are responsible for their own BAA obligations and internal compliance programs. ChartNav is designed to support your compliance posture — not to replace it."
+      },
+      {
+        "label": "ONC Certification",
+        "body": "ChartNav does not hold ONC Health IT certification. Buyers requiring ONC-certified EHR technology should evaluate this requirement separately."
+      },
+      {
+        "label": "FedRAMP Authorization",
+        "body": "ChartNav does not hold FedRAMP authorization. Government buyers with FedRAMP requirements should account for this in procurement evaluation."
+      },
+      {
+        "label": "SOC 2 Certification",
+        "body": "ChartNav has not completed a SOC 2 audit. SOC 2 Type II readiness is on the published security roadmap."
+      },
+      {
+        "label": "IBM Partnership",
+        "body": "ChartNav is not an IBM partner, IBM reseller, or IBM-certified organization. The use of IBM watsonx infrastructure reflects a technology integration, not a formal commercial partnership."
+      },
+      {
+        "label": "Guardium AI Security",
+        "body": "ChartNav has not deployed IBM Guardium AI Security. Guardium evaluation is included in the published security roadmap."
+      },
+      {
+        "label": "Replacement for Legal or Clinical Review",
+        "body": "ChartNav does not replace legal counsel, compliance officers, or clinical judgment. The platform is an operational and workflow tool. Nothing in ChartNav constitutes legal, regulatory, or clinical advice."
+      }
+    ]
+  },
+
+  "roadmap": {
+    "eyebrow": "SECURITY ROADMAP",
+    "headline": "Where we are going.",
+    "intro": "ChartNav publishes its security roadmap so buyers can evaluate current posture and near-term trajectory.",
+    "items": [
+      {
+        "status": "in_progress",
+        "label": "watsonx.governance Deeper Integration",
+        "body": "Expanding IBM watsonx.governance alignment for richer AI lineage tracking, model drift detection, and bias monitoring across clinical use cases."
+      },
+      {
+        "status": "planned",
+        "label": "Guardium AI Security Evaluation",
+        "body": "Formal evaluation of IBM Guardium AI Security for data activity monitoring across AI workflows and storage layers."
+      },
+      {
+        "status": "planned",
+        "label": "SOC 2 Type II Readiness",
+        "body": "Structured readiness process toward SOC 2 Type II audit, covering security, availability, and confidentiality trust service criteria."
+      },
+      {
+        "status": "planned",
+        "label": "Formal BAA Process",
+        "body": "Documented Business Associate Agreement process for practices and health systems requiring formal HIPAA BAA execution."
+      },
+      {
+        "status": "planned",
+        "label": "Penetration Testing",
+        "body": "Third-party penetration testing engagement covering API, authentication, authorization, and AI pipeline attack surfaces."
+      },
+      {
+        "status": "planned",
+        "label": "Security Questionnaire Package",
+        "body": "Standardized security questionnaire response package for enterprise procurement, government contractor evaluation, and health system vendor review."
+      },
+      {
+        "status": "planned",
+        "label": "SSO / SAML Integration",
+        "body": "Enterprise SSO support via SAML 2.0 and OIDC for organizations requiring identity provider integration."
+      },
+      {
+        "status": "planned",
+        "label": "Audit Export Package",
+        "body": "Structured export of AI governance logs, security events, and human review records — suitable for compliance reporting and external audit."
+      }
+    ]
+  },
+
+  "cta": {
+    "eyebrow": "NEXT STEPS",
+    "headline": "Bring your security questions to the workflow assessment.",
+    "body": "ChartNav advisors work through security requirements, procurement questions, and workflow fit — before any commitment. Assessments are available for practices, health systems, and enterprise organizations.",
+    "primary": {
+      "label": "Request a Workflow Assessment",
+      "href": "/chartnav/assessment"
+    },
+    "secondary": {
+      "label": "Book a Demo",
+      "action": "openDemoForm"
+    }
+  }
+}

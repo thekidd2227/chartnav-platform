@@ -63,7 +63,6 @@ import { EncounterSlip } from "./EncounterSlip";
 // ROI wave 1 — operational queue + triage cards + role split.
 import { QueuePresets } from "./QueuePresets";
 import { ReadinessBadge } from "./ReadinessBadge";
-import ChartnavSecurity from './pages/chartnav/Security';
 import {
   QueuePreset,
   QUEUE_PRESETS,

@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ChartNav MD — Clinical Workflow Platform for Ophthalmology Practices & Enterprise Health Organizations</title>
+  <meta name="description"
+    content="ChartNav MD delivers ophthalmology-first charting, imaging, intake, scheduling, and billing visibility — unified under IBM watsonx-powered AI workflows with human review, audit logging, and role-based access." />
+  <link rel="canonical" href="https://chartnavmd.com/" />
+
+  <meta property="og:type"        content="website" />
+  <meta property="og:url"         content="https://chartnavmd.com/" />
+  <meta property="og:title"       content="ChartNav MD — Clinical Workflow Platform" />
+  <meta property="og:description" content="IBM watsonx-powered AI workflows, human review, and full audit visibility for ophthalmology practices and enterprise health organizations." />
+  <meta property="og:image"       content="https://chartnavmd.com/og.jpg" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet" />
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --obsidian:    #09090b;
+      --surface:     #111113;
+      --surface-2:   #18181b;
+      --border:      rgba(255,255,255,.075);
+      --gold:        #b89355;
+      --gold-light:  #d4af72;
+      --text-1:      #f0ede8;
+      --text-2:      #a09c95;
+      --text-3:      #5c5955;
+      --max-w:       74rem;
+      --radius:      0;
+    }
+
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--obsidian);
+      color: var(--text-1);
+      font-family: 'Inter', system-ui, sans-serif;
+      font-weight: 300;
+      -webkit-font-smoothing: antialiased;
+      line-height: 1.5;
+    }
+    a { color: inherit; text-decoration: none; }
+
+    .container      { max-width: var(--max-w); margin: 0 auto; padding: 0 2rem; }
+    .container--sm  { max-width: 56rem; }
+    .container--xs  { max-width: 40rem; }
+
+    .eyebrow {
+      font-size: .5625rem;
+      letter-spacing: .15em;
+      text-transform: uppercase;
+      color: var(--gold);
+      font-weight: 500;
+    }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: .5rem;
+      padding: .75rem 1.875rem; font-size: .875rem; font-weight: 400;
+      letter-spacing: .01em; cursor: pointer; border: none;
+      font-family: inherit; transition: opacity .15s;
+    }
+    .btn:hover { opacity: .82; }
+    .btn--gold  { background: var(--gold); color: var(--obsidian); }
+    .btn--ghost { background: transparent; color: var(--text-1); border: 1px solid var(--border); }
+
+    section { padding: 5.5rem 0; }
+
+    /* ── Nav ────────────────────────────────────────────────────────── */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(9,9,11,.9); backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav__inner {
+      max-width: var(--max-w); margin: 0 auto; padding: 0 2rem;
+      height: 3.5rem; display: flex; align-items: center; justify-content: space-between;
+    }
+    .nav__logo { font-size: .875rem; font-weight: 500; letter-spacing: .02em; }
+    .nav__logo em { color: var(--gold); font-style: normal; }
+    .nav__links { list-style: none; display: flex; align-items: center; gap: 2rem; }
+    .nav__links a { font-size: .8125rem; color: var(--text-2); transition: color .15s; }
+    .nav__links a:hover { color: var(--text-1); }
+    @media (max-width: 620px) { .nav__links { display: none; } }
+
+    /* ── Hero ───────────────────────────────────────────────────────── */
+    #hero {
+      padding: 8rem 0 6rem; text-align: center;
+      border-bottom: 1px solid var(--border);
+    }
+    .hero__eyebrow { margin-bottom: 1.25rem; }
+    .hero__h1 {
+      font-size: clamp(2.125rem, 5vw, 3.75rem); font-weight: 300;
+      letter-spacing: -.04em; line-height: 1.06; max-width: 18ch;
+      margin: 0 auto 1.5rem;
+    }
+    .hero__sub {
+      font-size: 1.0625rem; line-height: 1.7; color: var(--text-2);
+      max-width: 48ch; margin: 0 auto 2.75rem;
+    }
+    .hero__ctas { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+    .hero__chips {
+      margin-top: 3.5rem; display: flex; gap: 1rem;
+      justify-content: center; flex-wrap: wrap;
+    }
+    .chip {
+      font-size: .625rem; letter-spacing: .12em; text-transform: uppercase;
+      color: var(--text-3); border: 1px solid var(--border); padding: .35rem .875rem;
+    }
+
+    /* ── Security strip ─────────────────────────────────────────────── */
+    #security-strip {
+      padding: 0; border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .sec-strip__inner {
+      padding: 1.5rem 2rem; max-width: var(--max-w); margin: 0 auto;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 2rem; flex-wrap: wrap;
+    }
+    .sec-strip__copy { font-size: .875rem; color: var(--text-2); max-width: 60ch; margin: 0; }
+    .sec-strip__copy strong { color: var(--text-1); font-weight: 400; }
+    .sec-strip__link {
+      font-size: .8125rem; color: var(--gold); white-space: nowrap;
+      border-bottom: 1px solid transparent; transition: border-color .15s; flex-shrink: 0;
+    }
+    .sec-strip__link:hover { border-bottom-color: var(--gold); }
+    @media (max-width: 640px) {
+      .sec-strip__inner { flex-direction: column; align-items: flex-start; }
+    }
+
+    /* ── Workflow ────────────────────────────────────────────────────── */
+    #workflow { border-bottom: 1px solid var(--border); }
+    .section__h { font-size: clamp(1.625rem, 3vw, 2.25rem); font-weight: 300; letter-spacing: -.025em; margin: .75rem 0 2.5rem; }
+    .workflow-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 1.5px; background: var(--border); margin-top: 2.5rem;
+    }
+    @media (max-width: 860px) { .workflow-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 520px) { .workflow-grid { grid-template-columns: 1fr; } }
+    .wf-card { background: var(--surface); padding: 1.875rem; }
+    .wf-card__num { font-size: .5625rem; letter-spacing: .14em; color: var(--gold); margin-bottom: 1rem; }
+    .wf-card__h   { font-size: .9375rem; font-weight: 400; letter-spacing: -.01em; margin-bottom: .5rem; }
+    .wf-card__p   { font-size: .8125rem; line-height: 1.65; color: var(--text-2); }
+
+    /* ── Security ────────────────────────────────────────────────────── */
+    #security { border-bottom: 1px solid var(--border); }
+    .security__layout {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 5rem; align-items: start;
+    }
+    @media (max-width: 760px) { .security__layout { grid-template-columns: 1fr; gap: 2.5rem; } }
+    .security__sub { font-size: .9375rem; line-height: 1.7; color: var(--text-2); margin-bottom: 2rem; }
+    .security__list { list-style: none; }
+    .security__item {
+      display: flex; gap: 1rem; align-items: flex-start;
+      padding: .9375rem 0; border-bottom: 1px solid var(--border);
+      font-size: .875rem; color: var(--text-2); line-height: 1.55;
+    }
+    .security__item:first-child { border-top: 1px solid var(--border); }
+    .security__dot { width: .375rem; height: .375rem; border-radius: 50%; background: var(--gold); flex-shrink: 0; margin-top: .45rem; }
+
+    /* ── No-claim ────────────────────────────────────────────────────── */
+    #noclaim { background: var(--surface); border-bottom: 1px solid var(--border); }
+    .noclaim__intro { font-size: .875rem; line-height: 1.65; color: var(--text-2); max-width: 52ch; margin: .75rem 0 2.5rem; }
+    .noclaim-grid {
+      display: grid; grid-template-columns: repeat(2, 1fr);
+      gap: 1.5px; background: var(--border);
+    }
+    @media (max-width: 680px) { .noclaim-grid { grid-template-columns: 1fr; } }
+    .noclaim-card { background: var(--surface); padding: 1.5rem; }
+    .noclaim-card__label { font-size: .5625rem; letter-spacing: .14em; text-transform: uppercase; color: var(--gold); margin-bottom: .75rem; }
+    .noclaim-card__body  { font-size: .8125rem; line-height: 1.6; color: var(--text-2); }
+
+    /* ── Assessment CTA ──────────────────────────────────────────────── */
+    #assessment { text-align: center; border-bottom: 1px solid var(--border); }
+    .assess__h    { font-size: clamp(1.625rem, 3vw, 2.5rem); font-weight: 300; letter-spacing: -.03em; max-width: 22ch; margin: .75rem auto 1rem; }
+    .assess__sub  { font-size: 1rem; line-height: 1.65; color: var(--text-2); max-width: 44ch; margin: 0 auto 2.75rem; }
+    .assess__form { max-width: 36rem; margin: 0 auto; display: flex; flex-direction: column; gap: 1rem; text-align: left; }
+    .form-row     { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    @media (max-width: 480px) { .form-row { grid-template-columns: 1fr; } }
+    .field label {
+      display: block; font-size: .6875rem; letter-spacing: .07em;
+      text-transform: uppercase; color: var(--text-2); margin-bottom: .4rem;
+    }
+    .field input, .field select {
+      width: 100%; background: var(--surface-2); border: 1px solid var(--border);
+      color: var(--text-1); padding: .65rem .875rem; font-size: .875rem;
+      font-family: inherit; font-weight: 300; outline: none; appearance: none;
+      transition: border-color .15s;
+    }
+    .field input:focus, .field select:focus { border-color: var(--gold); }
+    .field input::placeholder { color: var(--text-3); }
+    .ohnohoney { opacity: 0; position: absolute; top: 0; left: 0; height: 0; width: 0; z-index: -1; }
+    .form__notice { font-size: .6875rem; color: var(--text-3); line-height: 1.5; text-align: center; }
+    #form-success { display: none; max-width: 36rem; margin: 0 auto; padding: 2rem; border: 1px solid var(--border); border-left: 3px solid var(--gold); }
+    #form-success.visible { display: block; }
+    #form-success h3 { font-size: 1.125rem; font-weight: 400; margin-bottom: .5rem; }
+    #form-success p  { font-size: .875rem; color: var(--text-2); }
+
+    /* ── Footer ──────────────────────────────────────────────────────── */
+    footer { padding: 3rem 0; }
+    .footer__inner {
+      max-width: var(--max-w); margin: 0 auto; padding: 0 2rem;
+      display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1.25rem;
+    }
+    .footer__logo  { font-size: .8125rem; font-weight: 500; color: var(--text-2); }
+    .footer__logo em { color: var(--gold); font-style: normal; }
+    .footer__links { list-style: none; display: flex; gap: 1.5rem; flex-wrap: wrap; }
+    .footer__links a { font-size: .75rem; color: var(--text-3); transition: color .15s; }
+    .footer__links a:hover { color: var(--text-2); }
+    .footer__copy  { font-size: .6875rem; color: var(--text-3); }
+  </style>
+</head>
+<body>
+
+<!-- ── Nav ─────────────────────────────────────────────────────────────── -->
+<nav aria-label="Site navigation">
+  <div class="nav__inner">
+    <a href="/" class="nav__logo">ChartNav <em>MD</em></a>
+    <ul class="nav__links" role="list">
+      <li><a href="#workflow">Workflow</a></li>
+      <li><a href="#security">Security</a></li>
+      <li><a href="#assessment"><button type="button" class="btn btn--gold" style="padding:.4rem 1.1rem;font-size:.8125rem;">Request Assessment</button></a></li>
+    </ul>
+  </div>
+</nav>
+
+<!-- ── Hero ────────────────────────────────────────────────────────────── -->
+<section id="hero">
+  <div class="container">
+    <p class="eyebrow hero__eyebrow">OPHTHALMOLOGY CLINICAL WORKFLOW</p>
+    <h1 class="hero__h1">Clinical workflow built for serious organizations.</h1>
+    <p class="hero__sub">
+      Charting, imaging, intake, scheduling, and billing visibility — unified under
+      IBM watsonx-powered AI with human review, full audit logging, and role-based access.
+      Designed for practices, health systems, and enterprise health organizations that
+      cannot afford blind automation.
+    </p>
+    <div class="hero__ctas">
+      <a href="#assessment" class="btn btn--gold">Request Assessment</a>
+      <a href="https://arcgsystems.com/chartnav" class="btn btn--ghost">Full Platform →</a>
+    </div>
+    <div class="hero__chips" aria-label="Platform attributes">
+      <span class="chip">Multi-provider ready</span>
+      <span class="chip">Human review required</span>
+      <span class="chip">AI audit logging</span>
+      <span class="chip">Role-based access</span>
+      <span class="chip">Org-scoped records</span>
+    </div>
+  </div>
+</section>
+
+<!-- ── Security strip ───────────────────────────────────────────────────── -->
+<div id="security-strip" role="complementary" aria-label="Security overview">
+  <div class="sec-strip__inner">
+    <p class="sec-strip__copy">
+      <strong>Security & Governance — </strong>
+      IBM watsonx-powered AI workflows, human review, role-based access, audit visibility,
+      and security event logging — built for organizations that cannot afford blind automation.
+    </p>
+    <a href="#security" class="sec-strip__link">Security details →</a>
+  </div>
+</div>
+
+<!-- ── Workflow ─────────────────────────────────────────────────────────── -->
+<section id="workflow">
+  <div class="container">
+    <p class="eyebrow">PLATFORM WORKFLOW</p>
+    <h2 class="section__h">Every department. One chart.</h2>
+    <div class="workflow-grid" role="list">
+
+      <article class="wf-card" role="listitem">
+        <p class="wf-card__num">01 — CHARTING</p>
+        <h3 class="wf-card__h">Structured Clinical Charting</h3>
+        <p class="wf-card__p">Ophthalmology-specific encounter templates with structured data capture that feeds downstream coding — customizable per subspecialty.</p>
+      </article>
+
+      <article class="wf-card" role="listitem">
+        <p class="wf-card__num">02 — IMAGING</p>
+        <h3 class="wf-card__h">Imaging Integration</h3>
+        <p class="wf-card__p">OCT, fundus, visual field, and anterior segment imaging surfaced directly inside the encounter — no tab switching.</p>
+      </article>
+
+      <article class="wf-card" role="listitem">
+        <p class="wf-card__num">03 — INTAKE</p>
+        <h3 class="wf-card__h">Digital Patient Intake</h3>
+        <p class="wf-card__p">Pre-visit history, symptom capture, and consent collection — complete before the patient reaches the exam lane.</p>
+      </article>
+
+      <article class="wf-card" role="listitem">
+        <p class="wf-card__num">04 — SCHEDULING</p>
+        <h3 class="wf-card__h">Provider & Resource Scheduling</h3>
+        <p class="wf-card__p">Multi-provider, multi-location scheduling with procedure time blocking and lane assignment built in.</p>
+      </article>
+
+      <article class="wf-card" role="listitem">
+        <p class="wf-card__num">05 — FRONT OFFICE</p>
+        <h3 class="wf-card__h">Front-Office Coordination</h3>
+        <p class="wf-card__p">Check-in, eligibility, and co-pay collection in a single front-desk view. No toggling between systems.</p>
+      </article>
+
+      <article class="wf-card" role="listitem">
+        <p class="wf-card__num">06 — BILLING</p>
+        <h3 class="wf-card__h">Billing Visibility</h3>
+        <p class="wf-card__p">Charge capture, coding review, and claim status visible to clinical leadership — not locked in the billing department.</p>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+<!-- ── Security ─────────────────────────────────────────────────────────── -->
+<section id="security">
+  <div class="container">
+    <p class="eyebrow">SECURITY & GOVERNANCE</p>
+    <div class="security__layout">
+      <div>
+        <h2 class="section__h">Auditable AI. Human review required. Every time.</h2>
+        <p class="security__sub">
+          ChartNav does not route patient data through AI systems without PHI redaction,
+          governance logging, and qualified human review. That is the baseline — not a
+          premium feature. Designed for ophthalmology practices, hospitals, health systems,
+          and enterprise organizations with real accountability requirements.
+        </p>
+        <a href="https://arcgsystems.com/chartnav/security" class="btn btn--ghost" style="font-size:.8125rem;">
+          Full security details →
+        </a>
+      </div>
+
+      <ul class="security__list" aria-label="Security capabilities">
+        <li class="security__item">
+          <span class="security__dot" aria-hidden="true"></span>
+          IBM watsonx-powered AI workflows — designed to align with watsonx.governance principles. Provider/model tracking per call.
+        </li>
+        <li class="security__item">
+          <span class="security__dot" aria-hidden="true"></span>
+          Immutable AI audit log: prompt hash, output hash, model ID, PHI redaction status, security event log — append-only.
+        </li>
+        <li class="security__item">
+          <span class="security__dot" aria-hidden="true"></span>
+          PHI redaction pipeline scans all 18 HIPAA Safe Harbor identifiers before any AI model call. Unredactable PHI blocks the call.
+        </li>
+        <li class="security__item">
+          <span class="security__dot" aria-hidden="true"></span>
+          Prompt injection detection — hard block on token boundary attacks, jailbreak attempts, and review bypass patterns.
+        </li>
+        <li class="security__item">
+          <span class="security__dot" aria-hidden="true"></span>
+          Clinician review gate: no AI output becomes final documentation without qualified human approval.
+        </li>
+        <li class="security__item">
+          <span class="security__dot" aria-hidden="true"></span>
+          Role-based access — admin and clinician lead only for security console. All records org-scoped.
+        </li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ── No-claim ──────────────────────────────────────────────────────────── -->
+<section id="noclaim">
+  <div class="container">
+    <p class="eyebrow">WHAT CHARTNAV DOES NOT CLAIM</p>
+    <h2 class="section__h">We say what we have. Not what we don't.</h2>
+    <p class="noclaim__intro">
+      Transparency about security posture is a prerequisite for trust.
+      These are deliberate non-claims.
+    </p>
+    <div class="noclaim-grid" role="list">
+      <div class="noclaim-card" role="listitem">
+        <p class="noclaim-card__label">HIPAA Certification</p>
+        <p class="noclaim-card__body">ChartNav does not claim HIPAA certification. HIPAA compliance is an organizational responsibility. Practices are responsible for their BAA obligations. ChartNav is designed to support your compliance posture — not replace it.</p>
+      </div>
+      <div class="noclaim-card" role="listitem">
+        <p class="noclaim-card__label">ONC Certification</p>
+        <p class="noclaim-card__body">ChartNav does not hold ONC Health IT certification. Buyers requiring certified EHR technology should evaluate this requirement separately.</p>
+      </div>
+      <div class="noclaim-card" role="listitem">
+        <p class="noclaim-card__label">FedRAMP Authorization</p>
+        <p class="noclaim-card__body">ChartNav does not hold FedRAMP authorization. Government buyers with FedRAMP requirements should account for this in procurement evaluation.</p>
+      </div>
+      <div class="noclaim-card" role="listitem">
+        <p class="noclaim-card__label">IBM Partnership</p>
+        <p class="noclaim-card__body">ChartNav is not an IBM partner or IBM reseller. The use of IBM watsonx infrastructure reflects a technology integration, not a formal commercial partnership.</p>
+      </div>
+      <div class="noclaim-card" role="listitem">
+        <p class="noclaim-card__label">SOC 2</p>
+        <p class="noclaim-card__body">ChartNav has not completed a SOC 2 audit. SOC 2 Type II readiness is on the published security roadmap.</p>
+      </div>
+      <div class="noclaim-card" role="listitem">
+        <p class="noclaim-card__label">Clinical / Legal Advice</p>
+        <p class="noclaim-card__body">ChartNav does not replace legal counsel, compliance officers, or clinical judgment. Nothing in ChartNav constitutes legal, regulatory, or clinical advice.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Assessment ────────────────────────────────────────────────────────── -->
+<section id="assessment">
+  <div class="container container--xs">
+    <p class="eyebrow">REQUEST ASSESSMENT</p>
+    <h2 class="assess__h">Start with a workflow assessment.</h2>
+    <p class="assess__sub">
+      A ChartNav advisor maps your current workflow gaps and shows you exactly where
+      the platform fits — before any commitment. Available for practices, health systems,
+      and enterprise organizations.
+    </p>
+
+    <div id="form-success" role="status" aria-live="polite">
+      <h3>Request received.</h3>
+      <p>A ChartNav advisor will be in touch within one business day.</p>
+    </div>
+
+    <form id="assess-form" class="assess__form" novalidate onsubmit="handleSubmit(event)">
+      <div class="ohnohoney" aria-hidden="true">
+        <label for="company_website">Website</label>
+        <input type="text" id="company_website" name="company_website" tabindex="-1" autocomplete="off" />
+      </div>
+
+      <div class="form-row">
+        <div class="field">
+          <label for="first_name">First name *</label>
+          <input type="text" id="first_name" name="first_name" required autocomplete="given-name" />
+        </div>
+        <div class="field">
+          <label for="last_name">Last name *</label>
+          <input type="text" id="last_name" name="last_name" required autocomplete="family-name" />
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="work_email">Work email *</label>
+        <input type="email" id="work_email" name="work_email" required autocomplete="email" />
+      </div>
+
+      <div class="field">
+        <label for="org_name">Organization name *</label>
+        <input type="text" id="org_name" name="org_name" required />
+      </div>
+
+      <div class="form-row">
+        <div class="field">
+          <label for="org_type">Organization type</label>
+          <select id="org_type" name="org_type">
+            <option value="">Select type</option>
+            <option value="private_practice">Private Practice</option>
+            <option value="hospital_health_system">Hospital / Health System</option>
+            <option value="enterprise">Enterprise Organization</option>
+            <option value="government">Government / Contractor</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="providers">Provider count</label>
+          <select id="providers" name="providers">
+            <option value="">Select range</option>
+            <option value="1-3">1–3</option>
+            <option value="4-10">4–10</option>
+            <option value="11-25">11–25</option>
+            <option value="25+">25+</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="role">Your role *</label>
+        <select id="role" name="role" required>
+          <option value="">Select role</option>
+          <option value="practice_admin">Practice Administrator</option>
+          <option value="medical_director">Medical Director</option>
+          <option value="physician_owner">Physician Owner</option>
+          <option value="it_security">IT / Security</option>
+          <option value="operations">Operations</option>
+          <option value="procurement">Procurement</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+
+      <button type="submit" class="btn btn--gold" style="width:100%;justify-content:center;margin-top:.5rem;">
+        Request Assessment
+      </button>
+
+      <p class="form__notice">
+        ChartNav advisors respond within one business day.
+        No automated sales sequences.
+      </p>
+    </form>
+  </div>
+</section>
+
+<!-- ── Footer ────────────────────────────────────────────────────────────── -->
+<footer>
+  <div class="footer__inner">
+    <span class="footer__logo">ChartNav <em>MD</em></span>
+    <ul class="footer__links" role="list">
+      <li><a href="https://arcgsystems.com/chartnav">Platform</a></li>
+      <li><a href="https://arcgsystems.com/chartnav/security">Security</a></li>
+      <li><a href="https://arcgsystems.com/chartnav/assessment">Assessment</a></li>
+      <li><a href="https://arcgsystems.com/privacy">Privacy</a></li>
+      <li><a href="https://arcgsystems.com/terms">Terms</a></li>
+    </ul>
+    <p class="footer__copy">© 2025 ARCG Systems. ChartNav is a product of ARCG Systems.</p>
+  </div>
+</footer>
+
+<script>
+  const _formLoad = Date.now();
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    const f = e.target;
+
+    // Honeypot
+    if (f.company_website.value) return;
+
+    // Time guard
+    if (Date.now() - _formLoad < 2500) return;
+
+    const payload = {
+      first_name: f.first_name.value.trim(),
+      last_name:  f.last_name.value.trim(),
+      email:      f.work_email.value.trim(),
+      org_name:   f.org_name.value.trim(),
+      org_type:   f.org_type.value,
+      providers:  f.providers.value,
+      role:       f.role.value,
+      source:     'chartnavmd.com',
+      form_type:  'assessment',
+    };
+
+    // VITE_CHARTNAV_LEAD_WEBHOOK replaced at build/deploy time
+    // Use: sed -i "s|%%WEBHOOK_URL%%|${LEAD_WEBHOOK_URL}|g" index.html
+    const WEBHOOK = '%%WEBHOOK_URL%%';
+
+    try {
+      if (WEBHOOK && !WEBHOOK.startsWith('%%')) {
+        await fetch(WEBHOOK, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+      } else {
+        console.log('[ChartNav MD] Lead (webhook not configured):', payload);
+      }
+    } catch (err) {
+      console.error('[ChartNav MD] Webhook error:', err);
+    }
+
+    f.style.display = 'none';
+    const success = document.getElementById('form-success');
+    success.classList.add('visible');
+    success.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+</script>
+</body>
+</html>
