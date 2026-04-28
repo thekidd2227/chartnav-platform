@@ -7916,3 +7916,123 @@ def public_view_post_visit_summary(token: str) -> Response:
         )
     stamp_first_view(row["id"])
     return Response(content=row["pdf_bytes"], media_type="application/pdf")
+
+
+# ---------------------------------------------------------------------------
+# AI Governance admin routes
+# ---------------------------------------------------------------------------
+# Gated by require_admin_or_clinician_lead — same pattern as Operations.
+
+class AiUseCaseBody(BaseModel):
+    name: str
+    description: str = ""
+    model_provider: str
+    model_name: str
+    phi_exposure: bool = False
+    output_type: str = "text"
+    requires_human_review: bool = False
+    clinical_disclaimer_required: bool = False
+
+
+class AiSecurityEventBody(BaseModel):
+    event_type: str
+    severity: str
+    payload_hash: str
+    details: dict = Field(default_factory=dict)
+    detected_by: str = "chartnav_internal"
+
+
+@router.get("/admin/ai-governance/use-cases")
+def ai_governance_list_use_cases(
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    from app.authz import require_admin_or_clinician_lead as _check
+    _check(caller)
+    rows = fetch_all(
+        "SELECT use_case_id, name, description, model_provider, model_name, "
+        "phi_exposure, output_type, requires_human_review, "
+        "clinical_disclaimer_required, active, created_at "
+        "FROM ai_use_cases ORDER BY created_at DESC",
+        {},
+    )
+    return {"use_cases": rows}
+
+
+@router.post("/admin/ai-governance/use-cases", status_code=201)
+def ai_governance_create_use_case(
+    body: AiUseCaseBody,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    from app.authz import require_admin_or_clinician_lead as _check
+    _check(caller)
+    from app.services.ai_governance import register_ai_use_case
+    use_case_id = register_ai_use_case(
+        name=body.name,
+        description=body.description,
+        model_provider=body.model_provider,
+        model_name=body.model_name,
+        phi_exposure=body.phi_exposure,
+        output_type=body.output_type,
+        requires_human_review=body.requires_human_review,
+        clinical_disclaimer_required=body.clinical_disclaimer_required,
+    )
+    return {"use_case_id": use_case_id}
+
+
+@router.get("/admin/ai-governance/audit")
+def ai_governance_list_audit(
+    limit: int = Query(200, ge=1, le=1000),
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    from app.authz import require_admin_or_clinician_lead as _check
+    _check(caller)
+    rows = fetch_all(
+        "SELECT audit_id, org_id, user_id, encounter_id, use_case_id, "
+        "model_provider, model_name, prompt_template_id, "
+        "input_hash, output_hash, output_preview, "
+        "phi_redacted, clinical_disclaimer_shown, "
+        "latency_ms, token_count_prompt, token_count_completion, created_at "
+        "FROM ai_output_audit "
+        "WHERE org_id = :org "
+        "ORDER BY created_at DESC LIMIT :lim",
+        {"org": caller.organization_id, "lim": limit},
+    )
+    return {"audit": rows}
+
+
+@router.get("/admin/ai-governance/security-events")
+def ai_governance_list_security_events(
+    limit: int = Query(200, ge=1, le=1000),
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    from app.authz import require_admin_or_clinician_lead as _check
+    _check(caller)
+    rows = fetch_all(
+        "SELECT event_id, org_id, user_id, event_type, severity, "
+        "payload_hash, details, detected_by, created_at "
+        "FROM ai_security_events "
+        "WHERE org_id = :org "
+        "ORDER BY created_at DESC LIMIT :lim",
+        {"org": caller.organization_id, "lim": limit},
+    )
+    return {"security_events": rows}
+
+
+@router.post("/admin/ai-governance/security-events", status_code=201)
+def ai_governance_create_security_event(
+    body: AiSecurityEventBody,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    from app.authz import require_admin_or_clinician_lead as _check
+    _check(caller)
+    from app.services.ai_governance import record_security_event
+    event_id = record_security_event(
+        org_id=caller.organization_id,
+        event_type=body.event_type,
+        severity=body.severity,
+        payload_hash=body.payload_hash,
+        details=body.details,
+        detected_by=body.detected_by,
+        user_id=caller.user_id,
+    )
+    return {"event_id": event_id}

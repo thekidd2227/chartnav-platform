@@ -695,6 +695,17 @@ export default function App() {
         </div>
       </header>
 
+      <div className="security-strip" data-testid="security-strip">
+        <span className="security-strip__icon" aria-hidden="true">&#128274;</span>
+        <span className="security-strip__text">
+          Encrypted in transit and at rest. Org-scoped data isolation.
+          Immutable audit trail. Role-based access control.
+        </span>
+        <a className="security-strip__link" href="/chartnav/security">
+          Security details
+        </a>
+      </div>
+
       <div className="layout">
         <aside
           className="layout__list"

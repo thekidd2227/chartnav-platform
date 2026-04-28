@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /chartnav/security
+Disallow: /admin/
+Disallow: /intake/
+
+Sitemap: https://app.chartnav.io/sitemap.xml

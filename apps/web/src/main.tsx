@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import { InviteAccept } from "./InviteAccept";
 import { IntakePage } from "./IntakePage";
+import { SecurityInfoPage } from "./SecurityInfoPage";
 import { applyPreferences, loadDensity, loadTheme } from "./preferences";
 import "./styles.css";
 // Phase A item 5 — tablet hardening sheet (safe-area + 44pt targets +
@@ -51,6 +52,10 @@ function Root() {
   const intakeMatch = path.match(/^\/intake\/([^/?#]+)/);
   if (intakeMatch) {
     return <IntakePage token={intakeMatch[1]} />;
+  }
+  // Public security information page — no auth required.
+  if (path === "/chartnav/security" || path === "/chartnav/security/") {
+    return <SecurityInfoPage />;
   }
   return <App />;
 }
