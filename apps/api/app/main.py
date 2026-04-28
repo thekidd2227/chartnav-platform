@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
 
 from app.api.routes import router
+from app.routes.admin_security import router as admin_security_router
 from app.audit import record as audit_record, should_audit
 from app.config import settings
 from app.logging_config import configure_logging
@@ -119,3 +120,4 @@ async def _http_exception_handler(request: Request, exc: HTTPException) -> JSONR
 
 
 app.include_router(router)
+app.include_router(admin_security_router)
