@@ -45,7 +45,7 @@ def upgrade() -> None:
         ),
         sa.Column(
             "human_review_required", sa.Boolean(),
-            nullable=False, server_default=sa.text("1"),
+            nullable=False, server_default=sa.text("true"),
         ),
         sa.Column(
             "human_review_status", sa.String(length=32),

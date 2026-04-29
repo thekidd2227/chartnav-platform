@@ -33,7 +33,7 @@ def _serialize(record: AIGovernanceRecord) -> dict[str, Any]:
         "prompt_hash": record.prompt_hash,
         "output_hash": record.output_hash,
         "phi_redaction_status": record.phi_redaction_status,
-        "human_review_required": 1 if record.human_review_required else 0,
+        "human_review_required": bool(record.human_review_required),
         "human_review_status": record.human_review_status,
         "human_reviewer_id": record.human_reviewer_id,
         "human_review_timestamp": record.human_review_timestamp,
@@ -166,7 +166,7 @@ def append_security_event_row(
             ),
             {
                 "events": json.dumps(record.security_events),
-                "req": 1 if record.human_review_required else 0,
+                "req": bool(record.human_review_required),
                 "status": record.human_review_status,
                 "id": record_id,
                 "org_id": organization_id,

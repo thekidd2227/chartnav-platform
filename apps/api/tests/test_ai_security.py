@@ -24,7 +24,6 @@ from __future__ import annotations
 import json
 
 import pytest
-from sqlalchemy import text
 
 from app.services.ai_governance import (
     AIProvider,
@@ -439,7 +438,7 @@ class TestAppendSecurityEvent:
 
 def _seed_ai_record(test_db, *, org_id: int, **overrides):
     """Insert an AI governance row directly via SQL for route tests."""
-    from app.db import engine
+    from app.db import insert_returning_id, transaction
     base = {
         "organization_id": org_id,
         "provider": "ibm_watsonx",
@@ -448,39 +447,13 @@ def _seed_ai_record(test_db, *, org_id: int, **overrides):
         "prompt_hash": "a" * 64,
         "output_hash": "b" * 64,
         "phi_redaction_status": "clean",
-        "human_review_required": 1,
+        "human_review_required": True,
         "human_review_status": "pending",
-        "human_reviewer_id": None,
-        "human_review_timestamp": None,
-        "human_review_notes": None,
         "security_events": "[]",
-        "workflow_id": None,
-        "user_id": None,
-        "session_id": None,
-        "patient_identifier": None,
-        "prompt_tokens": None,
-        "completion_tokens": None,
-        "latency_ms": None,
     }
     base.update(overrides)
-    with engine.begin() as conn:
-        result = conn.execute(
-            text(
-                "INSERT INTO ai_governance_log "
-                "(organization_id, provider, model_id, use_case, prompt_hash, output_hash, "
-                "phi_redaction_status, human_review_required, human_review_status, "
-                "human_reviewer_id, human_review_timestamp, human_review_notes, "
-                "security_events, workflow_id, user_id, session_id, patient_identifier, "
-                "prompt_tokens, completion_tokens, latency_ms) "
-                "VALUES (:organization_id, :provider, :model_id, :use_case, :prompt_hash, :output_hash, "
-                ":phi_redaction_status, :human_review_required, :human_review_status, "
-                ":human_reviewer_id, :human_review_timestamp, :human_review_notes, "
-                ":security_events, :workflow_id, :user_id, :session_id, :patient_identifier, "
-                ":prompt_tokens, :completion_tokens, :latency_ms)"
-            ),
-            base,
-        )
-        return int(result.lastrowid)
+    with transaction() as conn:
+        return insert_returning_id(conn, "ai_governance_log", base)
 
 
 class TestAdminRoutesAuthorization:
