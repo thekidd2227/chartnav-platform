@@ -1,0 +1,136 @@
+<!--
+  Print-ready one-pager.
+  Source of truth: docs/sales/chartnav-clinical-signal-filtering-one-pager.md
+  Use: render to PDF (Pandoc, Markdown-to-PDF, or paste into Google Docs).
+  Target page count: 1–2 pages on Letter or A4. Do not add page numbers
+  inside the body — your PDF tooling adds them.
+-->
+
+# ChartNav — Clinical Signal Filtering & Retinal Diagram Assist
+
+> Most dictation tools capture everything. ChartNav is designed to
+> separate the clinical signal from conversational noise, propose
+> retinal annotations, and keep the provider in control.
+
+## The problem
+
+Ophthalmology providers dictate during exams. Real clinical speech
+is messy — casual asides ("hold on," "let me check," "next
+patient"), mixed laterality and finding density inside one
+sentence, and confidence that varies from definite to "possible"
+or "rule out." Generic dictation tools transcribe everything and
+push the cleanup burden onto the provider after the visit. The
+result: longer documentation, more after-hours work, and an AI
+surface that providers don't trust to chart on their behalf.
+
+## The ChartNav approach
+
+ChartNav is a clinical workflow surface for ophthalmology that
+treats provider speech as a stream to be **triaged**, not just
+transcribed.
+
+1. **Clinical Signal Filtering** separates dictation into
+   *clinical text*, *ignored chatter*, and *uncertain phrases*.
+2. **Retinal Diagram Assist** turns recognized findings into
+   *proposed* annotations on the OD/OS retinal canvas.
+3. **Provider review** is the only path to the chart. Applied
+   proposals persist; rejected proposals never reach the diagram
+   or the findings text.
+
+## Why it matters
+
+- **Less friction in the room.** Providers speak naturally; the
+  scribe surfaces only clinically-relevant content.
+- **Trust by construction.** Uncertain phrases are flagged for
+  review, not silently chosen one way or the other.
+- **Audit-ready persistence.** Every chart artifact carries
+  version, signed status, and an audit trail with no PHI in the
+  audit body.
+- **Conservative by design.** Rule-based v1 means deterministic,
+  reviewable behavior — not an opaque LLM at the chart edge.
+
+## Retinal Diagram Assist
+
+- OD/OS dual-canvas with manual pen and label tools.
+- AI-proposed annotations placed by zone (macula, optic disc,
+  superior, inferior, nasal, temporal, periphery), color-coded
+  by severity, tagged with certainty.
+- Apply / reject controls per proposal; *Apply remaining* and
+  *Reject remaining* batch actions.
+- Saved diagrams reload with annotations and findings intact.
+- Sign locks the diagram. Edits after signing fork into a new
+  version — the signed record is immutable.
+
+## Clinical Signal Filtering — what it sees
+
+- **Findings allowlist (v1):** drusen, microaneurysm, dot/blot
+  hemorrhage, flame hemorrhage, hard exudates, cotton-wool spot,
+  neovascularization (NVD/NVE), IRMA, lattice degeneration,
+  retinal tear or hole, retinal detachment, laser scar / PRP,
+  disc pallor, RPE changes.
+- **Laterality:** OD / OS / OU and natural-language equivalents.
+- **Zones:** macula, optic disc, superior, inferior, nasal,
+  temporal, periphery.
+- **Severity:** mild, moderate, severe.
+- **Uncertainty markers:** possible, possibly, maybe,
+  questionable, likely, rule out, uncertain, suspicious for,
+  cannot rule out, "?".
+- **Chatter:** "okay," "hold on," "let me see," "can you hear
+  me," "next patient," scheduling and rapport phrases.
+
+A phrase containing both a recognized finding *and* an
+uncertainty marker is kept as clinical and also surfaced as an
+uncertain phrase for explicit confirmation.
+
+## Provider-control safeguards
+
+- The proposal endpoint is **read-only** — calling the AI scribe
+  never writes to a chart.
+- Persistence happens only when the provider clicks *Save*.
+- Applied proposals carry a `source: "ai_approved"` tag in the
+  saved drawing JSON so downstream review can distinguish
+  manual annotations from AI-assisted ones.
+- Rejected proposals never enter `vector_json` or
+  `findings_text`.
+- Signed artifacts cannot be silently overwritten — edits fork
+  into a new version row, and the signed version is preserved.
+- Audit captures **counts only** (findings=N, chatter=N,
+  uncertain=N, annotations=N); the verbatim source text and
+  proposed annotation contents are never written to audit.
+
+## Buyer benefits
+
+| Audience                              | Benefit                                                                  |
+| ------------------------------------- | ------------------------------------------------------------------------ |
+| Clinic owners                         | Faster post-visit close-out; less after-hours documentation.             |
+| Practice administrators               | Consistent retinal documentation; cleaner audit story per provider.      |
+| Health-system innovation leaders      | A scribe surface defensible in front of clinical and compliance review.  |
+| Enterprise procurement                | Conservative AI claim surface; deterministic v1 with an upgrade path.    |
+| Government / public-sector buyers     | Provider-in-the-loop architecture; PHI-safe audit; honest scope.         |
+
+## Compliance-safe limitations
+
+- **Not a certified EHR.** ChartNav is a clinical workflow and
+  charting surface; it does not claim ONC certification.
+- **Not autonomous diagnosis.** The AI surfaces findings; the
+  provider diagnoses, treats, and signs.
+- **Not perfect transcription.** Phrases the filter does not
+  recognize are surfaced as *uncertain* rather than guessed.
+- **English-only v1.**
+- **Allowlist-bound v1.** Findings outside the v1 allowlist are
+  not auto-recognized; the provider can place them manually.
+
+## What's next
+
+LLM-backed filter v2 (same `analyze()` contract; v1 remains as
+fallback and regression baseline). Symbol palette expansion
+(per-finding glyphs, eraser, drag/move, anterior-segment
+template). STT pipeline integration so the scribe can run on
+real-time encounter audio rather than typed paste. Rendered
+PNG/PDF snapshot generation for export and print-to-chart
+workflows.
+
+---
+
+**ChartNav** · Built by ARCG Systems · Pricing, deployment
+options, and pilot terms available on request.
