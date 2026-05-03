@@ -110,7 +110,7 @@ jobs:
             if curl -sfo /dev/null http://127.0.0.1:8766/health; then break; fi
             sleep 0.5
           done
-          bash scripts/smoke.sh http://127.0.0.1:8766
+          bash apps/api/scripts/smoke.sh http://127.0.0.1:8766
           curl -sf -X POST http://127.0.0.1:8766/encounters/1/status \
               -H "Content-Type: application/json" \
               -H "X-User-Email: clin@chartnav.local" \
