@@ -11,19 +11,25 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ApiError,
   EyeDiagramArtifact,
+  RetinalProposalResponse,
   createPatientEyeDiagram,
   getPatientEyeDiagram,
   listPatientEyeDiagrams,
+  proposeRetinalFromFindings,
   signPatientEyeDiagram,
   updatePatientEyeDiagram,
 } from "./api";
 import {
   DrawingDocument,
   EMPTY_DRAWING,
+  ProposalMissingFlag,
+  RetinalProposal,
+  addApprovedProposal,
   applyAutoSummary,
   migrateUnknownDrawing,
 } from "./retinalAnnotations";
 import { RetinalDrawingCanvas } from "./RetinalDrawingCanvas";
+import { RetinalProposalReview } from "./RetinalProposalReview";
 
 interface Props {
   identity: string;
@@ -52,6 +58,10 @@ export function EyeDiagramPanel({ identity, patientId, encounterId }: Props) {
   const [banner, setBanner] = useState<Banner>(null);
   const [busy, setBusy] = useState(false);
 
+  // Phase 6 review surface — populated only after the provider clicks
+  // "Generate diagram proposals from findings". Cleared on dismiss.
+  const [proposalState, setProposalState] = useState<RetinalProposalResponse | null>(null);
+
   // --- list + load helpers -------------------------------------------
 
   const refresh = useCallback(async () => {
@@ -74,6 +84,7 @@ export function EyeDiagramPanel({ identity, patientId, encounterId }: Props) {
     setDrawing(EMPTY_DRAWING);
     setLegacyPayloadWarning(false);
     setBanner(null);
+    setProposalState(null);
   }, []);
 
   const loadArtifact = useCallback(
@@ -88,6 +99,8 @@ export function EyeDiagramPanel({ identity, patientId, encounterId }: Props) {
         setDrawing(doc);
         setLegacyPayloadWarning(!recognized);
         setBanner(null);
+        // Loading a different artifact discards any pending review state.
+        setProposalState(null);
       } catch (err) {
         setBanner({ kind: "error", msg: `Load failed: ${friendly(err)}` });
       } finally {
@@ -194,6 +207,53 @@ export function EyeDiagramPanel({ identity, patientId, encounterId }: Props) {
       setBusy(false);
     }
   }, [active, drawing, findings, identity, patientId, refresh, title]);
+
+  // --- Phase 6 proposal review --------------------------------------
+
+  const onGenerateProposals = useCallback(async () => {
+    try {
+      setBusy(true);
+      const res = await proposeRetinalFromFindings(
+        identity,
+        patientId,
+        findings
+      );
+      setProposalState(res);
+      const counts = res.proposed_annotations.length;
+      const flags = res.missing_flags.length;
+      const uncertain = res.uncertain_phrases.length;
+      setBanner({
+        kind: "info",
+        msg: `Generated ${counts} proposal${counts === 1 ? "" : "s"} for review${
+          flags ? `, ${flags} need clarification` : ""
+        }${uncertain ? `, ${uncertain} uncertain phrase${uncertain === 1 ? "" : "s"}` : ""}.`,
+      });
+    } catch (err) {
+      setBanner({
+        kind: "error",
+        msg: `Generate failed: ${friendly(err)}`,
+      });
+    } finally {
+      setBusy(false);
+    }
+  }, [findings, identity, patientId]);
+
+  const onApplyProposal = useCallback((p: RetinalProposal) => {
+    // Provider explicitly accepted this proposal. Insert a fresh
+    // ai_approved annotation into the working drawing; rejected ones
+    // never reach this handler. Persistence happens later via
+    // onUpdate / onSaveNew like any other annotation.
+    setDrawing((prev) => {
+      const next = addApprovedProposal(prev, p);
+      // Keep the auto-summary in sync with the newly-added annotation.
+      setFindings((findingsPrev) => applyAutoSummary(findingsPrev, next));
+      return next;
+    });
+  }, []);
+
+  const onDismissProposals = useCallback(() => {
+    setProposalState(null);
+  }, []);
 
   const onSign = useCallback(async () => {
     if (!active) return;
@@ -326,6 +386,37 @@ export function EyeDiagramPanel({ identity, patientId, encounterId }: Props) {
             data-testid="eye-diagram-findings"
           />
         </label>
+
+        {!isEditingSigned && (
+          <div className="eye-diagram-panel__proposal-trigger">
+            <button
+              type="button"
+              data-testid="eye-diagram-generate-proposals"
+              onClick={onGenerateProposals}
+              disabled={busy || !findings.trim()}
+            >
+              Generate diagram proposals from findings
+            </button>
+            <span className="muted">
+              Proposals are reviewed by you. Nothing is added to the
+              diagram until you apply it.
+            </span>
+          </div>
+        )}
+
+        {proposalState && (
+          <RetinalProposalReview
+            clinicalText={proposalState.clinical_text}
+            ignoredChatter={proposalState.ignored_chatter}
+            uncertainPhrases={proposalState.uncertain_phrases}
+            proposals={proposalState.proposed_annotations as RetinalProposal[]}
+            missingFlags={proposalState.missing_flags as ProposalMissingFlag[]}
+            confidenceSummary={proposalState.confidence_summary}
+            onApply={onApplyProposal}
+            onDismiss={onDismissProposals}
+            disabled={busy || isEditingSigned}
+          />
+        )}
 
         <div className="eye-diagram-panel__actions">
           {!active && (

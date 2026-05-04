@@ -66,6 +66,15 @@ export interface Point {
   y: number; // 0..1 normalized within the eye pane
 }
 
+/**
+ * Provenance of an annotation:
+ *   - "manual"      : drawn or typed directly by the provider
+ *   - "ai_approved" : applied from a proposal that the provider explicitly
+ *                     reviewed in the Phase 6 proposal panel. Rejected
+ *                     proposals never reach this state and never persist.
+ */
+export type AnnotationSource = "manual" | "ai_approved";
+
 export interface BaseAnnotation {
   id: string;
   kind: AnnotationKind;
@@ -73,8 +82,16 @@ export interface BaseAnnotation {
   x: number;
   y: number;
   color: string;
-  source: "manual";
+  source: AnnotationSource;
   created_at: string;
+  /** When source === "ai_approved", the originating Phase 6 proposal. */
+  proposal_id?: string;
+  /** The findings_text snippet that produced the proposal. Optional. */
+  source_phrase?: string;
+  /** Engine confidence (0..1) at the time the proposal was generated. */
+  confidence?: number;
+  /** Human-readable rule trace, e.g. "matched finding=drusen + eye=OD". */
+  reason?: string;
 }
 
 export interface SymbolAnnotation extends BaseAnnotation {
@@ -346,4 +363,107 @@ export function clearEye(doc: DrawingDocument, eye: Eye): DrawingDocument {
 
 export function clearAll(doc: DrawingDocument): DrawingDocument {
   return { ...doc, annotations: [] };
+}
+
+// --- Phase 6: proposal → annotation -------------------------------------
+
+/**
+ * Phase 6 proposal payload as returned by
+ * `POST /patients/{id}/eye-diagrams/propose-from-findings`.
+ *
+ * The backend always sends `source: "ai_proposed"` to mark this object
+ * as a *suggestion* — it is not yet on the diagram. Only after the
+ * provider applies the proposal does it become a stored annotation
+ * with `source: "ai_approved"`.
+ */
+export interface RetinalProposal {
+  proposal_id: string;
+  kind: "symbol" | "text";
+  symbol_type: SymbolType;
+  eye: Eye;
+  x: number;
+  y: number;
+  zone: string | null;
+  text: string;
+  color: string;
+  confidence: number;
+  confidence_band: "high" | "medium" | "low";
+  source_phrase: string;
+  source_start: number;
+  source_end: number;
+  reason: string;
+  missing_flags: string[];
+  source: "ai_proposed";
+}
+
+export interface ProposalMissingFlag {
+  code: string;
+  detail: string;
+  source_phrase: string;
+  source_start: number;
+  source_end: number;
+}
+
+export interface ProposalResponse {
+  clinical_text: string;
+  ignored_chatter: string[];
+  uncertain_phrases: string[];
+  proposed_annotations: RetinalProposal[];
+  confidence_summary: {
+    high: number;
+    medium: number;
+    low: number;
+    needs_review: boolean;
+  };
+  missing_flags: ProposalMissingFlag[];
+}
+
+/**
+ * Convert a backend proposal into a fresh `Annotation` ready to be
+ * inserted into a `DrawingDocument`. The annotation's `id` is freshly
+ * generated; `proposal_id` is preserved separately so we can trace
+ * provenance. `source` becomes `"ai_approved"` — the proposal has now
+ * been reviewed by a human and the human said yes.
+ */
+export function proposalToAnnotation(p: RetinalProposal): Annotation {
+  if (p.kind === "text") {
+    return {
+      id: newAnnotationId(),
+      kind: "text",
+      eye: p.eye,
+      x: p.x,
+      y: p.y,
+      text: p.text,
+      color: p.color,
+      source: "ai_approved",
+      created_at: new Date().toISOString(),
+      proposal_id: p.proposal_id,
+      source_phrase: p.source_phrase,
+      confidence: p.confidence,
+      reason: p.reason,
+    };
+  }
+  return {
+    id: newAnnotationId(),
+    kind: "symbol",
+    symbol_type: p.symbol_type,
+    eye: p.eye,
+    x: p.x,
+    y: p.y,
+    color: p.color,
+    source: "ai_approved",
+    created_at: new Date().toISOString(),
+    proposal_id: p.proposal_id,
+    source_phrase: p.source_phrase,
+    confidence: p.confidence,
+    reason: p.reason,
+    label: p.text || undefined,
+  };
+}
+
+export function addApprovedProposal(
+  doc: DrawingDocument,
+  proposal: RetinalProposal
+): DrawingDocument {
+  return addAnnotation(doc, proposalToAnnotation(proposal));
 }
