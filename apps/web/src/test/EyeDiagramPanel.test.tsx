@@ -23,6 +23,11 @@ import {
   updatePatientEyeDiagram,
 } from "../api";
 import { EyeDiagramPanel } from "../EyeDiagramPanel";
+import {
+  AUTO_SUMMARY_END,
+  AUTO_SUMMARY_START,
+  type DrawingDocument,
+} from "../retinalAnnotations";
 
 const mockedList = vi.mocked(listPatientEyeDiagrams);
 const mockedGet = vi.mocked(getPatientEyeDiagram);
@@ -39,7 +44,7 @@ const ARTIFACT_BASE: EyeDiagramArtifact = {
   artifact_type: "retinal_diagram",
   title: "Right eye exam",
   findings_text: "IOP 18 mmHg OU.",
-  drawing_json: { strokes: [{ path: "M0 0" }] },
+  drawing_json: {},
   version_number: 1,
   parent_artifact_id: null,
   signed_at: null,
@@ -47,6 +52,24 @@ const ARTIFACT_BASE: EyeDiagramArtifact = {
   is_signed: false,
   created_at: "2026-05-04T12:00:00+00:00",
   updated_at: "2026-05-04T12:00:00+00:00",
+};
+
+const SIGNED_DRAWING: DrawingDocument = {
+  schema_version: 1,
+  canvas_type: "retinal_diagram",
+  annotations: [
+    {
+      id: "a_seed_1",
+      kind: "symbol",
+      symbol_type: "drusen",
+      eye: "OD",
+      x: 0.5,
+      y: 0.5,
+      color: "#c1121f",
+      source: "manual",
+      created_at: "2026-05-04T12:00:00+00:00",
+    },
+  ],
 };
 
 function renderPanel() {
@@ -85,9 +108,12 @@ describe("EyeDiagramPanel", () => {
     expect(await screen.findByTestId("eye-diagram-empty")).toBeInTheDocument();
   });
 
-  it("loading restores title, findings, and drawing JSON", async () => {
+  it("loading restores title and findings; canvas mounts", async () => {
     mockedList.mockResolvedValueOnce({ items: [ARTIFACT_BASE], total: 1 });
-    mockedGet.mockResolvedValueOnce(ARTIFACT_BASE);
+    mockedGet.mockResolvedValueOnce({
+      ...ARTIFACT_BASE,
+      drawing_json: SIGNED_DRAWING as unknown as Record<string, unknown>,
+    });
 
     renderPanel();
     const user = userEvent.setup();
@@ -102,12 +128,28 @@ describe("EyeDiagramPanel", () => {
     expect(
       screen.getByTestId<HTMLTextAreaElement>("eye-diagram-findings").value
     ).toBe("IOP 18 mmHg OU.");
-    expect(
-      screen.getByTestId<HTMLTextAreaElement>("eye-diagram-drawing-json").value
-    ).toContain('"strokes"');
+    expect(screen.getByTestId("rdc-root")).toBeInTheDocument();
+    expect(screen.queryByTestId("eye-diagram-legacy-warning")).not.toBeInTheDocument();
+    // The seeded annotation should render.
+    expect(screen.getByTestId("rdc-annotation-a_seed_1")).toBeInTheDocument();
   });
 
-  it("save new sends drawing_json as parsed object", async () => {
+  it("legacy/unknown drawing_json shows a preserve-warning", async () => {
+    mockedList.mockResolvedValueOnce({ items: [ARTIFACT_BASE], total: 1 });
+    mockedGet.mockResolvedValueOnce({
+      ...ARTIFACT_BASE,
+      drawing_json: { strokes: [{ path: "M0 0" }] },
+    });
+    renderPanel();
+    const user = userEvent.setup();
+    await user.click(await screen.findByTestId("eye-diagram-load-11"));
+
+    expect(
+      await screen.findByTestId("eye-diagram-legacy-warning")
+    ).toBeInTheDocument();
+  });
+
+  it("save new sends a schema_version 1 drawing payload", async () => {
     mockedList.mockResolvedValue({ items: [], total: 0 });
     mockedCreate.mockResolvedValueOnce({ ...ARTIFACT_BASE, id: 99 });
 
@@ -119,15 +161,14 @@ describe("EyeDiagramPanel", () => {
     );
     await user.clear(titleInput);
     await user.type(titleInput, "New diagram");
-    const findings = screen.getByTestId<HTMLTextAreaElement>(
-      "eye-diagram-findings"
-    );
-    await user.clear(findings);
-    await user.type(findings, "Findings.");
-    const drawing = screen.getByTestId<HTMLTextAreaElement>(
-      "eye-diagram-drawing-json"
-    );
-    fireEvent.change(drawing, { target: { value: '{"a":1}' } });
+
+    // Place a drusen symbol on the OD pane via the toolbar + click.
+    await user.click(screen.getByTestId("rdc-tool-symbol-drusen"));
+    fireEvent.pointerDown(screen.getByTestId("rdc-svg-OD"), {
+      clientX: 100,
+      clientY: 100,
+      pointerId: 1,
+    });
 
     await user.click(screen.getByTestId("eye-diagram-save-new"));
 
@@ -135,12 +176,47 @@ describe("EyeDiagramPanel", () => {
       expect(mockedCreate).toHaveBeenCalledTimes(1);
     });
     const [, , payload] = mockedCreate.mock.calls[0];
-    expect(payload).toEqual({
-      title: "New diagram",
-      findings_text: "Findings.",
-      drawing_json: { a: 1 },
-      encounter_id: 42,
+    expect(payload.title).toBe("New diagram");
+    expect(payload.encounter_id).toBe(42);
+    const dj = payload.drawing_json as unknown as DrawingDocument;
+    expect(dj.schema_version).toBe(1);
+    expect(dj.canvas_type).toBe("retinal_diagram");
+    expect(dj.annotations).toHaveLength(1);
+    expect(dj.annotations[0]).toMatchObject({
+      kind: "symbol",
+      symbol_type: "drusen",
+      eye: "OD",
+      source: "manual",
     });
+  });
+
+  it("placing a symbol refreshes the findings auto-summary block", async () => {
+    mockedList.mockResolvedValue({ items: [], total: 0 });
+
+    renderPanel();
+    const user = userEvent.setup();
+    const findings = await screen.findByTestId<HTMLTextAreaElement>(
+      "eye-diagram-findings"
+    );
+    fireEvent.change(findings, {
+      target: { value: "Provider note line one." },
+    });
+
+    await user.click(screen.getByTestId("rdc-tool-symbol-flame_hemorrhage"));
+    fireEvent.pointerDown(screen.getByTestId("rdc-svg-OS"), {
+      clientX: 50,
+      clientY: 30,
+      pointerId: 1,
+    });
+
+    const updated = screen.getByTestId<HTMLTextAreaElement>(
+      "eye-diagram-findings"
+    ).value;
+    expect(updated).toContain("Provider note line one.");
+    expect(updated).toContain(AUTO_SUMMARY_START);
+    expect(updated).toContain(AUTO_SUMMARY_END);
+    expect(updated).toContain("OS:");
+    expect(updated).toContain("flame hemorrhage");
   });
 
   it("sign action calls signPatientEyeDiagram and reflects signed state", async () => {
@@ -161,17 +237,21 @@ describe("EyeDiagramPanel", () => {
     await waitFor(() => {
       expect(mockedSign).toHaveBeenCalledWith("clin@chartnav.local", 7, 11);
     });
-    // Sign button is replaced by the fork button when artifact is signed.
     expect(await screen.findByTestId("eye-diagram-fork")).toBeInTheDocument();
     expect(screen.queryByTestId("eye-diagram-update")).not.toBeInTheDocument();
     expect(
       screen.getByTestId("eye-diagram-signed-warning")
     ).toBeInTheDocument();
+    // Read-only canvas note appears.
+    expect(screen.getByTestId("rdc-readonly-note")).toBeInTheDocument();
+    // Toolbar should be hidden when canvas is read-only.
+    expect(screen.queryByTestId("rdc-toolbar")).not.toBeInTheDocument();
   });
 
   it("editing a signed artifact creates a fork via PATCH ?fork=true", async () => {
     const signed: EyeDiagramArtifact = {
       ...ARTIFACT_BASE,
+      drawing_json: SIGNED_DRAWING as unknown as Record<string, unknown>,
       is_signed: true,
       signed_at: "2026-05-04T12:30:00+00:00",
       signed_by_user_id: 2,
@@ -200,8 +280,7 @@ describe("EyeDiagramPanel", () => {
     const findings = screen.getByTestId<HTMLTextAreaElement>(
       "eye-diagram-findings"
     );
-    await user.clear(findings);
-    await user.type(findings, "Amended.");
+    fireEvent.change(findings, { target: { value: "Amended." } });
 
     await user.click(await screen.findByTestId("eye-diagram-fork"));
 
@@ -212,25 +291,9 @@ describe("EyeDiagramPanel", () => {
     expect(artifactId).toBe(11);
     expect(body.findings_text).toBe("Amended.");
     expect(options).toEqual({ fork: true });
-  });
-
-  it("malformed drawing JSON blocks save and surfaces an error banner", async () => {
-    mockedList.mockResolvedValue({ items: [], total: 0 });
-
-    renderPanel();
-    const user = userEvent.setup();
-    await screen.findByTestId("eye-diagram-empty");
-
-    const drawing = screen.getByTestId<HTMLTextAreaElement>(
-      "eye-diagram-drawing-json"
-    );
-    fireEvent.change(drawing, { target: { value: "{not valid json" } });
-
-    await user.click(screen.getByTestId("eye-diagram-save-new"));
-
-    expect(mockedCreate).not.toHaveBeenCalled();
-    expect(await screen.findByTestId("eye-diagram-banner")).toHaveTextContent(
-      /not valid JSON/i
-    );
+    // Drawing is preserved on the fork even though we only edited findings.
+    const dj = body.drawing_json as unknown as DrawingDocument;
+    expect(dj.annotations).toHaveLength(1);
+    expect(dj.annotations[0].id).toBe("a_seed_1");
   });
 });
