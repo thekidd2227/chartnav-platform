@@ -1,26 +1,29 @@
 """ChartNav AI Security Pipeline.
 
 Pure-logic module: PHI redaction, prompt-injection detection,
-sensitive-data detection, hashing, and a record-mutation pipeline that
-runs around every AI provider call. No DB or HTTP concerns here.
+sensitive-data detection, hashing, and pre/post-call audit helpers.
+No DB or HTTP concerns here.
 
-Pipeline order (pre-call):
-  1. redact_for_ai(raw_prompt)
-  2. detect_prompt_injection(clean_prompt)   -> abort if hard-block
-  3. detect_sensitive_data(clean_prompt)     -> flag / log
-  4. hash_prompt(clean_prompt)
+Pre-call (callers MUST honor):
+    result = preflight_ai_prompt(raw_prompt)
+    if result.should_block:
+        # do not call the model; record the blocked attempt
+        ...
+    redacted_prompt = result.redacted_prompt   # send this to the model
 
-Pipeline order (post-call):
-  5. hash_output(raw_output)
-  6. detect_sensitive_data(raw_output)       -> flag / log
-  7. require_human_review(record)
+Post-call:
+    audit_security_pipeline(record, redacted_prompt=..., raw_output=...)
+
+`audit_security_pipeline` only audits — it does not block. Pre-call
+blocking decisions are made by `preflight_ai_prompt` and must be
+enforced by the caller before any provider request.
 """
 
 from __future__ import annotations
 
 import hashlib
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from app.services.ai_governance import (
@@ -41,12 +44,12 @@ _PHI_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\b(19|20)\d{2}[-/](0[1-9]|1[0-2])[-/](0[1-9]|[12]\d|3[01])\b"), "DOB_ISO"),
     (re.compile(r"\b(0[1-9]|1[0-2])[/\-](0[1-9]|[12]\d|3[01])[/\-](19|20)\d{2}\b"), "DOB_US"),
     (re.compile(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b"), "EMAIL"),
-    # NPI and DEA before PHONE/MRN (avoids 10-digit NPI matching PHONE pattern)
+    # NPI before PHONE/MRN (avoids 10-digit NPI matching PHONE pattern)
     (re.compile(r"\bNPI[:\s#]*\d{10}\b", re.I), "NPI"),
     (re.compile(r"\b[A-Z]{2}\d{7}\b"), "DEA"),
     # URLs with personal paths (before generic digit sweep)
     (re.compile(r"https?://[^\s]+/(?:patient|user|member)/\d+", re.I), "PERSONAL_URL"),
-    # PHONE: require formatted separators to avoid false-positive on NPI/MRN digits
+    # PHONE: require formatted separators to avoid false-positives on long digit runs
     (
         re.compile(
             r"\b(?:\(?\d{3}\)?[\s.\-])\d{3}[\s.\-]\d{4}\b"
@@ -57,11 +60,29 @@ _PHI_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\b\d{5}(?:-\d{4})?\b"), "ZIP"),
     (re.compile(r"\b(?:\d{4}[\s\-]?){3}\d{4}\b"), "CC_CANDIDATE"),
     (re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b"), "IP_ADDRESS"),
-    # Generic long-digit catch-all — must be last
-    (re.compile(r"\b\d{10,12}\b"), "MRN_CANDIDATE"),
+    # MRN — REQUIRES context. We deliberately do NOT flag bare 10–12 digit
+    # numbers because clinical workflows are full of order numbers,
+    # accession numbers, study IDs and timestamps that look identical.
+    # Matched contexts: MRN | medical record [number] | chart number |
+    # patient id[entifier].
+    (
+        re.compile(
+            r"\b(?:MRN|medical\s+record(?:\s+(?:number|no\.?|#))?"
+            r"|chart\s+(?:number|no\.?|#)"
+            r"|patient\s+id(?:entifier)?)"
+            r"[:\s#]*\d{6,12}\b",
+            re.I,
+        ),
+        "MRN",
+    ),
 ]
 
 # --- Prompt injection signatures -----------------------------------------
+#
+# Order in this list controls which label is reported when only one
+# pattern matches. When BOTH soft and hard patterns match the same input,
+# `detect_prompt_injection` reports the first hard-block label so callers
+# never see "should_block=False" because a soft pattern matched first.
 
 # (pattern, label, is_hard_block)
 _INJECTION_PATTERNS: list[tuple[re.Pattern[str], str, bool]] = [
@@ -108,6 +129,7 @@ class InjectionResult:
     detected: bool
     should_block: bool
     matched_label: Optional[str] = None
+    matched_labels: list[str] = field(default_factory=list)
     severity: str = "medium"
 
 
@@ -123,7 +145,18 @@ class SuspiciousPromptResult:
     labels: list[str]
 
 
-# --- Core functions ------------------------------------------------------
+@dataclass
+class PreflightResult:
+    """Pre-call security verdict. Callers MUST honor `should_block`."""
+    redacted_prompt: str
+    should_block: bool
+    blocked_reason: Optional[str]
+    phi_categories: list[str]
+    injection_label: Optional[str]
+    suspicious_labels: list[str]
+
+
+# --- Core detection functions -------------------------------------------
 
 
 def redact_for_ai(text: str) -> RedactionResult:
@@ -148,24 +181,32 @@ def redact_for_ai(text: str) -> RedactionResult:
 def detect_prompt_injection(text: str) -> InjectionResult:
     """Scan `text` for adversarial instruction patterns.
 
-    Hard-block patterns abort the call; soft patterns are logged only.
+    Walks every pattern. If ANY hard-block pattern matches, the result is
+    blocking — even if a soft pattern also matched. `matched_label` is
+    the first hard-block label when present, otherwise the first soft.
     """
+    soft_labels: list[str] = []
+    hard_labels: list[str] = []
     for pattern, label, is_hard_block in _INJECTION_PATTERNS:
         if pattern.search(text):
-            return InjectionResult(
-                detected=True,
-                should_block=is_hard_block,
-                matched_label=label,
-                severity="critical" if is_hard_block else "high",
-            )
-    return InjectionResult(detected=False, should_block=False, severity="none")
+            (hard_labels if is_hard_block else soft_labels).append(label)
+
+    if not (soft_labels or hard_labels):
+        return InjectionResult(detected=False, should_block=False, severity="none")
+
+    all_labels = hard_labels + soft_labels
+    primary = hard_labels[0] if hard_labels else soft_labels[0]
+    return InjectionResult(
+        detected=True,
+        should_block=bool(hard_labels),
+        matched_label=primary,
+        matched_labels=all_labels,
+        severity="critical" if hard_labels else "high",
+    )
 
 
 def detect_sensitive_data(text: str) -> SensitiveDataResult:
-    """Inspect AI output for PHI that should not have been returned.
-
-    Also usable on prompts as a secondary scan.
-    """
+    """Inspect text for PHI categories. Used on prompts and outputs."""
     categories: list[str] = []
     for pattern, label in _PHI_PATTERNS:
         if pattern.search(text):
@@ -190,6 +231,92 @@ def hash_prompt(prompt: str) -> str:
 def hash_output(output: str) -> str:
     """SHA-256 hex digest of the AI output before any transformation."""
     return hashlib.sha256(output.encode("utf-8")).hexdigest()
+
+
+def sanitize_for_audit_detail(text: str, *, max_len: int = 500) -> str:
+    """Scrub a free-text string before storing it in a security event detail.
+
+    Used by every code path that accepts user-supplied detail strings.
+    Returns the redacted text with a category-suffix marker when PHI was
+    found. Truncates to `max_len` to bound storage. Raw PHI never persists.
+    """
+    if text is None:
+        return ""
+    cleaned = redact_for_ai(text)
+    out = cleaned.text
+    if cleaned.was_redacted:
+        out = f"{out} [phi_categories={','.join(cleaned.categories)}]"
+    if len(out) > max_len:
+        out = out[:max_len] + "..."
+    return out
+
+
+# --- Pre-call gate -------------------------------------------------------
+
+
+def preflight_ai_prompt(raw_prompt: str) -> PreflightResult:
+    """Pre-call security gate. Callers MUST honor `should_block`.
+
+    Returns:
+      - redacted_prompt: the version safe to send to a model. PHI is
+        replaced with [REDACTED:<category>] markers.
+      - should_block: True if the call must be aborted.
+      - blocked_reason: short reason string when blocked (label/category).
+      - phi_categories, injection_label, suspicious_labels: metadata for
+        audit events. Detail strings never include raw PHI.
+    """
+    redaction = redact_for_ai(raw_prompt)
+    injection = detect_prompt_injection(raw_prompt)
+    suspicious = detect_suspicious_prompt(raw_prompt)
+
+    should_block = injection.should_block
+    blocked_reason: Optional[str] = None
+    if should_block:
+        blocked_reason = f"injection:{injection.matched_label}"
+
+    return PreflightResult(
+        redacted_prompt=redaction.text,
+        should_block=should_block,
+        blocked_reason=blocked_reason,
+        phi_categories=redaction.categories,
+        injection_label=injection.matched_label,
+        suspicious_labels=suspicious.labels,
+    )
+
+
+def record_blocked_call(
+    record: AIGovernanceRecord,
+    *,
+    preflight: PreflightResult,
+) -> AIGovernanceRecord:
+    """Record that a pre-call check blocked an AI request.
+
+    The model is never called, so output_hash stays empty. The record's
+    review status is escalated and the matched injection label is stored
+    as the blocking event detail (label only — never raw prompt text).
+    """
+    record.phi_redaction_status = (
+        PHIRedactionStatus.REDACTED.value
+        if preflight.phi_categories
+        else PHIRedactionStatus.CLEAN.value
+    )
+    record.output_hash = ""
+    append_security_event(
+        record,
+        SecurityEventType.PROMPT_INJECTION,
+        f"Blocked at preflight: {preflight.blocked_reason or preflight.injection_label}",
+        severity="critical",
+    )
+    record.human_review_required = True
+    if record.human_review_status not in (
+        HumanReviewStatus.APPROVED.value,
+        HumanReviewStatus.ESCALATED.value,
+    ):
+        record.human_review_status = HumanReviewStatus.ESCALATED.value
+    return record
+
+
+# --- Post-call audit ----------------------------------------------------
 
 
 def require_human_review(
@@ -218,45 +345,45 @@ def record_ai_security_event(
 ) -> AIGovernanceRecord:
     """Append a named security event to the record's JSON event log.
 
-    Escalates human review automatically for high/critical events. Does
-    NOT store raw PHI in the detail field — callers must redact first.
+    Detail is auto-scrubbed via `sanitize_for_audit_detail` so caller
+    bugs cannot leak raw PHI into the event log. High/critical events
+    escalate the human-review status.
     """
-    append_security_event(record, event_type, detail, severity)
+    append_security_event(record, event_type, sanitize_for_audit_detail(detail), severity)
     return record
 
 
-# --- Full enforcement pipeline ------------------------------------------
-
-
-def enforce_security_pipeline(
+def audit_security_pipeline(
     record: AIGovernanceRecord,
     *,
     raw_prompt: str,
     raw_output: str,
+    redacted_prompt: Optional[str] = None,
 ) -> AIGovernanceRecord:
-    """Pre/post-call security audit. Mutates `record` in place.
+    """Post-call audit. Mutates `record` in place. Does NOT block.
 
-    Caller persists. Steps:
-      1. PHI scan on prompt
-      2. Injection scan on prompt
-      3. Suspicious prompt scan
-      4. PHI scan on output
-      5. Finalize phi_redaction_status
-      6. human_review_required = True (always, for clinical AI)
+    Pre-call blocking is the responsibility of `preflight_ai_prompt` and
+    its callers. This function records what happened around a completed
+    AI call:
+      - if `redacted_prompt` is provided AND differs from `raw_prompt`,
+        status is REDACTED (PHI was scrubbed before send).
+      - if PHI is detected in raw_prompt anyway (e.g. caller forgot to
+        send the redacted version), status is PHI_IN_PROMPT.
+      - if PHI is detected in raw_output, status is PHI_IN_OUTPUT.
+      - clean both ways: CLEAN.
+      - human_review_required = True (always for clinical AI).
     """
 
-    # Step 1 — PHI in prompt
     prompt_phi = detect_sensitive_data(raw_prompt)
     if prompt_phi.detected:
         record_ai_security_event(
             record,
             SecurityEventType.PHI_DETECTED,
-            f"PHI categories in prompt (no raw values stored): {prompt_phi.categories}",
+            f"PHI categories in prompt: {prompt_phi.categories}",
             severity="high",
         )
         record.phi_redaction_status = PHIRedactionStatus.PHI_IN_PROMPT.value
 
-    # Step 2 — Injection
     injection = detect_prompt_injection(raw_prompt)
     if injection.detected:
         record_ai_security_event(
@@ -266,7 +393,6 @@ def enforce_security_pipeline(
             severity=injection.severity,
         )
 
-    # Step 3 — Suspicious prompt (non-injection)
     suspicious = detect_suspicious_prompt(raw_prompt)
     if suspicious.detected:
         record_ai_security_event(
@@ -276,23 +402,25 @@ def enforce_security_pipeline(
             severity="medium",
         )
 
-    # Step 4 — PHI in output
     output_phi = detect_sensitive_data(raw_output)
     if output_phi.detected:
         record_ai_security_event(
             record,
             SecurityEventType.DATA_RISK,
-            f"PHI categories in AI output (no raw values stored): {output_phi.categories}",
+            f"PHI categories in AI output: {output_phi.categories}",
             severity="high",
         )
         if record.phi_redaction_status != PHIRedactionStatus.PHI_IN_PROMPT.value:
             record.phi_redaction_status = PHIRedactionStatus.PHI_IN_OUTPUT.value
 
-    # Step 5 — Set clean if nothing found
     if not prompt_phi.detected and not output_phi.detected:
-        record.phi_redaction_status = PHIRedactionStatus.CLEAN.value
+        # Nothing made it past the redaction layer. If the caller
+        # explicitly redacted before send, mark REDACTED to credit the
+        # mitigation; otherwise CLEAN.
+        if redacted_prompt is not None and redacted_prompt != raw_prompt:
+            record.phi_redaction_status = PHIRedactionStatus.REDACTED.value
+        else:
+            record.phi_redaction_status = PHIRedactionStatus.CLEAN.value
 
-    # Step 6 — Always require human review for clinical AI
     require_human_review(record, reason="clinical_ai_output")
-
     return record

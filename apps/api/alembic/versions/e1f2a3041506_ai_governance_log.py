@@ -62,7 +62,10 @@ def upgrade() -> None:
         sa.Column("workflow_id", sa.Integer(), nullable=True, index=True),
         sa.Column("user_id", sa.Integer(), nullable=True, index=True),
         sa.Column("session_id", sa.String(length=64), nullable=True),
-        sa.Column("patient_identifier", sa.String(length=64), nullable=True),
+        sa.Column(
+            "patient_ref_hash", sa.String(length=64), nullable=True,
+            comment="SHA-256 of an external patient reference. Never the raw value.",
+        ),
         sa.Column("prompt_tokens", sa.Integer(), nullable=True),
         sa.Column("completion_tokens", sa.Integer(), nullable=True),
         sa.Column("latency_ms", sa.Integer(), nullable=True),

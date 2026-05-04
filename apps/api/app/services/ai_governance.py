@@ -98,7 +98,7 @@ class AIGovernanceRecord:
     workflow_id: Optional[int] = None
     user_id: Optional[int] = None
     session_id: Optional[str] = None
-    patient_identifier: Optional[str] = None
+    patient_ref_hash: Optional[str] = None
     prompt_tokens: Optional[int] = None
     completion_tokens: Optional[int] = None
     latency_ms: Optional[int] = None
@@ -109,6 +109,28 @@ class AIGovernanceRecord:
 def _sha256(text: str) -> str:
     import hashlib
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _looks_like_sha256(value: str) -> bool:
+    """64-char lowercase hex => already a SHA-256 digest. Don't re-hash."""
+    if len(value) != 64:
+        return False
+    return all(c in "0123456789abcdef" for c in value)
+
+
+def hash_patient_ref(value: Optional[str]) -> Optional[str]:
+    """Hash an external patient reference for storage.
+
+    None / empty -> None. Already-hashed input passes through unchanged.
+    """
+    if value is None:
+        return None
+    s = str(value).strip()
+    if not s:
+        return None
+    if _looks_like_sha256(s):
+        return s
+    return _sha256(s)
 
 
 def create_governance_record(
@@ -122,7 +144,7 @@ def create_governance_record(
     workflow_id: Optional[int] = None,
     user_id: Optional[int] = None,
     session_id: Optional[str] = None,
-    patient_identifier: Optional[str] = None,
+    patient_ref: Optional[str] = None,
     prompt_tokens: Optional[int] = None,
     completion_tokens: Optional[int] = None,
     latency_ms: Optional[int] = None,
@@ -131,6 +153,7 @@ def create_governance_record(
 
     organization_id is required — records without an org cannot exist.
     No raw prompt or output text is stored — only SHA-256 hashes.
+    `patient_ref` is hashed before storage; the raw value never persists.
     """
     if not organization_id:
         raise ValueError("organization_id is required for all AI governance records")
@@ -141,11 +164,11 @@ def create_governance_record(
         model_id=model_id,
         use_case=use_case.value,
         prompt_hash=_sha256(prompt),
-        output_hash=_sha256(output),
+        output_hash=_sha256(output) if output else "",
         workflow_id=workflow_id,
         user_id=user_id,
         session_id=session_id,
-        patient_identifier=patient_identifier,
+        patient_ref_hash=hash_patient_ref(patient_ref),
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,
         latency_ms=latency_ms,

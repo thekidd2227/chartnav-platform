@@ -36,11 +36,17 @@ from app.services.ai_governance_store import (
     save_record,
     update_review,
 )
+from app.services.ai_security import sanitize_for_audit_detail
 
 
 router = APIRouter(prefix="/admin/security", tags=["admin-security"])
 
-_AdminOrLead = require_roles(ROLE_ADMIN, ROLE_REVIEWER)
+# RBAC matrix:
+#   posture, events GET/POST           -> admin only
+#   ai-activity GET                    -> admin + reviewer (read)
+#   ai-activity/{id}/review PATCH      -> admin + reviewer (review action)
+_AdminOnly = require_roles(ROLE_ADMIN)
+_AdminOrReviewer = require_roles(ROLE_ADMIN, ROLE_REVIEWER)
 
 
 # --- Helpers -------------------------------------------------------------
@@ -118,7 +124,7 @@ class ReviewUpdate(BaseModel):
 
 @router.get("/ai-activity", response_model=AIActivityResponse)
 def get_ai_activity(
-    caller: Caller = Depends(_AdminOrLead),
+    caller: Caller = Depends(_AdminOrReviewer),
     hours: int = Query(default=24, ge=1, le=720),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
@@ -149,7 +155,7 @@ def get_ai_activity(
 
 @router.get("/events", response_model=EventsResponse)
 def get_security_events(
-    caller: Caller = Depends(_AdminOrLead),
+    caller: Caller = Depends(_AdminOnly),
     hours: int = Query(default=72, ge=1, le=720),
     severity: Optional[str] = Query(default=None, pattern=r"^(low|medium|high|critical)$"),
     event_type: Optional[SecurityEventType] = Query(default=None),
@@ -200,13 +206,19 @@ def get_security_events(
 @router.post("/events", status_code=status.HTTP_201_CREATED)
 def create_security_event(
     body: ManualEventCreate,
-    caller: Caller = Depends(_AdminOrLead),
+    caller: Caller = Depends(_AdminOnly),
 ) -> dict[str, Any]:
-    """Manually log a security event. Used for admin-initiated flagging."""
+    """Manually log a security event. Used for admin-initiated flagging.
+
+    The free-text `detail` is auto-scrubbed for PHI before storage —
+    SSN, DOB, email, phone, MRN, NPI, etc. are replaced with category
+    markers. Raw values never persist.
+    """
+    sanitized_detail = sanitize_for_audit_detail(body.detail)
     event = {
         "event_id": str(uuid.uuid4()),
         "type": body.event_type.value,
-        "detail": body.detail,
+        "detail": sanitized_detail,
         "severity": body.severity,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
@@ -245,7 +257,7 @@ def create_security_event(
 
 @router.get("/posture", response_model=PostureResponse)
 def get_security_posture(
-    caller: Caller = Depends(_AdminOrLead),
+    caller: Caller = Depends(_AdminOnly),
     hours: int = Query(default=168, ge=1, le=720),  # default 7 days
 ) -> PostureResponse:
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
@@ -307,7 +319,7 @@ def get_security_posture(
 def update_review_status(
     record_id: int,
     body: ReviewUpdate,
-    caller: Caller = Depends(_AdminOrLead),
+    caller: Caller = Depends(_AdminOrReviewer),
 ) -> dict[str, Any]:
     updated = update_review(
         record_id,
