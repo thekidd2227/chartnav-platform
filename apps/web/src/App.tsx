@@ -745,6 +745,11 @@ function EncounterDetail({
             identity={identity}
             me={me}
             encounterId={encounter.id}
+            patientId={
+              typeof encounter.patient_id === "number"
+                ? encounter.patient_id
+                : null
+            }
             patientDisplay={
               encounter.patient_name ?? encounter.patient_identifier
             }
