@@ -85,6 +85,7 @@ import {
   segmentAbbreviations,
   type ClinicalShortcut,
 } from "./clinicalShortcuts";
+import { EyeDiagramPanel } from "./EyeDiagramPanel";
 
 // ---------------------------------------------------------------------
 // Types
@@ -94,6 +95,13 @@ interface Props {
   identity: string;
   me: Me;
   encounterId: number;
+  /**
+   * Numeric `patients.id` resolved from the encounter row. Null/absent
+   * when the encounter is sourced from an integrated adapter (e.g.
+   * FHIR) where the patient is identified by an external ref instead
+   * of a native row, in which case the eye-diagram panel hides itself.
+   */
+  patientId?: number | null;
   patientDisplay: string;
   providerDisplay: string;
 }
@@ -111,6 +119,7 @@ export function NoteWorkspace({
   identity,
   me,
   encounterId,
+  patientId = null,
   patientDisplay,
   providerDisplay,
 }: Props) {
@@ -2346,6 +2355,16 @@ export function NoteWorkspace({
             </div>
           </div>
         </div>
+      )}
+
+      {patientId !== null && (
+        <section className="section" data-testid="eye-diagram-section">
+          <EyeDiagramPanel
+            identity={identity}
+            patientId={patientId}
+            encounterId={encounterId}
+          />
+        </section>
       )}
     </div>
   );

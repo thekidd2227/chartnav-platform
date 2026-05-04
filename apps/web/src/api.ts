@@ -1568,3 +1568,111 @@ export function patchEncounterInputTranscript(
     body: JSON.stringify({ transcript_text: transcriptText }),
   });
 }
+
+// ---------- Eye-diagram artifacts (persistence shell) ----------
+//
+// This is the storage and identity foundation for retinal diagram
+// artifacts. There is no drawing canvas, no AI proposal pipeline, and
+// no apply/reject workflow yet — those land in a follow-up. Callers
+// supply `drawing_json` as any JSON-shaped object; the backend stores
+// it verbatim and returns it as a parsed object (never a string).
+
+export interface EyeDiagramArtifact {
+  id: number;
+  organization_id: number;
+  patient_id: number;
+  encounter_id: number | null;
+  created_by_user_id: number;
+  artifact_type: "retinal_diagram";
+  title: string;
+  findings_text: string;
+  drawing_json: Record<string, unknown>;
+  version_number: number;
+  parent_artifact_id: number | null;
+  signed_at: string | null;
+  signed_by_user_id: number | null;
+  is_signed: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EyeDiagramListResponse {
+  items: EyeDiagramArtifact[];
+  total: number;
+}
+
+export interface EyeDiagramCreateInput {
+  title?: string;
+  findings_text?: string;
+  drawing_json?: Record<string, unknown>;
+  encounter_id?: number | null;
+}
+
+export interface EyeDiagramUpdateInput {
+  title?: string;
+  findings_text?: string;
+  drawing_json?: Record<string, unknown>;
+}
+
+export function listPatientEyeDiagrams(
+  email: string,
+  patientId: number
+): Promise<EyeDiagramListResponse> {
+  return request(`/patients/${patientId}/eye-diagrams`, { email });
+}
+
+export function getPatientEyeDiagram(
+  email: string,
+  patientId: number,
+  artifactId: number
+): Promise<EyeDiagramArtifact> {
+  return request(`/patients/${patientId}/eye-diagrams/${artifactId}`, { email });
+}
+
+export function createPatientEyeDiagram(
+  email: string,
+  patientId: number,
+  input: EyeDiagramCreateInput
+): Promise<EyeDiagramArtifact> {
+  return request(`/patients/${patientId}/eye-diagrams`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+/**
+ * Update an unsigned artifact in place. If the target is signed and
+ * `fork` is true, the backend creates a new unsigned version whose
+ * `parent_artifact_id` is the original. If signed and `fork` is false,
+ * the backend returns 409 `artifact_signed_immutable`.
+ */
+export function updatePatientEyeDiagram(
+  email: string,
+  patientId: number,
+  artifactId: number,
+  input: EyeDiagramUpdateInput,
+  options: { fork?: boolean } = {}
+): Promise<EyeDiagramArtifact> {
+  const qs = options.fork ? "?fork=true" : "";
+  return request(`/patients/${patientId}/eye-diagrams/${artifactId}${qs}`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+/**
+ * Stamp signed_at/signed_by on the artifact. Re-signing returns
+ * 409 `artifact_already_signed`.
+ */
+export function signPatientEyeDiagram(
+  email: string,
+  patientId: number,
+  artifactId: number
+): Promise<EyeDiagramArtifact> {
+  return request(`/patients/${patientId}/eye-diagrams/${artifactId}/sign`, {
+    email,
+    method: "POST",
+  });
+}
