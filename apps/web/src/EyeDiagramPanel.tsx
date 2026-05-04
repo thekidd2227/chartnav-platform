@@ -1,10 +1,10 @@
-// EyeDiagramPanel — minimal JSON-shell UI for retinal diagram artifacts.
+// EyeDiagramPanel — provider-facing retinal diagram workspace.
 //
-// This is the persistence shell, not a drawing canvas. The drawing
-// payload is edited as raw JSON in a textarea so providers (and tests)
-// can save/load arbitrary structured drawings while the canvas widget
-// is built in a follow-up. AI proposal apply/reject is intentionally
-// out of scope for this PR.
+// Phase 5B: replaced the persistence-shell JSON textarea with a real
+// SVG OD/OS drawing canvas (RetinalDrawingCanvas). The save/load/sign/
+// fork wiring against the existing `/patients/{id}/eye-diagrams` API
+// is unchanged — only the editing surface and the findings auto-summary
+// behavior are new.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -17,6 +17,13 @@ import {
   signPatientEyeDiagram,
   updatePatientEyeDiagram,
 } from "./api";
+import {
+  DrawingDocument,
+  EMPTY_DRAWING,
+  applyAutoSummary,
+  migrateUnknownDrawing,
+} from "./retinalAnnotations";
+import { RetinalDrawingCanvas } from "./RetinalDrawingCanvas";
 
 interface Props {
   identity: string;
@@ -30,30 +37,6 @@ type Banner =
   | { kind: "info"; msg: string }
   | null;
 
-const EMPTY_DRAWING_JSON = "{}";
-
-function prettyJson(value: unknown): string {
-  try {
-    return JSON.stringify(value ?? {}, null, 2);
-  } catch {
-    return EMPTY_DRAWING_JSON;
-  }
-}
-
-function parseDrawingJson(input: string): { ok: true; value: Record<string, unknown> } | { ok: false; reason: string } {
-  const trimmed = input.trim();
-  if (!trimmed) return { ok: true, value: {} };
-  try {
-    const parsed = JSON.parse(trimmed);
-    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return { ok: false, reason: "drawing_json must be a JSON object." };
-    }
-    return { ok: true, value: parsed as Record<string, unknown> };
-  } catch (err) {
-    return { ok: false, reason: `drawing_json is not valid JSON (${(err as Error).message}).` };
-  }
-}
-
 function friendly(err: unknown): string {
   if (err instanceof ApiError) return `${err.errorCode}: ${err.reason}`;
   return err instanceof Error ? err.message : String(err);
@@ -64,9 +47,12 @@ export function EyeDiagramPanel({ identity, patientId, encounterId }: Props) {
   const [active, setActive] = useState<EyeDiagramArtifact | null>(null);
   const [title, setTitle] = useState<string>("");
   const [findings, setFindings] = useState<string>("");
-  const [drawingText, setDrawingText] = useState<string>(EMPTY_DRAWING_JSON);
+  const [drawing, setDrawing] = useState<DrawingDocument>(EMPTY_DRAWING);
+  const [legacyPayloadWarning, setLegacyPayloadWarning] = useState<boolean>(false);
   const [banner, setBanner] = useState<Banner>(null);
   const [busy, setBusy] = useState(false);
+
+  // --- list + load helpers -------------------------------------------
 
   const refresh = useCallback(async () => {
     try {
@@ -85,7 +71,8 @@ export function EyeDiagramPanel({ identity, patientId, encounterId }: Props) {
     setActive(null);
     setTitle("");
     setFindings("");
-    setDrawingText(EMPTY_DRAWING_JSON);
+    setDrawing(EMPTY_DRAWING);
+    setLegacyPayloadWarning(false);
     setBanner(null);
   }, []);
 
@@ -94,10 +81,12 @@ export function EyeDiagramPanel({ identity, patientId, encounterId }: Props) {
       try {
         setBusy(true);
         const a = await getPatientEyeDiagram(identity, patientId, id);
+        const { doc, recognized } = migrateUnknownDrawing(a.drawing_json);
         setActive(a);
         setTitle(a.title);
         setFindings(a.findings_text);
-        setDrawingText(prettyJson(a.drawing_json));
+        setDrawing(doc);
+        setLegacyPayloadWarning(!recognized);
         setBanner(null);
       } catch (err) {
         setBanner({ kind: "error", msg: `Load failed: ${friendly(err)}` });
@@ -116,29 +105,33 @@ export function EyeDiagramPanel({ identity, patientId, encounterId }: Props) {
     if (active.parent_artifact_id != null) {
       parts.push(`forked from #${active.parent_artifact_id}`);
     }
-    if (active.is_signed) {
-      parts.push("signed");
-    } else {
-      parts.push("unsigned");
-    }
+    parts.push(active.is_signed ? "signed" : "unsigned");
     return parts.join(" · ");
   }, [active]);
 
+  // --- save / update / fork / sign -----------------------------------
+
+  const onCanvasChange = useCallback(
+    (next: DrawingDocument) => {
+      setDrawing(next);
+      // Auto-refresh the fenced summary in findings_text whenever the
+      // drawing changes. Provider edits outside the fence are preserved.
+      setFindings((prev) => applyAutoSummary(prev, next));
+    },
+    []
+  );
+
   const onSaveNew = useCallback(async () => {
-    const parsed = parseDrawingJson(drawingText);
-    if (!parsed.ok) {
-      setBanner({ kind: "error", msg: parsed.reason });
-      return;
-    }
     try {
       setBusy(true);
       const created = await createPatientEyeDiagram(identity, patientId, {
         title,
         findings_text: findings,
-        drawing_json: parsed.value,
+        drawing_json: drawing as unknown as Record<string, unknown>,
         encounter_id: encounterId ?? undefined,
       });
       setActive(created);
+      setLegacyPayloadWarning(false);
       setBanner({ kind: "ok", msg: `Created v${created.version_number} (#${created.id}).` });
       await refresh();
     } catch (err) {
@@ -146,24 +139,24 @@ export function EyeDiagramPanel({ identity, patientId, encounterId }: Props) {
     } finally {
       setBusy(false);
     }
-  }, [drawingText, encounterId, findings, identity, patientId, refresh, title]);
+  }, [drawing, encounterId, findings, identity, patientId, refresh, title]);
 
   const onUpdate = useCallback(async () => {
     if (!active) return;
-    const parsed = parseDrawingJson(drawingText);
-    if (!parsed.ok) {
-      setBanner({ kind: "error", msg: parsed.reason });
-      return;
-    }
     try {
       setBusy(true);
       const updated = await updatePatientEyeDiagram(
         identity,
         patientId,
         active.id,
-        { title, findings_text: findings, drawing_json: parsed.value }
+        {
+          title,
+          findings_text: findings,
+          drawing_json: drawing as unknown as Record<string, unknown>,
+        }
       );
       setActive(updated);
+      setLegacyPayloadWarning(false);
       setBanner({ kind: "ok", msg: `Saved (v${updated.version_number}).` });
       await refresh();
     } catch (err) {
@@ -171,25 +164,25 @@ export function EyeDiagramPanel({ identity, patientId, encounterId }: Props) {
     } finally {
       setBusy(false);
     }
-  }, [active, drawingText, findings, identity, patientId, refresh, title]);
+  }, [active, drawing, findings, identity, patientId, refresh, title]);
 
   const onForkFromSigned = useCallback(async () => {
     if (!active) return;
-    const parsed = parseDrawingJson(drawingText);
-    if (!parsed.ok) {
-      setBanner({ kind: "error", msg: parsed.reason });
-      return;
-    }
     try {
       setBusy(true);
       const forked = await updatePatientEyeDiagram(
         identity,
         patientId,
         active.id,
-        { title, findings_text: findings, drawing_json: parsed.value },
+        {
+          title,
+          findings_text: findings,
+          drawing_json: drawing as unknown as Record<string, unknown>,
+        },
         { fork: true }
       );
       setActive(forked);
+      setLegacyPayloadWarning(false);
       setBanner({
         kind: "ok",
         msg: `New version ${forked.version_number} created (#${forked.id}, parent #${forked.parent_artifact_id}).`,
@@ -200,7 +193,7 @@ export function EyeDiagramPanel({ identity, patientId, encounterId }: Props) {
     } finally {
       setBusy(false);
     }
-  }, [active, drawingText, findings, identity, patientId, refresh, title]);
+  }, [active, drawing, findings, identity, patientId, refresh, title]);
 
   const onSign = useCallback(async () => {
     if (!active) return;
@@ -208,7 +201,7 @@ export function EyeDiagramPanel({ identity, patientId, encounterId }: Props) {
       setBusy(true);
       const signed = await signPatientEyeDiagram(identity, patientId, active.id);
       setActive(signed);
-      setBanner({ kind: "ok", msg: `Signed.` });
+      setBanner({ kind: "ok", msg: "Signed." });
       await refresh();
     } catch (err) {
       setBanner({ kind: "error", msg: `Sign failed: ${friendly(err)}` });
@@ -217,13 +210,15 @@ export function EyeDiagramPanel({ identity, patientId, encounterId }: Props) {
     }
   }, [active, identity, patientId, refresh]);
 
+  // --- render ---------------------------------------------------------
+
   return (
     <div className="eye-diagram-panel" data-testid="eye-diagram-panel">
       <header className="eye-diagram-panel__header">
         <h3>Retinal diagram artifacts</h3>
         <p className="eye-diagram-panel__hint">
-          Persistence shell. Drawing payload is plain JSON; the canvas
-          widget and AI proposals land in a later PR.
+          OD/OS drawing workspace. Symbols, freehand, and text labels save
+          as structured annotations. AI proposals are not part of this PR.
         </p>
       </header>
 
@@ -287,8 +282,20 @@ export function EyeDiagramPanel({ identity, patientId, encounterId }: Props) {
             data-testid="eye-diagram-signed-warning"
             className="flash flash--info"
           >
-            This artifact is signed and immutable. Saving will create a
-            new version that points back at this one as its parent.
+            This artifact is signed and immutable. Use “Save as new
+            version” to amend; the new version will fork from this one.
+          </div>
+        )}
+
+        {legacyPayloadWarning && (
+          <div
+            data-testid="eye-diagram-legacy-warning"
+            className="flash flash--info"
+          >
+            This artifact was saved before the drawing canvas existed.
+            Its drawing payload is preserved on the server but not
+            displayed; saving will replace it with the new canvas
+            content.
           </div>
         )}
 
@@ -303,26 +310,20 @@ export function EyeDiagramPanel({ identity, patientId, encounterId }: Props) {
           />
         </label>
 
+        <RetinalDrawingCanvas
+          value={drawing}
+          onChange={onCanvasChange}
+          readOnly={isEditingSigned}
+        />
+
         <label>
           <span>Findings</span>
           <textarea
-            rows={4}
+            rows={6}
             value={findings}
             onChange={(e) => setFindings(e.target.value)}
             disabled={busy}
             data-testid="eye-diagram-findings"
-          />
-        </label>
-
-        <label>
-          <span>Drawing JSON</span>
-          <textarea
-            rows={8}
-            value={drawingText}
-            onChange={(e) => setDrawingText(e.target.value)}
-            disabled={busy}
-            data-testid="eye-diagram-drawing-json"
-            spellCheck={false}
           />
         </label>
 

@@ -143,23 +143,140 @@ row hide the panel). The panel:
 This is a **persistence shell**: the drawing payload is edited as raw
 JSON. The clinical drawing canvas is a follow-up.
 
-## Future phases (deferred from this PR)
+## Phase 5B — OD/OS retinal drawing canvas
+
+The persistence shell's JSON textarea is replaced by a real SVG
+drawing surface. **No backend or storage contract changes.** The
+canvas saves and loads through the same `/patients/{id}/eye-diagrams`
+routes; the new content lives entirely inside `drawing_json` under a
+versioned, structured schema.
+
+### `drawing_json` schema (v1)
+
+```jsonc
+{
+  "schema_version": 1,
+  "canvas_type": "retinal_diagram",
+  "annotations": [
+    {
+      "id": "a_<timestamp>_<n>",
+      "kind": "symbol" | "freehand" | "text",
+      "eye": "OD" | "OS",
+      "x": 0.42,           // normalized 0..1 within the eye pane
+      "y": 0.58,
+      "color": "#c1121f",
+      "source": "manual",  // reserved; AI proposals will populate later
+      "created_at": "<iso8601>",
+
+      // kind === "symbol":
+      "symbol_type": "drusen" | "dot_blot_hemorrhage" | ...,
+      "label": "<optional>",
+
+      // kind === "freehand":
+      "points": [{ "x": 0.4, "y": 0.5 }, ...],
+
+      // kind === "text":
+      "text": "<provider label>"
+    }
+  ]
+}
+```
+
+Coordinates are **normalized 0..1** per eye pane so resizing the SVG
+never breaks position. The `source` field is reserved — every
+annotation in this PR is `"manual"`. AI-proposed annotations will land
+later under a different `source` value without a schema bump.
+
+### Symbol library v1
+
+13 ophthalmology symbols ship in this PR (see
+`apps/web/src/retinalAnnotations.ts` `SYMBOL_LIBRARY`):
+
+drusen · dot/blot hemorrhage · flame hemorrhage · microaneurysm ·
+hard exudates · cotton-wool spot · neovascularization · retinal tear ·
+retinal detachment · laser/scar · disc pallor · RPE change ·
+lattice degeneration
+
+Severity selection (mild / moderate / severe) is **not** in this PR —
+the `severity` field stays reserved.
+
+### Tools
+
+- Select / freehand / text label (the three primary modes)
+- 13-button symbol palette
+- Color picker
+- Undo / redo (whole-state snapshots, capped at **50** entries)
+- Move selected annotation by dragging in select mode
+- Delete selected
+- Clear current eye / clear all
+
+### Findings auto-summary
+
+The findings textarea is updated automatically as the canvas changes,
+but **only inside a fenced block**:
+
+```
+<!-- retinal-auto-summary:start -->
+Retinal diagram auto-summary:
+OD: drusen near macula
+OS: flame hemorrhage superior
+<!-- retinal-auto-summary:end -->
+```
+
+Provider text **outside** these markers is never modified. If the
+fence is missing, a fresh block is appended. If present, only the
+content between the markers is replaced. The summary respects rough
+zone names (superior / inferior / nasal / temporal / near macula)
+based on the normalized coordinates, and merges duplicates with `×N`
+counts.
+
+### Signed / fork behavior
+
+- A signed artifact loads in **read-only** mode: the toolbar is
+  hidden, pointer events on the canvas are ignored, and an inline
+  note explains how to amend.
+- The button strip below the canvas swaps to **"Save as new version"**.
+- Saving issues `PATCH /patients/{id}/eye-diagrams/{id}?fork=true`,
+  which the existing backend turns into a new unsigned row whose
+  `parent_artifact_id` is the original. No backend behavior change.
+
+### Legacy payload handling
+
+When a Phase-5A persistence-shell artifact (any non-`schema_version: 1`
+shape) is loaded, the canvas mounts empty and surfaces a small inline
+note: *"This artifact was saved before the drawing canvas existed."*
+The original `drawing_json` is preserved on the server until the user
+saves new canvas content. This keeps the rollout safe; we never
+silently destroy a legacy payload.
+
+### What's still deferred
+
+- AI-proposed annotations (consumer of the same `drawing_json`)
+- Provider apply/reject workflow + `source: "ai_approved"`
+- Clinical speech / signal filter
+- Rendered snapshot or PDF export of the signed diagram
+- Symbol library expansion beyond v1
+- Severity UI for symbols
+
+All of those continue to ride on the same `chart_artifacts` table and
+the same `drawing_json` schema — no migration needed when they land.
+
+## Future phases (still deferred)
 
 These all build on the same `chart_artifacts` table and routes:
 
-1. **Visual drawing canvas** — replace the JSON textarea with a real
-   OD/OS retinal canvas widget. Submits the same `drawing_json` shape.
-2. **Clinical speech filter** — filter dictated text into clinical
+1. **Clinical speech filter** — filter dictated text into clinical
    findings before it reaches the artifact. Independent of this PR.
-3. **AI-proposed annotations** — generate diagram annotations from
+2. **AI-proposed annotations** — generate diagram annotations from
    `findings_text`. Producer pipeline; does not write to `chart_artifacts`
    directly.
-4. **Provider apply/reject workflow** — surface AI proposals as
+3. **Provider apply/reject workflow** — surface AI proposals as
    reviewable suggestions; only **applied** ones flow into
    `drawing_json` with `source=ai_approved` provenance. Rejected
    proposals never persist.
-5. **Findings → diagram proposals** — the bridge that turns approved
+4. **Findings → diagram proposals** — the bridge that turns approved
    findings into proposed annotations on the diagram.
 
-The persistence shell ships first so each of those follow-ups has a
-stable storage contract and audit baseline to plug into.
+The persistence shell + Phase 5B canvas ship first so each of those
+follow-ups has a stable storage contract, schema version, and audit
+baseline to plug into.
