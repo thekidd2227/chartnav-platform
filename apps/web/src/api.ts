@@ -1676,3 +1676,169 @@ export function signPatientEyeDiagram(
     method: "POST",
   });
 }
+
+// ---------- Phase 8: scribe session lifecycle ----------
+//
+// One row per AI scribe session: the unit of work between provider
+// source/transcript text and a finalized clinical artifact. The
+// frontend never persists draft / processed / structured note content
+// without going through these endpoints — there is no client-side
+// finalization shortcut.
+
+export type ScribeSessionStatus =
+  | "draft"
+  | "processing"
+  | "ready_for_review"
+  | "reviewed"
+  | "finalized"
+  | "discarded";
+
+export type ScribeSessionInputMode =
+  | "pasted_text"
+  | "transcript"
+  | "audio_placeholder";
+
+export interface ScribeSession {
+  id: number;
+  organization_id: number;
+  patient_id: number;
+  encounter_id: number | null;
+  created_by_user_id: number;
+  status: ScribeSessionStatus;
+  input_mode: ScribeSessionInputMode;
+  source_text: string | null;
+  transcript_text: string | null;
+  draft_note_text: string | null;
+  /** Engine-produced structured note. Always a real object on the wire. */
+  structured_note_json: Record<string, string>;
+  linked_artifact_id: number | null;
+  review_notes: string | null;
+  finalized_at: string | null;
+  reviewed_at: string | null;
+  reviewed_by_user_id: number | null;
+  discarded_at: string | null;
+  created_at: string;
+  updated_at: string;
+  is_terminal: boolean;
+}
+
+export interface ScribeSessionListResponse {
+  items: ScribeSession[];
+  total: number;
+}
+
+export interface ScribeSessionCreateInput {
+  encounter_id?: number | null;
+  input_mode?: ScribeSessionInputMode;
+  source_text?: string;
+  transcript_text?: string;
+  linked_artifact_id?: number | null;
+}
+
+export interface ScribeSessionUpdateInput {
+  source_text?: string;
+  transcript_text?: string;
+  review_notes?: string;
+  encounter_id?: number | null;
+  linked_artifact_id?: number | null;
+  input_mode?: ScribeSessionInputMode;
+}
+
+export interface ScribeSessionReviewInput {
+  review_notes?: string;
+}
+
+export function listPatientScribeSessions(
+  email: string,
+  patientId: number
+): Promise<ScribeSessionListResponse> {
+  return request(`/patients/${patientId}/scribe-sessions`, { email });
+}
+
+export function getPatientScribeSession(
+  email: string,
+  patientId: number,
+  sessionId: number
+): Promise<ScribeSession> {
+  return request(
+    `/patients/${patientId}/scribe-sessions/${sessionId}`,
+    { email }
+  );
+}
+
+export function createPatientScribeSession(
+  email: string,
+  patientId: number,
+  input: ScribeSessionCreateInput
+): Promise<ScribeSession> {
+  return request(`/patients/${patientId}/scribe-sessions`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updatePatientScribeSession(
+  email: string,
+  patientId: number,
+  sessionId: number,
+  input: ScribeSessionUpdateInput
+): Promise<ScribeSession> {
+  return request(
+    `/patients/${patientId}/scribe-sessions/${sessionId}`,
+    {
+      email,
+      method: "PATCH",
+      body: JSON.stringify(input),
+    }
+  );
+}
+
+export function processPatientScribeSession(
+  email: string,
+  patientId: number,
+  sessionId: number
+): Promise<ScribeSession> {
+  return request(
+    `/patients/${patientId}/scribe-sessions/${sessionId}/process`,
+    { email, method: "POST" }
+  );
+}
+
+export function reviewPatientScribeSession(
+  email: string,
+  patientId: number,
+  sessionId: number,
+  input: ScribeSessionReviewInput = {}
+): Promise<ScribeSession> {
+  return request(
+    `/patients/${patientId}/scribe-sessions/${sessionId}/review`,
+    {
+      email,
+      method: "POST",
+      body: JSON.stringify(input),
+    }
+  );
+}
+
+export function finalizePatientScribeSession(
+  email: string,
+  patientId: number,
+  sessionId: number
+): Promise<ScribeSession> {
+  return request(
+    `/patients/${patientId}/scribe-sessions/${sessionId}/finalize`,
+    { email, method: "POST" }
+  );
+}
+
+export function discardPatientScribeSession(
+  email: string,
+  patientId: number,
+  sessionId: number
+): Promise<ScribeSession> {
+  return request(
+    `/patients/${patientId}/scribe-sessions/${sessionId}/discard`,
+    { email, method: "POST" }
+  );
+}
