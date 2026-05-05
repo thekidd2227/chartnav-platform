@@ -261,25 +261,182 @@ silently destroy a legacy payload.
 All of those continue to ride on the same `chart_artifacts` table and
 the same `drawing_json` schema — no migration needed when they land.
 
+## Phase 6 — findings → diagram proposals (deterministic, with provider review)
+
+The first AI-assisted clinical workflow on top of the canvas. **No
+external LLM in this PR.** The proposal engine is deterministic and
+rule-based; it lives in `apps/api/app/services/retinal_proposals.py`.
+**Zero schema changes** — proposals never touch the database directly,
+and applied annotations ride on the same `drawing_json` schema with an
+extended (additive, optional) annotation shape.
+
+### Endpoint
+
+```
+POST /patients/{patient_id}/eye-diagrams/propose-from-findings
+```
+
+Request:
+
+```jsonc
+{
+  "findings_text": "OD drusen at macula. OS flame hemorrhage superior.",
+  "drawing_json": { ... }   // optional, currently unused by the parser
+}
+```
+
+Response:
+
+```jsonc
+{
+  "clinical_text": "...",
+  "ignored_chatter": [...],
+  "uncertain_phrases": [...],
+  "proposed_annotations": [
+    {
+      "proposal_id": "p_<sha256-16>",
+      "kind": "symbol",
+      "symbol_type": "drusen",
+      "eye": "OD",
+      "x": 0.5, "y": 0.5,
+      "zone": "macula",
+      "text": "OD drusen at macula",
+      "color": "#c1121f",
+      "confidence": 0.85,
+      "confidence_band": "high" | "medium" | "low",
+      "source_phrase": "OD drusen at macula",
+      "source_start": 0, "source_end": 19,
+      "reason": "matched finding=drusen + eye=OD + zone=macula",
+      "missing_flags": [],
+      "source": "ai_proposed"
+    }
+  ],
+  "confidence_summary": { "high": 1, "medium": 0, "low": 0, "needs_review": true },
+  "missing_flags": [
+    { "code": "missing_laterality", "detail": "...", "source_phrase": "...", "source_start": 0, "source_end": 17 }
+  ]
+}
+```
+
+Rules enforced in the engine:
+
+- **No DB writes.** The endpoint is read-only on the data side.
+- **Stable proposal IDs.** `proposal_id = "p_" + sha256(normalized_phrase + finding + eye + zone)[:16]`. Same input ⇒ same id.
+- **Missing laterality ⇒ no auto-placement.** A `missing_laterality` flag is emitted instead so the UI can show the provider what to clarify.
+- **OU / bilateral / both eyes ⇒ two proposals** (OD + OS) with distinct ids.
+- **Chatter is ignored** (greetings, filler) and surfaced separately in `ignored_chatter`.
+- **Unknown clinical-sounding phrases ⇒ `uncertain_phrases`**, never an auto-proposal.
+- **Coordinate convention matches `RetinalDrawingCanvas.tsx`:**
+  - OD: optic disc on the right (x > 0.5); nasal = right, temporal = left.
+  - OS: optic disc on the left (x < 0.5); nasal = left, temporal = right.
+  - Superior is y < 0.5; inferior is y > 0.5; eye-independent.
+
+### Supported v1
+
+- **Findings** (13): drusen, dot/blot hemorrhage, flame hemorrhage,
+  microaneurysm, hard exudates, cotton-wool spot, neovascularization,
+  retinal tear/hole, retinal detachment, laser/scar, disc pallor,
+  RPE change, lattice degeneration.
+- **Laterality**: `OD`, `OS`, `OU`, `right eye`, `left eye`, `bilateral`,
+  `bilaterally`, `both eyes`.
+- **Zones**: macula, optic disc, superior, inferior, nasal, temporal,
+  superior temporal / superotemporal, superior nasal / superonasal,
+  inferior temporal / inferotemporal, inferior nasal / inferonasal,
+  periphery.
+
+### RBAC + org isolation
+
+- **Admin + clinician only.** Reviewers are denied (`role_forbidden`).
+  Even though the data layer is read-only, this endpoint produces
+  clinical suggestions and follows write-like access.
+- **Patient resolved inside the caller's org first.** Cross-org
+  patient ids return **404 `patient_not_found`** (no existence leak).
+
+### Audit safety
+
+A single `eye_diagram_proposed` row is written to
+`security_audit_events` per request. The detail string is
+**metadata-only** — `patient_id`, `proposal_count`, `uncertain_count`,
+`missing_flag_count`. The raw `findings_text` and proposal bodies are
+**never** written to the audit log. Sentinel-token regression test
+asserts neither leaks.
+
+### Apply / reject lifecycle
+
+- The proposal review panel (`apps/web/src/RetinalProposalReview.tsx`)
+  surfaces every proposal with its source phrase, reason, confidence
+  band, and missing flags.
+- "Apply" inserts a fresh annotation into the working
+  `DrawingDocument` with:
+  - `source: "ai_approved"`
+  - `proposal_id` retained for traceability
+  - `source_phrase`, `confidence`, `reason` carried as optional fields
+- "Reject" updates only transient UI state. Rejected proposals never
+  reach `onApply`, never enter `drawing_json`, and never persist on
+  save.
+- "Apply remaining" / "Reject remaining" act only on still-pending
+  proposals — already-applied ones are not re-applied.
+- The **"Generate diagram proposals from findings"** button is
+  disabled when `findings_text` is empty and **hidden** when the
+  artifact is signed (the canvas is read-only there; provider must
+  fork via "Save as new version" first).
+
+### Annotation schema additions (additive, no `schema_version` bump)
+
+The `Annotation` type gains four optional fields and a second source
+value. Existing v1 documents and tests are unaffected:
+
+```ts
+type AnnotationSource = "manual" | "ai_approved";
+
+interface BaseAnnotation {
+  // ...existing fields...
+  source: AnnotationSource;
+  proposal_id?: string;
+  source_phrase?: string;
+  confidence?: number;
+  reason?: string;
+}
+```
+
+### Validation
+
+- **Backend:** 27 new tests in `tests/test_retinal_proposals.py`
+  covering laterality detection, zones, OU expansion, chatter,
+  uncertain phrases, missing flags, stable ids, coordinate convention,
+  RBAC, cross-org 404, no-DB-write, and audit redaction (sentinel
+  tokens absent).
+- **Frontend:** 7 specs for `RetinalProposalReview`, plus 4 new
+  panel-flow specs in `EyeDiagramPanel.test.tsx` covering apply
+  persistence, reject non-persistence, mixed manual + applied save
+  payloads, and signed-artifact behavior.
+
+### Limitations / explicit non-claims
+
+- ❌ Not autonomous diagnosis. Every proposal requires explicit
+  provider apply.
+- ❌ No external LLM. The parser is deterministic regex over a closed
+  vocabulary; phrasing outside that vocabulary lands in
+  `uncertain_phrases`.
+- ❌ No automatic charting. Applied proposals enter the in-memory
+  document; the artifact is persisted only when the provider clicks
+  Save / Save as new version.
+- ❌ No orders, no e-prescribing, no coding side effects.
+- ❌ Parser will miss unfamiliar phrasing. Provider must verify the
+  diagram against their own findings text — that's the job, not a bug.
+
 ## Future phases (still deferred)
 
-These all build on the same `chart_artifacts` table and routes:
-
 1. **Clinical speech filter** — filter dictated text into clinical
-   findings before it reaches the artifact. Independent of this PR.
-2. **AI-proposed annotations** — generate diagram annotations from
-   `findings_text`. Producer pipeline; does not write to `chart_artifacts`
-   directly.
-3. **Provider apply/reject workflow** — surface AI proposals as
-   reviewable suggestions; only **applied** ones flow into
-   `drawing_json` with `source=ai_approved` provenance. Rejected
-   proposals never persist.
-4. **Findings → diagram proposals** — the bridge that turns approved
-   findings into proposed annotations on the diagram.
+   findings before it reaches the artifact.
+2. **External LLM proposal source** — same review-required contract,
+   different producer.
+3. **Severity UI for symbols** (mild / moderate / severe).
+4. **Symbol library v2** — broader ophthalmology coverage.
+5. **Rendered snapshot / PDF export** of signed diagrams.
 
-The persistence shell + Phase 5B canvas ship first so each of those
-follow-ups has a stable storage contract, schema version, and audit
-baseline to plug into.
+Each rides on the same `chart_artifacts` table, the same `drawing_json`
+schema (additive), and the same `eye_diagram_*` audit event family.
 
 ## Phase 8 — AI scribe session lifecycle
 
