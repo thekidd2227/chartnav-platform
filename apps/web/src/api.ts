@@ -1676,3 +1676,60 @@ export function signPatientEyeDiagram(
     method: "POST",
   });
 }
+
+// ---------- Phase 6: findings → diagram proposals ----------
+//
+// The proposal endpoint is read-only on the data side — calling it
+// never writes to chart_artifacts. Proposals only become stored
+// annotations after the provider explicitly applies them in the UI.
+
+export interface RetinalProposalResponse {
+  clinical_text: string;
+  ignored_chatter: string[];
+  uncertain_phrases: string[];
+  proposed_annotations: Array<{
+    proposal_id: string;
+    kind: "symbol" | "text";
+    symbol_type: string;
+    eye: "OD" | "OS";
+    x: number;
+    y: number;
+    zone: string | null;
+    text: string;
+    color: string;
+    confidence: number;
+    confidence_band: "high" | "medium" | "low";
+    source_phrase: string;
+    source_start: number;
+    source_end: number;
+    reason: string;
+    missing_flags: string[];
+    source: "ai_proposed";
+  }>;
+  confidence_summary: {
+    high: number;
+    medium: number;
+    low: number;
+    needs_review: boolean;
+  };
+  missing_flags: Array<{
+    code: string;
+    detail: string;
+    source_phrase: string;
+    source_start: number;
+    source_end: number;
+  }>;
+}
+
+export function proposeRetinalFromFindings(
+  email: string,
+  patientId: number,
+  findings_text: string,
+  drawing_json?: Record<string, unknown>
+): Promise<RetinalProposalResponse> {
+  return request(`/patients/${patientId}/eye-diagrams/propose-from-findings`, {
+    email,
+    method: "POST",
+    body: JSON.stringify({ findings_text, drawing_json }),
+  });
+}

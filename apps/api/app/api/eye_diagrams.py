@@ -45,6 +45,10 @@ from app.services.chart_artifacts import (
     sign_artifact,
     update_unsigned_artifact,
 )
+from app.services.retinal_proposals import (
+    propose_from_findings,
+    result_to_response,
+)
 
 
 router = APIRouter(tags=["eye-diagrams"])
@@ -139,6 +143,11 @@ class EyeDiagramCreate(BaseModel):
 class EyeDiagramUpdate(BaseModel):
     title: Optional[str] = Field(default=None, max_length=255)
     findings_text: Optional[str] = Field(default=None, max_length=20000)
+    drawing_json: Optional[dict[str, Any]] = None
+
+
+class ProposeFromFindings(BaseModel):
+    findings_text: str = Field(default="", max_length=20000)
     drawing_json: Optional[dict[str, Any]] = None
 
 
@@ -313,3 +322,55 @@ def sign_eye_diagram(
         artifact=signed,
     )
     return signed.to_response()
+
+
+# --- Phase 6: findings -> diagram proposal review -----------------------
+
+
+@router.post("/patients/{patient_id}/eye-diagrams/propose-from-findings")
+def propose_eye_diagram_from_findings(
+    patient_id: int,
+    payload: ProposeFromFindings,
+    request: Request,
+    caller: Caller = Depends(require_caller),
+) -> dict[str, Any]:
+    """Generate diagram proposals from a findings_text string.
+
+    Pure read on the data side — this endpoint never writes to
+    `chart_artifacts`. Proposals only enter `drawing_json` after the
+    provider explicitly applies them on the frontend.
+
+    RBAC: admin + clinician only. The endpoint produces clinical
+    suggestions, so it follows write-like access even though the data
+    layer is read-only.
+
+    Audit detail is metadata-only — counts and patient_id. The raw
+    `findings_text` and proposal bodies are NEVER written to the audit
+    log.
+    """
+    _require_write_role(caller)
+    pid = _resolve_patient_in_org(patient_id, caller)
+
+    result = propose_from_findings(payload.findings_text or "")
+    response = result_to_response(result)
+
+    detail = (
+        f"patient_id={pid} "
+        f"proposal_count={len(result.proposed_annotations)} "
+        f"uncertain_count={len(result.uncertain_phrases)} "
+        f"missing_flag_count={len(result.missing_flags)}"
+    )
+    audit_record(
+        event_type="eye_diagram_proposed",
+        request_id=getattr(request.state, "request_id", None),
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path=request.url.path,
+        method=request.method,
+        error_code=None,
+        detail=detail,
+        remote_addr=(request.client.host if request.client else None),
+    )
+
+    return response

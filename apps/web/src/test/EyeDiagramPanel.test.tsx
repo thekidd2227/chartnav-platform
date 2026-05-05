@@ -11,14 +11,17 @@ vi.mock("../api", async () => {
     createPatientEyeDiagram: vi.fn(),
     updatePatientEyeDiagram: vi.fn(),
     signPatientEyeDiagram: vi.fn(),
+    proposeRetinalFromFindings: vi.fn(),
   };
 });
 
 import {
   type EyeDiagramArtifact,
+  type RetinalProposalResponse,
   createPatientEyeDiagram,
   getPatientEyeDiagram,
   listPatientEyeDiagrams,
+  proposeRetinalFromFindings,
   signPatientEyeDiagram,
   updatePatientEyeDiagram,
 } from "../api";
@@ -295,5 +298,243 @@ describe("EyeDiagramPanel", () => {
     const dj = body.drawing_json as unknown as DrawingDocument;
     expect(dj.annotations).toHaveLength(1);
     expect(dj.annotations[0].id).toBe("a_seed_1");
+  });
+});
+
+// --- Phase 6: findings → diagram proposal flow ------------------------
+
+const mockedPropose = vi.mocked(proposeRetinalFromFindings);
+
+const PROPOSAL_RESPONSE: RetinalProposalResponse = {
+  clinical_text: "OD drusen at macula.",
+  ignored_chatter: [],
+  uncertain_phrases: [],
+  proposed_annotations: [
+    {
+      proposal_id: "p_drusen_od_macula",
+      kind: "symbol",
+      symbol_type: "drusen",
+      eye: "OD",
+      x: 0.5,
+      y: 0.5,
+      zone: "macula",
+      text: "OD drusen at macula",
+      color: "#c1121f",
+      confidence: 0.85,
+      confidence_band: "high",
+      source_phrase: "OD drusen at macula",
+      source_start: 0,
+      source_end: 19,
+      reason: "matched finding=drusen + eye=OD + zone=macula",
+      missing_flags: [],
+      source: "ai_proposed",
+    },
+    {
+      proposal_id: "p_flame_os_superior",
+      kind: "symbol",
+      symbol_type: "flame_hemorrhage",
+      eye: "OS",
+      x: 0.5,
+      y: 0.25,
+      zone: "superior",
+      text: "OS flame hemorrhage at superior",
+      color: "#c1121f",
+      confidence: 0.85,
+      confidence_band: "high",
+      source_phrase: "OS flame hemorrhage superior",
+      source_start: 21,
+      source_end: 49,
+      reason: "matched finding=flame_hemorrhage + eye=OS + zone=superior",
+      missing_flags: [],
+      source: "ai_proposed",
+    },
+  ],
+  confidence_summary: { high: 2, medium: 0, low: 0, needs_review: true },
+  missing_flags: [],
+};
+
+describe("EyeDiagramPanel — Phase 6 proposal flow", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("Generate button calls the proposal API with the current findings text", async () => {
+    mockedList.mockResolvedValue({ items: [], total: 0 });
+    mockedPropose.mockResolvedValueOnce(PROPOSAL_RESPONSE);
+
+    render(
+      <EyeDiagramPanel
+        identity="clin@chartnav.local"
+        patientId={7}
+        encounterId={42}
+      />
+    );
+    const user = userEvent.setup();
+
+    const findings = await screen.findByTestId<HTMLTextAreaElement>(
+      "eye-diagram-findings"
+    );
+    fireEvent.change(findings, {
+      target: {
+        value: "OD drusen at macula. OS flame hemorrhage superior.",
+      },
+    });
+
+    await user.click(screen.getByTestId("eye-diagram-generate-proposals"));
+
+    await waitFor(() => {
+      expect(mockedPropose).toHaveBeenCalledTimes(1);
+    });
+    const [emailArg, patientArg, textArg] = mockedPropose.mock.calls[0];
+    expect(emailArg).toBe("clin@chartnav.local");
+    expect(patientArg).toBe(7);
+    expect(textArg).toContain("OD drusen at macula");
+
+    expect(
+      await screen.findByTestId("retinal-proposal-review")
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("proposal-summary-high")).toHaveTextContent("2");
+  });
+
+  it("Generate button is disabled when findings text is empty", async () => {
+    mockedList.mockResolvedValue({ items: [], total: 0 });
+    render(
+      <EyeDiagramPanel
+        identity="clin@chartnav.local"
+        patientId={7}
+        encounterId={42}
+      />
+    );
+    expect(
+      (await screen.findByTestId("eye-diagram-generate-proposals"))
+        .hasAttribute("disabled")
+    ).toBe(true);
+  });
+
+  it("Apply persists ai_approved annotation; reject does not", async () => {
+    mockedList.mockResolvedValue({ items: [], total: 0 });
+    mockedPropose.mockResolvedValueOnce(PROPOSAL_RESPONSE);
+    mockedCreate.mockResolvedValueOnce({
+      ...ARTIFACT_BASE,
+      id: 200,
+      version_number: 1,
+    });
+
+    render(
+      <EyeDiagramPanel
+        identity="clin@chartnav.local"
+        patientId={7}
+        encounterId={42}
+      />
+    );
+    const user = userEvent.setup();
+
+    const findings = await screen.findByTestId<HTMLTextAreaElement>(
+      "eye-diagram-findings"
+    );
+    fireEvent.change(findings, {
+      target: {
+        value: "OD drusen at macula. OS flame hemorrhage superior.",
+      },
+    });
+
+    await user.click(screen.getByTestId("eye-diagram-generate-proposals"));
+    await screen.findByTestId("retinal-proposal-review");
+
+    // Apply the first proposal, reject the second.
+    await user.click(screen.getByTestId("proposal-apply-p_drusen_od_macula"));
+    await user.click(screen.getByTestId("proposal-reject-p_flame_os_superior"));
+
+    // Save the artifact — only the applied proposal should be in drawing_json.
+    await user.click(screen.getByTestId("eye-diagram-save-new"));
+
+    await waitFor(() => {
+      expect(mockedCreate).toHaveBeenCalledTimes(1);
+    });
+    const [, , createPayload] = mockedCreate.mock.calls[0];
+    const dj = createPayload.drawing_json as unknown as DrawingDocument;
+    expect(dj.schema_version).toBe(1);
+    expect(dj.annotations).toHaveLength(1);
+    const saved = dj.annotations[0];
+    expect(saved.source).toBe("ai_approved");
+    expect(saved.proposal_id).toBe("p_drusen_od_macula");
+    if (saved.kind === "symbol") {
+      expect(saved.symbol_type).toBe("drusen");
+      expect(saved.eye).toBe("OD");
+    } else {
+      throw new Error("expected symbol annotation");
+    }
+    // The rejected proposal id never reaches drawing_json.
+    expect(
+      dj.annotations.some((a) => a.proposal_id === "p_flame_os_superior")
+    ).toBe(false);
+  });
+
+  it("Manual annotation drawn before applying a proposal still saves as source=manual", async () => {
+    mockedList.mockResolvedValue({ items: [], total: 0 });
+    mockedPropose.mockResolvedValueOnce(PROPOSAL_RESPONSE);
+    mockedCreate.mockResolvedValueOnce({ ...ARTIFACT_BASE, id: 201 });
+
+    render(
+      <EyeDiagramPanel
+        identity="clin@chartnav.local"
+        patientId={7}
+        encounterId={42}
+      />
+    );
+    const user = userEvent.setup();
+
+    // Manual symbol on the OD pane first.
+    await user.click(screen.getByTestId("rdc-tool-symbol-microaneurysm"));
+    fireEvent.pointerDown(screen.getByTestId("rdc-svg-OD"), {
+      clientX: 80,
+      clientY: 40,
+      pointerId: 1,
+    });
+
+    // Then generate + apply one proposal.
+    const findings = screen.getByTestId<HTMLTextAreaElement>(
+      "eye-diagram-findings"
+    );
+    fireEvent.change(findings, {
+      target: { value: "OD drusen at macula." },
+    });
+    await user.click(screen.getByTestId("eye-diagram-generate-proposals"));
+    await user.click(
+      await screen.findByTestId("proposal-apply-p_drusen_od_macula")
+    );
+
+    await user.click(screen.getByTestId("eye-diagram-save-new"));
+
+    const [, , createPayload] = mockedCreate.mock.calls[0];
+    const dj = createPayload.drawing_json as unknown as DrawingDocument;
+    expect(dj.annotations).toHaveLength(2);
+    const sources = dj.annotations.map((a) => a.source).sort();
+    expect(sources).toEqual(["ai_approved", "manual"]);
+  });
+
+  it("hides the Generate button when the artifact is signed", async () => {
+    const signed: EyeDiagramArtifact = {
+      ...ARTIFACT_BASE,
+      is_signed: true,
+      signed_at: "2026-05-04T13:00:00+00:00",
+      signed_by_user_id: 2,
+    };
+    mockedList.mockResolvedValue({ items: [signed], total: 1 });
+    mockedGet.mockResolvedValueOnce(signed);
+
+    render(
+      <EyeDiagramPanel
+        identity="clin@chartnav.local"
+        patientId={7}
+        encounterId={42}
+      />
+    );
+    const user = userEvent.setup();
+    await user.click(await screen.findByTestId("eye-diagram-load-11"));
+
+    expect(
+      screen.queryByTestId("eye-diagram-generate-proposals")
+    ).not.toBeInTheDocument();
   });
 });
