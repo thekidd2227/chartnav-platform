@@ -86,6 +86,7 @@ import {
   type ClinicalShortcut,
 } from "./clinicalShortcuts";
 import { EyeDiagramPanel } from "./EyeDiagramPanel";
+import { PatientSummaryPanel } from "./PatientSummaryPanel";
 import { ScribeSessionPanel } from "./ScribeSessionPanel";
 
 // ---------------------------------------------------------------------
@@ -2371,6 +2372,16 @@ export function NoteWorkspace({
       {patientId !== null && (
         <section className="section" data-testid="scribe-session-section">
           <ScribeSessionPanel
+            identity={identity}
+            patientId={patientId}
+            encounterId={encounterId}
+          />
+        </section>
+      )}
+
+      {patientId !== null && (
+        <section className="section" data-testid="patient-summary-section">
+          <PatientSummaryPanel
             identity={identity}
             patientId={patientId}
             encounterId={encounterId}

@@ -469,3 +469,58 @@ later phase.
 
 See `docs/chartnav-scribe-session-lifecycle.md` for the full lifecycle
 contract, transition matrix, RBAC, audit safety, and limitations.
+
+## Phase 9 — provider-reviewed patient-friendly summaries
+
+Phase 9 adds a provider-facing surface for drafting plain-language
+summaries that a clinician can review, finalize, or discard. **Zero
+retinal-side changes. Zero scribe-session-side changes.** Phase 9 lives
+entirely in its own table (`patient_summaries`), its own routes
+(`/patients/{id}/patient-summaries/...`), and its own panel
+(`PatientSummaryPanel.tsx`).
+
+**Lifecycle states:** `draft` → `reviewed` → `finalized`, plus
+`discarded` reachable from `draft` or `reviewed`. `finalized` and
+`discarded` are immutable; `update`, `review`, `finalize`, and
+`discard` from a terminal state return `409 patient_summary_immutable`.
+Direct `draft → finalize` is rejected with
+`409 patient_summary_invalid_transition`.
+
+**Provider review is mandatory.** A summary cannot reach `finalized`
+without an explicit `review` step. The v1 generator is deterministic
+— it composes plain-language paragraphs from already-stored structured
+note fields (chief complaint, plan, follow-up) when seeded from a
+finalized scribe session, and falls back to a placeholder draft when
+no source is provided. **It never invents diagnoses, never adds
+treatment recommendations beyond what the source already contains,
+and always includes a limitations notice** that the draft is
+incomplete and requires provider review.
+
+**Patient delivery is explicitly deferred.** The endpoint never sends
+anything to a patient. The panel renders no patient-send action
+(no email, no SMS, no portal push, no PDF export). Banner copy on
+the panel reads: *"Patient summary draft — provider review required.
+Do not send to patient until finalized by the provider."*
+
+**Org isolation:** patient is resolved inside the caller's
+organization first; cross-org returns
+`404 patient_not_found` (no existence leak). A `scribe_session_id`
+that exists but in a different org or for a different patient
+returns `404 scribe_session_not_found` to avoid existence leakage of
+sessions in other orgs.
+
+**RBAC:** `admin` and `clinician` can write (`create`, `update`,
+`review`, `finalize`, `discard`). `reviewer` is read-only on this
+surface (matches the scribe-session contract). Read access still
+requires the caller to be in the same org as the patient.
+
+**Audit:** every mutation emits a `patient_summary_*` event whose
+`detail` is metadata-only — `summary_id`, `patient_id`, `encounter_id`,
+`scribe_session_id`, and `status`. Summary body, key findings,
+next steps, questions, limitations notice, and review notes are
+**never** written to `security_audit_events`. Sentinel-token
+regression tests assert this for every event type.
+
+See `docs/chartnav-patient-friendly-summary.md` for the full
+generator rules, transition matrix, RBAC, audit safety, and the
+list of explicit non-goals.

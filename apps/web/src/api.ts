@@ -1898,3 +1898,148 @@ export function proposeRetinalFromFindings(
     body: JSON.stringify({ findings_text, drawing_json }),
   });
 }
+
+// ---------- Phase 9: provider-reviewed patient-friendly summaries ----------
+//
+// One row per draft summary. The frontend never sends anything to a
+// patient — that's deferred. Status flows draft → reviewed →
+// finalized; or draft|reviewed → discarded. finalized and discarded
+// are immutable.
+
+export type PatientSummaryStatus =
+  | "draft"
+  | "reviewed"
+  | "finalized"
+  | "discarded";
+
+export interface PatientSummary {
+  id: number;
+  organization_id: number;
+  patient_id: number;
+  encounter_id: number | null;
+  scribe_session_id: number | null;
+  created_by_user_id: number;
+  reviewed_by_user_id: number | null;
+  status: PatientSummaryStatus;
+  plain_language_summary: string;
+  /** Real arrays on the wire — backend normalizes from JSON-encoded TEXT. */
+  key_findings: string[];
+  next_steps: string[];
+  questions: string[];
+  limitations_notice: string;
+  review_notes: string | null;
+  finalized_at: string | null;
+  reviewed_at: string | null;
+  discarded_at: string | null;
+  created_at: string;
+  updated_at: string;
+  is_terminal: boolean;
+}
+
+export interface PatientSummaryListResponse {
+  items: PatientSummary[];
+  total: number;
+}
+
+export interface PatientSummaryCreateInput {
+  encounter_id?: number | null;
+  scribe_session_id?: number | null;
+  provider_instructions?: string;
+}
+
+export interface PatientSummaryUpdateInput {
+  plain_language_summary?: string;
+  key_findings?: string[];
+  next_steps?: string[];
+  questions?: string[];
+  limitations_notice?: string;
+  review_notes?: string;
+}
+
+export interface PatientSummaryReviewInput {
+  review_notes?: string;
+}
+
+export function listPatientSummaries(
+  email: string,
+  patientId: number
+): Promise<PatientSummaryListResponse> {
+  return request(`/patients/${patientId}/patient-summaries`, { email });
+}
+
+export function getPatientSummary(
+  email: string,
+  patientId: number,
+  summaryId: number
+): Promise<PatientSummary> {
+  return request(
+    `/patients/${patientId}/patient-summaries/${summaryId}`,
+    { email }
+  );
+}
+
+export function createPatientSummary(
+  email: string,
+  patientId: number,
+  input: PatientSummaryCreateInput
+): Promise<PatientSummary> {
+  return request(`/patients/${patientId}/patient-summaries`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updatePatientSummary(
+  email: string,
+  patientId: number,
+  summaryId: number,
+  input: PatientSummaryUpdateInput
+): Promise<PatientSummary> {
+  return request(
+    `/patients/${patientId}/patient-summaries/${summaryId}`,
+    {
+      email,
+      method: "PATCH",
+      body: JSON.stringify(input),
+    }
+  );
+}
+
+export function reviewPatientSummary(
+  email: string,
+  patientId: number,
+  summaryId: number,
+  input: PatientSummaryReviewInput = {}
+): Promise<PatientSummary> {
+  return request(
+    `/patients/${patientId}/patient-summaries/${summaryId}/review`,
+    {
+      email,
+      method: "POST",
+      body: JSON.stringify(input),
+    }
+  );
+}
+
+export function finalizePatientSummary(
+  email: string,
+  patientId: number,
+  summaryId: number
+): Promise<PatientSummary> {
+  return request(
+    `/patients/${patientId}/patient-summaries/${summaryId}/finalize`,
+    { email, method: "POST" }
+  );
+}
+
+export function discardPatientSummary(
+  email: string,
+  patientId: number,
+  summaryId: number
+): Promise<PatientSummary> {
+  return request(
+    `/patients/${patientId}/patient-summaries/${summaryId}/discard`,
+    { email, method: "POST" }
+  );
+}
