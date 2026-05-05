@@ -437,3 +437,35 @@ interface BaseAnnotation {
 
 Each rides on the same `chart_artifacts` table, the same `drawing_json`
 schema (additive), and the same `eye_diagram_*` audit event family.
+
+## Phase 8 — AI scribe session lifecycle
+
+The scribe session lifecycle introduces an explicit unit of work
+between provider source/transcript text and a finalized clinical
+artifact. **Zero retinal-side changes.** Phase 8 lives entirely in
+its own table (`scribe_sessions`), its own routes
+(`/patients/{id}/scribe-sessions/...`), and its own panel
+(`ScribeSessionPanel.tsx`).
+
+**Lifecycle states:** `draft` → `processing` → `ready_for_review` →
+`reviewed` → `finalized`, plus `discarded` reachable from any
+non-terminal state. `finalized` and `discarded` are immutable.
+
+**Provider review is mandatory.** No state can reach `finalized`
+without an explicit `review` action followed by an explicit `finalize`
+action. The processing engine is deterministic regex over a closed
+heading vocabulary; the rendered draft always begins with
+`Draft — provider review required`. Audit detail is metadata-only —
+`source_text`, `transcript_text`, `draft_note_text`,
+`structured_note_json`, and `review_notes` never appear in
+`security_audit_events.detail`. Sentinel-token regression tests
+assert this for every event type.
+
+**Linkage to retinal artifacts** is opt-in via the
+`scribe_sessions.linked_artifact_id` foreign key into
+`chart_artifacts`. Finalizing a scribe session does **not** write into
+`chart_artifacts` — that's a separate explicit action that lives in a
+later phase.
+
+See `docs/chartnav-scribe-session-lifecycle.md` for the full lifecycle
+contract, transition matrix, RBAC, audit safety, and limitations.
