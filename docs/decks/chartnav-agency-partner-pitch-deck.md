@@ -1,8 +1,17 @@
 # ChartNav Agency / Partner Pitch Deck
 
-> Pitch for advisors, agencies, referral partners. 7 slides.
-> Includes federal-healthcare credibility framing per the SDVOSB /
-> VA past-performance contract.
+> Pitch for advisors, agencies, referral partners. 8 slides.
+> Includes federal-healthcare credibility framing per the SDVOSB
+> / VA past-performance contract.
+
+**Audience:** advisors, healthcare-IT agencies, federal-healthcare
+referral partners, and consultants who already have ophthalmology
+or federal-healthcare practice relationships.
+**Purpose:** explain what ChartNav is, why ophthalmology
+practices buy it, and how a partner can introduce it without
+overselling.
+**CTA / next step:** identify 2–3 ophthalmology practice
+candidates and schedule the warm intro.
 
 **Safe-claims contract.** Every slide obeys the approved-language
 list at `docs/commercial/chartnav-approved-claims-language.md`.
@@ -22,29 +31,51 @@ clinical-action automation we don't ship.
 
 ## Slide 2 — Who ChartNav helps
 
-- **Title:** ChartNav's customer.
+- **Title:** ChartNav's ICP.
 - **Content:**
-  - Ophthalmology practices (retina, glaucoma, cataract, general
-    ophthalmology).
-  - 2–10 providers, single-or-multi-location.
-  - Looking for documentation + retinal-workflow support, not an
-    EHR replacement.
-  - Federal-healthcare adjacent buyers (e.g., VA-related practice
-    relationships) are also addressable via the operating
-    entity's SDVOSB certification.
-- **Speaker notes:** Be concrete; partners need a clear ICP.
-- **Visual:** persona card.
+  - **Private-practice ICP:** ophthalmology practices (retina,
+    glaucoma, cataract, general ophthalmology), 2–10 providers,
+    single-or-multi-location, looking for documentation +
+    retinal-workflow support — not an EHR replacement.
+  - **Federal-healthcare-adjacent ICP:** VA-related or
+    government-healthcare-adjacent practices addressable via
+    the operating entity's SDVOSB certification and
+    Mann-Grandstaff VA past performance.
+  - **Two clearly different sales motions** — partners pick the
+    motion that fits their existing relationships.
+- **Speaker notes:** Be concrete; partners need a clear ICP and
+  a clear motion split.
+- **Visual:** two-column ICP card (private practice vs.
+  federal-adjacent).
 
-## Slide 3 — Why partners care
+## Slide 3 — Clinical Signal Filtering — the easy-to-demo wedge
+
+- **Title:** Filters conversation. Captures findings. Builds the diagram.
+- **Content:**
+  - The fastest concept for a partner to explain in a warm
+    intro: ChartNav separates ophthalmology dictation into
+    chatter, findings, uncertainty, and proposed retinal
+    annotations.
+  - Doctor says: *"Okay hold on… OD drusen in the macula… maybe
+    OS flame hemorrhage inferior."*
+  - ChartNav separates it into four clean classifications and
+    proposes annotations the provider applies, edits, or
+    rejects.
+  - Partners can use this story before the live demo even runs.
+- **Speaker notes:** This is the line that books the demo.
+- **Visual:** four-row card showing the four classifications.
+
+## Slide 4 — Why partners care
 
 - **Title:** What's in it for partners.
 - **Content:**
   - Provider-friendly product (provider-in-control safety model).
   - Buyer-safe positioning — no banned claims, no fabricated
-    metrics.
-  - Pilot-ready packet (Phase 14) makes security review fast.
-  - Public landing page + Phase 13/15 demo guides reduce
-    discovery friction.
+    metrics, no overselling.
+  - Pilot-ready security packet makes review fast for the
+    practice's compliance lead.
+  - Public proof page + buyer demo deck reduce discovery
+    friction.
   - **Past performance:** federal healthcare contracting at
     Mann-Grandstaff VA Medical Center, Spokane WA — opens
     federal-adjacent doors.
@@ -53,44 +84,47 @@ clinical-action automation we don't ship.
 - **Speaker notes:** Trust transfer is the core value.
 - **Visual:** 6-bullet card.
 
-## Slide 4 — Referral / pilot pathway
+## Slide 5 — Referral / pilot pathway
 
 - **Title:** How partners introduce ChartNav.
 - **Content:**
   - 1. Partner makes the warm intro.
   - 2. Discovery call (15–30 min).
-  - 3. Live fake-patient demo.
+  - 3. Live fake-patient demo (buyer demo deck).
   - 4. Pilot agreement + security review.
   - 5. Controlled pilot, 4–6 weeks ($10,000 flat fee).
   - 6. Post-pilot decision and conversion to paid customer.
-- **Speaker notes:** Reference
-  `chartnav-demo-to-pilot-transition-plan.md`.
+- **Speaker notes:** Partners can co-attend any step.
 - **Visual:** 6-step pathway.
 
-## Slide 5 — Partner economics
+## Slide 6 — Partner economics
 
 - **Title:** Partner economics.
 - **Content:**
-  - Referral fee structure, pilot revenue share, customer revenue
-    share, and co-branded materials are **discussed per partner
-    agreement** — not printed in this version of the deck.
+  - Referral fee structure, pilot revenue share, customer
+    revenue share, and co-branded materials are **discussed per
+    partner agreement** — not published.
 - **Speaker notes:** Partner economics conversations happen 1:1
-  with each partner. We will not publish a generic referral table.
+  with each partner. We will not publish a generic referral
+  table.
 - **Visual:** plain card.
 
-## Slide 6 — Boundaries
+## Slide 7 — Boundaries
 
 - **Title:** What partners do not do.
 - **Content:**
   - Don't oversell — read the buyer-safe non-goals aloud.
-  - Don't claim HIPAA / SOC 2 / certified-EHR.
-  - Don't promise orders / coding / referrals / patient messaging.
+  - Don't claim HIPAA / SOC 2 / FDA / certified-EHR.
+  - Don't promise orders / coding / referrals / patient
+    messaging.
   - Don't represent ChartNav as an EHR replacement.
+  - Don't paraphrase the safety contract — use the buyer
+    objection-handling answers verbatim.
 - **Speaker notes:** Partners share the same forbidden-claims
-  list.
-- **Visual:** 4-bullet card.
+  list as ChartNav.
+- **Visual:** 5-bullet card.
 
-## Slide 7 — Next step
+## Slide 8 — Next step
 
 - **Title:** What we'd like from partners.
 - **Content:**

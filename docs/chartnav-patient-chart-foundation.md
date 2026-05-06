@@ -1046,3 +1046,97 @@ contract, the pricing contract, the milestone contract, the
 safe-claims contract, the desktop-folder source-of-truth
 contract, the test contract, and the Phase 18 candidate
 description.
+
+## Phase 17B — A+ deck message tightening + Clinical Signal Filtering upgrade
+
+Phase 17B is a **content quality pass** on top of Phase 17.
+After Phase 17 the deck library exists; after Phase 17B the
+decks are A-level commercial material — clear enough for a real
+buyer, investor, advisor, partner, or practice administrator to
+understand without needing repo context.
+
+**No new clinical automation. No backend changes. No new schema.
+No external LLM. No real-PHI claim. No unsupported HIPAA / SOC 2
+/ FDA / certified-EHR claim. No binary media in the repo.**
+
+What changed:
+
+- **Clinical Signal Filtering positioned as the prime feature**
+  on every buyer-relevant deck, with a canonical three-line
+  cadence ("Filters conversation. Captures findings. Builds the
+  diagram.") and a concrete worked example (the doctor saying
+  *"Okay hold on… OD drusen in the macula… maybe OS flame
+  hemorrhage inferior."* and ChartNav classifying the line into
+  ignored chatter, clinical finding, uncertain phrase, and
+  proposed diagram annotation).
+- **Demo deck split** into two decks. The buyer demo deck
+  (`chartnav-buyer-demo-deck.md`) is what a presenter shows
+  during a live demo — no terminal commands, no repo paths, no
+  `?demo=1` query string, no `make dev` references; only what
+  the buyer sees on screen. The operator demo deck
+  (`chartnav-operator-demo-deck.md`) is **internal-only** —
+  pre-flight checklist, START / STOP / RESET .command files,
+  reset commands, fallback plan if the stack breaks mid-demo.
+  The original `chartnav-demo-deck.md` is now an index that
+  routes the operator to the right deck for the audience.
+- **One-page sales deck rewritten** as a single-page leave-
+  behind with a Clinical Signal Filtering headline and worked
+  example.
+- **Buyer-facing decks scrubbed of repo-leak phrases** —
+  "production code on main," "operator's note," "this version of
+  the deck," `?intro=1`, `?demo=1`, `make dev`, `make reset-db`,
+  raw repo paths, and `Phase N smoke` references no longer
+  appear in any buyer-facing deck.
+- **Audience + Purpose + CTA** declared in the front-matter of
+  every deck so an operator (or a future ChartNav employee) can
+  pick up any deck cold and know who it's for.
+- **Company deck audience-routed.** Slide 8 (federal /
+  government-healthcare credibility — SDVOSB, Mann-Grandstaff
+  VA past performance) is clearly marked as "for federal /
+  government-healthcare conversations" and explicitly skipped
+  for private-practice buyers. Private-practice buyers see the
+  clinical workflow without federal credentials.
+- **Brand guidelines deck** adds a Clinical Signal Filtering
+  approved-phrasing slide and extends the banned-phrase
+  catalogue with "AI draws automatically," "AI decides," "AI
+  diagnosis," "automatic charting," "hands-free diagnosis,"
+  "hands-free charting," "guaranteed documentation accuracy."
+- **Customer pitch template + project proposal template** add
+  practice-specific Clinical Signal Filtering content via
+  `{{DICTATION_PAIN}}`, `{{RETINAL_WORKFLOW_PAIN}}`, and
+  `{{PRACTICE_EXAMPLE_FINDING}}` placeholders so each pilot
+  pitch lands in the practice's own words.
+- **Marketing plan deck** adds a concrete 30/60/90-day GTM
+  execution plan and frames Clinical Signal Filtering as the
+  outreach wedge.
+- **Product roadmap deck** translates engineering phases into
+  business outcomes ("capabilities already working") and adds
+  a 30/60/90-day execution plan.
+- **Master kit + approved-claims language + objection-handling
+  + commercial readiness map** updated to reference the new
+  deck split and the Clinical Signal Filtering language.
+- **Export script + create-package wrapper** updated to include
+  the two new deck files and verify them in post-export checks.
+- **`scripts/check_commercial_claims.sh`** extended with a
+  buyer-facing repo-leak scan plus the new Phase 17B
+  banned-phrase entries.
+- **`apps/web/src/test/CommercialDeckClaims.test.tsx`** grows
+  from 45 assertions to 96 assertions covering the Phase 17B
+  Clinical Signal Filtering presence requirement, the
+  buyer-facing repo-leak scan, the audience / purpose / CTA
+  front-matter requirement, and the operator-demo-stays-internal
+  contract.
+
+**Test contract.** `npx vitest run
+src/test/CommercialDeckClaims.test.tsx` should pass 96/96.
+`bash scripts/check_commercial_claims.sh` should pass 0 fail / 0
+warn. The export script produces 41 source files copied + README
++ 3 .command files generated.
+
+Phase 17B is a content + tooling pass. The Phase 18 candidate
+remains unchanged — first paid pilot or paid customer (target
+M1 = Jul 1, 2026). The Phase 17B-tightened decks are the
+inventory Phase 18 sells from.
+
+See `docs/chartnav-commercial-launch-package.md` for the updated
+deck audience map and the full test contract.

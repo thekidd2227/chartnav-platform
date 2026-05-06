@@ -55,6 +55,8 @@ const DECKS = [
   "docs/decks/chartnav-investor-pitch-deck.md",
   "docs/decks/chartnav-sales-deck.md",
   "docs/decks/chartnav-demo-deck.md",
+  "docs/decks/chartnav-buyer-demo-deck.md",
+  "docs/decks/chartnav-operator-demo-deck.md",
   "docs/decks/chartnav-customer-pitch-deck-template.md",
   "docs/decks/chartnav-company-deck.md",
   "docs/decks/chartnav-product-roadmap-deck.md",
@@ -63,6 +65,46 @@ const DECKS = [
   "docs/decks/chartnav-one-page-sales-deck.md",
   "docs/decks/chartnav-financial-fundraising-deck.md",
   "docs/decks/chartnav-marketing-plan-deck.md",
+  "docs/decks/chartnav-project-proposal-deck.md",
+  "docs/decks/chartnav-agency-partner-pitch-deck.md",
+  "docs/decks/chartnav-elevator-pitch-deck.md",
+  "docs/decks/chartnav-long-sales-pitch-deck.md",
+];
+
+// Phase 17B — Clinical Signal Filtering must appear as a prime
+// feature in every deck where it is buyer-relevant. The
+// brand-guidelines / operator-demo / index decks are exempt by
+// path (they are catalog / internal / pointer docs).
+const DECKS_REQUIRING_CSF = [
+  "docs/decks/chartnav-investor-pitch-deck.md",
+  "docs/decks/chartnav-sales-deck.md",
+  "docs/decks/chartnav-buyer-demo-deck.md",
+  "docs/decks/chartnav-customer-pitch-deck-template.md",
+  "docs/decks/chartnav-company-deck.md",
+  "docs/decks/chartnav-product-roadmap-deck.md",
+  "docs/decks/chartnav-educational-onboarding-deck.md",
+  "docs/decks/chartnav-one-page-sales-deck.md",
+  "docs/decks/chartnav-marketing-plan-deck.md",
+  "docs/decks/chartnav-project-proposal-deck.md",
+  "docs/decks/chartnav-agency-partner-pitch-deck.md",
+  "docs/decks/chartnav-elevator-pitch-deck.md",
+  "docs/decks/chartnav-long-sales-pitch-deck.md",
+];
+
+// Phase 17B — buyer-facing decks must not include internal repo
+// language, terminal commands, or operator-only references.
+// Operator demo deck and brand-guidelines deck are exempt by
+// path; they are internal docs.
+const BUYER_FACING_DECKS = [
+  "docs/decks/chartnav-investor-pitch-deck.md",
+  "docs/decks/chartnav-sales-deck.md",
+  "docs/decks/chartnav-buyer-demo-deck.md",
+  "docs/decks/chartnav-customer-pitch-deck-template.md",
+  "docs/decks/chartnav-company-deck.md",
+  "docs/decks/chartnav-product-roadmap-deck.md",
+  "docs/decks/chartnav-educational-onboarding-deck.md",
+  "docs/decks/chartnav-one-page-sales-deck.md",
+  "docs/decks/chartnav-financial-fundraising-deck.md",
   "docs/decks/chartnav-project-proposal-deck.md",
   "docs/decks/chartnav-agency-partner-pitch-deck.md",
   "docs/decks/chartnav-elevator-pitch-deck.md",
@@ -113,6 +155,10 @@ const FORBIDDEN_POSITIVE_CLAIMS: { name: string; pattern: RegExp }[] = [
   { name: "autonomous diagnosis", pattern: /\bautonomous diagnosis\b/i },
   { name: "automatic diagnosis", pattern: /\bautomatic diagnosis\b/i },
   { name: "guaranteed accuracy", pattern: /\bguaranteed accuracy\b/i },
+  {
+    name: "guaranteed documentation accuracy",
+    pattern: /\bguaranteed documentation accuracy\b/i,
+  },
   { name: "automatic orders", pattern: /\bautomatic orders?\b/i },
   { name: "auto-orders", pattern: /\bauto[- ]orders?\b/i },
   { name: "order OCT", pattern: /\border oct\b/i },
@@ -131,6 +177,17 @@ const FORBIDDEN_POSITIVE_CLAIMS: { name: string; pattern: RegExp }[] = [
     pattern: /\bproduction[- ]ready for phi\b/i,
   },
   { name: "real patient data ready", pattern: /\breal patient data ready\b/i },
+  // Phase 17B additions.
+  { name: "AI draws automatically", pattern: /\bai draws automatically\b/i },
+  { name: "AI decides", pattern: /\bai decides\b/i },
+  { name: "AI diagnosis", pattern: /\bai diagnosis\b/i },
+  { name: "automatic charting", pattern: /\bautomatic charting\b/i },
+  { name: "hands-free diagnosis", pattern: /\bhands[- ]free diagnosis\b/i },
+  { name: "hands-free charting", pattern: /\bhands[- ]free charting\b/i },
+  {
+    name: "hands-off documentation",
+    pattern: /\bhands[- ]off documentation\b/i,
+  },
 ];
 
 // ---------------------------------------------------------------
@@ -212,14 +269,36 @@ function isSafeNegativeContext(
 // ---------------------------------------------------------------
 
 describe("Phase 17 — required files exist", () => {
-  it("all 15 deck Markdown source files exist and are non-empty", () => {
-    expect(DECKS).toHaveLength(15);
+  it("all 17 deck Markdown source files exist and are non-empty (Phase 17 + 17B buyer/operator split)", () => {
+    expect(DECKS).toHaveLength(17);
     for (const rel of DECKS) {
       const full = path.join(REPO_ROOT, rel);
       const stat = statSync(full);
       expect(stat.isFile(), `Missing deck: ${rel}`).toBe(true);
       expect(stat.size, `Empty deck: ${rel}`).toBeGreaterThan(0);
     }
+  });
+
+  it("buyer-demo / operator-demo / index trio is present (Phase 17B split)", () => {
+    for (const rel of [
+      "docs/decks/chartnav-demo-deck.md",
+      "docs/decks/chartnav-buyer-demo-deck.md",
+      "docs/decks/chartnav-operator-demo-deck.md",
+    ]) {
+      const full = path.join(REPO_ROOT, rel);
+      expect(statSync(full).isFile(), `Missing demo-trio file: ${rel}`).toBe(
+        true
+      );
+    }
+  });
+
+  it("the demo-deck index points at both buyer and operator decks", () => {
+    const text = readFileSync(
+      path.join(REPO_ROOT, "docs/decks/chartnav-demo-deck.md"),
+      "utf-8"
+    );
+    expect(text).toMatch(/chartnav-buyer-demo-deck\.md/);
+    expect(text).toMatch(/chartnav-operator-demo-deck\.md/);
   });
 
   it("all 6 commercial support docs exist and are non-empty", () => {
@@ -529,5 +608,155 @@ describe("Phase 17 — desktop-folder safety contract", () => {
   it(".gitignore covers the generated Desktop folder paths", () => {
     const text = readFileSync(path.join(REPO_ROOT, ".gitignore"), "utf-8");
     expect(text).toMatch(/chartnav decks\//);
+  });
+});
+
+// ---------------------------------------------------------------
+// Phase 17B — Clinical Signal Filtering presence + repo-leak
+// scan + audience-clarity tests.
+// ---------------------------------------------------------------
+
+describe("Phase 17B — Clinical Signal Filtering surfaces in every buyer-relevant deck", () => {
+  it.each(DECKS_REQUIRING_CSF)(
+    "%s mentions Clinical Signal Filtering by name + the headline cadence",
+    (rel) => {
+      const text = readFileSync(path.join(REPO_ROOT, rel), "utf-8");
+      expect(
+        text,
+        `${rel} does not mention "Clinical Signal Filtering" by name`
+      ).toMatch(/Clinical Signal Filtering/i);
+      // The headline cadence appears in some form. Accept the
+      // canonical line OR a faithful paraphrase that uses two of
+      // the three verbs (filters / captures / builds).
+      const hasHeadline =
+        /Filters conversation\.\s*Captures findings\.\s*Builds the diagram\./i.test(
+          text
+        );
+      const hasParaphrase =
+        /\bfilter[s]?\b/i.test(text) &&
+        /\bcaptur[es]?/i.test(text) &&
+        /\bbuild[s]?/i.test(text);
+      expect(
+        hasHeadline || hasParaphrase,
+        `${rel} does not include the CSF "filters / captures / builds" cadence`
+      ).toBe(true);
+    }
+  );
+});
+
+describe("Phase 17B — buyer-facing decks contain no repo-leak / operator-only references", () => {
+  const REPO_LEAK_PATTERNS: { name: string; pattern: RegExp }[] = [
+    { name: "production code on main", pattern: /production code on main/i },
+    { name: "operator's note", pattern: /operator['']s note/i },
+    {
+      name: "this version of the deck",
+      pattern: /this version of the deck/i,
+    },
+    { name: "?intro=1 query string", pattern: /\?intro=1/ },
+    { name: "?demo=1 query string", pattern: /\?demo=1/ },
+    { name: "make dev command", pattern: /\bmake dev\b/ },
+    { name: "make reset-db command", pattern: /\bmake reset-db\b/ },
+    {
+      name: "scripts/reset_demo_state.sh",
+      pattern: /scripts\/reset_demo_state\.sh/,
+    },
+    {
+      name: "scripts/export_chartnav_decks_to_desktop.sh",
+      pattern: /scripts\/export_chartnav_decks_to_desktop\.sh/,
+    },
+    { name: "START_CHARTNAV.command", pattern: /START_CHARTNAV\.command/ },
+    { name: "STOP_CHARTNAV.command", pattern: /STOP_CHARTNAV\.command/ },
+    {
+      name: "RESET_DEMO_DATA.command",
+      pattern: /RESET_DEMO_DATA\.command/,
+    },
+    { name: "apps/web/ path", pattern: /apps\/web\// },
+    { name: "apps/api/ path", pattern: /apps\/api\// },
+    {
+      name: "sentinel-token regression",
+      pattern: /sentinel[- ]token regression/i,
+    },
+    { name: "Phase N smoke", pattern: /\bphase\s+\d+\s+smoke\b/i },
+    {
+      name: "Phase 16 landing page",
+      pattern: /Phase 16 landing page/i,
+    },
+    {
+      name: "Phase 16 workflow SVG",
+      pattern: /Phase 16 workflow SVG/i,
+    },
+    {
+      name: "contract doc in the repo",
+      pattern: /contract doc in the repo/i,
+    },
+  ];
+
+  it.each(BUYER_FACING_DECKS)(
+    "%s has no repo-leak phrases",
+    (rel) => {
+      const text = readFileSync(path.join(REPO_ROOT, rel), "utf-8");
+      const lines = text.split(/\r?\n/);
+      for (const { name, pattern } of REPO_LEAK_PATTERNS) {
+        const matches = lines
+          .map((line, idx) => ({ line, idx }))
+          .filter(({ line }) => pattern.test(line));
+        for (const { line, idx } of matches) {
+          // Allow placeholder lines in the customer pitch
+          // template — they're meant to be replaced before the
+          // meeting and may legitimately mention internal
+          // scaffolding inline.
+          if (/\{\{[A-Z_]+\}\}/.test(line)) continue;
+          expect(
+            false,
+            `In ${rel} line ${idx + 1}: buyer-facing deck contains repo-leak phrase "${name}": ${line}`
+          ).toBe(true);
+        }
+      }
+    }
+  );
+});
+
+describe("Phase 17B — every deck has explicit audience + purpose + CTA", () => {
+  it.each(DECKS)("%s declares Audience + Purpose + CTA up front", (rel) => {
+    const text = readFileSync(path.join(REPO_ROOT, rel), "utf-8");
+    // Audience.
+    expect(
+      /\*\*Audience:\*\*|^>\s.*Audience|Audience[:.]/im.test(text),
+      `${rel} does not declare an Audience`
+    ).toBe(true);
+    // Purpose.
+    expect(
+      /\*\*Purpose:\*\*|^>\s.*Purpose|Purpose[:.]/im.test(text),
+      `${rel} does not declare a Purpose`
+    ).toBe(true);
+    // CTA / next step.
+    expect(
+      /\*\*CTA( ?\/ ?next step)?:\*\*|next step|Single CTA|Pilot CTA|CTA[:.]/im.test(
+        text
+      ),
+      `${rel} does not declare a CTA / next step`
+    ).toBe(true);
+  });
+});
+
+describe("Phase 17B — operator-demo deck stays internal-only", () => {
+  it("chartnav-operator-demo-deck.md is clearly marked internal-only", () => {
+    const text = readFileSync(
+      path.join(REPO_ROOT, "docs/decks/chartnav-operator-demo-deck.md"),
+      "utf-8"
+    );
+    expect(text).toMatch(/internal[- ]only/i);
+    expect(text).toMatch(/Never\b.*present.*to a buyer|not for buyers/i);
+  });
+
+  it("the buyer-demo deck does NOT mention START / STOP / RESET .command files", () => {
+    const text = readFileSync(
+      path.join(REPO_ROOT, "docs/decks/chartnav-buyer-demo-deck.md"),
+      "utf-8"
+    );
+    expect(text).not.toMatch(/START_CHARTNAV\.command/);
+    expect(text).not.toMatch(/STOP_CHARTNAV\.command/);
+    expect(text).not.toMatch(/RESET_DEMO_DATA\.command/);
+    expect(text).not.toMatch(/\bmake dev\b/);
   });
 });

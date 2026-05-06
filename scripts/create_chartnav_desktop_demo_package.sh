@@ -64,6 +64,8 @@ EXPECTED_FILES=(
   "01_Decks/chartnav-investor-pitch-deck.md"
   "01_Decks/chartnav-sales-deck.md"
   "01_Decks/chartnav-demo-deck.md"
+  "01_Decks/chartnav-buyer-demo-deck.md"
+  "01_Decks/chartnav-operator-demo-deck.md"
   "01_Decks/chartnav-customer-pitch-deck-template.md"
   "01_Decks/chartnav-company-deck.md"
   "01_Decks/chartnav-product-roadmap-deck.md"

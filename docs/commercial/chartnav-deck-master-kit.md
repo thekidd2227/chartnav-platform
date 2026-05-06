@@ -53,11 +53,13 @@ audience and the time you have.
 - **Doesn't care about:** investor metrics, fundraising stage,
   partner economics.
 - **Right deck:**
-  `chartnav-sales-deck.md` (10 slides) or
-  `chartnav-long-sales-pitch-deck.md` (14 slides) plus
+  `chartnav-sales-deck.md` (11 slides) or
+  `chartnav-long-sales-pitch-deck.md` (15 slides) plus
   `chartnav-customer-pitch-deck-template.md` for the customized
   proposal. Use `chartnav-one-page-sales-deck.md` as the
-  follow-up email attachment.
+  follow-up email attachment. For the live demo itself use
+  `chartnav-buyer-demo-deck.md` — never the operator demo deck
+  in front of a buyer.
 
 ### Persona 2 — Practice security / compliance owner
 
@@ -79,9 +81,10 @@ audience and the time you have.
 - **Doesn't care about:** click-by-click product mechanics
   (those go in the demo).
 - **Right deck:**
-  `chartnav-investor-pitch-deck.md` (14 slides) plus
+  `chartnav-investor-pitch-deck.md` (15 slides) plus
   `chartnav-financial-fundraising-deck.md` (8 slides
   supplement). Open with the elevator-pitch deck for cold intros.
+  For the live demo segment use `chartnav-buyer-demo-deck.md`.
 
 ### Persona 4 — Federal-healthcare-adjacent buyer (VA, federal
 contracting)
@@ -91,9 +94,10 @@ contracting)
 - **Cares about:** SDVOSB certification, federal past performance,
   HUBZone / DBE / MBE / SBE / NMSDC certifications carried by the
   operating entity, security posture.
-- **Right deck:** `chartnav-company-deck.md` (with credibility
-  slide) or `chartnav-agency-partner-pitch-deck.md` (if going
-  through a partner channel).
+- **Right deck:** `chartnav-company-deck.md` (slide 8 federal
+  credibility track is appropriate here) or
+  `chartnav-agency-partner-pitch-deck.md` (if going through a
+  partner channel).
 
 ### Persona 5 — Agency / referral partner
 
@@ -128,6 +132,35 @@ Optional sub-line on internal / federal-aimed decks:
 > Scribe → proposals → diagram → summary → brief → action queue
 > → guided demo."*
 
+### Clinical Signal Filtering — the prime feature line (every buyer-facing deck)
+> *"Filters conversation. Captures findings. Builds the diagram."*
+
+**Supporting copy** (every buyer-facing deck must use this language
+or a faithful paraphrase):
+
+> Doctors do not dictate in perfect templates. ChartNav separates
+> casual speech from clinical findings, flags uncertainty,
+> proposes retinal diagram annotations, and keeps the provider in
+> control.
+
+**Concrete example** (every buyer-facing deck should include this
+or an equivalent):
+
+> Doctor says:
+>
+> *"Okay hold on… OD drusen in the macula… maybe OS flame
+> hemorrhage inferior."*
+>
+> ChartNav separates:
+>
+> - **Ignored chatter:** "Okay hold on"
+> - **Clinical finding:** "OD drusen in the macula"
+> - **Uncertain phrase:** "maybe OS flame hemorrhage inferior"
+> - **Proposed diagram annotation:** provider review required
+
+The provider applies, edits, or rejects every proposal before
+anything is saved or finalized.
+
 ### Pricing block
 > *"$299–$499 per provider per month, OR $5,000 per practice per
 > month flat. Pilot: $10,000 flat for a 4–6 week controlled
@@ -153,6 +186,8 @@ Same as above plus:
 
 Use these exact strings for module names across every deck:
 
+- Clinical Signal Filtering (prime differentiator — surfaces in
+  scribe + proposals + diagram together)
 - AI scribe session lifecycle
 - Findings-to-retinal-diagram proposal review
 - OD/OS retinal drawing canvas

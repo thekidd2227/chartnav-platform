@@ -53,6 +53,8 @@ DECKS=(
   "docs/decks/chartnav-investor-pitch-deck.md"
   "docs/decks/chartnav-sales-deck.md"
   "docs/decks/chartnav-demo-deck.md"
+  "docs/decks/chartnav-buyer-demo-deck.md"
+  "docs/decks/chartnav-operator-demo-deck.md"
   "docs/decks/chartnav-customer-pitch-deck-template.md"
   "docs/decks/chartnav-company-deck.md"
   "docs/decks/chartnav-product-roadmap-deck.md"
@@ -61,6 +63,26 @@ DECKS=(
   "docs/decks/chartnav-one-page-sales-deck.md"
   "docs/decks/chartnav-financial-fundraising-deck.md"
   "docs/decks/chartnav-marketing-plan-deck.md"
+  "docs/decks/chartnav-project-proposal-deck.md"
+  "docs/decks/chartnav-agency-partner-pitch-deck.md"
+  "docs/decks/chartnav-elevator-pitch-deck.md"
+  "docs/decks/chartnav-long-sales-pitch-deck.md"
+)
+
+# Buyer-facing decks (excludes operator-only and brand-internal
+# decks that may legitimately reference internal scripts / repo
+# paths). Phase 17B introduces stricter repo-leak / banned-buzzword
+# checks for this subset.
+BUYER_FACING_DECKS=(
+  "docs/decks/chartnav-investor-pitch-deck.md"
+  "docs/decks/chartnav-sales-deck.md"
+  "docs/decks/chartnav-buyer-demo-deck.md"
+  "docs/decks/chartnav-customer-pitch-deck-template.md"
+  "docs/decks/chartnav-company-deck.md"
+  "docs/decks/chartnav-product-roadmap-deck.md"
+  "docs/decks/chartnav-educational-onboarding-deck.md"
+  "docs/decks/chartnav-one-page-sales-deck.md"
+  "docs/decks/chartnav-financial-fundraising-deck.md"
   "docs/decks/chartnav-project-proposal-deck.md"
   "docs/decks/chartnav-agency-partner-pitch-deck.md"
   "docs/decks/chartnav-elevator-pitch-deck.md"
@@ -153,6 +175,7 @@ FORBIDDEN_CAPABILITY=(
   "autonomous diagnosis"
   "automatic diagnosis"
   "guaranteed accuracy"
+  "guaranteed documentation accuracy"
   "automatic orders"
   "auto-orders"
   "submit referral"
@@ -160,6 +183,13 @@ FORBIDDEN_CAPABILITY=(
   "replaces a doctor"
   "replaces the doctor"
   "replaces providers"
+  "AI draws automatically"
+  "AI decides"
+  "AI diagnosis"
+  "automatic charting"
+  "hands-free diagnosis"
+  "hands-free charting"
+  "hands-off documentation"
 )
 
 ALL_DOCS=("${DECKS[@]}" "${SUPPORT[@]}" "${DEMO_PKG[@]}")
@@ -248,6 +278,59 @@ for f in "${DECKS[@]}"; do
 done
 if [ "$fail_count" -eq 0 ]; then
   echo "   ok — every deck references the safe-claims contract."
+fi
+echo
+
+# ---------------------------------------------------------------
+# 5B. Phase 17B — buyer-facing deck repo-leak / banned-buzzword
+# scan. Buyer-facing decks must not include internal terminal
+# commands, repo paths, internal feature-flag URLs, or operator-
+# only language that exposes implementation detail. The brand-
+# guidelines deck and the operator-demo deck are exempt by path.
+# ---------------------------------------------------------------
+echo "5B. Buyer-facing deck repo-leak / banned-buzzword scan"
+REPO_LEAK_PATTERNS=(
+  "production code on main"
+  "operator.s note"
+  "this version of the deck"
+  "\\?intro=1"
+  "\\?demo=1"
+  "make dev"
+  "make reset-db"
+  "scripts/reset_demo_state\\.sh"
+  "scripts/export_chartnav_decks_to_desktop\\.sh"
+  "START_CHARTNAV\\.command"
+  "STOP_CHARTNAV\\.command"
+  "RESET_DEMO_DATA\\.command"
+  "apps/web/"
+  "apps/api/"
+  "sentinel-token regression"
+  "Phase [0-9]+ smoke"
+  "Phase 16 landing page"
+  "Phase 16 workflow SVG"
+  "contract doc in the repo"
+  "source file"
+  "in production code"
+)
+for f in "${BUYER_FACING_DECKS[@]}"; do
+  [ -f "$f" ] || continue
+  for pat in "${REPO_LEAK_PATTERNS[@]}"; do
+    while IFS= read -r line; do
+      lower="$(printf '%s' "$line" | tr 'A-Z' 'a-z')"
+      # Allow the customer pitch template's `{{PLACEHOLDER}}` lines
+      # to mention internal scaffolding only when the line itself
+      # is clearly a placeholder.
+      if printf '%s' "$line" | grep -Eq '\{\{[A-Z_]+\}\}'; then
+        continue
+      fi
+      echo "   FAIL — buyer-facing deck $f line contains '$pat':"
+      echo "          $line"
+      fail_count=$((fail_count + 1))
+    done < <(grep -E "$pat" "$f" || true)
+  done
+done
+if [ "$fail_count" -eq 0 ]; then
+  echo "   ok — buyer-facing decks contain no repo-leak phrases."
 fi
 echo
 

@@ -27,6 +27,19 @@
 - "audit metadata-only"
 - "cross-organization access returns 404"
 
+### Clinical Signal Filtering language (prime feature — buyer-facing)
+
+- "Clinical Signal Filtering"
+- "Filters conversation. Captures findings. Builds the diagram."
+- "separates casual speech from clinical findings"
+- "flags uncertainty for provider review"
+- "proposes retinal diagram annotations the provider applies,
+  edits, or rejects"
+- "ignored chatter / clinical finding / uncertain phrase /
+  proposed diagram annotation"
+- "the provider applies, edits, or rejects every proposal before
+  anything is saved or finalized"
+
 ### Pilot / safety language
 
 - "controlled pilot"
@@ -89,6 +102,7 @@ inside a forbidden-phrase enumeration like this list itself.
 - ❌ "autonomous diagnosis"
 - ❌ "automatic diagnosis"
 - ❌ "guaranteed accuracy"
+- ❌ "guaranteed documentation accuracy"
 - ❌ "automatic orders"
 - ❌ "order OCT"
 - ❌ "submit referral"
@@ -99,6 +113,13 @@ inside a forbidden-phrase enumeration like this list itself.
 - ❌ "auto-message patients"
 - ❌ "replaces a doctor"
 - ❌ "external LLM certainty"
+- ❌ "AI draws automatically"
+- ❌ "AI decides"
+- ❌ "AI diagnosis"
+- ❌ "automatic charting"
+- ❌ "hands-free diagnosis"
+- ❌ "hands-free charting"
+- ❌ "hands-off documentation"
 
 ---
 
@@ -134,6 +155,12 @@ Always replace forbidden phrasing with approved phrasing.
 | "replaces a doctor" | "documentation support — provider decides" |
 | "production-ready for PHI" | "controlled-pilot mode after BAA + security review" |
 | "real patient data ready" | "fake-data demo first; real PHI after gating" |
+| "AI draws automatically" | "AI proposes; provider applies, edits, or rejects" |
+| "AI decides" | "AI proposes; provider decides" |
+| "AI diagnosis" | "provider-reviewed documentation" |
+| "automatic charting" | "draft documentation the provider reviews" |
+| "hands-free diagnosis" | "provider-in-the-loop documentation" |
+| "guaranteed documentation accuracy" | "provider-reviewed; provider corrects" |
 
 ---
 

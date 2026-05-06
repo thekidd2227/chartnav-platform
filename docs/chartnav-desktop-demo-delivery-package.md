@@ -32,7 +32,7 @@ Desktop folder is regenerated whenever the operator runs
 /Users/jean-maxcharles/Desktop/chartnav decks/
 ├── README.md                          # Map of the folder
 ├── 00_START_HERE/                     # Entry doc + safety contract
-├── 01_Decks/                          # 15 deck Markdown source files
+├── 01_Decks/                          # 17 deck Markdown source files (Phase 17 + 17B)
 ├── 02_One_Pagers/                     # One-page sales deck
 ├── 03_Demo_Package/                   # Demo script, click path,
 │                                      #   shot list (Phase 13/15)
@@ -57,7 +57,7 @@ operator re-runs the export script to refresh the Desktop folder.
 
 | Asset | Source-of-truth path in repo | Desktop destination |
 |---|---|---|
-| Deck Markdown source files (15) | `docs/decks/*.md` | `01_Decks/` |
+| Deck Markdown source files (17) | `docs/decks/*.md` | `01_Decks/` |
 | One-page sales | `docs/decks/chartnav-one-page-sales-deck.md` | `02_One_Pagers/` |
 | Demo script (what to say) | `docs/demo/chartnav-clinical-workflow-demo-script.md` | `03_Demo_Package/` |
 | Demo click path (what to click) | `docs/demo/chartnav-demo-click-path.md` | `03_Demo_Package/` |
@@ -175,7 +175,8 @@ Desktop folder state.
 ## Phase 17 deliverable
 
 Phase 17 ships:
-- 15 deck Markdown source files (`docs/decks/`).
+- 17 deck Markdown source files (`docs/decks/`) — the original
+  15 plus the Phase 17B buyer-demo / operator-demo split.
 - 6 commercial support docs (`docs/commercial/`).
 - 4 demo-package docs (`docs/commercial/demo-package/` plus this
   contract).
