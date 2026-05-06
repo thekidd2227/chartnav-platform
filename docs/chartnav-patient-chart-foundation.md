@@ -649,3 +649,49 @@ See `docs/chartnav-provider-action-review-queue.md` for the full
 contract, including the closed action-type vocabulary, lifecycle
 matrix, source priority, dedupe rules, audit detail format, and the
 explicit deferred-work list.
+
+## Phase 12 — end-to-end clinical workflow smoke review
+
+Phase 12 is a hardening / verification pass, **not** a new product
+surface. It exercises the existing ChartNav clinical workflow across
+phases 6 / 8 / 9 / 10 / 11 in a single seeded context (org / user /
+patient / encounter) to catch integration cracks, missing wiring,
+audit-leak regressions, and unsafe language across module
+boundaries.
+
+**No new product surface.** Zero new tables, zero new migrations,
+zero new client-facing endpoints, zero new UI panels.
+
+**What Phase 12 adds:**
+
+- 17 backend integration tests in
+  `apps/api/tests/test_end_to_end_clinical_workflow.py` covering
+  route sanity (every Phase 5B/6/8/9/10/11 list-or-generate route
+  registered), the full provider workflow (scribe → propose →
+  retinal → summary → brief → actions), end-to-end audit redaction
+  with sentinel tokens injected at every clinical-body field,
+  end-to-end org isolation, end-to-end safety-language scan over
+  service-emitted strings, and reviewer read-only RBAC.
+- 7 frontend smoke tests in
+  `apps/web/src/test/ClinicalWorkflowSmoke.test.tsx` covering
+  workspace mount of all five clinical panels, panel safety copy,
+  full mocked-API workflow drive, no-forbidden-button assertions,
+  no autonomous-diagnosis or external-LLM language, and
+  safe-error banner behavior.
+- 1 Playwright e2e smoke in
+  `apps/web/tests/e2e/clinical-workflow-smoke.spec.ts` confirming
+  the panels mount on a real seeded encounter and the safety copy
+  renders against the live stack.
+
+**Safety-language scan.** A reproducible grep across every clinical
+panel and every service/route module returned four matches — all
+classified as safe negative assertions (banner copy or module
+docstring saying ChartNav does *not* do the forbidden thing). No
+actionable code uses any of the forbidden tokens.
+
+**Documented limitations and follow-ups** live in
+`docs/chartnav-end-to-end-clinical-workflow-smoke-review.md`. None
+block this phase merging.
+
+See that document for the full coverage map, audit-redaction
+methodology, and follow-up recommendations.
