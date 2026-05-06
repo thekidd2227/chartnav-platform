@@ -88,6 +88,7 @@ import {
 import { EyeDiagramPanel } from "./EyeDiagramPanel";
 import { PatientSummaryPanel } from "./PatientSummaryPanel";
 import { PreVisitBriefPanel } from "./PreVisitBriefPanel";
+import { ProviderActionItemsPanel } from "./ProviderActionItemsPanel";
 import { ScribeSessionPanel } from "./ScribeSessionPanel";
 
 // ---------------------------------------------------------------------
@@ -2393,6 +2394,19 @@ export function NoteWorkspace({
       {patientId !== null && (
         <section className="section" data-testid="pre-visit-brief-section">
           <PreVisitBriefPanel
+            identity={identity}
+            patientId={patientId}
+            encounterId={encounterId}
+          />
+        </section>
+      )}
+
+      {patientId !== null && (
+        <section
+          className="section"
+          data-testid="provider-action-items-section"
+        >
+          <ProviderActionItemsPanel
             identity={identity}
             patientId={patientId}
             encounterId={encounterId}

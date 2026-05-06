@@ -586,3 +586,66 @@ See `docs/chartnav-pre-visit-brief.md` for the full contract,
 including the response shape, generator rules, source priority,
 data-gap behavior, RBAC, audit safety, and the explicit deferred-work
 list.
+
+## Phase 11 — provider action review queue
+
+Phase 11 adds a **persisted, provider-reviewable action queue**.
+ChartNav surfaces deterministic review tasks from existing chart
+records; the provider explicitly Accepts, Dismisses, or Completes
+each one. ChartNav itself **never** creates orders, sends referrals,
+posts billing or coding entries, messages patients, or takes any
+clinical action.
+
+Phase 11 lives in its own table (`provider_action_items`), its own
+service (`apps/api/app/services/provider_action_items.py`), its own
+routes (`/patients/{id}/provider-action-items/...`), and its own
+panel (`ProviderActionItemsPanel.tsx`). Single new migration:
+`b3c4d5e6f7a8`. **Zero changes** to retinal, EyeDiagram,
+chart_artifacts, scribe_sessions, patient_summaries, or pre_visit
+schemas — Phase 11 reads them but never writes.
+
+**Lifecycle states:** `suggested → accepted → completed`, plus
+`dismissed` reachable from `suggested` or `accepted`. `dismissed`
+and `completed` are immutable. Direct `suggested → completed` is
+rejected with `409 provider_action_invalid_transition`.
+
+**Action-type vocabulary is closed.** The service rejects any
+`action_type` outside the explicit set, which keeps the queue in
+review-prompt territory: every type begins with `review_`,
+`finalize_`, `sign_`, or `reconcile_`. There is no order, coding,
+referral, prescribe, or message type, and there cannot be one
+without a code change to the closed enum.
+
+**Generator is deterministic.** No LLM. Inputs in priority order:
+explicit unsigned/unreviewed workflow state, finalized patient
+summaries, reviewed/finalized scribe sessions, signed retinal
+artifacts, recent encounters, and pre-visit data gaps. Clinical-
+language scans run only against finalized chart text (signed
+artifacts, finalized summaries, reviewed/finalized scribe sessions).
+Drafts and unsigned content are not scanned.
+
+**Dedupe** keys on
+`(action_type, source_type, source_id, title)`. Repeated generates
+do not churn while a prior suggestion is still in `suggested` or
+`accepted`. The response reports `generated_count`,
+`created_count`, and `reused_count`.
+
+**Org isolation** is patient-resolved-first; cross-org returns
+`404 patient_not_found`. Every per-source SELECT re-filters by
+`organization_id` for defense in depth.
+
+**RBAC:** `admin` and `clinician` can generate / accept / dismiss /
+complete. `reviewer` is read-only.
+
+**Audit:** four metadata-only event types
+(`provider_action_items_generated`,
+`provider_action_item_accepted`,
+`provider_action_item_dismissed`,
+`provider_action_item_completed`). The `title` and `reason` columns
+and any source clinical body are **never** written to
+`security_audit_events`. Sentinel-token regression tests assert this.
+
+See `docs/chartnav-provider-action-review-queue.md` for the full
+contract, including the closed action-type vocabulary, lifecycle
+matrix, source priority, dedupe rules, audit detail format, and the
+explicit deferred-work list.
