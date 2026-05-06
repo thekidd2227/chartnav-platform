@@ -695,3 +695,50 @@ block this phase merging.
 
 See that document for the full coverage map, audit-redaction
 methodology, and follow-up recommendations.
+
+## Phase 13 — demo-ready clinical workflow package
+
+Phase 13 is a **demo-packaging phase**, not a new product surface.
+Its only goal is to make the existing ChartNav clinical workflow
+understandable in five minutes by a buyer, pilot user, advisor, or
+investor — without misrepresenting what the product does.
+
+**No new clinical automation. No new schema. No new API surface.
+No backend changes.** Phase 13 ships:
+
+- a small collapsible in-app guide (`DemoClinicalWorkflowGuide`)
+  mounted at the top of the workspace's panel stack, collapsed by
+  default; expands to a seven-step checklist with safety copy;
+  references the demo script;
+- a 5-minute and 10-minute demo script, an exact click-path doc,
+  and a video shot list under `docs/demo/`;
+- this Phase 13 contract document at
+  `docs/chartnav-demo-ready-clinical-workflow-package.md`;
+- this section.
+
+**Demo data policy.** No backend demo seed is added. The demo
+reuses the existing fake seed (`demo-eye-clinic` org, patient
+`PT-1001` Morgan Lee, encounter 1) which has been demo-flavored
+since Phase 0. No real PHI; no new patient names; no new MRNs;
+no new DOBs.
+
+**Safety / claims rules** are documented in the Phase 13 contract
+doc. The frontend tests assert them against the demo guide; the
+existing Phase 12 backend integration test already enforces them
+across service-emitted text. Forbidden phrasing includes "HIPAA
+compliant," "certified EHR," "autonomous diagnosis," "guaranteed
+accuracy," "automatic orders," "submit referral," "billing
+automation," and "send patient message"; allowed phrasing is the
+narrow safe-phrase list ("provider-reviewed," "documentation
+support," "draft for review," etc.). Negative assertions are
+allowed only when they clearly say ChartNav does *not* do the
+thing.
+
+**No video files or screenshots are checked into this repo.** The
+shot list is editorial only.
+
+See `docs/chartnav-demo-ready-clinical-workflow-package.md` for
+the full demo-ready contract, including the documentation map,
+audience, demo-data policy, the demo guide's behavior contract,
+the safety-language rules, the video clip plan, and the Phase 14
+candidate list.

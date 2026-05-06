@@ -85,6 +85,7 @@ import {
   segmentAbbreviations,
   type ClinicalShortcut,
 } from "./clinicalShortcuts";
+import { DemoClinicalWorkflowGuide } from "./DemoClinicalWorkflowGuide";
 import { EyeDiagramPanel } from "./EyeDiagramPanel";
 import { PatientSummaryPanel } from "./PatientSummaryPanel";
 import { PreVisitBriefPanel } from "./PreVisitBriefPanel";
@@ -2359,6 +2360,15 @@ export function NoteWorkspace({
             </div>
           </div>
         </div>
+      )}
+
+      {patientId !== null && (
+        <section
+          className="section"
+          data-testid="demo-clinical-workflow-guide-section"
+        >
+          <DemoClinicalWorkflowGuide patientDisplay={patientDisplay} />
+        </section>
       )}
 
       {patientId !== null && (
