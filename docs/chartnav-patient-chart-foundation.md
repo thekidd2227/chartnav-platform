@@ -797,3 +797,68 @@ existing safety contract.
 See `docs/chartnav-pilot-readiness-deployment-hardening.md` for
 the full Phase 14 contract, the docs map, the readiness-test
 description, and the Phase 15 recommendation.
+
+## Phase 15 — commercial demo delivery system
+
+Phase 15 converts the existing ChartNav clinical workflow
+foundation into a polished, controllable, sales-demo-ready system.
+Goal: ChartNav should feel like a coherent ophthalmology platform
+during demos instead of a collection of features.
+
+**No new clinical automation. No new schema. No new API surface.
+No backend code changes. Fake demo data only.**
+
+Phase 15 ships:
+
+- a new `GuidedDemoMode` component — a sticky in-workspace
+  orchestrator with a deterministic 8-step stepper, a prominent
+  **DEMO MODE** badge, on-screen presenter cues, and Previous /
+  Next / Reset controls. Gated on the URL query `?demo=1` (or
+  `localStorage.chartnav.demoMode = "1"`); default off so normal
+  providers never see it;
+- `scripts/reset_demo_state.sh` — drops + re-seeds the local dev
+  SQLite DB, prints a DevTools snippet for clearing browser-side
+  demo state, refuses to run if `DATABASE_URL` is anything other
+  than the local `sqlite:///<path>` default;
+- two new docs under `docs/demo/` — an operator guide (recommended
+  flow with Guided Demo Mode, click-by-click sequence, fallback
+  paths, what NOT to claim, talking points) and an environment
+  README (local startup, reset levels, seeded credentials,
+  fake-data structure, troubleshooting, recording recommendations);
+- this top-level Phase 15 contract at
+  `docs/chartnav-commercial-demo-delivery-system.md`;
+- this section;
+- two new test files — a `GuidedDemoMode.test.tsx` component suite
+  and a `DemoCommercialDelivery.test.tsx` package suite that
+  asserts the new docs exist with required headings and that
+  forbidden positive claims appear only in safe contexts.
+
+**Deterministic by design.** Step labels and cues are fixed at
+compile time. Step state lives only in browser `localStorage`.
+There are no animations, no auto-advance, no hidden timers, no API
+calls. The stepper does not click clinical-panel buttons or
+generate artifacts — it is a presenter overlay, not a workflow
+automation surface.
+
+**Fake-data-only boundary.** The demo environment is fake-data
+only by construction. The Phase 15 reset script refuses to run
+against a non-local database URL. The Guided Demo Mode badge
+prominently labels the experience "DEMO MODE · fake data only" so
+it cannot be confused with a real-data session.
+
+**Safety guardrails.** The stepper renders the same
+negative-assertion safety bullets the Phase 13 demo guide and the
+Phase 11 action queue use. Forbidden marketing claims are rejected
+by the Phase 15 docs-claims test unless they appear inside a
+negative-assertion line, an enumerated forbidden-phrase list, or
+a Q&A question heading whose answer is a negative assertion —
+identical heuristic to Phase 13 / 14.
+
+**Phase 15 prepares Phase 16** — desktop demo packaging
+(one-click runner for the buyer's laptop), pre-recorded fallback
+clips, optional sticky workflow progress in normal mode, an
+a11y smoke for the stepper, and a CI summary card. Phase 16 must
+continue to obey the existing safety contract.
+
+See `docs/chartnav-commercial-demo-delivery-system.md` for the
+full Phase 15 contract.
