@@ -862,3 +862,70 @@ continue to obey the existing safety contract.
 
 See `docs/chartnav-commercial-demo-delivery-system.md` for the
 full Phase 15 contract.
+
+## Phase 16 — website proof upgrade + conversion layer
+
+Phase 16 upgrades the public-facing ChartNav website so it reflects
+the actual product built through Phases 6–15. Goal: a buyer should
+understand the real ChartNav workflow in under 60 seconds — what it
+does, why it is ophthalmology-specific, what the provider controls,
+what ChartNav does *not* do, and how to request a demo or start a
+pilot conversation.
+
+**No new clinical automation. No backend changes. No new schema.
+No external LLM. No real-PHI claim. No unsupported HIPAA / SOC 2 /
+certified-EHR claim. No binary media in the repo.**
+
+There is no separate marketing site (no `apps/web/chartnavmd-site`).
+The public website is the React app at `apps/web/`. Phase 16 adds
+an opt-in route — `/landing` or `?intro=1` — that renders a new
+public landing / proof page (`LandingPage.tsx`); the existing
+authenticated workspace UX is unchanged. The opt-in pattern matches
+Phase 15's Guided Demo Mode (`?demo=1`).
+
+Phase 16 ships:
+
+- a new `LandingPage.tsx` with hero / workflow / ophthalmology /
+  provider-control / modules / before-after / demo-pilot /
+  non-goals / footer sections;
+- two inline SVG diagrams — a 7-stage workflow path and a Draft →
+  Reviewed → Finalized state model. No binary media is committed;
+- a 6-line gate in `main.tsx` and a CSS append in `styles.css`;
+- an 18-test vitest suite asserting required sections, CTAs, SVG
+  diagrams, modules, before/after, non-goals, the safe-claims
+  contract, and the absence of order / coding / referral /
+  patient-message buttons or autonomous-LLM positive claims;
+- `scripts/check_website_claims.sh` — a pre-deploy verifier that
+  confirms required files exist, the router gate is wired,
+  negative-assertion phrasing is present, no forbidden positive
+  claim slips, and no binary media is checked in under
+  `apps/web/public`;
+- the top-level Phase 16 contract at
+  `docs/chartnav-website-proof-upgrade-conversion-layer.md` and an
+  editorial shot list at
+  `docs/website/chartnav-website-shot-list.md`;
+- this section.
+
+**Safe claims** are enforced by the same heuristic Phase 13 / 14 /
+15 use: forbidden marketing claims (HIPAA compliant, certified EHR,
+autonomous diagnosis, automatic orders, submit referral, billing
+automation, send patient message, replaces a doctor,
+production-ready for PHI, real patient data ready) appear only
+inside negative-assertion lines, enumerated forbidden lists, or
+explicit `does not …` statements.
+
+**CTA strategy.** All named CTAs resolve to a single `contactHref`
+prop (default `mailto:hello@chartnavmd.com`) so the deploy host can
+override the destination without touching component code. Phase 16
+does not invent a working intake backend.
+
+**Phase 16 prepares Phase 17** — possible follow-ups include
+flipping the unauthenticated default to the landing page, wiring a
+real intake form, adding the landing page to the axe-core a11y
+sweep, capturing real screenshots into out-of-repo CDN storage, and
+the long-deferred commercial deck library (still out-of-repo).
+
+See `docs/chartnav-website-proof-upgrade-conversion-layer.md` for
+the full Phase 16 contract, the messaging strategy, the per-phase
+proof map, the visual asset strategy, the CTA strategy, the safe
+claims rules, the test contract, and the Phase 17 candidate list.
