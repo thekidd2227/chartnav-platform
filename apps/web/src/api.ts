@@ -2140,3 +2140,142 @@ export function getPatientPreVisitBrief(
 ): Promise<PreVisitBrief> {
   return request(`/patients/${patientId}/pre-visit-brief`, { email });
 }
+
+// ---------- Phase 11: provider action review queue ----------------
+//
+// One row per provider-reviewable action suggestion. Status flows
+// suggested → accepted → completed; or suggested|accepted →
+// dismissed. Direct suggested → completed is rejected. dismissed and
+// completed are immutable. ChartNav never creates orders, sends
+// referrals, messages patients, or takes action automatically — every
+// item is a review task the provider explicitly resolves.
+
+export type ProviderActionStatus =
+  | "suggested"
+  | "accepted"
+  | "dismissed"
+  | "completed";
+
+export type ProviderActionPriority = "low" | "medium" | "high";
+
+export interface ProviderActionItem {
+  id: number;
+  organization_id: number;
+  patient_id: number;
+  encounter_id: number | null;
+  source_type: string | null;
+  source_id: number | null;
+  action_type: string;
+  priority: ProviderActionPriority;
+  title: string;
+  reason: string;
+  status: ProviderActionStatus;
+  created_by_system: boolean;
+  generated_batch_id: string | null;
+  accepted_by_user_id: number | null;
+  dismissed_by_user_id: number | null;
+  completed_by_user_id: number | null;
+  accepted_at: string | null;
+  dismissed_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  is_terminal: boolean;
+}
+
+export interface ProviderActionItemListResponse {
+  items: ProviderActionItem[];
+  total: number;
+}
+
+export interface ProviderActionItemGenerateResponse {
+  batch_id: string;
+  generated_count: number;
+  created_count: number;
+  reused_count: number;
+  items: ProviderActionItem[];
+}
+
+export interface ProviderActionItemListFilters {
+  status?: ProviderActionStatus;
+  priority?: ProviderActionPriority;
+  action_type?: string;
+  encounter_id?: number;
+}
+
+function _qs(filters: ProviderActionItemListFilters): string {
+  const parts: string[] = [];
+  if (filters.status) parts.push(`status=${encodeURIComponent(filters.status)}`);
+  if (filters.priority)
+    parts.push(`priority=${encodeURIComponent(filters.priority)}`);
+  if (filters.action_type)
+    parts.push(`action_type=${encodeURIComponent(filters.action_type)}`);
+  if (filters.encounter_id !== undefined)
+    parts.push(`encounter_id=${filters.encounter_id}`);
+  return parts.length ? `?${parts.join("&")}` : "";
+}
+
+export function generateProviderActionItems(
+  email: string,
+  patientId: number
+): Promise<ProviderActionItemGenerateResponse> {
+  return request(
+    `/patients/${patientId}/provider-action-items/generate`,
+    { email, method: "POST" }
+  );
+}
+
+export function listProviderActionItems(
+  email: string,
+  patientId: number,
+  filters: ProviderActionItemListFilters = {}
+): Promise<ProviderActionItemListResponse> {
+  return request(
+    `/patients/${patientId}/provider-action-items${_qs(filters)}`,
+    { email }
+  );
+}
+
+export function getProviderActionItem(
+  email: string,
+  patientId: number,
+  actionId: number
+): Promise<ProviderActionItem> {
+  return request(
+    `/patients/${patientId}/provider-action-items/${actionId}`,
+    { email }
+  );
+}
+
+export function acceptProviderActionItem(
+  email: string,
+  patientId: number,
+  actionId: number
+): Promise<ProviderActionItem> {
+  return request(
+    `/patients/${patientId}/provider-action-items/${actionId}/accept`,
+    { email, method: "POST" }
+  );
+}
+
+export function dismissProviderActionItem(
+  email: string,
+  patientId: number,
+  actionId: number
+): Promise<ProviderActionItem> {
+  return request(
+    `/patients/${patientId}/provider-action-items/${actionId}/dismiss`,
+    { email, method: "POST" }
+  );
+}
+
+export function completeProviderActionItem(
+  email: string,
+  patientId: number,
+  actionId: number
+): Promise<ProviderActionItem> {
+  return request(
+    `/patients/${patientId}/provider-action-items/${actionId}/complete`,
+    { email, method: "POST" }
+  );
+}
