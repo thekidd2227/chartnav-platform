@@ -742,3 +742,58 @@ the full demo-ready contract, including the documentation map,
 audience, demo-data policy, the demo guide's behavior contract,
 the safety-language rules, the video clip plan, and the Phase 14
 candidate list.
+
+## Phase 14 — pilot readiness / deployment hardening
+
+Phase 14 is a **pilot-readiness / deployment-hardening phase**.
+Its only goal is to prepare ChartNav for safe pilot conversations
+and controlled-pilot deployment with ophthalmology offices,
+without obvious gaps.
+
+**No new clinical automation. No new schema. No new API surface.
+No backend code changes.** The PR's `git diff` against
+`apps/api/` (excluding `tests/`) is empty.
+
+Phase 14 ships:
+
+- eight new pilot docs under `docs/pilot/` (readiness checklist,
+  deployment guide, admin onboarding, security packet, support
+  runbook, demo-to-pilot transition plan, known limitations,
+  pilot success metrics);
+- this top-level Phase 14 contract at
+  `docs/chartnav-pilot-readiness-deployment-hardening.md`;
+- this section;
+- a vitest readiness suite asserting the docs exist, the required
+  headings exist, and forbidden positive claims appear only in
+  safe contexts (negative assertions, enumerated forbidden-phrase
+  lists, or Q&A question headings whose answers are negatives);
+- `scripts/check_pilot_readiness.sh` — a small shell verifier for
+  pre-pilot dry-runs.
+
+**Safe pilot language** is enforced by the readiness suite and
+documented in the security packet's "BAA / HIPAA language
+caution" section. Forbidden positive claims include "HIPAA
+compliant," "certified EHR," "autonomous diagnosis," "automatic
+orders," "submit referral," "billing automation," "send patient
+message," "replaces a doctor," "production-ready for PHI."
+Approved phrasing includes "provider-reviewed," "documentation
+support," "ophthalmology-specific," "controlled-pilot," "designed
+to support."
+
+**Deployment expectations** are now documented for three modes:
+`local` (fake-data only), `staging` (fake-data only), and
+`controlled-pilot` (real PHI permitted only after BAA + security
+review gating items are signed off).
+
+**Security review gating** items are enumerated in one place,
+identical across the readiness checklist, the security packet, the
+admin onboarding checklist, and the demo-to-pilot transition plan.
+
+**Phase 14 prepares Phase 15** — Phase 15 will package ChartNav as
+a runnable desktop demo (one-click run on a buyer's laptop) and
+finalize commercial-launch readiness, while continuing to obey the
+existing safety contract.
+
+See `docs/chartnav-pilot-readiness-deployment-hardening.md` for
+the full Phase 14 contract, the docs map, the readiness-test
+description, and the Phase 15 recommendation.
