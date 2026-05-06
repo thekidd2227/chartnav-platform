@@ -87,6 +87,7 @@ import {
 } from "./clinicalShortcuts";
 import { DemoClinicalWorkflowGuide } from "./DemoClinicalWorkflowGuide";
 import { EyeDiagramPanel } from "./EyeDiagramPanel";
+import { GuidedDemoMode } from "./GuidedDemoMode";
 import { PatientSummaryPanel } from "./PatientSummaryPanel";
 import { PreVisitBriefPanel } from "./PreVisitBriefPanel";
 import { ProviderActionItemsPanel } from "./ProviderActionItemsPanel";
@@ -2360,6 +2361,15 @@ export function NoteWorkspace({
             </div>
           </div>
         </div>
+      )}
+
+      {patientId !== null && (
+        <section
+          className="section"
+          data-testid="guided-demo-mode-section"
+        >
+          <GuidedDemoMode patientDisplay={patientDisplay} />
+        </section>
       )}
 
       {patientId !== null && (
