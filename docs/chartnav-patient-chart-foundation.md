@@ -524,3 +524,65 @@ regression tests assert this for every event type.
 See `docs/chartnav-patient-friendly-summary.md` for the full
 generator rules, transition matrix, RBAC, audit safety, and the
 list of explicit non-goals.
+
+## Phase 10 — provider-facing pre-visit clinical brief
+
+Phase 10 adds a **provider-facing pre-visit brief**: a deterministic,
+on-demand summary of the existing ChartNav chart for one patient
+that a clinician can review before the visit. **Zero new tables.
+Zero new migrations.** Phase 10 lives entirely in its own service
+(`apps/api/app/services/pre_visit_briefs.py`), its own routes
+(`/patients/{id}/pre-visit-brief...`), and its own panel
+(`PreVisitBriefPanel.tsx`).
+
+**Lifecycle:** none. The brief is computed on each call from the
+existing source tables (encounters, workflow_events, scribe_sessions,
+chart_artifacts, patient_summaries) and never stored. Two routes:
+
+- `POST /patients/{id}/pre-visit-briefs/generate` — explicit, audited
+  generation. Emits `pre_visit_brief_generated` with metadata-only
+  detail (patient_id, source_counts, generated_at).
+- `GET /patients/{id}/pre-visit-brief` — read-only on-demand
+  recompute. Not audited (consistent with read-side of
+  patient_summaries / scribe_sessions).
+
+**Source priority:** finalized patient summaries → reviewed/finalized
+scribe sessions → signed retinal artifacts → recent encounters →
+workflow events.
+
+**Generator is fully deterministic.** No LLM, no autonomous diagnosis,
+no treatment recommendations beyond source content, no orders, no
+coding, no patient-side delivery. Section excerpts are truncated to
+fixed character limits; `active_issues` are pulled verbatim from
+already-finalized chart fields and deduplicated case-insensitively.
+A constant `PROVIDER_REVIEW_NOTICE` is included in every response.
+
+**`data_gaps` is explicit.** Missing or weakly-populated sources are
+listed by name (e.g., "No signed retinal artifacts on file…"). The
+brief tells the provider what is *not* in the chart, not what
+clinically *should* be.
+
+**`source_counts` is metadata only.** The eight integer counts that
+describe the brief's inputs are also encoded into the audit detail
+field — they are the only body-derived information that ever reaches
+the audit log.
+
+**Org isolation:** patient is resolved inside the caller's
+organization first; cross-org returns `404 patient_not_found` (no
+existence leak). Every per-source SELECT re-filters by
+`organization_id` for defense in depth.
+
+**RBAC:** `admin` + `clinician` can both POST and GET. `reviewer` is
+read-only on this surface (GET allowed; POST → `403 role_forbidden`).
+
+**Audit:** every generation emits a `pre_visit_brief_generated`
+event with metadata-only `detail`. `last_visit_summary`,
+`active_issues`, retinal/scribe excerpts, patient summary excerpts,
+`pending_items`, `suggested_review_items`, and `data_gaps` body
+strings are **never** written to `security_audit_events`.
+Sentinel-token regression tests assert this for every section body.
+
+See `docs/chartnav-pre-visit-brief.md` for the full contract,
+including the response shape, generator rules, source priority,
+data-gap behavior, RBAC, audit safety, and the explicit deferred-work
+list.

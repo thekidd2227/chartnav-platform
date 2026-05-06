@@ -2043,3 +2043,100 @@ export function discardPatientSummary(
     { email, method: "POST" }
   );
 }
+
+// ---------- Phase 10: provider-facing pre-visit clinical brief ----------
+//
+// On-demand, deterministic. The brief is a derived view over existing
+// chart records (encounters, scribe sessions, retinal artifacts,
+// patient summaries, workflow events). It is never persisted, never
+// sent to a patient, never an order/coding tool, and never a clinical
+// decision. POST /generate is the audited explicit-action route; GET
+// is a read-only convenience (no audit emitted).
+
+export interface PreVisitBriefRetinalSummary {
+  total: number;
+  signed_count: number;
+  unsigned_count: number;
+  has_unsigned_drafts: boolean;
+  latest_signed: {
+    id: number;
+    title: string | null;
+    signed_at: string | null;
+    version_number: number | null;
+    encounter_id: number | null;
+  } | null;
+}
+
+export interface PreVisitBriefScribeSummary {
+  session_id: number | null;
+  status: string;
+  updated_at?: string | null;
+  finalized_at?: string | null;
+  reviewed_at?: string | null;
+  encounter_id?: number | null;
+  chief_complaint_excerpt?: string | null;
+  plan_excerpt?: string | null;
+}
+
+export interface PreVisitBriefSummaryContext {
+  summary_id: number | null;
+  status: string;
+  source_kind?: string;
+  finalized_at?: string | null;
+  reviewed_at?: string | null;
+  encounter_id?: number | null;
+  scribe_session_id?: number | null;
+  plain_language_excerpt?: string | null;
+  key_findings_count?: number;
+  next_steps_count?: number;
+}
+
+export interface PreVisitBriefPendingItem {
+  kind: "encounter" | "scribe_session" | "patient_summary";
+  id: number;
+  status: string;
+  encounter_id?: number | null;
+  provider_name?: string | null;
+  scheduled_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface PreVisitBriefSuggestedItem {
+  kind: "scribe_session" | "patient_summary";
+  id: number;
+  reason: string;
+  updated_at?: string | null;
+}
+
+export interface PreVisitBrief {
+  patient_id: number;
+  brief_status: string;
+  last_visit_summary: string | null;
+  active_issues: string[];
+  retinal_artifact_summary: PreVisitBriefRetinalSummary;
+  recent_scribe_session_summary: PreVisitBriefScribeSummary;
+  patient_summary_context: PreVisitBriefSummaryContext;
+  pending_items: PreVisitBriefPendingItem[];
+  suggested_review_items: PreVisitBriefSuggestedItem[];
+  data_gaps: string[];
+  source_counts: Record<string, number>;
+  generated_at: string;
+  notice: string;
+}
+
+export function generatePatientPreVisitBrief(
+  email: string,
+  patientId: number
+): Promise<PreVisitBrief> {
+  return request(
+    `/patients/${patientId}/pre-visit-briefs/generate`,
+    { email, method: "POST" }
+  );
+}
+
+export function getPatientPreVisitBrief(
+  email: string,
+  patientId: number
+): Promise<PreVisitBrief> {
+  return request(`/patients/${patientId}/pre-visit-brief`, { email });
+}
