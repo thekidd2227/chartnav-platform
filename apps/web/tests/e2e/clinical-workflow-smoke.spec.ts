@@ -37,7 +37,32 @@ async function openEncounter(
 ) {
   await page.locator(`[data-testid=enc-row-${id}]`).click();
   await page.waitForSelector("[data-testid=encounter-detail]");
-  await page.waitForSelector("[data-testid=note-workspace]");
+  // Phase 19 — encounter detail is now a tabbed workspace; the
+  // NoteWorkspace lives behind the Documentation tab and the
+  // EyeDiagramPanel behind the Imaging tab. The default active
+  // tab is Overview, so we no longer wait for `note-workspace`
+  // to be present at openEncounter time.
+  await page.waitForSelector("[data-testid=clinical-tabbed-workspace]");
+}
+
+/**
+ * Phase 19 helper — click a workspace tab + wait for its panel.
+ */
+async function openTab(
+  page: import("@playwright/test").Page,
+  slug:
+    | "overview"
+    | "clinical"
+    | "documentation"
+    | "imaging"
+    | "labs-orders-review"
+    | "calendar"
+    | "communications"
+    | "documents"
+    | "chat"
+) {
+  await page.locator(`[data-testid=ctw-tab-${slug}]`).click();
+  await page.waitForSelector(`[data-testid=ctw-panel-${slug}]`);
 }
 
 test.describe("Clinical workflow smoke — Phase 12", () => {
@@ -56,8 +81,14 @@ test.describe("Clinical workflow smoke — Phase 12", () => {
     // The five Phase 5B / 8 / 9 / 10 / 11 panels each gate on a
     // numeric patientId resolved from the encounter row. The seeded
     // encounter (PT-1001) has a native patient_id, so all five
-    // sections should render.
+    // sections should render — but they live behind Phase 19 tabs.
+    // Imaging tab — the eye-diagram panel.
+    await openTab(page, "imaging");
     await expect(page.getByTestId("eye-diagram-section")).toBeVisible();
+
+    // Documentation tab — the scribe / summary / brief / action
+    // items panels (all inside NoteWorkspace).
+    await openTab(page, "documentation");
     await expect(page.getByTestId("scribe-session-section")).toBeVisible();
     await expect(page.getByTestId("patient-summary-section")).toBeVisible();
     await expect(page.getByTestId("pre-visit-brief-section")).toBeVisible();
@@ -71,6 +102,10 @@ test.describe("Clinical workflow smoke — Phase 12", () => {
   }) => {
     await useIdentity(page, ADMIN);
     await openEncounter(page, 1);
+
+    // Phase 19 — banner copy lives inside NoteWorkspace, which
+    // mounts in the Documentation tab.
+    await openTab(page, "documentation");
 
     await expect(
       page.getByTestId("scribe-session-banner-copy")
@@ -92,12 +127,15 @@ test.describe("Clinical workflow smoke — Phase 12", () => {
     await useIdentity(page, ADMIN);
     await openEncounter(page, 1);
 
-    // Wait for at least one Phase-12 panel to mount before scanning.
+    // Phase 19 — open Documentation tab so the action-items panel
+    // is mounted; then sweep the entire workspace (including all
+    // visible chrome) for forbidden button labels. The forbidden
+    // labels must not appear on ANY interactive control regardless
+    // of which tab is active, so we also visit Labs/Orders Review
+    // and Communications and re-check.
+    await openTab(page, "documentation");
     await page.waitForSelector("[data-testid=provider-action-items-panel]");
 
-    // Negative-assertion safety copy ("does not create orders…") is
-    // allowed only inside the panel's banner-copy; an actionable
-    // button matching these names must not exist.
     const forbiddenLabels = [
       /place order/i,
       /send referral/i,
@@ -108,8 +146,13 @@ test.describe("Clinical workflow smoke — Phase 12", () => {
       /portal push/i,
       /prescribe/i,
     ];
-    for (const label of forbiddenLabels) {
-      await expect(page.getByRole("button", { name: label })).toHaveCount(0);
+    for (const tab of ["documentation", "labs-orders-review", "communications"] as const) {
+      await openTab(page, tab);
+      for (const label of forbiddenLabels) {
+        await expect(
+          page.getByRole("button", { name: label })
+        ).toHaveCount(0);
+      }
     }
   });
 
@@ -119,7 +162,9 @@ test.describe("Clinical workflow smoke — Phase 12", () => {
     await useIdentity(page, ADMIN);
     await openEncounter(page, 1);
 
-    // Wait for the workspace to fully render before scraping text.
+    // Phase 19 — open Documentation tab so NoteWorkspace mounts,
+    // then scrape its rendered text.
+    await openTab(page, "documentation");
     await page.waitForSelector(
       "[data-testid=provider-action-items-panel]"
     );
