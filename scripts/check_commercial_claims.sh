@@ -381,6 +381,68 @@ fi
 echo
 
 # ---------------------------------------------------------------
+# 6B. Phase 17D presentation generator + assets.
+# ---------------------------------------------------------------
+echo "6B. Phase 17D presentation system"
+PHASE17D_FILES=(
+  "tools/presentations/package.json"
+  "tools/presentations/theme.js"
+  "tools/presentations/parseDeck.js"
+  "tools/presentations/slideLayouts.js"
+  "tools/presentations/renderDeck.js"
+  "tools/presentations/generateAll.js"
+  "tools/presentations/brand/chartnavMark.js"
+  "scripts/generate_chartnav_presentations.sh"
+  "docs/presentations/palette.md"
+  "docs/presentations/typography.md"
+  "docs/presentations/brand-usage.md"
+  "docs/presentations/chartnav-presentation-system.md"
+)
+for f in "${PHASE17D_FILES[@]}"; do
+  if [ ! -s "$f" ]; then
+    echo "   MISSING or EMPTY: $f"
+    fail_count=$((fail_count + 1))
+  fi
+done
+
+# The generator script must be executable.
+if [ -f scripts/generate_chartnav_presentations.sh ] \
+   && [ ! -x scripts/generate_chartnav_presentations.sh ]; then
+  echo "   warn — scripts/generate_chartnav_presentations.sh is present but not executable."
+  warn_count=$((warn_count + 1))
+fi
+
+# theme.js must reference the canonical palette tokens so it
+# stays in sync with apps/web/src/styles.css.
+if [ -f tools/presentations/theme.js ]; then
+  for tok in "0B6E79" "DC2626" "14B8A6" "0F172A"; do
+    if ! grep -q "$tok" tools/presentations/theme.js; then
+      echo "   FAIL — tools/presentations/theme.js missing palette token: $tok"
+      fail_count=$((fail_count + 1))
+    fi
+  done
+fi
+
+# Generator must read from docs/decks and write under
+# CHARTNAV_DESKTOP_DIR.
+if [ -f tools/presentations/generateAll.js ]; then
+  if ! grep -q "docs/decks\|docs.*decks" tools/presentations/generateAll.js \
+     && ! grep -q "DECKS_DIR" tools/presentations/generateAll.js; then
+    echo "   FAIL — generateAll.js does not reference the deck source dir"
+    fail_count=$((fail_count + 1))
+  fi
+  if ! grep -q "CHARTNAV_DESKTOP_DIR" tools/presentations/generateAll.js; then
+    echo "   FAIL — generateAll.js does not honor CHARTNAV_DESKTOP_DIR"
+    fail_count=$((fail_count + 1))
+  fi
+fi
+
+if [ "$fail_count" -eq 0 ] && [ "$warn_count" -eq 0 ]; then
+  echo "   ok — Phase 17D presentation system files present and palette in sync."
+fi
+echo
+
+# ---------------------------------------------------------------
 # 7. .gitignore guard for the Desktop folder.
 # ---------------------------------------------------------------
 echo "7. .gitignore guard for the Desktop folder"

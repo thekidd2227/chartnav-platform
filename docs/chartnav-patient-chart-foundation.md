@@ -1140,3 +1140,94 @@ inventory Phase 18 sells from.
 
 See `docs/chartnav-commercial-launch-package.md` for the updated
 deck audience map and the full test contract.
+
+## Phase 17D — presentation conversion system + branded deck exports
+
+Phase 17D bridges the markdown deck library (Phase 17 + 17B) to
+**real, branded PowerPoint presentations** so the operator
+walks into investor / buyer / partner meetings without a
+manual conversion step.
+
+**Tooling + content only. No backend changes. No schema. No
+external LLM. No real-PHI claim. No new clinical features. No
+binary media in the repo.**
+
+What ships:
+
+- `tools/presentations/` — a Node-based PPTX generator. One
+  direct dep (`pptxgenjs`) — pure JS, no native libs. Files:
+  - `theme.js` — palette + typography pulled from
+    `apps/web/src/styles.css` so the slides match the product UI.
+  - `brand/chartnavMark.js` — reproduces the ChartNav mark + logo
+    as PptxGenJS shapes (no raster art committed).
+  - `parseDeck.js` — markdown → structured slide records.
+    Tolerant of canonical `## Slide N — title` AND section-style
+    `##` / `###` decks (for the one-pager + demo-deck index).
+  - `slideLayouts.js` — 10 reusable layouts: Cover, Section,
+    Title+Bullets, Feature Cards, **Clinical Signal Filtering**
+    (the four-classification card pattern), Workflow, Pricing,
+    Safety Dual ("does / does NOT"), CTA, Index.
+  - `renderDeck.js` — heuristic per-slide layout picker + driver.
+  - `generateAll.js` — walks `docs/decks/` and writes 17 PPTX
+    files into the operator's Desktop folder.
+  - `test/parseDeck.test.js` + `test/renderDeck.test.js` —
+    Node-based smoke tests (vitest's Vite root is `apps/web/`
+    and can't reach `tools/presentations/`).
+- `scripts/generate_chartnav_presentations.sh` — standalone
+  wrapper that ensures deps are installed and runs the JS driver.
+- `scripts/export_chartnav_decks_to_desktop.sh` — extended to
+  add `01_Decks/Markdown_Source/`, `01_Decks/PPTX/`,
+  `01_Decks/PDF/`, `02_One_Pagers/Markdown_Source/`,
+  `02_One_Pagers/PPTX/`, `10_Presentation_Assets/` to the
+  Desktop layout, redirect deck Markdown copies to the new
+  `Markdown_Source/` folders, copy
+  `docs/presentations/*.md` into `10_Presentation_Assets/`, and
+  optionally chain the PPTX generator. Skip with
+  `CHARTNAV_SKIP_PPTX=1` for a fast Markdown-only refresh.
+- `scripts/create_chartnav_desktop_demo_package.sh` — verifier
+  list extended to cover the 17 PPTX outputs + 4 presentation-
+  assets docs.
+- `scripts/check_commercial_claims.sh` — extended with a Phase
+  17D section that verifies every generator file exists, the
+  generator is executable, and `theme.js` carries the canonical
+  palette tokens (sync guard against `apps/web/src/styles.css`).
+- `apps/web/src/test/CommercialDeckClaims.test.tsx` — extended
+  from 96 to 112 assertions covering Phase 17D file presence,
+  generator wiring, theme palette sync, export-script Markdown
+  routing, and create-package verifier coverage.
+- `docs/presentations/` — palette / typography / brand-usage
+  notes + the Phase 17D system overview.
+- This section.
+
+**End-to-end output.** From the repo root on the operator's Mac:
+
+```
+bash scripts/export_chartnav_decks_to_desktop.sh
+```
+
+…produces 41 source-file copies (39 Phase 17 + 2 Phase 17B
+buyer/operator demo decks), 1 README, 3 .command launchers,
+**17 branded PPTX presentations** (under `01_Decks/PPTX/` and
+`02_One_Pagers/PPTX/`), and 4 presentation-assets docs (under
+`10_Presentation_Assets/`).
+
+**PDF export is deferred.** Pure-JS PPTX-to-PDF requires a heavy
+LibreOffice headless dependency. The operator opens each PPTX in
+PowerPoint or Keynote and exports PDF manually. The `01_Decks/PDF/`
+folder is created empty so manually-exported PDFs have a stable
+home.
+
+**Safe-claims contract** is preserved end-to-end. The generator
+reads exactly the same Markdown the Phase 17B
+`CommercialDeckClaims` vitest scans, so any banned phrase that
+slips into a source deck is caught before generation. The
+generator never invents text beyond the Markdown source.
+
+**Phase 18 candidate** is unchanged — first paid pilot or paid
+customer (target M1 = July 1, 2026). The Phase 17 + 17B + 17D
+output (markdown decks + branded PPTX + Desktop folder +
+.command launchers) is the inventory Phase 18 sells from.
+
+See `docs/presentations/chartnav-presentation-system.md` for the
+full Phase 17D system overview, layout selection heuristic,
+limitations, and regeneration workflow.

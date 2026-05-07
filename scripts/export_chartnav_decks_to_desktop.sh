@@ -74,25 +74,25 @@ MAPPING=(
   # decks + Phase 17B buyer-demo / operator-demo split; the
   # original chartnav-demo-deck.md is now an index that routes
   # to one of the two)
-  "docs/decks/chartnav-investor-pitch-deck.md::01_Decks"
-  "docs/decks/chartnav-sales-deck.md::01_Decks"
-  "docs/decks/chartnav-demo-deck.md::01_Decks"
-  "docs/decks/chartnav-buyer-demo-deck.md::01_Decks"
-  "docs/decks/chartnav-operator-demo-deck.md::01_Decks"
-  "docs/decks/chartnav-customer-pitch-deck-template.md::01_Decks"
-  "docs/decks/chartnav-company-deck.md::01_Decks"
-  "docs/decks/chartnav-product-roadmap-deck.md::01_Decks"
-  "docs/decks/chartnav-brand-guidelines-deck.md::01_Decks"
-  "docs/decks/chartnav-educational-onboarding-deck.md::01_Decks"
-  "docs/decks/chartnav-financial-fundraising-deck.md::01_Decks"
-  "docs/decks/chartnav-marketing-plan-deck.md::01_Decks"
-  "docs/decks/chartnav-project-proposal-deck.md::01_Decks"
-  "docs/decks/chartnav-agency-partner-pitch-deck.md::01_Decks"
-  "docs/decks/chartnav-elevator-pitch-deck.md::01_Decks"
-  "docs/decks/chartnav-long-sales-pitch-deck.md::01_Decks"
+  "docs/decks/chartnav-investor-pitch-deck.md::01_Decks/Markdown_Source"
+  "docs/decks/chartnav-sales-deck.md::01_Decks/Markdown_Source"
+  "docs/decks/chartnav-demo-deck.md::01_Decks/Markdown_Source"
+  "docs/decks/chartnav-buyer-demo-deck.md::01_Decks/Markdown_Source"
+  "docs/decks/chartnav-operator-demo-deck.md::01_Decks/Markdown_Source"
+  "docs/decks/chartnav-customer-pitch-deck-template.md::01_Decks/Markdown_Source"
+  "docs/decks/chartnav-company-deck.md::01_Decks/Markdown_Source"
+  "docs/decks/chartnav-product-roadmap-deck.md::01_Decks/Markdown_Source"
+  "docs/decks/chartnav-brand-guidelines-deck.md::01_Decks/Markdown_Source"
+  "docs/decks/chartnav-educational-onboarding-deck.md::01_Decks/Markdown_Source"
+  "docs/decks/chartnav-financial-fundraising-deck.md::01_Decks/Markdown_Source"
+  "docs/decks/chartnav-marketing-plan-deck.md::01_Decks/Markdown_Source"
+  "docs/decks/chartnav-project-proposal-deck.md::01_Decks/Markdown_Source"
+  "docs/decks/chartnav-agency-partner-pitch-deck.md::01_Decks/Markdown_Source"
+  "docs/decks/chartnav-elevator-pitch-deck.md::01_Decks/Markdown_Source"
+  "docs/decks/chartnav-long-sales-pitch-deck.md::01_Decks/Markdown_Source"
 
   # 02_One_Pagers — the one-page sales deck
-  "docs/decks/chartnav-one-page-sales-deck.md::02_One_Pagers"
+  "docs/decks/chartnav-one-page-sales-deck.md::02_One_Pagers/Markdown_Source"
 
   # 03_Demo_Package — demo script + click path + shot list + ops guide
   "docs/demo/chartnav-clinical-workflow-demo-script.md::03_Demo_Package"
@@ -134,7 +134,12 @@ MAPPING=(
 SUBFOLDERS=(
   "00_START_HERE"
   "01_Decks"
+  "01_Decks/Markdown_Source"
+  "01_Decks/PPTX"
+  "01_Decks/PDF"
   "02_One_Pagers"
+  "02_One_Pagers/Markdown_Source"
+  "02_One_Pagers/PPTX"
   "03_Demo_Package"
   "04_Pilot_Sales"
   "05_Objection_Handling"
@@ -142,6 +147,7 @@ SUBFOLDERS=(
   "07_Website_Proof"
   "08_Local_Demo_Launcher"
   "09_Review_Checklists"
+  "10_Presentation_Assets"
 )
 
 # ---------------------------------------------------------------
@@ -443,9 +449,51 @@ echo "        generated and marked executable."
 echo
 
 # ---------------------------------------------------------------
-# 6. Print summary tree.
+# 6. Copy presentation-assets docs into 10_Presentation_Assets/.
 # ---------------------------------------------------------------
-echo "6. Summary tree (depth 2):"
+PRESENTATION_ASSETS_DIR="$DEST_DIR/10_Presentation_Assets"
+PRESENTATION_DOCS_DIR="$REPO_ROOT/docs/presentations"
+if [ -d "$PRESENTATION_DOCS_DIR" ]; then
+  echo "6. Copying presentation-assets docs to 10_Presentation_Assets/…"
+  copied_assets=0
+  for f in "$PRESENTATION_DOCS_DIR"/*.md; do
+    [ -f "$f" ] || continue
+    cp "$f" "$PRESENTATION_ASSETS_DIR/$(basename "$f")"
+    copied_assets=$((copied_assets + 1))
+  done
+  echo "   ok — $copied_assets asset doc(s) copied."
+  echo
+else
+  echo "6. (no docs/presentations/ — skipping presentation-assets copy)"
+  echo
+fi
+
+# ---------------------------------------------------------------
+# 7. Optionally chain the Phase 17D presentation generator.
+#    Skip when CHARTNAV_SKIP_PPTX=1 is set (useful for fast
+#    Markdown-only refreshes).
+# ---------------------------------------------------------------
+if [ "${CHARTNAV_SKIP_PPTX:-0}" = "1" ]; then
+  echo "7. (CHARTNAV_SKIP_PPTX=1 — skipping branded PPTX generation)"
+  echo
+elif command -v node >/dev/null 2>&1 && [ -f "$REPO_ROOT/tools/presentations/generateAll.js" ]; then
+  echo "7. Generating branded PPTX presentations (Phase 17D)…"
+  if [ ! -d "$REPO_ROOT/tools/presentations/node_modules" ]; then
+    echo "   installing tools/presentations dependencies…"
+    ( cd "$REPO_ROOT/tools/presentations" && npm install --no-audit --no-fund >/dev/null 2>&1 )
+  fi
+  CHARTNAV_DESKTOP_DIR="$DEST_DIR" node "$REPO_ROOT/tools/presentations/generateAll.js" \
+    | sed 's|^|   |'
+  echo
+else
+  echo "7. (Node / generator not available — skipping branded PPTX generation)"
+  echo
+fi
+
+# ---------------------------------------------------------------
+# 8. Print summary tree.
+# ---------------------------------------------------------------
+echo "8. Summary tree (depth 2):"
 if command -v find >/dev/null 2>&1; then
   ( cd "$DEST_DIR" && find . -maxdepth 2 -mindepth 1 \
       -not -path '*/.*' -print | sort | sed 's|^\./|  |' )
@@ -454,5 +502,7 @@ echo
 
 echo "Export complete."
 echo "  $copied source files copied · 1 README + 3 .command files generated."
+echo "  Branded PPTX presentations generated under 01_Decks/PPTX/ and"
+echo "  02_One_Pagers/PPTX/ (Phase 17D)."
 echo "  Source of truth lives in the chartnav-platform repo;"
 echo "  the Desktop folder is a regenerated review package."
