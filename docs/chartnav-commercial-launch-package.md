@@ -385,9 +385,12 @@ bash scripts/export_chartnav_decks_to_desktop.sh
 ```
 
 Expected: 41 source files copied · 1 README + 3 .command files
-generated · summary tree printed. (Phase 17 = 39 source files;
-Phase 17B adds the buyer-demo + operator-demo decks for a total
-of 41.)
+generated · 4 presentation-assets docs copied · **17 branded
+PPTX presentations generated** under `01_Decks/PPTX/` and
+`02_One_Pagers/PPTX/` (Phase 17D) · summary tree printed.
+(Phase 17 = 39 source files; Phase 17B adds the buyer-demo +
+operator-demo decks for a total of 41; Phase 17D adds the PPTX
+outputs and the `10_Presentation_Assets/` folder.)
 
 ---
 

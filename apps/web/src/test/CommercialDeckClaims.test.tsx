@@ -760,3 +760,123 @@ describe("Phase 17B — operator-demo deck stays internal-only", () => {
     expect(text).not.toMatch(/\bmake dev\b/);
   });
 });
+
+// ---------------------------------------------------------------
+// Phase 17D — presentation generation system.
+// ---------------------------------------------------------------
+
+describe("Phase 17D — presentation system files exist", () => {
+  const PHASE17D_FILES = [
+    "tools/presentations/package.json",
+    "tools/presentations/theme.js",
+    "tools/presentations/parseDeck.js",
+    "tools/presentations/slideLayouts.js",
+    "tools/presentations/renderDeck.js",
+    "tools/presentations/generateAll.js",
+    "tools/presentations/brand/chartnavMark.js",
+    "scripts/generate_chartnav_presentations.sh",
+    "docs/presentations/palette.md",
+    "docs/presentations/typography.md",
+    "docs/presentations/brand-usage.md",
+    "docs/presentations/chartnav-presentation-system.md",
+  ];
+
+  it.each(PHASE17D_FILES)("%s exists and is non-empty", (rel) => {
+    const full = path.join(REPO_ROOT, rel);
+    const stat = statSync(full);
+    expect(stat.isFile(), `Missing: ${rel}`).toBe(true);
+    expect(stat.size, `Empty: ${rel}`).toBeGreaterThan(0);
+  });
+});
+
+describe("Phase 17D — generator wiring", () => {
+  it("tools/presentations/theme.js carries the canonical palette tokens", () => {
+    const text = readFileSync(
+      path.join(REPO_ROOT, "tools/presentations/theme.js"),
+      "utf-8"
+    );
+    // Tokens copied from apps/web/src/styles.css. If the product
+    // CSS palette changes, theme.js must update in the same PR.
+    for (const token of [
+      "0B6E79", // primary teal
+      "DC2626", // pulse red
+      "14B8A6", // aqua accent
+      "0F172A", // foreground
+      "475569", // muted
+      "EEF8FA", // primary soft
+    ]) {
+      expect(text, `theme.js missing palette token ${token}`).toContain(token);
+    }
+  });
+
+  it("tools/presentations/generateAll.js honors CHARTNAV_DESKTOP_DIR + reads docs/decks/", () => {
+    const text = readFileSync(
+      path.join(REPO_ROOT, "tools/presentations/generateAll.js"),
+      "utf-8"
+    );
+    expect(text).toMatch(/CHARTNAV_DESKTOP_DIR/);
+    expect(text).toMatch(/docs.*decks|DECKS_DIR/);
+    // The 17 decks the operator asked us to convert must be in
+    // the REQUIRED_DECKS list.
+    for (const id of [
+      "chartnav-investor-pitch-deck",
+      "chartnav-sales-deck",
+      "chartnav-long-sales-pitch-deck",
+      "chartnav-one-page-sales-deck",
+      "chartnav-buyer-demo-deck",
+      "chartnav-operator-demo-deck",
+      "chartnav-company-deck",
+      "chartnav-customer-pitch-deck-template",
+      "chartnav-project-proposal-deck",
+      "chartnav-financial-fundraising-deck",
+      "chartnav-product-roadmap-deck",
+      "chartnav-marketing-plan-deck",
+      "chartnav-brand-guidelines-deck",
+      "chartnav-educational-onboarding-deck",
+      "chartnav-agency-partner-pitch-deck",
+      "chartnav-elevator-pitch-deck",
+      "chartnav-demo-deck",
+    ]) {
+      expect(text, `generateAll.js missing deck id: ${id}`).toContain(id);
+    }
+  });
+
+  it("scripts/export_chartnav_decks_to_desktop.sh routes deck Markdown into Markdown_Source/ and supports CHARTNAV_SKIP_PPTX", () => {
+    const text = readFileSync(
+      path.join(REPO_ROOT, "scripts/export_chartnav_decks_to_desktop.sh"),
+      "utf-8"
+    );
+    expect(text).toMatch(/01_Decks\/Markdown_Source/);
+    expect(text).toMatch(/02_One_Pagers\/Markdown_Source/);
+    expect(text).toMatch(/01_Decks\/PPTX/);
+    expect(text).toMatch(/10_Presentation_Assets/);
+    expect(text).toMatch(/CHARTNAV_SKIP_PPTX/);
+  });
+
+  it("scripts/create_chartnav_desktop_demo_package.sh verifies the new PPTX outputs", () => {
+    const text = readFileSync(
+      path.join(REPO_ROOT, "scripts/create_chartnav_desktop_demo_package.sh"),
+      "utf-8"
+    );
+    // Must verify at least the highest-traffic decks landed as
+    // PPTX in the right subfolder.
+    for (const rel of [
+      "01_Decks/PPTX/chartnav-investor-pitch-deck.pptx",
+      "01_Decks/PPTX/chartnav-sales-deck.pptx",
+      "01_Decks/PPTX/chartnav-buyer-demo-deck.pptx",
+      "02_One_Pagers/PPTX/chartnav-one-page-sales-deck.pptx",
+      "10_Presentation_Assets/palette.md",
+      "10_Presentation_Assets/chartnav-presentation-system.md",
+    ]) {
+      expect(text, `create-package missing PPTX verifier for ${rel}`).toContain(
+        rel
+      );
+    }
+  });
+});
+
+// Note: parser correctness is exercised by the Node-based test
+// at tools/presentations/test/parseDeck.test.js — vitest's Vite
+// root is apps/web/ and cannot resolve modules outside that
+// scope. Run `node tools/presentations/test/parseDeck.test.js`
+// (or `npm --prefix tools/presentations run test`) to exercise it.
