@@ -29,11 +29,20 @@
 
 ### Commercial
 
-- 15 deck Markdown source files (Phase 17 — this work).
+- 17 deck Markdown source files (Phase 17 + 17B): the original
+  15 (investor pitch, sales, demo index, customer pitch
+  template, company, product roadmap, brand guidelines,
+  educational onboarding, one-page sales, financial
+  fundraising, marketing plan, project proposal, agency
+  partner, elevator, long sales) plus the Phase 17B buyer-demo
+  and operator-demo split (the original combined demo deck is
+  now an index that routes to one of the two).
+- Clinical Signal Filtering positioned as the prime feature
+  across every buyer-facing deck (Phase 17B).
 - 6 commercial support docs (master kit, claims language,
   objections, pricing, pilot handoff, this readiness map).
-- 4 demo-package docs (startup, troubleshooting, review checklist,
-  desktop delivery contract).
+- 4 demo-package docs (startup, troubleshooting, review
+  checklist, desktop delivery contract).
 - Public landing page at `/?intro=1`.
 - In-product Guided Demo Mode at `/?demo=1`.
 - Pilot readiness packet (8 docs from Phase 14).

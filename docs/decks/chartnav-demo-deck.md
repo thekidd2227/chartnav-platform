@@ -1,100 +1,53 @@
-# ChartNav Demo Deck
+# ChartNav Demo Deck — Index
 
-> Used while walking through the live product against the seeded
-> fake-patient demo. 8 slides. Pair with
-> `docs/demo/chartnav-clinical-workflow-demo-script.md` (what to
-> say) and `docs/demo/chartnav-demo-click-path.md` (what to click).
+> The demo deck is **split into two**. Pick the right one for
+> the audience:
+>
+> - **`chartnav-buyer-demo-deck.md`** — slides used **during** the
+>   live ChartNav demo with a buyer (practice, advisor, partner).
+>   No terminal commands, no repo paths, no operator-only
+>   references. 9 slides describing what the buyer sees.
+> - **`chartnav-operator-demo-deck.md`** — **internal-only** deck
+>   the operator uses to rehearse the demo. Boot, reset,
+>   pre-flight checklist, click path, fallback plan, tear-down.
+>   8 slides. **Never present this deck to a buyer.**
 
-**Safe-claims contract.** Negative-assertion safety copy renders on
-every panel during the demo. Same forbidden-claims list as every
-other deck.
+**Audience:** anyone selecting which demo deck to present.
+**Purpose:** route to the right deck for the audience without
+risking accidentally showing internal terminal commands during a
+buyer meeting.
+**CTA / next step:** open the deck listed in the routing table
+below — buyer demo for buyer meetings, operator demo for
+internal rehearsal.
 
 ---
 
-## Slide 1 — Cover
+## When to use which
 
-- **Title:** ChartNav live demo — fake patient data only.
-- **Content:**
-  - "We'll walk through the existing ChartNav ophthalmology
-    workflow for the demo patient."
-  - "Every step is provider-reviewed."
-- **Speaker notes:** Confirm the URL has `?demo=1`.
-- **Visual:** logo + DEMO MODE badge.
+| Situation | Use this deck |
+|---|---|
+| Sales meeting with a practice owner, clinical champion, or compliance lead | `chartnav-buyer-demo-deck.md` |
+| Investor / advisor walkthrough that includes a live demo | `chartnav-buyer-demo-deck.md` |
+| Partner / agency demo for a referral conversation | `chartnav-buyer-demo-deck.md` |
+| Operator pre-flight rehearsal before a buyer meeting | `chartnav-operator-demo-deck.md` |
+| Onboarding a new operator (Maria training Jean-Max's understudy, future hires, partner agency runner) | `chartnav-operator-demo-deck.md` |
+| Triaging a broken demo environment | `chartnav-operator-demo-deck.md` |
 
-## Slide 2 — Demo setup
+## Companion documents (both decks)
 
-- **Title:** Pre-flight.
-- **Content:**
-  - Local stack already booted (`make dev` or
-    `START_CHARTNAV.command`).
-  - Identity = `admin@chartnav.local`.
-  - URL = `http://localhost:5173/?demo=1`.
-  - DB reset done via `bash scripts/reset_demo_state.sh`.
-- **Speaker notes:** Reset between demos.
-- **Visual:** terminal mock.
+- **What to say** — `docs/demo/chartnav-clinical-workflow-demo-script.md`
+- **What to click** — `docs/demo/chartnav-demo-click-path.md`
+- **What to capture** — `docs/demo/chartnav-video-clip-shot-list.md`
+- **Operator guide** — `docs/demo/chartnav-demo-operator-guide.md`
+- **Demo environment** — `docs/demo/chartnav-demo-environment.md`
+- **Pre-demo checklist** — `docs/commercial/demo-package/chartnav-demo-review-checklist.md`
+- **Troubleshooting** — `docs/commercial/demo-package/chartnav-local-demo-troubleshooting.md`
 
-## Slide 3 — Fake patient story
+## Safety
 
-- **Title:** Demo patient — Morgan Lee, PT-1001.
-- **Content:**
-  - Fake patient. Fake DOB. Fake provider (Dr. Carter).
-  - Reason for visit: blurry vision OD, two weeks.
-  - Plan: refraction next visit; monitor OS.
-- **Speaker notes:** Repeat: this is fake data.
-- **Visual:** chart card.
-
-## Slide 4 — Click path
-
-- **Title:** What we'll click.
-- **Content:** intake → pre-visit brief → scribe → retinal proposal
-  → diagram → summary → action queue.
-- **Speaker notes:** Mirror Phase 15 stepper.
-- **Visual:** 7-step list.
-
-## Slide 5 — What to watch for
-
-- **Title:** Watch the safety contract.
-- **Content:**
-  - Every panel has provider-review banner copy.
-  - Finalize is an explicit click — never automatic.
-  - Signed artifacts are immutable in place.
-  - Action queue surfaces *review* tasks only.
-- **Speaker notes:** Pause on each banner during the run.
-- **Visual:** four annotation callouts.
-
-## Slide 6 — Safety boundaries (read aloud)
-
-- **Title:** What ChartNav does not do.
-- **Content:**
-  - Does not diagnose autonomously.
-  - Does not create orders.
-  - Does not submit referrals.
-  - Does not bill / code automatically.
-  - Does not send anything to a patient automatically.
-- **Speaker notes:** Read each bullet — don't paraphrase.
-- **Visual:** plain bullets.
-
-## Slide 7 — Q&A guardrails
-
-- **Title:** Common questions.
-- **Content:**
-  - "HIPAA?" → "We follow HIPAA-aware data-handling practices.
-    Compliance is implemented by covered entities. We require a
-    BAA before any real PHI."
-  - "Diagnose?" → "No — provider reviews and decides."
-  - "External LLM?" → "Today's generators are deterministic."
-- **Speaker notes:** Refer to
-  `docs/commercial/objections/chartnav-buyer-objection-handling.md`.
-- **Visual:** Q&A cards.
-
-## Slide 8 — Close / CTA
-
-- **Title:** Next step.
-- **Content:**
-  - "Want to take this to a controlled pilot?"
-  - "We'll send the pilot readiness packet today."
-  - Pricing: $299–$499/provider/month, $5,000/practice/month flat,
-    or $10,000 flat for a 4–6 week pilot.
-- **Speaker notes:** Single CTA. Hand the pricing only when asked.
-- **Visual:** plain card.
-- **Contact:** jeanmax@arivergroup.com · chartnavmd.com
+Both decks obey the same safe-claims contract at
+`docs/commercial/chartnav-approved-claims-language.md`. ChartNav
+is provider-reviewed workflow support — no autonomous diagnosis,
+no automatic orders / coding / referrals / patient messaging,
+no certified-EHR replacement claim. Demos run against fake
+patient data only.

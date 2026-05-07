@@ -1,8 +1,17 @@
 # ChartNav Financial / Fundraising Supplement Deck
 
-> Investor-supplement deck. Pricing is real; fundraising stage and
-> amount are deliberately not printed in this version. Pair with
+> Investor-supplement deck. Pricing is real; fundraising stage
+> and amount are deliberately discussed live. Pair with
 > `chartnav-investor-pitch-deck.md`.
+
+**Audience:** investors, advisors, commercial advisors who have
+already seen the investor pitch deck and want pricing /
+milestones / use-of-funds depth.
+**Purpose:** lay out the pricing structure, the milestones, and
+the use-of-funds categories in honest terms — no fabricated
+metrics.
+**CTA / next step:** schedule the live fake-patient demo;
+fundraising specifics discussed live.
 
 **Safe-claims contract.** No fabricated revenue. No fabricated
 runway. No fabricated valuation. No fabricated pilot conversion
@@ -22,8 +31,7 @@ categories — fundraising stage and amount discussed live.
 - **Content:**
   - This deck supplements the investor pitch with the pricing
     structure, the milestones, and the use-of-funds categories.
-  - **Stage** and **amount** are deliberately not printed in this
-    version of the deck — discussed live.
+  - **Stage** and **amount** are discussed live.
   - **No fabricated metrics.**
 - **Speaker notes:** Frame the conversation honestly.
 - **Visual:** disclaimer card.
@@ -42,7 +50,8 @@ categories — fundraising stage and amount discussed live.
     pricing.
   - **Pilot fees** are not discounted unless approved
     case-by-case.
-- **Speaker notes:** This is the published pricing structure.
+- **Speaker notes:** Published pricing structure. Hypothesis
+  until paid-pilot data validates it.
 - **Visual:** pricing-tier table.
 
 ## Slide 4 — Pilot conversion model
@@ -52,11 +61,12 @@ categories — fundraising stage and amount discussed live.
   - Pilots run 4–6 weeks against fake demo data and (after BAA +
     security review) real PHI.
   - Conversion criteria are agreed with the practice up-front
-    (see `docs/pilot/chartnav-pilot-success-metrics.md`).
+    (target metrics, not promised percentages).
   - **No fabricated conversion percentage.** Operating data fills
-    this once pilots run.
+    this in once pilots run.
 - **Speaker notes:** Be explicit: we don't have N=many yet.
-- **Visual:** funnel diagram with placeholder labels.
+- **Visual:** funnel diagram with target placeholders, not
+  fabricated numbers.
 
 ## Slide 5 — Use of funds
 
@@ -68,8 +78,8 @@ categories — fundraising stage and amount discussed live.
   - Security review formalization.
   - Out-of-repo media production.
   - Legal / regulatory review.
-- **Speaker notes:** Five categories, no dollar/percentage values
-  in this version of the deck. Allocation discussed live.
+- **Speaker notes:** Five categories, no dollar / percentage
+  values printed in this deck. Allocation discussed live.
 - **Visual:** 5-bullet card.
 
 ## Slide 6 — Milestones
@@ -80,9 +90,8 @@ categories — fundraising stage and amount discussed live.
   - **M2 — five paid pilots:** October 1, 2026.
   - **M3 — first paying customer (post-pilot):** Q4 2026.
   - **M4 — multi-practice deployment:** Q4 2026.
-- **Speaker notes:** Real targets. Conservatively grouped: M3 +
-  M4 in the same quarter is intentional (post-pilot conversion +
-  multi-practice land in Q4).
+- **Speaker notes:** Real targets, not committed delivery dates.
+  M3 + M4 land in the same quarter on purpose.
 - **Visual:** 4-row milestone table.
 
 ## Slide 7 — Risks
@@ -94,7 +103,7 @@ categories — fundraising stage and amount discussed live.
   - Hosting decisions per practice.
   - External-LLM safety contract design (when added).
   - Regulatory landscape changes.
-- **Speaker notes:** Be honest. The investor sees through fake
+- **Speaker notes:** Be honest. Investors see through fake
   optimism.
 - **Visual:** plain bullets.
 
@@ -104,11 +113,13 @@ categories — fundraising stage and amount discussed live.
 - **Content:**
   - Will not buy media that fakes a screenshot ChartNav cannot
     produce.
-  - Will not claim HIPAA / SOC 2 certification we don't have.
+  - Will not claim HIPAA / SOC 2 / FDA certification we don't
+    have.
   - Will not pivot off the provider-in-control safety model.
-  - Will not ship orders / coding / referrals / patient messaging
-    surfaces.
+  - Will not ship orders / coding / referrals / patient
+    messaging surfaces.
 - **Speaker notes:** Boundaries are a feature.
 - **Visual:** 4-bullet card.
 - **Investors so far:** No outside investors to date. Valuation
-  / terms not disclosed in this version of the deck.
+  and terms discussed live.
+- **Contact:** jeanmax@arivergroup.com · chartnavmd.com

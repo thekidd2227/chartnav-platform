@@ -70,10 +70,15 @@ MAPPING=(
   "docs/commercial/chartnav-approved-claims-language.md::00_START_HERE"
   "docs/commercial/chartnav-commercial-readiness-map.md::00_START_HERE"
 
-  # 01_Decks — the 15 deck Markdown source files
+  # 01_Decks — the 17 deck Markdown source files (15 original
+  # decks + Phase 17B buyer-demo / operator-demo split; the
+  # original chartnav-demo-deck.md is now an index that routes
+  # to one of the two)
   "docs/decks/chartnav-investor-pitch-deck.md::01_Decks"
   "docs/decks/chartnav-sales-deck.md::01_Decks"
   "docs/decks/chartnav-demo-deck.md::01_Decks"
+  "docs/decks/chartnav-buyer-demo-deck.md::01_Decks"
+  "docs/decks/chartnav-operator-demo-deck.md::01_Decks"
   "docs/decks/chartnav-customer-pitch-deck-template.md::01_Decks"
   "docs/decks/chartnav-company-deck.md::01_Decks"
   "docs/decks/chartnav-product-roadmap-deck.md::01_Decks"

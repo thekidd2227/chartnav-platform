@@ -19,8 +19,10 @@ ChartNav is in under 60 seconds. Phase 17 gives the operator
 the rest of the commercial surface they need to actually run
 sales conversations:
 
-- 15 deck Markdown source files spanning every recurring sales
-  / investor / partner / onboarding scenario.
+- 17 deck Markdown source files spanning every recurring sales
+  / investor / partner / onboarding scenario (Phase 17 + 17B —
+  the original 15 decks plus the buyer-demo / operator-demo
+  split introduced in 17B).
 - 6 commercial support docs (master kit, approved-claims
   language, objections, pricing, pilot handoff, readiness map).
 - 4 demo-package docs (local demo startup guide, troubleshooting,
@@ -55,20 +57,29 @@ in the repo.
 
 ## What Phase 17 ships
 
-### 15 deck Markdown source files (`docs/decks/`)
+### 17 deck Markdown source files (`docs/decks/`)
 
-Each is a slide-by-slide Markdown source — title, purpose,
-content, speaker notes, visual cue, safe-claims note. The
-operator (or a downstream pitch tool) renders them into the
-final visual format out-of-repo.
+Each is a slide-by-slide Markdown source — title, audience,
+purpose, CTA, content, speaker notes, visual cue, safe-claims
+note. The operator (or a downstream pitch tool) renders them
+into the final visual format out-of-repo.
+
+Phase 17B adds **Clinical Signal Filtering** as the prime
+buyer-facing feature line ("Filters conversation. Captures
+findings. Builds the diagram.") on every deck where it is
+buyer-relevant, and splits the original combined demo deck into
+a **buyer demo deck** (no terminal commands or repo paths) and
+an **operator demo deck** (internal pre-flight rehearsal only).
 
 | Deck | Audience | SDVOSB / VA framing |
 |---|---|---|
 | `chartnav-investor-pitch-deck.md` | Investors / advisors | yes |
 | `chartnav-sales-deck.md` | Private-practice ophthalmology | no |
-| `chartnav-demo-deck.md` | Live demo deck | no |
+| `chartnav-demo-deck.md` | **Index** — routes to buyer or operator deck | no |
+| `chartnav-buyer-demo-deck.md` | Used **during** a live buyer demo | no |
+| `chartnav-operator-demo-deck.md` | **Internal** rehearsal — never shown to a buyer | no |
 | `chartnav-customer-pitch-deck-template.md` | Per-practice template | no |
-| `chartnav-company-deck.md` | Federal / govt-healthcare-adjacent | yes |
+| `chartnav-company-deck.md` | Mixed — slide 8 is the federal credibility track | yes (slide 8 only) |
 | `chartnav-product-roadmap-deck.md` | Investors + practices | no |
 | `chartnav-brand-guidelines-deck.md` | Internal | catalog of banned phrases |
 | `chartnav-educational-onboarding-deck.md` | Pilot users | no |
@@ -110,10 +121,10 @@ final visual format out-of-repo.
 
 ### 1 vitest test (`apps/web/src/test/`)
 
-`CommercialDeckClaims.test.tsx` — 45 assertions across 8 describe
-blocks:
+`CommercialDeckClaims.test.tsx` — 96 assertions across 12
+describe blocks (Phase 17 + 17B):
 
-1. Required files exist (15 decks + 6 support + 4 demo-package +
+1. Required files exist (17 decks + 6 support + 4 demo-package +
    3 scripts).
 2. Every deck references the safe-claims contract.
 3. Forbidden positive claims appear only in safe contexts (the
@@ -130,6 +141,20 @@ blocks:
    consistently in the four decks that quote pricing.
 8. The Desktop-folder safety contract is recorded in the Phase 17
    contract doc and the Desktop folder is in `.gitignore`.
+9. **Phase 17B — Clinical Signal Filtering surfaces in every
+   buyer-relevant deck** (the brand-guidelines / operator-demo /
+   index decks are exempt by path).
+10. **Phase 17B — buyer-facing decks contain no repo-leak /
+    operator-only references** (no terminal commands, no repo
+    paths, no `?demo=1` / `?intro=1` query strings, no
+    operator's-note phrasing).
+11. **Phase 17B — every deck declares Audience + Purpose +
+    CTA** in its front-matter so any operator can pick up any
+    deck cold.
+12. **Phase 17B — operator-demo deck stays internal-only** and
+    the buyer-demo deck contains no `START_CHARTNAV` /
+    `STOP_CHARTNAV` / `RESET_DEMO_DATA` references or
+    `make dev` commands.
 
 ---
 
@@ -347,7 +372,7 @@ cd apps/web
 npx vitest run src/test/CommercialDeckClaims.test.tsx
 ```
 
-Expected: **45 tests passed.**
+Expected: **96 tests passed.**
 
 ```
 bash scripts/check_commercial_claims.sh
@@ -359,14 +384,17 @@ Expected: **PASSED — 0 fail / 0 warn.**
 bash scripts/export_chartnav_decks_to_desktop.sh
 ```
 
-Expected: 39 source files copied · 1 README + 3 .command files
-generated · summary tree printed.
+Expected: 41 source files copied · 1 README + 3 .command files
+generated · summary tree printed. (Phase 17 = 39 source files;
+Phase 17B adds the buyer-demo + operator-demo decks for a total
+of 41.)
 
 ---
 
 ## Phase 17 deliverable summary
 
-- 15 deck Markdown source files (`docs/decks/`).
+- 17 deck Markdown source files (`docs/decks/`) — original 15
+  + Phase 17B buyer-demo / operator-demo split.
 - 6 commercial support docs (`docs/commercial/`).
 - 4 demo-package docs (3 under
   `docs/commercial/demo-package/` + this contract at the

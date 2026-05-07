@@ -75,6 +75,25 @@ moat is specialty fit + provider-in-control safety contract."*
 
 ---
 
+## "What's Clinical Signal Filtering and how is it different from a generic AI scribe?"
+
+**Answer:** *"Doctors do not dictate in perfect templates.
+Clinical Signal Filtering separates casual speech from clinical
+findings, flags uncertainty, and proposes retinal diagram
+annotations — the four classifications are ignored chatter,
+clinical finding, uncertain phrase, and proposed diagram
+annotation. The provider applies, edits, or rejects every
+proposal before anything is saved or finalized. A generic AI
+scribe writes a SOAP note from the audio; ChartNav does that
+plus the ophthalmology-specific retinal-diagram workflow on top
+— and surfaces uncertainty for explicit provider review."*
+
+**Don't say:** "AI draws automatically," "AI decides," "AI
+diagnosis," "automatic charting," "hands-free diagnosis,"
+"hands-free charting," "guaranteed documentation accuracy."
+
+---
+
 ## "Why not just use an AI scribe?"
 
 **Answer:** *"AI scribes are specialty-agnostic. ChartNav is
