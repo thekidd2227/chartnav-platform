@@ -445,6 +445,126 @@ echo
 # ---------------------------------------------------------------
 # 7. .gitignore guard for the Desktop folder.
 # ---------------------------------------------------------------
+# ---------------------------------------------------------------
+# 6C. Phase 18 controlled-pilot PHI readiness files.
+# ---------------------------------------------------------------
+echo "6C. Phase 18 controlled-pilot PHI readiness"
+PHASE18_FILES=(
+  "scripts/validate_controlled_pilot_env.sh"
+  "scripts/backup_controlled_pilot_postgres.sh"
+  "scripts/restore_controlled_pilot_postgres.sh"
+  "scripts/verify_controlled_pilot_backup.sh"
+  "scripts/smoke_controlled_pilot.sh"
+  "docs/security/chartnav-production-auth-readiness.md"
+  "docs/security/chartnav-monitoring-logging-readiness.md"
+  "docs/security/chartnav-incident-response-plan.md"
+  "docs/security/chartnav-real-phi-readiness-status.md"
+  "docs/pilot/chartnav-controlled-pilot-go-live-checklist.md"
+)
+for f in "${PHASE18_FILES[@]}"; do
+  if [ ! -s "$f" ]; then
+    echo "   MISSING or EMPTY: $f"
+    fail_count=$((fail_count + 1))
+  fi
+done
+# All five Phase 18 scripts must be executable.
+for s in scripts/validate_controlled_pilot_env.sh \
+         scripts/backup_controlled_pilot_postgres.sh \
+         scripts/restore_controlled_pilot_postgres.sh \
+         scripts/verify_controlled_pilot_backup.sh \
+         scripts/smoke_controlled_pilot.sh; do
+  if [ -f "$s" ] && [ ! -x "$s" ]; then
+    echo "   warn — $s exists but is not executable."
+    warn_count=$((warn_count + 1))
+  fi
+done
+
+# Safety guards must be present in the destructive scripts.
+if [ -f scripts/backup_controlled_pilot_postgres.sh ]; then
+  if ! grep -q "DATABASE_URL is SQLite" scripts/backup_controlled_pilot_postgres.sh; then
+    echo "   FAIL — backup_controlled_pilot_postgres.sh missing SQLite refusal"
+    fail_count=$((fail_count + 1))
+  fi
+fi
+if [ -f scripts/restore_controlled_pilot_postgres.sh ]; then
+  if ! grep -q "CHARTNAV_RESTORE_CONFIRM" scripts/restore_controlled_pilot_postgres.sh; then
+    echo "   FAIL — restore_controlled_pilot_postgres.sh missing CHARTNAV_RESTORE_CONFIRM gate"
+    fail_count=$((fail_count + 1))
+  fi
+fi
+if [ -f scripts/validate_controlled_pilot_env.sh ]; then
+  for must in "CHARTNAV_AUTH_MODE" "CHARTNAV_JWT_ISSUER" "CHARTNAV_JWT_AUDIENCE" \
+              "CHARTNAV_JWT_JWKS_URL" "DATABASE_URL" "CHARTNAV_AUDIT_RETENTION_DAYS"; do
+    if ! grep -q "$must" scripts/validate_controlled_pilot_env.sh; then
+      echo "   FAIL — validate_controlled_pilot_env.sh does not check $must"
+      fail_count=$((fail_count + 1))
+    fi
+  done
+fi
+
+# Phase 18 docs must NOT make a positive HIPAA / SOC 2 / certified-EHR claim.
+# The Phase 18 docs are partly catalog/Q&A docs by design (e.g. the
+# readiness status doc lists "Is ChartNav HIPAA-certified? No.").
+# Negative-context heuristic accepts:
+#   - explicit "does not / do not / not / never / forbidden / banned"
+#   - the ❌ marker (forbidden-list bullets)
+#   - "is not" / "are not" / "not pursued" patterns
+#   - per-line column "no.", "no," answers in Q&A markdown tables
+#   - prev-line context (e.g. "Is ChartNav a certified EHR?" then "No.")
+for f in "${PHASE18_FILES[@]}"; do
+  [ -f "$f" ] || continue
+  case "$f" in
+    *.sh) continue ;;  # script file — heuristic skipped
+  esac
+  # Build a temp file of (line_no:line) so we can look at the previous
+  # line for context.
+  while IFS= read -r entry; do
+    idx="${entry%%:*}"
+    line="${entry#*:}"
+    # Strip markdown bold/italic so "is **not**" matches "is not".
+    stripped="$(printf '%s' "$line" | sed -E 's/\*+//g; s/`+//g; s/_+/ /g')"
+    lower="$(printf '%s' "$stripped" | tr 'A-Z' 'a-z')"
+    # Per-line negative context.
+    if printf '%s' "$line" | grep -Eq '❌'; then
+      continue
+    fi
+    if printf '%s' "$lower" | grep -Eq '(does not|do not|never|forbidden|banned|don.?t say|not\s+(yet\s+)?(pursued|certified|hipaa|soc|hitrust|fda)|not pursued|software is not|is not|are not|not\s+(hipaa|soc|hitrust|fda)|never\s)'; then
+      continue
+    fi
+    # Markdown table answer "No." / "**No.**"
+    if printf '%s' "$lower" | grep -Eq '\|\s*\*\*?no'; then
+      continue
+    fi
+    # Prev-line is a question header / negation, then this line is
+    # the wrapped continuation.
+    if [ "$idx" -gt 1 ]; then
+      prev="$(sed -n "$((idx - 1))p" "$f")"
+      prev_stripped="$(printf '%s' "$prev" | sed -E 's/\*+//g; s/`+//g; s/_+/ /g')"
+      prev_lower="$(printf '%s' "$prev_stripped" | tr 'A-Z' 'a-z')"
+      if printf '%s' "$prev_lower" | grep -Eq '(is chartnav|does chartnav|never\s|forbidden|banned|don.?t say|do not|does not|is not|are not|chartnav is not|not\s+a|not\s+(hipaa|soc|hitrust|fda)|❌)'; then
+        continue
+      fi
+    fi
+    echo "   FAIL — Phase 18 doc $f line $idx contains positive claim:"
+    echo "          $line"
+    fail_count=$((fail_count + 1))
+  done < <(
+    for pat in "HIPAA[- ]compliant" "HIPAA[- ]certified" "SOC[- ]?2[- ]?certified" \
+               "FDA[- ]cleared" "HITRUST[- ]certified" "certified EHR" \
+               "production[- ]ready for PHI" "real patient data ready"; do
+      grep -nEi "$pat" "$f" || true
+    done | sort -u
+  )
+done
+
+if [ "$fail_count" -eq 0 ] && [ "$warn_count" -eq 0 ]; then
+  echo "   ok — Phase 18 files present + safety guards intact + no positive certification claims."
+fi
+echo
+
+# ---------------------------------------------------------------
+# 7. .gitignore guard for the Desktop folder.
+# ---------------------------------------------------------------
 echo "7. .gitignore guard for the Desktop folder"
 if [ ! -f .gitignore ]; then
   echo "   FAIL — .gitignore is missing."
