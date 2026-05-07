@@ -155,6 +155,37 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
   letter-spacing: -0.01em;
 }
 
+/*
+ * Phase 19 — buyer-safe identity chip. The chip carries an
+ * "Identity" eyebrow label so it reads as system info rather
+ * than a debug dump. The role/org token uses the product's
+ * regular sans-serif (not the monospace dev chip font), and
+ * the chip stays visible during a buyer demo while the API
+ * URL chip is hidden.
+ */
+.header-meta .chip--identity {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  background: var(--cn-primary-soft);
+  border-color: var(--cn-primary-tint);
+  color: var(--cn-fg);
+  font-family: inherit;
+  letter-spacing: normal;
+}
+.header-meta .chip--identity .chip__label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cn-primary);
+}
+.header-meta .chip--identity .chip__value {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--cn-fg);
+}
+
 .identity-picker { display: flex; align-items: center; gap: 6px; }
 .identity-picker select,
 .identity-picker input {
@@ -1447,4 +1478,334 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
   padding: 1px 4px;
   border-radius: 3px;
   font-size: 12px;
+}
+
+/* ===========================================================
+ * Phase 19 — Clinical tabbed workspace.
+ * =========================================================== */
+
+.ctw {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Sticky patient + encounter header */
+.ctw__patient-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--cn-surface);
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-md);
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.04);
+}
+.ctw__patient-line {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.ctw__patient-name {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--cn-fg);
+}
+.ctw__patient-meta,
+.ctw__encounter-line {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--cn-muted);
+}
+.ctw__meta-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--cn-dim);
+  margin-right: 4px;
+}
+
+/* Tab bar */
+.ctw__tabbar {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--cn-line);
+  padding: 0 4px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.ctw__tab {
+  background: transparent;
+  border: none;
+  padding: 10px 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--cn-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  transition: color 0.15s var(--cn-ease), border-color 0.15s var(--cn-ease);
+}
+.ctw__tab:hover {
+  color: var(--cn-fg);
+}
+.ctw__tab--active {
+  color: var(--cn-primary);
+  border-bottom-color: var(--cn-primary);
+  font-weight: 600;
+}
+
+.ctw__panel {
+  background: var(--cn-bg);
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-md);
+  padding: 20px;
+  min-height: 280px;
+}
+
+/* Card grid */
+.ctw-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+@media (max-width: 900px) {
+  .ctw-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+  .ctw-grid { grid-template-columns: minmax(0, 1fr); }
+}
+.ctw-card {
+  background: var(--cn-surface);
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-md);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ctw-card--wide { grid-column: 1 / -1; }
+.ctw-card__title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--cn-primary);
+}
+.ctw-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--cn-fg);
+}
+
+/* Field row (label above value) */
+.ctw-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ctw-field__label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--cn-dim);
+}
+.ctw-field__value {
+  font-size: 14px;
+  color: var(--cn-fg);
+}
+
+/* Empty state */
+.ctw-empty {
+  font-size: 13px;
+  color: var(--cn-muted);
+  font-style: italic;
+  padding: 8px 0;
+  line-height: 1.5;
+}
+
+/* Footnote */
+.ctw__footnote {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  color: var(--cn-dim);
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: var(--cn-primary-soft);
+  border-left: 3px solid var(--cn-primary-tint);
+  border-radius: var(--cn-radius-sm);
+}
+
+/* Action row */
+.ctw-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+/* Clinical tab */
+.ctw-clinical { display: flex; flex-direction: column; gap: 12px; }
+.ctw-clinical__search {
+  padding: 10px 14px;
+  border: 1px solid var(--cn-line-strong);
+  border-radius: var(--cn-radius-md);
+  font: inherit;
+  font-size: 14px;
+  background: var(--cn-surface);
+}
+.ctw-clinical__groups {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ctw-clinical__groups details {
+  background: var(--cn-surface);
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-md);
+  padding: 10px 14px;
+}
+.ctw-clinical__groups summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--cn-fg);
+}
+.ctw-clinical__items {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--cn-muted);
+}
+
+/* Communications */
+.ctw-comms__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.ctw-comms__entry {
+  background: var(--cn-bg-alt);
+  border-radius: var(--cn-radius-sm);
+  padding: 8px 10px;
+}
+.ctw-comms__entry-head {
+  font-size: 12px;
+  margin-bottom: 4px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--cn-muted);
+}
+.ctw-comms__entry-body { font-size: 13px; color: var(--cn-fg); white-space: pre-wrap; }
+.ctw-comms__composer {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--cn-line-strong);
+  border-radius: var(--cn-radius-md);
+  font: inherit;
+  font-size: 13px;
+  background: var(--cn-surface);
+  resize: vertical;
+}
+
+/* Documents */
+.ctw-docs__list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ctw-docs__entry {
+  background: var(--cn-bg-alt);
+  border-radius: var(--cn-radius-sm);
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+/* Chat */
+.ctw-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ctw-chat__banner {
+  background: rgba(220, 38, 38, 0.08);
+  border-left: 3px solid var(--cn-pulse);
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--cn-pulse);
+  border-radius: var(--cn-radius-sm);
+}
+.ctw-chat__participants {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+.ctw-chat__thread {
+  background: var(--cn-surface);
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-md);
+  padding: 12px;
+  max-height: 380px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ctw-chat__message {
+  background: var(--cn-bg-alt);
+  border-left: 3px solid var(--cn-primary-tint);
+  padding: 8px 10px;
+  border-radius: var(--cn-radius-sm);
+}
+.ctw-chat__message[data-participant="Clinician"] { border-left-color: var(--cn-primary); }
+.ctw-chat__message[data-participant="Reviewer"] { border-left-color: var(--cn-accent); }
+.ctw-chat__message-head {
+  font-size: 11px;
+  margin-bottom: 4px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--cn-muted);
+}
+.ctw-chat__message-body {
+  font-size: 13px;
+  color: var(--cn-fg);
+  white-space: pre-wrap;
+}
+.ctw-chat__composer {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--cn-line-strong);
+  border-radius: var(--cn-radius-md);
+  font: inherit;
+  font-size: 13px;
+  resize: vertical;
+}
+.btn--selected {
+  background: var(--cn-primary-soft);
+  color: var(--cn-primary);
+  border-color: var(--cn-primary-tint);
 }
