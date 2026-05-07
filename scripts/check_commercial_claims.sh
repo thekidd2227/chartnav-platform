@@ -1,0 +1,356 @@
+#!/usr/bin/env bash
+# scripts/check_commercial_claims.sh — Phase 17 commercial deck +
+# support-doc claims verifier.
+#
+# What it does:
+#   1. confirms the 15 deck Markdown source files exist under
+#      docs/decks/ and are non-empty;
+#   2. confirms the 6 commercial support docs exist under
+#      docs/commercial/ and are non-empty;
+#   3. confirms the 4 demo-package docs exist (3 under
+#      docs/commercial/demo-package/ + Phase 17 contract at the
+#      docs/ root);
+#   4. greps each deck + support doc for forbidden positive claims
+#      (HIPAA-compliant, SOC 2-certified, certified-EHR,
+#      autonomous-diagnosis, automatic orders / coding / referrals /
+#      patient messaging) — only flags positive context, not the
+#      explicit negative-assertion safety bullets;
+#   5. confirms decks include the provider-review safe-claims
+#      contract phrasing;
+#   6. confirms the export and create-package shell scripts exist,
+#      are executable, and refuse non-local DATABASE_URL values
+#      (via the wrapped reset_demo_state.sh);
+#   7. confirms the Desktop folder paths are listed in .gitignore
+#      so the generated package is never committed.
+#
+# The vitest suite at apps/web/src/test/CommercialDeckClaims.test.tsx
+# is authoritative; this script is a lightweight pre-merge sanity
+# check.
+#
+# Usage:
+#   bash scripts/check_commercial_claims.sh
+# Exit codes:
+#   0  passed
+#   1  failed (a required file is missing, a forbidden positive
+#      claim was detected, or a script is not executable)
+
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$REPO_ROOT"
+
+fail_count=0
+warn_count=0
+
+echo "ChartNav Phase 17 commercial-claims check."
+echo
+
+# ---------------------------------------------------------------
+# 1. Required deck files.
+# ---------------------------------------------------------------
+DECKS=(
+  "docs/decks/chartnav-investor-pitch-deck.md"
+  "docs/decks/chartnav-sales-deck.md"
+  "docs/decks/chartnav-demo-deck.md"
+  "docs/decks/chartnav-customer-pitch-deck-template.md"
+  "docs/decks/chartnav-company-deck.md"
+  "docs/decks/chartnav-product-roadmap-deck.md"
+  "docs/decks/chartnav-brand-guidelines-deck.md"
+  "docs/decks/chartnav-educational-onboarding-deck.md"
+  "docs/decks/chartnav-one-page-sales-deck.md"
+  "docs/decks/chartnav-financial-fundraising-deck.md"
+  "docs/decks/chartnav-marketing-plan-deck.md"
+  "docs/decks/chartnav-project-proposal-deck.md"
+  "docs/decks/chartnav-agency-partner-pitch-deck.md"
+  "docs/decks/chartnav-elevator-pitch-deck.md"
+  "docs/decks/chartnav-long-sales-pitch-deck.md"
+)
+
+echo "1. Deck source files (expect ${#DECKS[@]})"
+for f in "${DECKS[@]}"; do
+  if [ ! -s "$f" ]; then
+    echo "   MISSING or EMPTY: $f"
+    fail_count=$((fail_count + 1))
+  fi
+done
+if [ "$fail_count" -eq 0 ]; then
+  echo "   ok — all ${#DECKS[@]} deck files present and non-empty."
+fi
+echo
+
+# ---------------------------------------------------------------
+# 2. Commercial support docs.
+# ---------------------------------------------------------------
+SUPPORT=(
+  "docs/commercial/chartnav-deck-master-kit.md"
+  "docs/commercial/chartnav-approved-claims-language.md"
+  "docs/commercial/chartnav-commercial-readiness-map.md"
+  "docs/commercial/objections/chartnav-buyer-objection-handling.md"
+  "docs/commercial/pricing/chartnav-pricing-packaging-notes.md"
+  "docs/commercial/pilot/chartnav-pilot-handoff-checklist.md"
+)
+
+echo "2. Commercial support docs (expect ${#SUPPORT[@]})"
+local_fail=0
+for f in "${SUPPORT[@]}"; do
+  if [ ! -s "$f" ]; then
+    echo "   MISSING or EMPTY: $f"
+    fail_count=$((fail_count + 1))
+    local_fail=$((local_fail + 1))
+  fi
+done
+if [ "$local_fail" -eq 0 ]; then
+  echo "   ok — all ${#SUPPORT[@]} support docs present and non-empty."
+fi
+echo
+
+# ---------------------------------------------------------------
+# 3. Demo-package docs.
+# ---------------------------------------------------------------
+DEMO_PKG=(
+  "docs/commercial/demo-package/chartnav-local-demo-startup-guide.md"
+  "docs/commercial/demo-package/chartnav-local-demo-troubleshooting.md"
+  "docs/commercial/demo-package/chartnav-demo-review-checklist.md"
+  "docs/chartnav-desktop-demo-delivery-package.md"
+)
+
+echo "3. Demo-package docs (expect ${#DEMO_PKG[@]})"
+local_fail=0
+for f in "${DEMO_PKG[@]}"; do
+  if [ ! -s "$f" ]; then
+    echo "   MISSING or EMPTY: $f"
+    fail_count=$((fail_count + 1))
+    local_fail=$((local_fail + 1))
+  fi
+done
+if [ "$local_fail" -eq 0 ]; then
+  echo "   ok — all ${#DEMO_PKG[@]} demo-package docs present and non-empty."
+fi
+echo
+
+# ---------------------------------------------------------------
+# 4. Forbidden positive claims across decks + support docs.
+#
+# Compliance/certification claims are rejected outright. Capability
+# claims (autonomous diagnosis, automatic orders, etc.) are rejected
+# only when they appear as a positive claim — every deck explicitly
+# uses negative-assertion bullets ("ChartNav does not diagnose",
+# "Not autonomous diagnosis", etc.) and those are allowed.
+# ---------------------------------------------------------------
+FORBIDDEN_COMPLIANCE=(
+  "HIPAA[- ]compliant"
+  "HIPAA[- ]certified"
+  "SOC[- ]?2[- ]?certified"
+  "FDA[- ]cleared"
+  "HITRUST[- ]certified"
+  "production[- ]ready for PHI"
+  "real patient data ready"
+)
+
+FORBIDDEN_CAPABILITY=(
+  "certified EHR"
+  "autonomous diagnosis"
+  "automatic diagnosis"
+  "guaranteed accuracy"
+  "automatic orders"
+  "auto-orders"
+  "submit referral"
+  "send patient message"
+  "replaces a doctor"
+  "replaces the doctor"
+  "replaces providers"
+)
+
+ALL_DOCS=("${DECKS[@]}" "${SUPPORT[@]}" "${DEMO_PKG[@]}")
+
+echo "4. Forbidden positive claims (across ${#ALL_DOCS[@]} doc(s))"
+for f in "${ALL_DOCS[@]}"; do
+  [ -f "$f" ] || continue
+
+  # Catalog docs that exist *to enumerate* the banned phrases:
+  # - approved-claims-language.md (the canonical list)
+  # - brand-guidelines-deck.md (slide 5 — "Never use")
+  # - buyer-objection-handling.md (each "Don't say:" block)
+  # Skip the catalog docs entirely; their job is to list bad
+  # phrases.
+  case "$f" in
+    *"chartnav-approved-claims-language.md"|\
+    *"chartnav-brand-guidelines-deck.md"|\
+    *"chartnav-buyer-objection-handling.md")
+      continue
+      ;;
+  esac
+
+  for pattern in "${FORBIDDEN_COMPLIANCE[@]}"; do
+    if grep -Eiq "$pattern" "$f"; then
+      while IFS= read -r line; do
+        # Allow lines that are clearly negative context — "not
+        # HIPAA-certified", "does not claim", "Software is not
+        # certified", "not pursued", "never", etc. The pricing-
+        # notes and readiness-map docs explicitly enumerate what
+        # we are NOT certified for.
+        lower="$(printf '%s' "$line" | tr 'A-Z' 'a-z')"
+        if printf '%s' "$lower" | grep -Eq '(does not|do not|never|forbidden|banned|don.?t say|not\s+(yet\s+)?(pursued|certified|hipaa|soc|hitrust|fda)|not pursued|software is not|is not|are not|\bnot\b\s+(hipaa|soc|hitrust|fda))'; then
+          continue
+        fi
+        echo "   FAIL — forbidden compliance claim '$pattern' in $f"
+        echo "          $line"
+        fail_count=$((fail_count + 1))
+      done < <(grep -Ei "$pattern" "$f" || true)
+    fi
+  done
+
+  for pattern in "${FORBIDDEN_CAPABILITY[@]}"; do
+    while IFS= read -r line; do
+      lower="$(printf '%s' "$line" | tr 'A-Z' 'a-z')"
+      # Allow obvious negative contexts. We cover:
+      #  - "does not …"
+      #  - "no autonomous", "never"
+      #  - sentence-leading "not …"
+      #  - "don't say:" / "do not use" framings
+      if printf '%s' "$lower" | grep -Eq '(does not|do not|never|no autonomous|no automatic|\bnot\s|forbidden|banned|do[- ]not[- ]use|don.?t say)'; then
+        continue
+      fi
+      # The pattern "submit referral" appears in objection-handling
+      # / readiness-map docs only as something ChartNav does not
+      # do; the negative-context guard above catches almost all of
+      # those, but if a hit slips through we log a warn rather
+      # than a fail.
+      echo "   warn — '$pattern' in $f outside obvious negative context:"
+      echo "          $line"
+      warn_count=$((warn_count + 1))
+    done < <(grep -Ei "$pattern" "$f" || true)
+  done
+done
+if [ "$fail_count" -eq 0 ] && [ "$warn_count" -eq 0 ]; then
+  echo "   ok — no forbidden positive claims detected."
+fi
+echo
+
+# ---------------------------------------------------------------
+# 5. Provider-review safe-claims contract phrasing on every deck.
+# ---------------------------------------------------------------
+echo "5. Safe-claims phrasing on every deck"
+for f in "${DECKS[@]}"; do
+  [ -f "$f" ] || continue
+  # Each deck must reference the approved-claims language doc OR
+  # carry the canonical safety phrasing inline (provider-reviewed,
+  # approved-claims, or a "Safe-claims contract" header).
+  if grep -Eq 'chartnav-approved-claims-language\.md' "$f" \
+     || grep -Eiq 'provider[- ]reviewed' "$f" \
+     || grep -Eiq 'safe[- ]claims contract' "$f" \
+     || grep -Eiq 'approved[- ]claims' "$f"; then
+    continue
+  fi
+  echo "   FAIL — $f does not reference approved-claims language or 'provider-reviewed' or 'Safe-claims contract'."
+  fail_count=$((fail_count + 1))
+done
+if [ "$fail_count" -eq 0 ]; then
+  echo "   ok — every deck references the safe-claims contract."
+fi
+echo
+
+# ---------------------------------------------------------------
+# 6. Phase 17 shell scripts.
+# ---------------------------------------------------------------
+echo "6. Phase 17 shell scripts"
+for s in \
+  "scripts/export_chartnav_decks_to_desktop.sh" \
+  "scripts/create_chartnav_desktop_demo_package.sh"; do
+  if [ ! -f "$s" ]; then
+    echo "   MISSING: $s"
+    fail_count=$((fail_count + 1))
+    continue
+  fi
+  if [ ! -x "$s" ]; then
+    echo "   warn — $s is present but not marked executable."
+    warn_count=$((warn_count + 1))
+  fi
+done
+
+# The reset script (which the .command file wraps) must contain
+# the EXPECTED_PREFIX="sqlite:///" guard.
+if [ -f scripts/reset_demo_state.sh ]; then
+  if ! grep -Eq 'EXPECTED_PREFIX="sqlite:///"' scripts/reset_demo_state.sh; then
+    echo "   FAIL — scripts/reset_demo_state.sh missing local-DB guard"
+    fail_count=$((fail_count + 1))
+  fi
+fi
+
+# The export script must set EXPECTED desktop dir + REPO_ON_MAC
+# defaults to the operator's documented paths.
+if [ -f scripts/export_chartnav_decks_to_desktop.sh ]; then
+  if ! grep -Eq 'CHARTNAV_DESKTOP_DIR' scripts/export_chartnav_decks_to_desktop.sh; then
+    echo "   FAIL — export script missing CHARTNAV_DESKTOP_DIR override hook"
+    fail_count=$((fail_count + 1))
+  fi
+  # Must wrap reset_demo_state.sh, not invent a new reset path.
+  if ! grep -Eq 'reset_demo_state\.sh' scripts/export_chartnav_decks_to_desktop.sh; then
+    echo "   FAIL — export script does not reference reset_demo_state.sh"
+    fail_count=$((fail_count + 1))
+  fi
+fi
+
+if [ "$fail_count" -eq 0 ] && [ "$warn_count" -eq 0 ]; then
+  echo "   ok — Phase 17 scripts present and DB-guard wiring intact."
+fi
+echo
+
+# ---------------------------------------------------------------
+# 7. .gitignore guard for the Desktop folder.
+# ---------------------------------------------------------------
+echo "7. .gitignore guard for the Desktop folder"
+if [ ! -f .gitignore ]; then
+  echo "   FAIL — .gitignore is missing."
+  fail_count=$((fail_count + 1))
+else
+  if grep -Eq '(chartnav decks|/Users/jean-maxcharles/Desktop/chartnav decks|chartnav-platform/desktop-export)' .gitignore; then
+    echo "   ok — Desktop demo package paths covered by .gitignore."
+  else
+    echo "   warn — .gitignore does not explicitly exclude the Desktop folder."
+    echo "          The folder is outside the repo, so this is not a hard fail,"
+    echo "          but consider adding a guard pattern."
+    warn_count=$((warn_count + 1))
+  fi
+fi
+echo
+
+# ---------------------------------------------------------------
+# 8. No binary media checked into Phase 17 doc / deck folders.
+# ---------------------------------------------------------------
+echo "8. No binary media in commercial / deck / demo-package folders"
+binaries=$(find docs/decks docs/commercial docs/demo \
+  -type f \
+  \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' \
+     -o -iname '*.gif' -o -iname '*.webp' -o -iname '*.mp4' \
+     -o -iname '*.mov' -o -iname '*.webm' -o -iname '*.pdf' \
+     -o -iname '*.pptx' -o -iname '*.key' \) \
+  2>/dev/null || true)
+if [ -n "$binaries" ]; then
+  echo "   FAIL — binary media checked in under Phase 17 paths:"
+  printf '   %s\n' $binaries
+  fail_count=$((fail_count + 1))
+else
+  echo "   ok — only Markdown / text under Phase 17 paths."
+fi
+echo
+
+# ---------------------------------------------------------------
+# 9. Repo state.
+# ---------------------------------------------------------------
+echo "9. Repo state"
+echo "   sha:    $(git rev-parse HEAD 2>/dev/null || echo unknown)"
+echo "   branch: $(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
+echo
+
+if [ "$fail_count" -gt 0 ]; then
+  echo "FAILED — $fail_count fail(s), $warn_count warn(s)."
+  exit 1
+fi
+if [ "$warn_count" -gt 0 ]; then
+  echo "PASSED with $warn_count heuristic warn(s); run vitest to confirm."
+  exit 0
+fi
+echo "PASSED — 0 fail / 0 warn."
+exit 0

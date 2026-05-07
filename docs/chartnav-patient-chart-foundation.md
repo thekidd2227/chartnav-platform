@@ -929,3 +929,120 @@ See `docs/chartnav-website-proof-upgrade-conversion-layer.md` for
 the full Phase 16 contract, the messaging strategy, the per-phase
 proof map, the visual asset strategy, the CTA strategy, the safe
 claims rules, the test contract, and the Phase 17 candidate list.
+
+## Phase 17 — commercial launch package + desktop demo delivery
+
+Phase 17 ships the operator-facing commercial surface that Phases
+6–16 implied but never built: the deck library, the commercial
+support docs, the local demo launcher, and the desktop demo
+delivery package. After Phase 17 a presenter on the operator's
+Mac can open `/Users/jean-maxcharles/Desktop/chartnav decks/`,
+double-click `START_CHARTNAV.command`, run a fake-data demo, and
+double-click `STOP_CHARTNAV.command` and `RESET_DEMO_DATA.command`
+to tear down — without going hunting in the repo.
+
+**No new clinical automation. No backend changes. No new schema.
+No external LLM. No real-PHI claim. No unsupported HIPAA / SOC 2
+/ FDA / certified-EHR claim. No binary media in the repo.**
+
+Phase 17 ships:
+
+- 15 deck Markdown source files under `docs/decks/` covering
+  every recurring sales / investor / partner / onboarding
+  scenario (investor pitch, sales, demo, customer pitch
+  template, company, product roadmap, brand guidelines,
+  educational onboarding, one-page sales, financial fundraising,
+  marketing plan, project proposal, agency partner pitch,
+  elevator pitch, long sales pitch);
+- 6 commercial support docs under `docs/commercial/` (deck
+  master kit, approved-claims language, commercial readiness
+  map, buyer objection handling, pricing-packaging notes, pilot
+  handoff checklist);
+- 4 demo-package docs (local demo startup guide, troubleshooting,
+  demo review checklist, plus the top-level desktop demo
+  delivery contract at
+  `docs/chartnav-desktop-demo-delivery-package.md`);
+- 3 shell scripts —
+  `scripts/export_chartnav_decks_to_desktop.sh` (idempotent
+  exporter that builds the Desktop folder, copies every source
+  doc to the right subfolder, generates README + 3 .command
+  files, marks them executable),
+  `scripts/create_chartnav_desktop_demo_package.sh` (orchestrator
+  that runs the export and verifies every expected file landed +
+  every .command file is executable), and
+  `scripts/check_commercial_claims.sh` (pre-merge sanity check
+  that mirrors the vitest claims contract);
+- a 45-test vitest suite at
+  `apps/web/src/test/CommercialDeckClaims.test.tsx` asserting
+  every required file exists, every deck reaches the safe-claims
+  contract, no forbidden positive claim slips, no deck invents
+  financial numbers, the local-DB safety guard is preserved, no
+  binary media is committed under Phase 17 paths, the pricing
+  constants ($299 / $499 / $5,000 / $10,000) appear consistently,
+  and the Desktop folder is `.gitignore`-d;
+- the top-level Phase 17 contract at
+  `docs/chartnav-commercial-launch-package.md` and the desktop
+  delivery contract at
+  `docs/chartnav-desktop-demo-delivery-package.md`;
+- this section.
+
+**Pricing contract.** $299–$499/provider/month; $5,000/practice/
+month flat; $10,000 pilot fee (firm, not discounted); 2–4
+practices = 10% off, 5–9 = 15% off, 10+ = enterprise terms.
+Pricing is a hypothesis until paid-pilot data validates it; the
+pricing-notes doc enumerates what is firm vs. validation-pending.
+
+**Milestones.** M1 first paid pilot Jul 1 2026; M2 second paid
+pilot Oct 1 2026; M3 first paying customer post-pilot Q4 2026;
+M4 multi-practice deployment Q4 2026. Targets, not committed
+delivery dates.
+
+**SDVOSB / VA past-performance framing** appears on
+`chartnav-investor-pitch-deck.md`, `chartnav-company-deck.md`,
+`chartnav-agency-partner-pitch-deck.md`, and the internal
+marketing plan deck only — the certifications and Mann-Grandstaff
+VA past performance attach to the operating entity (ARCG
+Systems), not to ChartNav clinically. Private-practice clinical
+buyers see the clinical decks without the federal credibility
+slide because federal credentials are not the relevant signal
+for that audience.
+
+**Safe-claims contract** is enforced by the same heuristic Phase
+13 / 14 / 15 / 16 use: forbidden marketing claims (HIPAA-
+compliant, certified EHR, autonomous diagnosis, automatic
+orders, submit referral, billing automation, send patient
+message, replaces a doctor, production-ready for PHI, real
+patient data ready) appear only inside negative-assertion lines,
+enumerated forbidden lists ("Never use" / "Don't say"), Q&A
+question headings whose answers are negative assertions, or
+explicit `does not …` statements. The catalog docs whose entire
+job is to enumerate banned phrases —
+`chartnav-approved-claims-language.md`,
+`chartnav-brand-guidelines-deck.md` slide 5,
+`chartnav-buyer-objection-handling.md` "Don't say" blocks — are
+exempt by path from both the vitest scan and the shell-script
+scan.
+
+**Desktop delivery contract.** The Desktop folder at
+`/Users/jean-maxcharles/Desktop/chartnav decks/` (override via
+`CHARTNAV_DESKTOP_DIR`) is regenerated by the export script,
+never committed back to the repo (paths are in `.gitignore`),
+contains only Markdown / shell / text copies of repo source (no
+binary media), and ships three macOS double-click scripts
+(`START_CHARTNAV.command`, `STOP_CHARTNAV.command`,
+`RESET_DEMO_DATA.command`). The reset script wraps
+`scripts/reset_demo_state.sh`, which refuses to run if
+`DATABASE_URL` is anything other than a local
+`sqlite:///<path>`.
+
+**Phase 17 prepares Phase 18** — first paid pilot or paid
+customer (target M1 = Jul 1 2026). Phase 18 is operations work,
+not new product. The Phase 17 commercial launch package is the
+inventory Phase 18 sells from.
+
+See `docs/chartnav-commercial-launch-package.md` for the full
+Phase 17 contract, the deck audience map, the SDVOSB framing
+contract, the pricing contract, the milestone contract, the
+safe-claims contract, the desktop-folder source-of-truth
+contract, the test contract, and the Phase 18 candidate
+description.
