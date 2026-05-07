@@ -49,7 +49,8 @@ async function seedAdmin(page: Page) {
   );
   await page.reload();
   // Wait for identity + first list fetch to complete.
-  await expect(page.getByTestId("identity-badge")).toContainText("admin");
+  // Phase 19 — visible chip is "Identity Admin · Org N" (capitalized).
+  await expect(page.getByTestId("identity-badge")).toContainText(/Admin/);
 }
 
 test.describe("a11y — WCAG 2.1 AA blocking floor", () => {
