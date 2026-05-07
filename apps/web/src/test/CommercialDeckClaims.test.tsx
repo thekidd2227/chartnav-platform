@@ -880,3 +880,122 @@ describe("Phase 17D — generator wiring", () => {
 // root is apps/web/ and cannot resolve modules outside that
 // scope. Run `node tools/presentations/test/parseDeck.test.js`
 // (or `npm --prefix tools/presentations run test`) to exercise it.
+
+// ---------------------------------------------------------------
+// Phase 18 — controlled-pilot PHI readiness hardening.
+// ---------------------------------------------------------------
+
+describe("Phase 18 — controlled-pilot PHI readiness files exist", () => {
+  const PHASE18_FILES = [
+    "scripts/validate_controlled_pilot_env.sh",
+    "scripts/backup_controlled_pilot_postgres.sh",
+    "scripts/restore_controlled_pilot_postgres.sh",
+    "scripts/verify_controlled_pilot_backup.sh",
+    "scripts/smoke_controlled_pilot.sh",
+    "docs/security/chartnav-production-auth-readiness.md",
+    "docs/security/chartnav-monitoring-logging-readiness.md",
+    "docs/security/chartnav-incident-response-plan.md",
+    "docs/security/chartnav-real-phi-readiness-status.md",
+    "docs/pilot/chartnav-controlled-pilot-go-live-checklist.md",
+  ];
+
+  it.each(PHASE18_FILES)("%s exists and is non-empty", (rel) => {
+    const full = path.join(REPO_ROOT, rel);
+    const stat = statSync(full);
+    expect(stat.isFile(), `Missing: ${rel}`).toBe(true);
+    expect(stat.size, `Empty: ${rel}`).toBeGreaterThan(0);
+  });
+});
+
+describe("Phase 18 — safety guards in destructive scripts", () => {
+  it("backup script refuses SQLite + missing DATABASE_URL", () => {
+    const text = readFileSync(
+      path.join(REPO_ROOT, "scripts/backup_controlled_pilot_postgres.sh"),
+      "utf-8"
+    );
+    expect(text).toMatch(/DATABASE_URL is SQLite/);
+    expect(text).toMatch(/DATABASE_URL is not set/);
+    expect(text).toMatch(/REFUSED/);
+  });
+
+  it("restore script gates on CHARTNAV_RESTORE_CONFIRM=I_UNDERSTAND", () => {
+    const text = readFileSync(
+      path.join(REPO_ROOT, "scripts/restore_controlled_pilot_postgres.sh"),
+      "utf-8"
+    );
+    expect(text).toMatch(/CHARTNAV_RESTORE_CONFIRM/);
+    expect(text).toMatch(/I_UNDERSTAND/);
+    expect(text).toMatch(/DESTRUCTIVE/);
+  });
+
+  it("env validator checks every required Phase 18 env var", () => {
+    const text = readFileSync(
+      path.join(REPO_ROOT, "scripts/validate_controlled_pilot_env.sh"),
+      "utf-8"
+    );
+    for (const v of [
+      "CHARTNAV_AUTH_MODE",
+      "CHARTNAV_JWT_ISSUER",
+      "CHARTNAV_JWT_AUDIENCE",
+      "CHARTNAV_JWT_JWKS_URL",
+      "DATABASE_URL",
+      "CHARTNAV_AUDIT_RETENTION_DAYS",
+      "CHARTNAV_CORS_ALLOW_ORIGINS",
+      "CHARTNAV_STT_PROVIDER",
+    ]) {
+      expect(text, `validator missing check for ${v}`).toContain(v);
+    }
+  });
+
+  it("smoke script never prints tokens + gates writes", () => {
+    const text = readFileSync(
+      path.join(REPO_ROOT, "scripts/smoke_controlled_pilot.sh"),
+      "utf-8"
+    );
+    expect(text).toMatch(/CHARTNAV_SMOKE_ALLOW_WRITES/);
+    expect(text).toMatch(/never prints tokens/i);
+    // The script must not echo the token variables into argv.
+    expect(text).not.toMatch(/echo[^\n]*\$\{?CHARTNAV_SMOKE_(ADMIN|CLINICIAN|REVIEWER)_TOKEN/);
+  });
+});
+
+describe("Phase 18 — PHI readiness statement preserved", () => {
+  it("real-PHI readiness status doc contains the canonical readiness sentence", () => {
+    const text = readFileSync(
+      path.join(REPO_ROOT, "docs/security/chartnav-real-phi-readiness-status.md"),
+      "utf-8"
+    );
+    // The canonical readiness sentence is repeated verbatim in
+    // multiple Phase 18 docs. The status doc is the source of
+    // truth — assert the key clauses are present.
+    expect(text).toMatch(/not approved for real PHI by default/i);
+    expect(text).toMatch(/BAA execution/i);
+    expect(text).toMatch(/practice security review/i);
+    expect(text).toMatch(/production bearer authentication/i);
+    expect(text).toMatch(/Postgres hosting/i);
+    expect(text).toMatch(/written practice approval/i);
+  });
+
+  it("controlled-pilot go-live checklist has a final sign-off section", () => {
+    const text = readFileSync(
+      path.join(REPO_ROOT, "docs/pilot/chartnav-controlled-pilot-go-live-checklist.md"),
+      "utf-8"
+    );
+    expect(text).toMatch(/Final sign-off/i);
+    expect(text).toMatch(/Practice clinical champion/i);
+    expect(text).toMatch(/Practice security \/ compliance owner/i);
+    expect(text).toMatch(/ARCG Systems operator/i);
+  });
+
+  it("incident response plan has S1 path + redaction rules", () => {
+    const text = readFileSync(
+      path.join(REPO_ROOT, "docs/security/chartnav-incident-response-plan.md"),
+      "utf-8"
+    );
+    expect(text).toMatch(/S1[ —]/);
+    expect(text).toMatch(/Stop/i);
+    expect(text).toMatch(/Preserve evidence/i);
+    expect(text).toMatch(/Redact before sharing/i);
+    expect(text).toMatch(/within 1 hour/i);
+  });
+});

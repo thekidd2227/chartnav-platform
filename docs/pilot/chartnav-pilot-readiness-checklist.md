@@ -215,3 +215,28 @@ Decisions:
   the practice is willing.
 - **Pause** if metrics are mixed and a follow-up phase is needed.
 - **End** if the practice or ChartNav decides the fit is poor.
+
+---
+
+## Before any real-PHI session
+
+This readiness checklist covers pilot logistics + workflow fit.
+Before any real-PHI session, **also** complete:
+
+- `docs/pilot/chartnav-controlled-pilot-go-live-checklist.md` —
+  the master pre-PHI gate (BAA, production auth, Postgres,
+  backups, monitoring, audit retention, incident contacts,
+  written practice approval).
+- `docs/security/chartnav-production-auth-readiness.md` — the
+  bearer-auth contract.
+- `docs/security/chartnav-monitoring-logging-readiness.md` — the
+  log / metric / alert contract.
+- `docs/security/chartnav-incident-response-plan.md` — the
+  data-safety incident path.
+
+ChartNav is **not** approved for real PHI by default. ChartNav
+can be prepared for a controlled-pilot environment that may
+process real PHI only after BAA execution, practice security
+review, production bearer authentication, Postgres hosting,
+backups, monitoring, audit-retention agreement, incident-response
+contacts, and written practice approval.
