@@ -156,6 +156,13 @@ function readEnabled(): boolean {
   }
 }
 
+// Exposed for use outside the demo guide (e.g. App.tsx topbar
+// chip visibility). Same source-of-truth as the demo guide
+// itself, so the two stay in sync.
+export function isDemoModeEnabled(): boolean {
+  return readEnabled();
+}
+
 function readStep(): number {
   if (typeof window === "undefined") return 0;
   try {

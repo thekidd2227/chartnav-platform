@@ -39,6 +39,10 @@ async function openEncounter(
 ) {
   await page.locator(`[data-testid=enc-row-${id}]`).click();
   await page.waitForSelector("[data-testid=encounter-detail]");
+  // Phase 19 — NoteWorkspace lives inside the Documentation tab.
+  // Click the tab so the workspace mounts, then wait for it.
+  await page.waitForSelector("[data-testid=clinical-tabbed-workspace]");
+  await page.locator("[data-testid=ctw-tab-documentation]").click();
   await page.waitForSelector("[data-testid=note-workspace]");
 }
 

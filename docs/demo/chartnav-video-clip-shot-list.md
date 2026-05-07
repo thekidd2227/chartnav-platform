@@ -39,34 +39,69 @@ voice-over, re-record the clip — do not edit around it.
 
 ---
 
+## Capture URL
+
+Always capture against `http://127.0.0.1:5173/?demo=1`. The
+`?demo=1` query enables Guided Demo Mode AND hides the dev API
+URL chip — buyers never see `localhost:8000` on screen. The
+identity chip reads **Identity Admin · Org 1** with the email
+in the `title=` attribute (Phase 19).
+
+## Tab map (Phase 19 layout)
+
+The encounter detail is now a tabbed clinical workspace. Two
+tabs hold all the demo content:
+
+| Tab | Surface | Used by clips |
+|---|---|---|
+| **Documentation / EMR-EHR** | Scribe · Patient summary · Pre-visit brief · Provider action queue | 1, 4, 5, 6 |
+| **Imaging** | OD/OS retinal diagram | 2, 3 |
+
+Capture the tab transition (1-second click + panel transition)
+when moving between Documentation and Imaging — that's part of
+the new product feel.
+
+---
+
 ## Clip plan
 
 ### Clip 1 · Scribe lifecycle
 
+> Tab: **Documentation / EMR-EHR**
+
 - **Length**: 30 – 45 seconds
-- **What's on screen**: the Scribe session panel. The pasted source
-  text, then *Process*, then *Mark reviewed*, then *Finalize*. End
-  on the read-only finalized state with the status badge visible.
+- **Setup**: open `enc-row-1`, click the Documentation tab.
+- **What's on screen**: the Scribe session panel inside the
+  Documentation tab. The pasted source text, then *Process*,
+  then *Mark reviewed*, then *Finalize*. End on the read-only
+  finalized state with the status badge visible.
 - **Voice-over beat**: "ChartNav drafts a structured note from the
   source text. The provider reviews and finalizes — never automatic.
   Finalized sessions are immutable."
-- **Capture order**: paste → process → review → finalize.
+- **Capture order**: tab click → paste → process → review → finalize.
 
 ### Clip 2 · Retinal proposal review
 
+> Tab: **Imaging**
+
 - **Length**: 30 – 45 seconds
+- **Setup**: click the Imaging tab. The OD/OS retinal diagram
+  panel mounts.
 - **What's on screen**: the Eye diagram panel with the
   *Generate proposals from findings* action visible, then the
   proposal modal/list, then *Apply* on one OD or OS proposal.
 - **Voice-over beat**: "Proposals are read-only suggestions.
   Anything that lands on the diagram is tagged source=ai_approved
   and stays auditable."
-- **Capture order**: paste findings → generate → modal → apply one →
-  modal closes.
+- **Capture order**: Imaging-tab click → paste findings → generate →
+  modal → apply one → modal closes.
 
 ### Clip 3 · OD/OS diagram apply / save / sign
 
+> Tab: **Imaging**
+
 - **Length**: 20 – 30 seconds
+- **Setup**: continues from Clip 2 — already on the Imaging tab.
 - **What's on screen**: applied annotations on the OD/OS retinal
   diagram, then *Save*, then *Sign*. End on the signed read-only
   state with the signed-at timestamp.
@@ -77,7 +112,10 @@ voice-over, re-record the clip — do not edit around it.
 
 ### Clip 4 · Patient-friendly summary
 
+> Tab: **Documentation / EMR-EHR**
+
 - **Length**: 30 – 45 seconds
+- **Setup**: click the Documentation tab.
 - **What's on screen**: the Patient summary panel banner copy
   ("Patient summary draft — provider review required. Do not send
   to patient until finalized by the provider."), then *Create*, an
@@ -85,12 +123,15 @@ voice-over, re-record the clip — do not edit around it.
   state.
 - **Voice-over beat**: "Provider-facing summary. ChartNav does not
   send anything to a patient. Finalized summaries are immutable."
-- **Capture order**: banner copy on screen → create → small edit →
-  review → finalize.
+- **Capture order**: Documentation-tab click → banner copy on
+  screen → create → small edit → review → finalize.
 
 ### Clip 5 · Pre-visit brief
 
+> Tab: **Documentation / EMR-EHR**
+
 - **Length**: 20 – 30 seconds
+- **Setup**: continues from Clip 4 — already on Documentation tab.
 - **What's on screen**: the Pre-visit brief panel. Click *Generate*.
   Show the source-counts tiles, the last-visit recap, and at least
   one data-gap entry.
@@ -101,7 +142,10 @@ voice-over, re-record the clip — do not edit around it.
 
 ### Clip 6 · Provider action queue
 
+> Tab: **Documentation / EMR-EHR**
+
 - **Length**: 30 – 45 seconds
+- **Setup**: continues from Clip 5 — already on Documentation tab.
 - **What's on screen**: the Provider action queue panel banner copy
   ("Provider action suggestions — review required. ChartNav does
   not create orders, send referrals, message patients, or take
@@ -117,13 +161,41 @@ voice-over, re-record the clip — do not edit around it.
 - **Length**: 60 – 90 seconds (assembled from clips 1 – 6)
 - **What's on screen**: a chronological cut from scribe → propose →
   diagram → summary → brief → action queue, with each panel
-  appearing for ~10 – 15 seconds. End on a screen card or full-
-  workspace shot.
+  appearing for ~10 – 15 seconds. Include the tab transitions
+  between Documentation and Imaging — they read as "this is a
+  real product, not a single screen." End on a screen card or
+  full-workspace shot showing the 9-tab bar.
 - **Voice-over beat**: the demo-script lead-in ("Five minutes,
   seven steps, every step provider-reviewed.") plus the safety-
   guardrail bullet list as on-screen text overlay (no claim of
   HIPAA / EHR / autonomous anything).
 - **Capture order**: cut from clips 1 – 6.
+
+### Clip 8 · Clinical Signal Filtering banner (optional, hero shot)
+
+> Tab: **Clinical / Ophthalmology**
+
+- **Length**: 10 – 15 seconds
+- **Setup**: click the **Clinical / Ophthalmology** tab.
+- **What's on screen**: the Clinical tab's collapsible groups
+  (Cornea / Retina / Oculoplastics / Glaucoma) with the
+  Phase 17B Clinical Signal Filtering banner visible. Slow
+  camera pan over the banner.
+- **Voice-over beat**: "Filters conversation. Captures findings.
+  Builds the diagram."
+- **Capture order**: Clinical-tab click → banner visible → pan.
+
+### Clip 9 · 9-tab navigation reveal (optional, hero shot)
+
+- **Length**: 5 – 8 seconds
+- **What's on screen**: the encounter detail header with the
+  patient pill (`Identity Admin · Org 1`) + a deliberate
+  left-to-right hover across the 9 tabs (Overview, Clinical,
+  Documentation, Imaging, Labs/Orders Review, Calendar,
+  Communications, Documents, Chat).
+- **Voice-over beat**: none — this is a visual reveal for the
+  master cut and the website hero.
+- **Capture order**: hover-pan across the tab bar.
 
 ---
 

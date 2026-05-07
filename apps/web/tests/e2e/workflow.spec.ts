@@ -25,7 +25,21 @@ async function switchIdentity(page: Page, email: string) {
 }
 
 async function waitForIdentity(page: Page, token: string) {
-  await expect(page.getByTestId("identity-badge")).toContainText(token);
+  // Phase 19 — the buyer-safe identity chip shows
+  //   "Identity <Role> · Org <N>"
+  // (Role is capitalized: Admin / Clinician / Reviewer; the email
+  // travels in the chip's `title` attribute). The legacy test
+  // tokens are a mix of role names ("admin", "clinician", "reviewer"),
+  // org tags ("org 1", "org 2"), and full emails. Match all of
+  // them by checking BOTH the visible text (case-insensitive) AND
+  // the `title` attribute.
+  const badge = page.getByTestId("identity-badge");
+  const re = new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+  await expect(async () => {
+    const text = (await badge.textContent()) ?? "";
+    const title = (await badge.getAttribute("title")) ?? "";
+    expect(re.test(text) || re.test(title)).toBe(true);
+  }).toPass({ timeout: 10000 });
 }
 
 test.describe("ChartNav end-to-end", () => {
@@ -40,8 +54,14 @@ test.describe("ChartNav end-to-end", () => {
   test("boots and resolves the default seeded identity", async ({ page }) => {
     // Default identity is the first seeded entry (admin@chartnav.local).
     await waitForIdentity(page, "admin@chartnav.local");
-    await expect(page.getByTestId("identity-badge")).toContainText("admin");
-    await expect(page.getByTestId("identity-badge")).toContainText("org 1");
+    // Phase 19 — visible chip text is now "Identity Admin · Org 1"
+    // (capitalized). Email lives in the `title` attribute.
+    await expect(page.getByTestId("identity-badge")).toContainText(/Admin/);
+    await expect(page.getByTestId("identity-badge")).toContainText(/Org 1/);
+    await expect(page.getByTestId("identity-badge")).toHaveAttribute(
+      "title",
+      /admin@chartnav\.local/
+    );
     await expect(page.getByTestId("enc-list")).toBeVisible();
   });
 

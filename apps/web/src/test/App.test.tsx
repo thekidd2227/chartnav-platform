@@ -176,8 +176,16 @@ async function waitForAdminLoaded() {
 describe("ChartNav frontend", () => {
   it("resolves /me and shows identity badge", async () => {
     await waitForAdminLoaded();
-    expect(screen.getByTestId("identity-badge")).toHaveTextContent(
-      "admin@chartnav.local · admin · org 1"
+    // Phase 19 — buyer-safe identity chip. The visible chip text
+    // is now "Identity Admin · Org 1" (role / org), while the
+    // raw email travels in the chip's `title` attribute for the
+    // operator's reference.
+    const badge = screen.getByTestId("identity-badge");
+    expect(badge).toHaveTextContent("Identity");
+    expect(badge).toHaveTextContent("Admin · Org 1");
+    expect(badge).toHaveAttribute(
+      "title",
+      expect.stringContaining("admin@chartnav.local")
     );
   });
 
@@ -231,7 +239,7 @@ describe("ChartNav frontend", () => {
       "clin@chartnav.local"
     );
     await waitFor(() =>
-      expect(screen.getByTestId("identity-badge")).toHaveTextContent("clinician")
+      expect(screen.getByTestId("identity-badge")).toHaveTextContent("Clinician")
     );
 
     await user.click(await screen.findByTestId("enc-row-1"));
@@ -251,7 +259,7 @@ describe("ChartNav frontend", () => {
       "rev@chartnav.local"
     );
     await waitFor(() =>
-      expect(screen.getByTestId("identity-badge")).toHaveTextContent("reviewer")
+      expect(screen.getByTestId("identity-badge")).toHaveTextContent("Reviewer")
     );
 
     await user.click(await screen.findByTestId("enc-row-2"));
@@ -273,7 +281,7 @@ describe("ChartNav frontend", () => {
       "clin@chartnav.local"
     );
     await waitFor(() =>
-      expect(screen.getByTestId("identity-badge")).toHaveTextContent("clinician")
+      expect(screen.getByTestId("identity-badge")).toHaveTextContent("Clinician")
     );
     expect(screen.queryByTestId("open-admin-panel")).not.toBeInTheDocument();
 
@@ -282,7 +290,7 @@ describe("ChartNav frontend", () => {
       "rev@chartnav.local"
     );
     await waitFor(() =>
-      expect(screen.getByTestId("identity-badge")).toHaveTextContent("reviewer")
+      expect(screen.getByTestId("identity-badge")).toHaveTextContent("Reviewer")
     );
     expect(screen.queryByTestId("open-admin-panel")).not.toBeInTheDocument();
   });
@@ -297,7 +305,7 @@ describe("ChartNav frontend", () => {
       "rev@chartnav.local"
     );
     await waitFor(() =>
-      expect(screen.getByTestId("identity-badge")).toHaveTextContent("reviewer")
+      expect(screen.getByTestId("identity-badge")).toHaveTextContent("Reviewer")
     );
     expect(screen.queryByTestId("open-create-encounter")).not.toBeInTheDocument();
   });
@@ -389,7 +397,8 @@ describe("ChartNav frontend", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId("identity-badge")).toHaveTextContent("org 2");
+      // Phase 19 — visible chip text capitalises the org token.
+      expect(screen.getByTestId("identity-badge")).toHaveTextContent("Org 2");
     });
     // org2 encounters surface
     expect(await screen.findByText("Priya Shah")).toBeInTheDocument();
@@ -558,8 +567,11 @@ describe("ChartNav frontend", () => {
       "rev@chartnav.local"
     );
     await waitFor(() =>
-      expect(screen.getByTestId("identity-badge")).toHaveTextContent(
-        /rev@chartnav.local/i
+      // Phase 19 — visible chip is role+org; the email travels in
+      // the title attribute, not the visible text.
+      expect(screen.getByTestId("identity-badge")).toHaveAttribute(
+        "title",
+        expect.stringContaining("rev@chartnav.local")
       )
     );
     await user.click(await screen.findByTestId("enc-row-1"));

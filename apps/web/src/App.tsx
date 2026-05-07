@@ -30,6 +30,8 @@ import {
 import { AdminPanel } from "./AdminPanel";
 import { NoteWorkspace } from "./NoteWorkspace";
 import { SEEDED_IDENTITIES, loadIdentity, saveIdentity } from "./identity";
+import { isDemoModeEnabled } from "./GuidedDemoMode";
+import { ClinicalTabbedWorkspace } from "./ClinicalTabbedWorkspace";
 
 type Banner =
   | { kind: "ok"; msg: string }
@@ -239,7 +241,15 @@ export default function App() {
         </div>
         <div className="header-meta">
           <IdentityBadge me={me} meError={meError} meLoading={meLoading} />
-          <span className="chip">API {API_URL}</span>
+          {/*
+            Phase 19 — hide the dev API URL chip in demo mode so a
+            buyer / advisor / partner watching a live demo never
+            sees `localhost:8000` on screen. The chip stays visible
+            in the developer's normal workflow.
+          */}
+          {!isDemoModeEnabled() && (
+            <span className="chip" data-testid="api-chip">API {API_URL}</span>
+          )}
           {canCreate && (
             <button
               className="btn btn--primary"
@@ -404,9 +414,30 @@ function IdentityBadge({
       </span>
     );
   if (!me) return <span className="chip">—</span>;
+  // Phase 19 — buyer-safe identity chip. The chip carries a small
+  // "Identity" eyebrow label so it reads as system info (not a debug
+  // dump), and the role + org tokens use friendlier wording. The
+  // raw email still travels in the chip's title attribute so an
+  // operator can confirm provisioning at a glance, without the email
+  // dominating the visible chip.
+  const friendlyRole =
+    me.role === "admin"
+      ? "Admin"
+      : me.role === "clinician"
+      ? "Clinician"
+      : me.role === "reviewer"
+      ? "Reviewer"
+      : me.role;
   return (
-    <span className="chip" data-testid="identity-badge">
-      {me.email} · {me.role} · org {me.organization_id}
+    <span
+      className="chip chip--identity"
+      data-testid="identity-badge"
+      title={`${me.email} · ${me.role} · organization_id=${me.organization_id}`}
+    >
+      <span className="chip__label">Identity</span>
+      <span className="chip__value">
+        {friendlyRole} · Org {me.organization_id}
+      </span>
     </span>
   );
 }
@@ -654,120 +685,122 @@ function EncounterDetail({
 
   return (
     <div data-testid="encounter-detail">
-      <div className="detail__head">
-        <div>
-          <h2>
-            #{encounter.id} · {encounter.patient_name ?? encounter.patient_identifier}
-          </h2>
-          <div className="sub">
-            {encounter.patient_identifier} · {encounter.provider_name}
-          </div>
-        </div>
-        <div className="detail__head-right">
-          <span
-            className="status-pill"
-            data-status={encounter.status}
-            data-testid="detail-status"
-          >
-            {encounter.status.replace(/_/g, " ")}
-          </span>
-          <span
-            className="source-chip"
-            data-testid="detail-source-chip"
-            data-source={encounter._source ?? "chartnav"}
-          >
-            {encounterSourceLabel(encounter)}
-          </span>
-        </div>
-      </div>
-
-      {!nativeEncounter && (
-        <ExternalEncounterBanner
-          identity={identity}
+      {/*
+       * Phase 19 — the encounter detail body is now rendered by
+       * ClinicalTabbedWorkspace (9 tabs: Overview, Clinical,
+       * Documentation, Imaging, Labs/Orders Review, Calendar,
+       * Communications, Documents, Chat). The Documentation tab
+       * embeds the existing NoteWorkspace; the Imaging tab embeds
+       * the existing EyeDiagramPanel. Banners (external encounter,
+       * bridged refresh, external-note fallback) still render
+       * here so they stay above the tabbed body.
+       */}
+      {me && nativeEncounter && typeof encounter.id === "number" ? (
+        <ClinicalTabbedWorkspace
           encounter={encounter}
-          canBridge={role === "admin" || role === "clinician"}
-        />
-      )}
-
-      {nativeEncounter && (encounter as any).external_ref && (
-        <BridgedEncounterRefreshBanner
           identity={identity}
-          encounter={encounter}
-          canRefresh={role === "admin" || role === "clinician"}
-          onRefreshed={onRefreshDetail}
+          me={me}
+          pendingStatus={pendingStatus}
+          onTransition={async (s) => {
+            setPendingStatus(s);
+            try {
+              await onTransition(s);
+            } finally {
+              setPendingStatus(null);
+            }
+          }}
+          onSetPendingStatus={setPendingStatus}
+          onRefreshDetail={onRefreshDetail}
+          bannersSlot={
+            <>
+              {!nativeEncounter && (
+                <ExternalEncounterBanner
+                  identity={identity}
+                  encounter={encounter}
+                  canBridge={role === "admin" || role === "clinician"}
+                />
+              )}
+              {nativeEncounter && (encounter as any).external_ref && (
+                <BridgedEncounterRefreshBanner
+                  identity={identity}
+                  encounter={encounter}
+                  canRefresh={role === "admin" || role === "clinician"}
+                  onRefreshed={onRefreshDetail}
+                />
+              )}
+            </>
+          }
         />
-      )}
-
-      <dl className="detail__facts">
-        <div><dt>Organization</dt><dd>#{encounter.organization_id}</dd></div>
-        <div><dt>Location</dt><dd>#{encounter.location_id}</dd></div>
-        <div><dt>Scheduled</dt><dd>{fmt(encounter.scheduled_at)}</dd></div>
-        <div><dt>Started</dt><dd>{fmt(encounter.started_at)}</dd></div>
-        <div><dt>Completed</dt><dd>{fmt(encounter.completed_at)}</dd></div>
-        <div><dt>Created</dt><dd>{fmt(encounter.created_at)}</dd></div>
-      </dl>
-
-      <section className="section">
-        <h3>Allowed transitions ({role ?? "—"})</h3>
-        {nextStatuses.length ? (
-          <div className="actions" data-testid="transitions">
-            {nextStatuses.map((s) => (
-              <button
-                key={s}
-                className="btn btn--primary"
-                data-testid={`transition-${s}`}
-                disabled={pendingStatus !== null}
-                onClick={async () => {
-                  setPendingStatus(s);
-                  try {
-                    await onTransition(s);
-                  } finally {
-                    setPendingStatus(null);
-                  }
-                }}
+      ) : (
+        <>
+          {/*
+           * Externally-sourced (non-native) encounters or pre-auth
+           * states render the original head + banners + bridge
+           * fallback message. Once the encounter is bridged into
+           * ChartNav (i.e. becomes native), the tabbed workspace
+           * above takes over.
+           */}
+          <div className="detail__head">
+            <div>
+              <h2>
+                #{encounter.id} ·{" "}
+                {encounter.patient_name ?? encounter.patient_identifier}
+              </h2>
+              <div className="sub">
+                {encounter.patient_identifier} · {encounter.provider_name}
+              </div>
+            </div>
+            <div className="detail__head-right">
+              <span
+                className="status-pill"
+                data-status={encounter.status}
+                data-testid="detail-status"
               >
-                {pendingStatus === s ? "…" : `Move to ${s.replace(/_/g, " ")}`}
-              </button>
-            ))}
+                {encounter.status.replace(/_/g, " ")}
+              </span>
+              <span
+                className="source-chip"
+                data-testid="detail-source-chip"
+                data-source={encounter._source ?? "chartnav"}
+              >
+                {encounterSourceLabel(encounter)}
+              </span>
+            </div>
           </div>
-        ) : (
-          <div className="subtle-note">
-            No transitions available from <code>{encounter.status}</code> for role{" "}
-            <code>{role}</code>. (The backend is the source of truth — it will
-            reject anything it disallows.)
-          </div>
-        )}
-      </section>
 
-      {me && nativeEncounter && typeof encounter.id === "number" && (
-        <section className="section">
-          <NoteWorkspace
-            identity={identity}
-            me={me}
-            encounterId={encounter.id}
-            patientId={
-              typeof encounter.patient_id === "number"
-                ? encounter.patient_id
-                : null
-            }
-            patientDisplay={
-              encounter.patient_name ?? encounter.patient_identifier
-            }
-            providerDisplay={encounter.provider_name}
-          />
-        </section>
-      )}
-      {me && !nativeEncounter && (
-        <section className="section" data-testid="note-workspace-external-note">
-          <div className="subtle-note">
-            Note drafting on an externally-sourced encounter requires
-            bridging it into ChartNav first. Use the{" "}
-            <strong>Bridge to ChartNav</strong> action above — once
-            bridged, the full transcript → findings → draft → signoff
-            workflow is available here while the encounter shell
-            continues to live in the external EHR.
-          </div>
-        </section>
+          {!nativeEncounter && (
+            <ExternalEncounterBanner
+              identity={identity}
+              encounter={encounter}
+              canBridge={role === "admin" || role === "clinician"}
+            />
+          )}
+
+          {nativeEncounter && (encounter as any).external_ref && (
+            <BridgedEncounterRefreshBanner
+              identity={identity}
+              encounter={encounter}
+              canRefresh={role === "admin" || role === "clinician"}
+              onRefreshed={onRefreshDetail}
+            />
+          )}
+
+          {me && !nativeEncounter && (
+            <section
+              className="section"
+              data-testid="note-workspace-external-note"
+            >
+              <div className="subtle-note">
+                Note drafting on an externally-sourced encounter requires
+                bridging it into ChartNav first. Use the{" "}
+                <strong>Bridge to ChartNav</strong> action above — once
+                bridged, the full transcript → findings → draft → signoff
+                workflow is available here while the encounter shell
+                continues to live in the external EHR.
+              </div>
+            </section>
+          )}
+        </>
       )}
 
       <section className="section">

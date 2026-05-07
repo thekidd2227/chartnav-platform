@@ -39,7 +39,8 @@ async function seedAdmin(page: Page) {
     localStorage.setItem("chartnav.devIdentity", "admin@chartnav.local")
   );
   await page.reload();
-  await expect(page.getByTestId("identity-badge")).toContainText("admin");
+  // Phase 19 — visible chip is "Identity Admin · Org N" (capitalized).
+  await expect(page.getByTestId("identity-badge")).toContainText(/Admin/);
   // Wait for the list's first response
   await expect(page.getByTestId("enc-list")).toBeVisible();
   await freezeUI(page);
