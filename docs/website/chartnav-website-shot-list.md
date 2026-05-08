@@ -59,9 +59,9 @@ URL chip, so buyers never see `localhost:8000` on screen. The
 identity chip reads **Identity Admin · Org 1** with the email
 in the chip's `title=` attribute (Phase 19).
 
-## Tab map (Phase 19 + 19B layout)
+## Tab map (Phase 19F layout — 9 tabs, no Billing)
 
-The encounter detail is now a 10-tab clinical workspace. Two
+The encounter detail is now a 9-tab clinical workspace. Two
 tabs hold the demo content used by the website cuts; capture
 the tab transition (1-second click + panel transition) when
 moving between Documentation and Imaging — that's part of the
@@ -73,17 +73,20 @@ new product feel.
 | **Imaging** | OD/OS retinal diagram | Stages 2, 3 |
 | **Clinical / Ophthalmology** | Phase 17B Clinical Signal Filtering banner + collapsible groups | Optional hero |
 
-Other tabs (Overview, Orders & Labs, Calendar, Communications,
-Documents, Chat, Billing) are not part of the seven-stage
-website cut and should not appear in the per-stage stills.
-They DO appear in the *10-tab navigation reveal* hero.
+Other tabs (Overview, Labs / Orders Review, Calendar,
+Communications, Documents, Chat) are not part of the
+seven-stage website cut and should not appear in the per-stage
+stills. They DO appear in the *9-tab navigation reveal* hero.
 
-**Phase 19B notes:** *Orders & Labs* is a renamed, review-only
-tab (replaces "Labs / Orders Review"); *Billing* is a new
-administrative review placeholder with an explicit
-*"ChartNav does not auto-code, auto-bill, or submit claims"*
-disclaimer. Neither tab is a workflow capture target — they
-exist to show the platform breadth in the navigation reveal.
+**Phase 19F notes:** *Labs / Orders Review* is review-only
+(View / Mark reviewed / Add note). **Billing is intentionally
+absent** — ChartNav does not bill, code, submit claims, or
+handle insurance. The Chat tab covers internal staff comms
+and is the buyer-visible replacement for the prior review-only
+Billing surface. Communications covers internal staff
+handoffs (no patient messaging). None of these tabs are
+workflow capture targets — they exist to show platform
+breadth in the navigation reveal.
 
 ---
 
@@ -98,11 +101,13 @@ website use only — they are not in-product features.
   encounter detail with `enc-row-1` (Morgan Lee) selected.
   Identity chip reads **Identity Admin · Org 1**; the API URL
   chip is hidden by `?demo=1`. Show the sticky patient-encounter
-  header and the 10-tab clinical workspace bar (Overview,
-  Clinical, Documentation, Imaging, Orders & Labs, Calendar,
-  Communications, Documents, Chat, Billing). Land on the **Documentation
-  / EMR/EHR** tab so the scribe / summary / brief / action-queue
-  panels are visible.
+  header and the 9-tab clinical workspace bar (Overview,
+  Clinical, Documentation, Imaging, Labs / Orders Review,
+  Calendar, Communications, Documents, Chat) — **no Billing
+  tab**, ChartNav does not bill, code, submit claims, or
+  handle insurance. Land on the **Documentation / EMR/EHR** tab
+  so the scribe / summary / brief / action-queue panels are
+  visible.
 - **Hero — safety banner.** Tight screenshot of the
   Phase 11 action queue banner copy on the **Documentation /
   EMR/EHR** tab: *"Provider action suggestions — review required.
@@ -113,12 +118,14 @@ website use only — they are not in-product features.
   Step 1 of 8 with the *DEMO MODE · fake data only* badge.
   The API URL chip is hidden; the identity chip reads
   **Identity Admin · Org 1**.
-- **Hero — 10-tab navigation reveal.** 5–8 second clip of a
-  deliberate left-to-right hover-pan across the 10-tab bar of
+- **Hero — 9-tab navigation reveal.** 5–8 second clip of a
+  deliberate left-to-right hover-pan across the 9-tab bar of
   the clinical workspace (Overview → Clinical → Documentation
-  → Imaging → Orders & Labs → Calendar → Communications →
-  Documents → Chat → Billing). No voice-over. Reads as "this is
-  a real product, not a single screen."
+  → Imaging → Labs / Orders Review → Calendar → Communications
+  → Documents → Chat). No voice-over. Reads as "this is a
+  real product, not a single screen." There is **no Billing
+  tab** — ChartNav does not bill, code, submit claims, or
+  handle insurance.
 - **Hero — Clinical Signal Filtering banner.** 10–15 second
   clip on the **Clinical / Ophthalmology** tab. Slow camera
   pan over the Phase 17B Clinical Signal Filtering banner and

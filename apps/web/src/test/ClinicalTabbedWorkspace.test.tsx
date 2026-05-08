@@ -1,5 +1,5 @@
 /**
- * Phase 19 + Phase 19B — Clinical Tabbed Workspace tests.
+ * Phase 19 + 19B + 19F — Clinical Tabbed Workspace tests.
  *
  * The existing App tests (App.test.tsx) verify integration: the
  * `transitions` / `transition-${s}` / `detail-status` /
@@ -9,21 +9,28 @@
  * This file exercises the standalone ClinicalTabbedWorkspace
  * component:
  *
- *   - 10 tabs render with the expected labels (Phase 19B added a
- *     review-only Billing tab; "Labs / Orders Review" is now
- *     "Orders & Labs"; Chat is retained from Phase 19)
+ *   - exactly 9 tabs render with the expected labels (Phase 19F
+ *     removes the prior review-only Billing tab; "Labs / Orders
+ *     Review" replaces "Orders & Labs"; Chat is retained from
+ *     Phase 19 as the internal-comms surface)
  *   - tab switching shows / hides the right panels
  *   - safe-claims labels are present in each tab
  *   - forbidden UI labels (place order, submit referral, send to
- *     patient, billing automation, etc.) appear nowhere as
- *     interactive button / heading / input text
+ *     patient, billing automation, CPT, charges, insurance,
+ *     submit claim, auto-code, auto-bill, payment, claim) appear
+ *     nowhere as interactive button / heading / input text
+ *   - no Billing tab; no Billing card heading; no Billing data-
+ *     testid anywhere
  *   - the Chat tab persists messages to localStorage and exports
  *     .txt / .json
  *   - the Communications tab is internal-only
- *   - the Billing tab is review-only: surface labels (CPT Codes,
- *     Charges, Insurance Status) appear only as card headings, and
- *     the disclaimer makes the no-auto-code / no-auto-bill / no-
- *     submit-claim contract explicit
+ *   - the Overview tab's Timeline card holds workflow events +
+ *     the Add timeline event composer (composer hidden when
+ *     ?demo=1 is active)
+ *   - the patient-header demographic strip shows intentional
+ *     empty-state copy ("Not available in demo" / "Not recorded"
+ *     / "No allergies recorded" / "No active meds recorded" /
+ *     "Not scheduled") instead of bare em-dashes
  */
 
 import { render, screen, within, fireEvent } from "@testing-library/react";
@@ -71,7 +78,15 @@ const ME: api.Me = {
   organization_id: 1,
 };
 
-function renderWorkspace(overrides: Partial<api.Encounter> = {}) {
+function renderWorkspace(
+  overrides: Partial<api.Encounter> = {},
+  opts: {
+    events?: api.WorkflowEvent[];
+    eventAllowed?: boolean;
+    pendingEvent?: boolean;
+    isDemo?: boolean;
+  } = {}
+) {
   return render(
     <ClinicalTabbedWorkspace
       encounter={{ ...ENCOUNTER, ...overrides }}
@@ -81,6 +96,11 @@ function renderWorkspace(overrides: Partial<api.Encounter> = {}) {
       onTransition={vi.fn().mockResolvedValue(undefined)}
       onSetPendingStatus={vi.fn()}
       onRefreshDetail={vi.fn()}
+      events={opts.events ?? []}
+      eventAllowed={opts.eventAllowed ?? true}
+      pendingEvent={opts.pendingEvent ?? false}
+      onAddEvent={vi.fn().mockResolvedValue(undefined)}
+      isDemo={opts.isDemo ?? false}
     />
   );
 }
@@ -131,33 +151,41 @@ describe("Phase 19 — Clinical tabbed workspace", () => {
     );
   });
 
-  it("renders all 10 tabs in the tab bar (Phase 19 + 19B with Chat retained + Billing added)", () => {
+  it("renders exactly 9 tabs in the tab bar (Phase 19F removes Billing; Chat is retained as the internal-comms surface)", () => {
     renderWorkspace();
     const bar = screen.getByTestId("ctw-tabbar");
     const tabs = within(bar).getAllByRole("tab");
-    expect(tabs).toHaveLength(10);
+    expect(tabs).toHaveLength(9);
     const labels = tabs.map((t) => t.textContent);
     expect(labels).toEqual([
       "Overview",
       "Clinical / Ophthalmology",
       "Documentation / EMR/EHR",
       "Imaging",
-      "Orders & Labs",
+      "Labs / Orders Review",
       "Calendar",
       "Communications",
       "Documents",
       "Chat",
-      "Billing",
     ]);
   });
 
-  it("Overview is the default active tab and shows Patient snapshot / Visit summary cards", () => {
+  it("does NOT render a Billing tab (Phase 19F)", () => {
+    renderWorkspace();
+    expect(screen.queryByTestId("ctw-tab-billing")).toBeNull();
+    const bar = screen.getByTestId("ctw-tabbar");
+    expect(bar.textContent || "").not.toMatch(/\bBilling\b/);
+  });
+
+  it("Overview is the default active tab and shows Patient snapshot / Visit summary / Favorites / Timeline cards", () => {
     renderWorkspace();
     const tab = screen.getByTestId("ctw-tab-overview");
     expect(tab).toHaveAttribute("aria-selected", "true");
     expect(screen.getByTestId("ctw-overview")).toBeInTheDocument();
     expect(screen.getByTestId("ctw-card-patient-snapshot")).toBeInTheDocument();
     expect(screen.getByTestId("ctw-card-visit-summary")).toBeInTheDocument();
+    expect(screen.getByTestId("ctw-card-favorites")).toBeInTheDocument();
+    expect(screen.getByTestId("ctw-card-timeline")).toBeInTheDocument();
   });
 
   it("clicking each tab switches the panel", async () => {
@@ -171,7 +199,6 @@ describe("Phase 19 — Clinical tabbed workspace", () => {
       "communications",
       "documents",
       "chat",
-      "billing",
     ]) {
       await user.click(screen.getByTestId(`ctw-tab-${slug}`));
       expect(screen.getByTestId(`ctw-panel-${slug}`)).toBeInTheDocument();
@@ -191,20 +218,23 @@ describe("Phase 19 — Clinical tabbed workspace", () => {
 // Safe-claims contract — forbidden UI labels appear NOWHERE.
 // ---------------------------------------------------------------
 
-describe("Phase 19 + 19B — workspace contains no forbidden order / patient-send / automated-billing labels on interactive elements", () => {
+describe("Phase 19 + 19B + 19F — workspace contains no forbidden order / patient-send / billing labels on interactive elements", () => {
   // The forbidden phrases below MAY appear inside safety footnotes
   // (e.g. "ChartNav does not place lab orders" / "does not deliver
-  // to a patient portal" / "ChartNav does not auto-code, auto-bill,
-  // or submit claims") because those paragraphs ARE the safe-
-  // claims contract. Same negative-assertion pattern Phase 17B and
-  // Phase 18 already use. What we forbid is the phrase appearing
-  // as a button label, heading, or interactive control — those are
-  // the surfaces that ship to a buyer.
+  // to a patient portal" / "ChartNav does not bill, code, submit
+  // claims, or handle insurance") because those paragraphs ARE the
+  // safe-claims contract. Same negative-assertion pattern Phase
+  // 17B / 18 / 19B already use. What we forbid is the phrase
+  // appearing as a button label, heading, or interactive control —
+  // those are the surfaces that ship to a buyer.
   //
-  // Phase 19B: "CPT Codes" / "Charges" / "Insurance Status" are
-  // legitimate Billing-tab card headings and are NOT banned. The
-  // Billing-specific assertion below covers the auto-billing
-  // contract independently.
+  // Phase 19F: Billing / CPT / Charges / Insurance / Submit Claim /
+  // Auto-code / Auto-bill / Send Claim / Charge Patient / Bill
+  // Insurance / Payment / Claim are now banned EVERYWHERE in the
+  // workspace, not just on interactive elements. The prior Phase
+  // 19B exception ("CPT / Charges / Insurance are legitimate
+  // Billing-tab headings") no longer applies — there is no
+  // Billing tab.
   it.each([
     ["overview"],
     ["clinical"],
@@ -214,7 +244,6 @@ describe("Phase 19 + 19B — workspace contains no forbidden order / patient-sen
     ["communications"],
     ["documents"],
     ["chat"],
-    ["billing"],
   ])(
     "tab %s has no forbidden labels on buttons / headings / inputs",
     async (slug) => {
@@ -309,53 +338,171 @@ describe("Phase 19B — Orders & Labs tab is review-only", () => {
 });
 
 // ---------------------------------------------------------------
-// Billing — review-only with disclaimer (Phase 19B).
+// Phase 19F — Billing surface fully absent (no tab, no panel, no
+// disclaimer, no card, no headings, no testids, no UI text).
+// ChartNav does not bill, code, submit claims, or handle insurance.
 // ---------------------------------------------------------------
 
-describe("Phase 19B — Billing tab is administrative review-only with disclaimer", () => {
-  it("renders the auto-billing disclaimer banner", async () => {
-    const user = userEvent.setup();
-    renderWorkspace();
-    await user.click(screen.getByTestId("ctw-tab-billing"));
-    const disclaimer = screen.getByTestId("ctw-billing-disclaimer");
-    expect(disclaimer).toBeInTheDocument();
-    expect(disclaimer.textContent || "").toMatch(
-      /does not auto-code, auto-bill, or submit claims/i
-    );
-  });
+describe("Phase 19F — Billing surface is fully absent from the workspace", () => {
+  // The tab list iterates every tab including the Overview default
+  // and clicks each in turn so we exercise every panel's rendered
+  // text (CSS `display:none` is not used; inactive panels simply
+  // don't render). Each switched-to panel must NOT contain the
+  // banned billing/coding/insurance/payment vocabulary anywhere.
+  const NINE_TABS = [
+    "overview",
+    "clinical",
+    "imaging",
+    "orders-labs",
+    "calendar",
+    "communications",
+    "documents",
+    "chat",
+  ] as const;
 
-  it("includes CPT Codes / Charges / Insurance Status / Billing Review Notes sections as headings only", async () => {
-    const user = userEvent.setup();
+  it("does not expose any billing-flavored testids", () => {
     renderWorkspace();
-    await user.click(screen.getByTestId("ctw-tab-billing"));
-    expect(screen.getByTestId("ctw-card-cpt-codes")).toBeInTheDocument();
-    expect(screen.getByTestId("ctw-card-charges")).toBeInTheDocument();
-    expect(screen.getByTestId("ctw-card-insurance-status")).toBeInTheDocument();
-    expect(
-      screen.getByTestId("ctw-card-billing-review-notes")
-    ).toBeInTheDocument();
-  });
-
-  it("renders only View / Mark reviewed / Add note as button labels (no Submit Claim / Auto-code / Auto-bill / Send Claim / Charge Patient / Bill Insurance)", async () => {
-    const user = userEvent.setup();
-    renderWorkspace();
-    await user.click(screen.getByTestId("ctw-tab-billing"));
-    const panel = screen.getByTestId("ctw-panel-billing");
-    const buttons = within(panel).getAllByRole("button");
-    for (const b of buttons) {
-      const t = (b.textContent || "").toLowerCase();
-      expect(t).toMatch(/^(view|mark reviewed|add note)$/);
+    for (const id of [
+      "ctw-tab-billing",
+      "ctw-panel-billing",
+      "ctw-billing",
+      "ctw-billing-disclaimer",
+      "ctw-card-cpt-codes",
+      "ctw-card-charges",
+      "ctw-card-insurance-status",
+      "ctw-card-billing-review-notes",
+    ]) {
+      expect(screen.queryByTestId(id)).toBeNull();
     }
   });
 
-  it("review-only action buttons are disabled (no clickable billing actions)", async () => {
-    const user = userEvent.setup();
+  it.each(NINE_TABS.map((s) => [s]))(
+    "tab %s contains no Billing / CPT / Charges / Insurance / Claim / Payment text in rendered UI",
+    async (slug) => {
+      const user = userEvent.setup();
+      renderWorkspace();
+      await user.click(screen.getByTestId(`ctw-tab-${slug}`));
+      const panel = screen.getByTestId(`ctw-panel-${slug}`);
+      const text = panel.textContent || "";
+      for (const banned of [
+        /\bBilling\b/i,
+        /\bCPT\b/i,
+        /\bCharges\b/i,
+        /\bInsurance\b/i,
+        /\bSubmit Claim\b/i,
+        /\bAuto-code\b/i,
+        /\bAuto-bill\b/i,
+        /\bSend Claim\b/i,
+        /\bCharge Patient\b/i,
+        /\bBill Insurance\b/i,
+        /\bPayment\b/i,
+        /\bClaim submission\b/i,
+      ]) {
+        expect(
+          text,
+          `tab ${slug} must not contain ${banned}: ${text.slice(0, 200)}`
+        ).not.toMatch(banned);
+      }
+    }
+  );
+});
+
+// ---------------------------------------------------------------
+// Phase 19F — Overview Timeline card holds workflow events + the
+// Add timeline event composer. The composer is hidden in ?demo=1.
+// ---------------------------------------------------------------
+
+describe("Phase 19F — Overview Timeline card", () => {
+  const FAKE_EVENTS: api.WorkflowEvent[] = [
+    {
+      id: 1,
+      encounter_id: 1,
+      event_type: "encounter_created",
+      event_data: { source: "demo" },
+      created_at: "2026-04-18 09:00:00",
+    },
+  ];
+
+  it("renders workflow events inside the Overview Timeline card (not as a floating section below the workspace)", () => {
+    renderWorkspace({}, { events: FAKE_EVENTS });
+    const card = screen.getByTestId("ctw-card-timeline");
+    expect(within(card).getByText(/encounter_created/)).toBeInTheDocument();
+    expect(within(card).getByTestId("ctw-timeline-stamps")).toBeInTheDocument();
+  });
+
+  it("shows the Add timeline event composer when not in demo mode and the role is allowed", () => {
+    renderWorkspace({}, { events: [], eventAllowed: true, isDemo: false });
+    expect(screen.getByTestId("event-form")).toBeInTheDocument();
+    expect(screen.queryByTestId("event-composer-demo-hidden")).toBeNull();
+    expect(screen.queryByTestId("event-denied")).toBeNull();
+  });
+
+  it("shows the demo-hidden notice (read-only timeline) when ?demo=1 is active", () => {
+    renderWorkspace({}, { events: FAKE_EVENTS, eventAllowed: true, isDemo: true });
+    expect(screen.getByTestId("event-composer-demo-hidden")).toBeInTheDocument();
+    expect(screen.queryByTestId("event-form")).toBeNull();
+    // Read-only timeline still renders.
+    expect(
+      within(screen.getByTestId("ctw-card-timeline")).getByText(
+        /encounter_created/
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("shows the role-denied notice when eventAllowed is false (reviewer)", () => {
+    renderWorkspace({}, { events: [], eventAllowed: false, isDemo: false });
+    expect(screen.getByTestId("event-denied")).toBeInTheDocument();
+    expect(screen.queryByTestId("event-form")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------
+// Phase 19F — patient-header demographic strip uses intentional
+// empty-state copy instead of bare em-dashes.
+// ---------------------------------------------------------------
+
+describe("Phase 19F — patient-header empty-state copy is intentional, not bare em-dashes", () => {
+  it("renders intentional empty-state text for fields not on the Encounter type", () => {
     renderWorkspace();
-    await user.click(screen.getByTestId("ctw-tab-billing"));
-    const panel = screen.getByTestId("ctw-panel-billing");
-    const buttons = within(panel).getAllByRole("button");
-    for (const b of buttons) {
-      expect(b).toBeDisabled();
+    expect(screen.getByTestId("ctw-patient-dob")).toHaveTextContent(
+      /Not available in demo/
+    );
+    expect(screen.getByTestId("ctw-patient-phone")).toHaveTextContent(
+      /Not available in demo/
+    );
+    expect(screen.getByTestId("ctw-demo-gender")).toHaveTextContent(
+      /Not recorded/
+    );
+    expect(screen.getByTestId("ctw-demo-allergies")).toHaveTextContent(
+      /No allergies recorded/
+    );
+    expect(screen.getByTestId("ctw-demo-conditions")).toHaveTextContent(
+      /No conditions recorded/
+    );
+    expect(screen.getByTestId("ctw-demo-medications")).toHaveTextContent(
+      /No active meds recorded/
+    );
+    expect(screen.getByTestId("ctw-demo-next-appt")).toHaveTextContent(
+      /Not scheduled/
+    );
+  });
+
+  it("does NOT render any cell as a bare em-dash", () => {
+    renderWorkspace();
+    for (const id of [
+      "ctw-patient-dob",
+      "ctw-patient-phone",
+      "ctw-demo-gender",
+      "ctw-demo-allergies",
+      "ctw-demo-conditions",
+      "ctw-demo-medications",
+      "ctw-demo-next-appt",
+    ]) {
+      const cell = screen.getByTestId(id);
+      // The cell's value text (excluding the leading label) must not
+      // be a bare em-dash. We strip the label prefix before checking.
+      const value = (cell.textContent || "").replace(/^[A-Za-z #]+\s*/, "");
+      expect(value.trim()).not.toMatch(/^—$/);
     }
   });
 });

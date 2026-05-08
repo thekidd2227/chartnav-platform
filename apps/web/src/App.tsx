@@ -445,16 +445,22 @@ function ClinicalSidebarNav({
         </SidebarItem>
       </SidebarGroup>
       <SidebarGroup label="Operations" testid="sidebar-group-operations">
-        <SidebarItem testid="sidebar-item-messages" disabled>
-          Messages
-        </SidebarItem>
         <SidebarItem testid="sidebar-item-tasks" disabled>
           Tasks
         </SidebarItem>
+        <SidebarItem testid="sidebar-item-messages" disabled>
+          Messages
+        </SidebarItem>
+        <SidebarItem testid="sidebar-item-chat" disabled>
+          Chat
+        </SidebarItem>
       </SidebarGroup>
+      {/* Phase 19F — Admin no longer surfaces Billing. ChartNav
+          does not bill, code, submit claims, or handle insurance.
+          Documents replaces Billing as the third Admin item. */}
       <SidebarGroup label="Admin" testid="sidebar-group-admin">
-        <SidebarItem testid="sidebar-item-billing" disabled>
-          Billing
+        <SidebarItem testid="sidebar-item-documents" disabled>
+          Documents
         </SidebarItem>
         <SidebarItem testid="sidebar-item-reports" disabled>
           Reports
@@ -463,6 +469,10 @@ function ClinicalSidebarNav({
           Settings
         </SidebarItem>
       </SidebarGroup>
+      {/* Phase 19F — Quick Actions: dropped Send Message (no
+          patient messaging) and New Patient (not in Phase 19F
+          spec). Internal Chat Note replaces them as a fast-path
+          to the internal-staff Chat tab. */}
       <SidebarGroup label="Quick Actions" testid="sidebar-group-quick-actions">
         <SidebarItem
           testid="sidebar-item-new-encounter"
@@ -471,17 +481,14 @@ function ClinicalSidebarNav({
         >
           New Encounter
         </SidebarItem>
-        <SidebarItem testid="sidebar-item-new-patient" disabled>
-          New Patient
-        </SidebarItem>
         <SidebarItem testid="sidebar-item-record-dictation" disabled>
           Record Dictation
         </SidebarItem>
         <SidebarItem testid="sidebar-item-upload-imaging" disabled>
           Upload Imaging
         </SidebarItem>
-        <SidebarItem testid="sidebar-item-send-message" disabled>
-          Send Message
+        <SidebarItem testid="sidebar-item-internal-chat-note" disabled>
+          Internal Chat Note
         </SidebarItem>
       </SidebarGroup>
     </nav>
@@ -861,6 +868,23 @@ function EncounterDetail({
           }}
           onSetPendingStatus={setPendingStatus}
           onRefreshDetail={onRefreshDetail}
+          /* Phase 19F — Timeline + Add event composer used to render
+             below the workspace. They now live inside the Overview
+             tab's Timeline card. The composer is hidden when
+             ?demo=1 is active so the buyer demo never exposes the
+             dev composer (the read-only Timeline still renders). */
+          events={events}
+          eventAllowed={eventAllowed}
+          pendingEvent={pendingEvent}
+          onAddEvent={async (type, data) => {
+            setPendingEvent(true);
+            try {
+              await onAddEvent(type, data);
+            } finally {
+              setPendingEvent(false);
+            }
+          }}
+          isDemo={isDemoModeEnabled()}
           bannersSlot={
             <>
               {!nativeEncounter && (
@@ -950,43 +974,55 @@ function EncounterDetail({
               </div>
             </section>
           )}
+
+          {/* Phase 19F — Timeline + Add event are now embedded in
+              the Overview tab's Timeline card on the native path.
+              For non-native (externally-sourced) encounters the
+              tabbed workspace doesn't render, so the legacy
+              floating sections stay here so admins can still
+              audit + append events while the bridge is pending.
+              They are inside the `else` branch so they never
+              render alongside the tabbed workspace (which would
+              be the buyer-demo "random Add event below tabs"
+              regression). */}
+          <section className="section">
+            <h3>Timeline ({events.length})</h3>
+            {events.map((ev) => (
+              <div className="event-item" key={ev.id}>
+                <div className="event-item__head">
+                  <span className="event-item__type">{ev.event_type}</span>
+                  <span className="event-item__when">
+                    {fmt(ev.created_at)}
+                  </span>
+                </div>
+                <div className="event-item__data">{renderEventData(ev)}</div>
+              </div>
+            ))}
+          </section>
+
+          <section className="section">
+            <h3>Add event</h3>
+            {eventAllowed ? (
+              <EventComposer
+                pending={pendingEvent}
+                onSubmit={async (type, data) => {
+                  setPendingEvent(true);
+                  try {
+                    await onAddEvent(type, data);
+                  } finally {
+                    setPendingEvent(false);
+                  }
+                }}
+              />
+            ) : (
+              <div className="subtle-note" data-testid="event-denied">
+                Your role (<code>{role}</code>) cannot add workflow events.
+                Switch to an admin or clinician identity to write.
+              </div>
+            )}
+          </section>
         </>
       )}
-
-      <section className="section">
-        <h3>Timeline ({events.length})</h3>
-        {events.map((ev) => (
-          <div className="event-item" key={ev.id}>
-            <div className="event-item__head">
-              <span className="event-item__type">{ev.event_type}</span>
-              <span className="event-item__when">{fmt(ev.created_at)}</span>
-            </div>
-            <div className="event-item__data">{renderEventData(ev)}</div>
-          </div>
-        ))}
-      </section>
-
-      <section className="section">
-        <h3>Add event</h3>
-        {eventAllowed ? (
-          <EventComposer
-            pending={pendingEvent}
-            onSubmit={async (type, data) => {
-              setPendingEvent(true);
-              try {
-                await onAddEvent(type, data);
-              } finally {
-                setPendingEvent(false);
-              }
-            }}
-          />
-        ) : (
-          <div className="subtle-note" data-testid="event-denied">
-            Your role (<code>{role}</code>) cannot add workflow events. Switch
-            to an admin or clinician identity to write.
-          </div>
-        )}
-      </section>
     </div>
   );
 }

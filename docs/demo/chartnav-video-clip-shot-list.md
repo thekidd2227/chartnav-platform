@@ -47,9 +47,9 @@ URL chip — buyers never see `localhost:8000` on screen. The
 identity chip reads **Identity Admin · Org 1** with the email
 in the `title=` attribute (Phase 19).
 
-## Tab map (Phase 19 + 19B layout)
+## Tab map (Phase 19F layout — 9 tabs, no Billing)
 
-The encounter detail is now a 10-tab clinical workspace. Two
+The encounter detail is now a 9-tab clinical workspace. Two
 tabs hold all the demo content:
 
 | Tab | Surface | Used by clips |
@@ -61,16 +61,23 @@ Capture the tab transition (1-second click + panel transition)
 when moving between Documentation and Imaging — that's part of
 the new product feel.
 
-The other 8 tabs (Overview · Clinical · Orders & Labs · Calendar
-· Communications · Documents · Chat · Billing) appear in the
+The other 7 tabs (Overview · Clinical · Labs / Orders Review ·
+Calendar · Communications · Documents · Chat) appear in the
 hero "navigation reveal" hover-pan but are NOT featured in the
-per-clip workflow shots. Phase 19B adds:
+per-clip workflow shots. Phase 19F notes:
 
-- *Orders & Labs* (renamed from Labs / Orders Review) — review-only.
-- *Billing* — administrative review placeholder with the explicit
-  *"ChartNav does not auto-code, auto-bill, or submit claims"*
-  disclaimer banner. Do not capture clicks; the tab is
-  intentionally action-light.
+- *Labs / Orders Review* — review-only (View / Mark reviewed /
+  Add note). The tab does not surface Submit Order, Place Order,
+  or Send Referral; ChartNav never places lab, imaging, or
+  procedure orders.
+- **Billing is intentionally absent.** ChartNav does not bill,
+  code, submit claims, or handle insurance. Do not capture any
+  Billing / CPT / Charges / Insurance / Claim / Payment surface
+  — there isn't one. Chat (internal staff) replaces the prior
+  review-only Billing tab as the buyer-visible surface.
+- *Chat* — frontend-only internal staff thread; persists to
+  localStorage on the operator's machine. Demo-local. No
+  patient messaging.
 
 ---
 
@@ -175,7 +182,7 @@ per-clip workflow shots. Phase 19B adds:
   appearing for ~10 – 15 seconds. Include the tab transitions
   between Documentation and Imaging — they read as "this is a
   real product, not a single screen." End on a screen card or
-  full-workspace shot showing the 10-tab bar.
+  full-workspace shot showing the 9-tab bar.
 - **Voice-over beat**: the demo-script lead-in ("Five minutes,
   seven steps, every step provider-reviewed.") plus the safety-
   guardrail bullet list as on-screen text overlay (no claim of
@@ -196,14 +203,16 @@ per-clip workflow shots. Phase 19B adds:
   Builds the diagram."
 - **Capture order**: Clinical-tab click → banner visible → pan.
 
-### Clip 9 · 10-tab navigation reveal (optional, hero shot)
+### Clip 9 · 9-tab navigation reveal (optional, hero shot)
 
 - **Length**: 5 – 8 seconds
 - **What's on screen**: the encounter detail header with the
   patient pill (`Identity Admin · Org 1`) + a deliberate
-  left-to-right hover across the 10 tabs (Overview, Clinical,
-  Documentation, Imaging, Orders & Labs, Calendar,
-  Communications, Documents, Chat, Billing).
+  left-to-right hover across the 9 tabs (Overview, Clinical,
+  Documentation, Imaging, Labs / Orders Review, Calendar,
+  Communications, Documents, Chat). **No Billing tab** —
+  ChartNav does not bill, code, submit claims, or handle
+  insurance.
 - **Voice-over beat**: none — this is a visual reveal for the
   master cut and the website hero.
 - **Capture order**: hover-pan across the tab bar.

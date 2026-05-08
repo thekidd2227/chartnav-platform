@@ -1,29 +1,29 @@
 /**
- * ClinicalTabbedWorkspace — Phase 19 + Phase 19B correction.
+ * ClinicalTabbedWorkspace — Phase 19 + 19B + 19F.
  *
- * Replaces the single-page encounter detail with a 10-tab clinical
+ * Replaces the single-page encounter detail with a 9-tab clinical
  * workspace. The Documentation tab wraps the existing NoteWorkspace
  * (scribe → review → finalize is unchanged). The Imaging tab wraps
  * the existing EyeDiagramPanel (OD/OS retinal diagram). The Chat
  * tab is a frontend-only internal staff chat with .txt / .json
  * export. Every other tab is a properly-labeled read-only review
- * surface with "No data yet" empty states.
+ * surface with intentional empty-state copy.
  *
- * Phase 19B reintroduces a **review-only Billing tab**: it shows
- * CPT codes, charges, and insurance status as flat text labels for
- * administrative review and explicitly disables every interactive
- * billing action (no Submit Claim, no Auto-code, no Auto-bill, no
- * Send Claim, no Charge Patient, no Bill Insurance). The disclaimer
- * banner makes the contract loud: ChartNav does not auto-code,
- * auto-bill, or submit claims.
+ * Phase 19F removes the Billing tab entirely. ChartNav does not
+ * bill, code, submit claims, or handle insurance; the prior
+ * "review-only Billing tab" was a buyer-trust risk and is
+ * replaced by the existing Chat tab as the internal-comms
+ * surface. The Communications tab covers internal staff handoffs.
  *
  * Safe-claims contract — every interactive label below has been
  * screened against the Phase 17B / 18 forbidden-claims list:
  *
- *   - NO automated billing surface. Billing tab is administrative
- *     review-only (View / Add Note / Mark Reviewed). All claim-
- *     submission / auto-code / auto-bill / auto-charge actions are
- *     forbidden as button labels.
+ *   - NO Billing surface at all. ChartNav does not bill, code,
+ *     submit claims, or handle insurance. CPT / Charges /
+ *     Insurance / Submit Claim / Auto-code / Auto-bill / Send
+ *     Claim / Charge Patient / Bill Insurance / Payment / Claim
+ *     are forbidden as visible UI labels anywhere in the
+ *     workspace.
  *   - NO "Submit order" / "Place order" / "Send referral" /
  *     "Bill" / "Code" interactive buttons. The Orders & Labs tab is
  *     review-only ("View" / "Mark reviewed" / "Add note").
@@ -50,8 +50,10 @@ import {
 import {
   encounterSourceLabel,
   allowedNextStatuses,
+  EVENT_TYPES,
   type Encounter,
   type Me,
+  type WorkflowEvent,
 } from "./api";
 import { NoteWorkspace } from "./NoteWorkspace";
 import { EyeDiagramPanel } from "./EyeDiagramPanel";
@@ -78,22 +80,25 @@ type TabId =
   | "calendar"
   | "communications"
   | "documents"
-  | "chat"
-  | "billing";
+  | "chat";
 
 type TabSpec = { id: TabId; label: string };
 
+// Phase 19F — exactly 9 tabs. The Billing tab removed in this
+// phase; ChartNav does not bill, code, submit claims, or handle
+// insurance, so the prior review-only Billing tab is replaced by
+// the existing Chat (internal staff) and Communications (internal
+// handoffs) surfaces.
 const TABS: TabSpec[] = [
   { id: "overview", label: "Overview" },
   { id: "clinical", label: "Clinical / Ophthalmology" },
   { id: "documentation", label: "Documentation / EMR/EHR" },
   { id: "imaging", label: "Imaging" },
-  { id: "orders-labs", label: "Orders & Labs" },
+  { id: "orders-labs", label: "Labs / Orders Review" },
   { id: "calendar", label: "Calendar" },
   { id: "communications", label: "Communications" },
   { id: "documents", label: "Documents" },
   { id: "chat", label: "Chat" },
-  { id: "billing", label: "Billing" },
 ];
 
 // ---------------------------------------------------------------
@@ -109,6 +114,20 @@ export interface ClinicalTabbedWorkspaceProps {
   onSetPendingStatus: (s: string | null) => void;
   onRefreshDetail: () => void;
   /**
+   * Phase 19F — Timeline (workflow events) + the Add timeline event
+   * composer used to render below the workspace in App.tsx. They
+   * are now embedded inside the Overview tab's Timeline card so
+   * the demo doesn't show a floating "Add event" section after the
+   * tab system. The composer is hidden when `isDemo === true`
+   * (the read-only Timeline still renders) so the buyer demo
+   * doesn't expose a free-text dev composer.
+   */
+  events: WorkflowEvent[];
+  eventAllowed: boolean;
+  pendingEvent: boolean;
+  onAddEvent: (type: string, data: string) => Promise<void> | void;
+  isDemo: boolean;
+  /**
    * The original encounter-detail rendered an "external encounter"
    * banner and a "bridged refresh" banner above the body. To avoid
    * duplicating those code paths, the parent App.tsx still renders
@@ -120,8 +139,19 @@ export interface ClinicalTabbedWorkspaceProps {
 export function ClinicalTabbedWorkspace(
   props: ClinicalTabbedWorkspaceProps
 ): JSX.Element {
-  const { encounter, identity, me, pendingStatus, onTransition, bannersSlot } =
-    props;
+  const {
+    encounter,
+    identity,
+    me,
+    pendingStatus,
+    onTransition,
+    bannersSlot,
+    events,
+    eventAllowed,
+    pendingEvent,
+    onAddEvent,
+    isDemo,
+  } = props;
 
   const [active, setActive] = useState<TabId>("overview");
 
@@ -137,6 +167,11 @@ export function ClinicalTabbedWorkspace(
             me={me}
             pendingStatus={pendingStatus}
             onTransition={onTransition}
+            events={events}
+            eventAllowed={eventAllowed}
+            pendingEvent={pendingEvent}
+            onAddEvent={onAddEvent}
+            isDemo={isDemo}
           />
         )}
         {active === "clinical" && <ClinicalTab />}
@@ -166,7 +201,6 @@ export function ClinicalTabbedWorkspace(
         )}
         {active === "documents" && <DocumentsTab encounter={encounter} />}
         {active === "chat" && <ChatTab encounter={encounter} me={me} />}
-        {active === "billing" && <BillingTab />}
       </div>
     </div>
   );
@@ -181,14 +215,19 @@ function PatientEncounterHeader({
 }: {
   encounter: Encounter;
 }): JSX.Element {
-  // Phase 19B — clinical demographic strip. The Encounter type
-  // currently carries: patient_identifier, patient_name,
-  // provider_name, location_id, status, scheduled times. Fields
-  // like DOB / phone / gender / allergies / conditions /
-  // medications / last visit / next appointment are not on the
-  // type yet; they render as `—` placeholders so the strip
-  // matches the clinical reference layout without inventing data.
-  const lastVisit = fmt(encounter.completed_at);
+  // Phase 19F — replace the bare em-dash placeholders with
+  // intentional empty-state copy so the demo doesn't read as
+  // unfinished. The Encounter type still doesn't carry DOB /
+  // phone / gender / allergies / conditions / medications / next
+  // appointment; rather than invent fake PHI, every absent field
+  // labels its own absence ("Not available in demo" /
+  // "Not recorded" / "No allergies recorded" / "No active meds
+  // recorded" / "Not scheduled"). Last Visit + Provider remain
+  // wired to real (seeded) encounter data when present.
+  const lastVisit = encounter.completed_at
+    ? fmt(encounter.completed_at)
+    : "No prior visit on file";
+  const provider = encounter.provider_name ?? "Not assigned";
   return (
     <header
       className="ctw__patient-header"
@@ -200,14 +239,16 @@ function PatientEncounterHeader({
         </h2>
         <div className="ctw__patient-meta">
           <span data-testid="ctw-patient-dob">
-            <span className="ctw__meta-label">DOB</span> —
+            <span className="ctw__meta-label">DOB</span>{" "}
+            <span className="ctw__meta-empty">Not available in demo</span>
           </span>
           <span data-testid="ctw-patient-mrn">
             <span className="ctw__meta-label">MRN</span>{" "}
             {encounter.patient_identifier}
           </span>
           <span data-testid="ctw-patient-phone">
-            <span className="ctw__meta-label">Phone</span> —
+            <span className="ctw__meta-label">Phone</span>{" "}
+            <span className="ctw__meta-empty">Not available in demo</span>
           </span>
         </div>
         <div className="ctw__encounter-line">
@@ -226,7 +267,7 @@ function PatientEncounterHeader({
           </span>
           <span data-testid="ctw-encounter-provider">
             <span className="ctw__meta-label">Provider</span>{" "}
-            {encounter.provider_name ?? "—"}
+            {provider}
           </span>
           <span data-testid="ctw-encounter-location">
             <span className="ctw__meta-label">Location</span> #
@@ -246,26 +287,26 @@ function PatientEncounterHeader({
         className="ctw__demographics"
         data-testid="ctw-patient-demographics"
       >
-        <DemographicCell label="Gender" testid="ctw-demo-gender">
-          —
+        <DemographicCell label="Gender" testid="ctw-demo-gender" empty>
+          Not recorded
         </DemographicCell>
-        <DemographicCell label="Allergies" testid="ctw-demo-allergies">
-          —
+        <DemographicCell label="Allergies" testid="ctw-demo-allergies" empty>
+          No allergies recorded
         </DemographicCell>
-        <DemographicCell label="Conditions" testid="ctw-demo-conditions">
-          —
+        <DemographicCell label="Conditions" testid="ctw-demo-conditions" empty>
+          No conditions recorded
         </DemographicCell>
-        <DemographicCell label="Medications" testid="ctw-demo-medications">
-          —
+        <DemographicCell label="Medications" testid="ctw-demo-medications" empty>
+          No active meds recorded
         </DemographicCell>
         <DemographicCell label="Last Visit" testid="ctw-demo-last-visit">
           {lastVisit}
         </DemographicCell>
-        <DemographicCell label="Next Appt" testid="ctw-demo-next-appt">
-          —
+        <DemographicCell label="Next Appt" testid="ctw-demo-next-appt" empty>
+          Not scheduled
         </DemographicCell>
         <DemographicCell label="Provider" testid="ctw-demo-provider">
-          {encounter.provider_name ?? "—"}
+          {provider}
         </DemographicCell>
       </div>
     </header>
@@ -276,15 +317,23 @@ function DemographicCell({
   label,
   testid,
   children,
+  empty,
 }: {
   label: string;
   testid: string;
   children: ReactNode;
+  empty?: boolean;
 }): JSX.Element {
   return (
     <div className="ctw__demo-cell" data-testid={testid}>
       <span className="ctw__demo-label">{label}</span>
-      <span className="ctw__demo-value">{children}</span>
+      <span
+        className={
+          "ctw__demo-value" + (empty ? " ctw__demo-value--empty" : "")
+        }
+      >
+        {children}
+      </span>
     </div>
   );
 }
@@ -330,11 +379,21 @@ function OverviewTab({
   me,
   pendingStatus,
   onTransition,
+  events,
+  eventAllowed,
+  pendingEvent,
+  onAddEvent,
+  isDemo,
 }: {
   encounter: Encounter;
   me: Me;
   pendingStatus: string | null;
   onTransition: (status: string) => Promise<void>;
+  events: WorkflowEvent[];
+  eventAllowed: boolean;
+  pendingEvent: boolean;
+  onAddEvent: (type: string, data: string) => Promise<void> | void;
+  isDemo: boolean;
 }): JSX.Element {
   const role = me.role;
   const nativeEncounter =
@@ -350,7 +409,9 @@ function OverviewTab({
           {encounter.patient_name ?? encounter.patient_identifier}
         </Field>
         <Field label="MRN">{encounter.patient_identifier}</Field>
-        <Field label="Provider">{encounter.provider_name ?? "—"}</Field>
+        <Field label="Provider">
+          {encounter.provider_name ?? "Not assigned"}
+        </Field>
       </Card>
 
       <Card title="Visit summary">
@@ -372,11 +433,12 @@ function OverviewTab({
         </EmptyState>
       </Card>
 
-      <Card title="Timeline">
-        <Field label="Scheduled">{fmt(encounter.scheduled_at)}</Field>
-        <Field label="Started">{fmt(encounter.started_at)}</Field>
-        <Field label="Completed">{fmt(encounter.completed_at)}</Field>
-        <Field label="Created">{fmt(encounter.created_at)}</Field>
+      <Card title="Recent encounters">
+        <EmptyState>
+          The encounter list lives in the left sidebar. Recent-encounter
+          history per patient will surface here once the backend
+          endpoint lands.
+        </EmptyState>
       </Card>
 
       <Card title="Tasks">
@@ -387,12 +449,51 @@ function OverviewTab({
         </EmptyState>
       </Card>
 
-      <Card title="Recent encounters">
+      <Card title="Favorites">
         <EmptyState>
-          The encounter list lives in the left sidebar. Recent-encounter
-          history per patient will surface here once the backend
-          endpoint lands.
+          Pin frequently-used clinical shortcuts and templates here.
+          The library lives in the Clinical / Ophthalmology tab and
+          syncs into this panel once a clinician marks favorites.
         </EmptyState>
+      </Card>
+
+      <Card title="Timeline" wide>
+        <div
+          className="ctw-timeline__stamps"
+          data-testid="ctw-timeline-stamps"
+        >
+          <Field label="Scheduled">{fmt(encounter.scheduled_at)}</Field>
+          <Field label="Started">{fmt(encounter.started_at)}</Field>
+          <Field label="Completed">{fmt(encounter.completed_at)}</Field>
+          <Field label="Created">{fmt(encounter.created_at)}</Field>
+        </div>
+        <h4 className="ctw-timeline__heading" data-testid="ctw-timeline-heading">
+          Timeline ({events.length})
+        </h4>
+        {events.length > 0 ? (
+          <ul className="ctw-timeline__events">
+            {events.map((ev) => (
+              <li className="event-item" key={ev.id}>
+                <div className="event-item__head">
+                  <span className="event-item__type">{ev.event_type}</span>
+                  <span className="event-item__when">{fmt(ev.created_at)}</span>
+                </div>
+                <div className="event-item__data">{renderEventData(ev)}</div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <EmptyState>
+            No timeline events recorded yet for this encounter.
+          </EmptyState>
+        )}
+        <TimelineEventComposer
+          eventAllowed={eventAllowed}
+          pendingEvent={pendingEvent}
+          onAddEvent={onAddEvent}
+          isDemo={isDemo}
+          role={role}
+        />
       </Card>
 
       <Card title="Allowed transitions" wide>
@@ -422,6 +523,131 @@ function OverviewTab({
       </Card>
     </div>
   );
+}
+
+// Phase 19F — Add timeline event composer. Was a floating section
+// in App.tsx below the workspace; now embedded inside Overview's
+// Timeline card. Hidden in `?demo=1` so the buyer demo never sees
+// the dev composer (the read-only timeline still renders).
+// Preserves the `event-form` / `event-denied` / `event-type` /
+// `event-data` / `event-submit` testids App.test.tsx asserts on.
+function TimelineEventComposer({
+  eventAllowed,
+  pendingEvent,
+  onAddEvent,
+  isDemo,
+  role,
+}: {
+  eventAllowed: boolean;
+  pendingEvent: boolean;
+  onAddEvent: (type: string, data: string) => Promise<void> | void;
+  isDemo: boolean;
+  role: Me["role"];
+}): JSX.Element {
+  if (isDemo) {
+    return (
+      <div
+        className="subtle-note ctw-timeline__demo-note"
+        data-testid="event-composer-demo-hidden"
+      >
+        Add timeline event is hidden in demo mode. The timeline above
+        is read-only.
+      </div>
+    );
+  }
+  if (!eventAllowed) {
+    return (
+      <div className="subtle-note" data-testid="event-denied">
+        Your role (<code>{role}</code>) cannot add workflow events.
+        Switch to an admin or clinician identity to write.
+      </div>
+    );
+  }
+  return (
+    <div className="ctw-timeline__composer">
+      <h4 className="ctw-timeline__composer-heading">Add timeline event</h4>
+      <TimelineEventForm
+        pending={pendingEvent}
+        onSubmit={(type, data) => onAddEvent(type, data)}
+      />
+    </div>
+  );
+}
+
+function TimelineEventForm({
+  pending,
+  onSubmit,
+}: {
+  pending: boolean;
+  onSubmit: (type: string, data: string) => void | Promise<void>;
+}): JSX.Element {
+  const [type, setType] = useState("");
+  const [data, setData] = useState("");
+  const disabled = !type.trim() || pending;
+  return (
+    <form
+      className="event-form"
+      data-testid="event-form"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        if (disabled) return;
+        await onSubmit(type.trim(), data);
+        setType("");
+        setData("");
+      }}
+    >
+      <select
+        aria-label="Event type"
+        data-testid="event-type"
+        value={type}
+        onChange={(e) => setType(e.target.value)}
+        required
+      >
+        <option value="" disabled>
+          Select event type…
+        </option>
+        {EVENT_TYPES.map((t) => (
+          <option key={t} value={t}>
+            {t}
+          </option>
+        ))}
+      </select>
+      <textarea
+        data-testid="event-data"
+        placeholder='event_data (optional JSON, e.g. {"comment":"..."})'
+        value={data}
+        onChange={(e) => setData(e.target.value)}
+      />
+      <div className="row">
+        <button
+          type="submit"
+          className="btn btn--primary"
+          disabled={disabled}
+          data-testid="event-submit"
+        >
+          {pending ? "Appending…" : "Append event"}
+        </button>
+        <span className="subtle-note">
+          JSON is parsed if valid; otherwise sent as a string.
+        </span>
+      </div>
+    </form>
+  );
+}
+
+function renderEventData(ev: WorkflowEvent): string {
+  const d = ev.event_data;
+  if (d == null) return "—";
+  if (typeof d === "string") return d;
+  if (typeof d === "object") {
+    return Object.entries(d as Record<string, unknown>)
+      .map(
+        ([k, v]) =>
+          `${k}: ${typeof v === "object" ? JSON.stringify(v) : String(v)}`
+      )
+      .join("  ·  ");
+  }
+  return String(d);
 }
 
 // ---------------------------------------------------------------
@@ -1061,72 +1287,13 @@ function ChatTab({
   );
 }
 
-// ---------------------------------------------------------------
-// Billing — REVIEW-ONLY administrative placeholder (Phase 19B).
-//
-// CPT codes, charges, and insurance status surface as flat text
-// for administrative review. Every interactive billing action
-// (Submit Claim, Auto-code, Auto-bill, Send Claim, Charge Patient,
-// Bill Insurance) is forbidden as a label here — the disclaimer
-// banner makes the contract explicit. Review-only actions match
-// the Orders & Labs tab: View / Add Note / Mark Reviewed.
-// ---------------------------------------------------------------
-
-function BillingTab(): JSX.Element {
-  return (
-    <div className="ctw-grid" data-testid="ctw-billing">
-      <div
-        className="ctw__disclaimer"
-        data-testid="ctw-billing-disclaimer"
-        role="note"
-      >
-        <strong>Billing review placeholder.</strong> ChartNav does
-        not auto-code, auto-bill, or submit claims. CPT codes and
-        charges shown below come from the practice's existing
-        billing system and surface here for administrative review
-        only.
-      </div>
-      <Card title="CPT Codes">
-        <EmptyState>
-          CPT codes attached to this encounter by the practice's
-          billing system surface here for review. No code is
-          generated, edited, or submitted by ChartNav.
-        </EmptyState>
-        <ReviewOnlyActionRow />
-      </Card>
-      <Card title="Charges">
-        <EmptyState>
-          Charges entered upstream surface here as a flat read-only
-          list. ChartNav does not calculate or post charges.
-        </EmptyState>
-        <ReviewOnlyActionRow />
-      </Card>
-      <Card title="Insurance Status">
-        <EmptyState>
-          Eligibility and authorization state from the practice's
-          payer integration surface here. ChartNav does not verify
-          eligibility or contact payers.
-        </EmptyState>
-        <ReviewOnlyActionRow />
-      </Card>
-      <Card title="Billing Review Notes" wide>
-        <EmptyState>
-          Administrative review notes attached to a CPT code or
-          charge. Use <strong>Add note</strong> after reviewing;
-          {" "}
-          <strong>Mark reviewed</strong> closes the row.
-        </EmptyState>
-        <ReviewOnlyActionRow />
-      </Card>
-      <p className="ctw__footnote">
-        Allowed actions on this tab: <strong>View</strong>,{" "}
-        <strong>Add note</strong>, <strong>Mark reviewed</strong>.
-        ChartNav never auto-codes, auto-bills, charges patients,
-        or submits claims to insurance.
-      </p>
-    </div>
-  );
-}
+// Phase 19F — the prior review-only Billing tab is removed.
+// ChartNav does not bill, code, submit claims, or handle
+// insurance. The Chat tab covers internal staff comms; the
+// Communications tab covers internal handoffs. CPT / Charges /
+// Insurance / Submit Claim / Auto-code / Auto-bill / Send Claim /
+// Charge Patient / Bill Insurance / Payment / Claim are forbidden
+// as visible UI labels everywhere in the workspace.
 
 function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);

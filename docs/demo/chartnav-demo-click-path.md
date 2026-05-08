@@ -26,9 +26,9 @@ demo data loaded (`make reset-db` runs both alembic + seed).
 
 ---
 
-## Tab map (Phase 19 + 19B layout)
+## Tab map (Phase 19F layout — 9 tabs, no Billing)
 
-The encounter detail is a 10-tab clinical workspace. Two tabs
+The encounter detail is a 9-tab clinical workspace. Two tabs
 hold the demo content:
 
 | Tab | What's inside | Which steps use it |
@@ -36,23 +36,26 @@ hold the demo content:
 | **Documentation / EMR/EHR** | Scribe · Patient summary · Pre-visit brief · Provider action queue | Steps 0, 1, 4, 5, 6 |
 | **Imaging** | OD/OS retinal diagram | Steps 2, 3 |
 
-Other tabs (Overview · Clinical · Orders & Labs · Calendar ·
-Communications · Documents · Chat · Billing) are not part of
-the 5-minute click path. Skip them unless a buyer specifically
-asks.
+Other tabs (Overview · Clinical · Labs / Orders Review ·
+Calendar · Communications · Documents · Chat) are not part
+of the 5-minute click path. Skip them unless a buyer
+specifically asks.
 
-**Phase 19B notes:**
-- *Orders & Labs* is review-only (View / Mark reviewed / Add
-  note). ChartNav does not place lab / imaging / procedure
-  orders.
-- *Billing* is an administrative review placeholder. The tab
-  carries an explicit disclaimer: *"ChartNav does not auto-code,
-  auto-bill, or submit claims."* Allowed actions are View / Add
-  note / Mark reviewed only — no Submit Claim, Auto-code,
-  Auto-bill, Send Claim, Charge Patient, or Bill Insurance
-  surfaces.
-- *Chat* remains a frontend-only internal staff thread (Phase 19);
-  data persists to localStorage on the operator's machine.
+**Phase 19F notes:**
+- *Labs / Orders Review* is review-only (View / Mark reviewed
+  / Add note). ChartNav does not place lab / imaging /
+  procedure orders.
+- **Billing is intentionally absent.** ChartNav does not bill,
+  code, submit claims, or handle insurance. The Chat tab covers
+  internal staff comms; the Communications tab covers internal
+  handoffs. CPT / Charges / Insurance / Submit Claim /
+  Auto-code / Auto-bill / Send Claim / Charge Patient / Bill
+  Insurance / Payment / Claim are forbidden as visible UI
+  labels anywhere in the workspace.
+- *Chat* remains a frontend-only internal staff thread (Phase
+  19); data persists to localStorage on the operator's machine.
+  The Chat tab is the buyer-visible replacement for the prior
+  review-only Billing surface.
 
 ---
 
