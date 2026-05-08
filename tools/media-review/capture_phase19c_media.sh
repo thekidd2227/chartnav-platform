@@ -321,32 +321,67 @@ echo "   ok — README, REVIEW_ORDER, CLIP_CAPTURE_INSTRUCTIONS, manifest writte
 
 # ---------------------------------------------------------------
 # 4. Optional Playwright capture.
+#
+# Phase 19C correction: we drive capture via the existing
+# `npx playwright test` harness instead of a standalone Node
+# script. The harness's `webServer:` already boots a clean
+# isolated stack on ports 8001 / 5174 against an ephemeral
+# SQLite seed — same setup CI uses every day, so it sidesteps
+# corrupted-node_modules / mcp-module load failures.
+#
+# This means the operator does NOT need `make dev` running.
+# Playwright will spin its own stack up and tear it down.
 # ---------------------------------------------------------------
 
 echo
-echo "4. Screenshot capture (Playwright headless)"
+echo "4. Screenshot capture (Playwright test runner)"
 
 if ! command -v node >/dev/null 2>&1; then
   echo "   skip — node not on PATH; install Node 18+ to enable capture"
-  echo "   You can still review templates + archive copies."
+  echo "   You can still review the templates + archive copies."
   exit 0
 fi
 
-# Liveness probe — short timeout so we fail fast if the operator
-# hasn't booted the dev stack.
-if ! curl -sSf -o /dev/null --max-time 3 "$BASE_URL"; then
-  echo "   skip — could not reach $BASE_URL"
-  echo "   Boot the local stack first:"
-  echo "     cd $REPO_ROOT"
-  echo "     make dev"
-  echo "   Then re-run this script. Templates + archive copies are"
-  echo "   already in place."
+if [ ! -d "$REPO_ROOT/apps/web/node_modules/@playwright/test" ]; then
+  echo "   skip — apps/web/node_modules is missing or incomplete."
+  echo "   Run this first to populate it:"
+  echo "     ( cd $REPO_ROOT/apps/web && npm install )"
+  echo "     ( cd $REPO_ROOT/apps/web && npx playwright install chromium )"
+  echo "   Then re-run this script."
   exit 0
 fi
 
-node "$SCRIPT_DIR/capture_phase19c_screenshots.mjs" \
-  --out "$REVIEW_DIR/01_New_Screenshots" \
-  --base-url "$BASE_URL"
+# Sanity: the spec we delegate to.
+SPEC="apps/web/tests/media-review/capture-phase19b.spec.ts"
+if [ ! -f "$REPO_ROOT/$SPEC" ]; then
+  echo "   skip — capture spec missing at $SPEC"
+  echo "   Make sure your branch is up to date: git pull"
+  exit 0
+fi
+
+# Run from the apps/web workspace so playwright.config.ts is
+# picked up. CAPTURE_OUT_DIR is honored by the spec.
+(
+  cd "$REPO_ROOT/apps/web"
+  CAPTURE_OUT_DIR="$REVIEW_DIR/01_New_Screenshots" \
+    npx playwright test \
+      --project=chromium \
+      --reporter=list \
+      tests/media-review/capture-phase19b.spec.ts
+) || {
+  echo
+  echo "   Capture failed. Common fixes:"
+  echo "     1. ( cd $REPO_ROOT/apps/web && npx playwright install chromium )"
+  echo "     2. The spec drives a self-managed stack — make sure"
+  echo "        ports 8001 and 5174 are FREE before re-running."
+  echo "        \`lsof -ti tcp:8001 tcp:5174 | xargs -r kill -9\`"
+  echo "     3. The Python venv at apps/api/.venv must exist;"
+  echo "        run \`make install\` from the repo root if missing."
+  echo
+  echo "   Templates + archive copies are already in place at:"
+  echo "     $REVIEW_DIR"
+  exit 0
+}
 
 echo
 echo "Done. Review folder: $REVIEW_DIR"
