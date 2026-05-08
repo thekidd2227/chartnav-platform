@@ -277,11 +277,17 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
    placeholders for future phases.
    ============================================================ */
 .sidebar-nav {
-  padding: 16px 12px 8px;
+  /* Phase 19E — brand-red/burgundy sidebar nav. Scoped to the
+     grouped-nav block ONLY: the encounter list + filters below
+     keep their pale --cn-bg-alt background so the work surface
+     stays clean and readable. The bottom border separates the
+     two zones visually. */
+  background: #7f1d1d;
+  padding: 16px 12px 14px;
   display: flex;
   flex-direction: column;
   gap: 14px;
-  border-bottom: 1px solid var(--cn-line);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.18);
 }
 .sidebar-nav__group {
   display: flex;
@@ -293,10 +299,9 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  /* Phase 19B fix — group labels live on --cn-bg-alt (#EEF2F5);
-     --cn-dim (#64748B) is only 3.77:1 there, fails WCAG AA. Use
-     --cn-muted (#475569) which is ~5.9:1 on the sidebar bg. */
-  color: var(--cn-muted);
+  /* Phase 19E — light pink (#fecaca) on burgundy yields ~8.9:1,
+     well above WCAG AA 4.5:1 for normal text. */
+  color: #fecaca;
   padding: 0 6px;
   margin-bottom: 2px;
 }
@@ -316,29 +321,37 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
   padding: 7px 10px;
   font: inherit;
   font-size: 13px;
-  color: var(--cn-fg);
+  /* Phase 19E — white nav text on burgundy yields ~12.6:1. */
+  color: #ffffff;
   border-radius: 6px;
   cursor: pointer;
-  transition: background 0.15s var(--cn-ease), color 0.15s var(--cn-ease);
+  transition: background 0.15s var(--cn-ease),
+              color 0.15s var(--cn-ease),
+              box-shadow 0.15s var(--cn-ease);
 }
 .sidebar-nav__item:hover:not(:disabled) {
-  background: rgba(15, 118, 110, 0.06);
+  /* Phase 19E — subtle white-overlay hover on burgundy. */
+  background: rgba(255, 255, 255, 0.10);
+  color: #ffffff;
 }
 .sidebar-nav__item--active {
-  /* Phase 19B fix — the previous 12% teal tint produced an
-     effective ~#D4E2E5 background on which #0f766e text sits at
-     ~4.0:1 (fails AA 4.5:1). White bg gives 5.4:1 + reads as a
-     "selected" item; the left stripe carries the visual weight. */
-  background: var(--cn-surface);
-  color: #0f766e;
+  /* Phase 19E — teal active accent on burgundy. The 3px inset
+     left stripe uses --ctw-accent (#14b8a6) so it punches off
+     the deep red without going neon. The slight black-tint bg
+     (rgba(0,0,0,0.18)) deepens the active row to read as
+     "selected"; white text stays high-contrast (~10.5:1 on
+     the resulting effective tone). */
+  background: rgba(0, 0, 0, 0.18);
+  color: #ffffff;
   font-weight: 600;
-  box-shadow: inset 3px 0 0 #0f766e;
+  box-shadow: inset 3px 0 0 #14b8a6;
 }
 .sidebar-nav__item--disabled,
 .sidebar-nav__item:disabled {
-  /* Disabled controls are exempt from axe color-contrast, but
-     the visible color is intentionally muted. */
-  color: var(--cn-dim);
+  /* Phase 19E — muted-white disabled state on burgundy. Disabled
+     form controls are axe color-contrast exempt; this still
+     reads as "not available" without going invisible. */
+  color: rgba(255, 255, 255, 0.55);
   cursor: not-allowed;
 }
 
@@ -1651,7 +1664,13 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
   display: flex;
   flex-direction: column;
   gap: 6px;
-  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.04);
+  /* Phase 19E — 2px brand-red micro-accent at the top of the
+     patient header, layered over the existing 1px-bottom hairline
+     shadow. The inset shadow respects --cn-radius-md so the strip
+     follows the rounded top corners cleanly. */
+  box-shadow:
+    inset 0 2px 0 #dc2626,
+    0 1px 0 rgba(15, 23, 42, 0.04);
 }
 .ctw__patient-line {
   display: flex;
@@ -1753,8 +1772,15 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
               border-color 0.18s var(--cn-ease);
 }
 .ctw-card:hover {
+  /* Phase 19E — subtle red-tinted hover shadow (alpha 0.10)
+     replaces the global --cn-shadow-md (teal-flavored) so cards
+     pick up the brand red accent on hover without screaming
+     "danger." Kept at 6px y-offset / 18px blur so it reads as a
+     gentle lift, not a glow. */
   border-color: var(--cn-line-strong);
-  box-shadow: var(--cn-shadow-md);
+  box-shadow:
+    0 6px 18px rgba(220, 38, 38, 0.10),
+    0 1px 3px rgba(15, 23, 42, 0.05);
 }
 .ctw-card--wide { grid-column: 1 / -1; }
 .ctw-card__title {
