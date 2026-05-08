@@ -603,4 +603,35 @@ describe("ChartNav frontend", () => {
     });
     expect(await screen.findByTestId("banner-ok")).toHaveTextContent("draft_ready");
   });
+
+  // -------------------------------------------------------------
+  // Phase 19F — sidebar contract.
+  //
+  // The grouped sidebar must NOT surface Billing or any patient-
+  // messaging quick action, and must surface Documents (ADMIN) +
+  // Chat (OPERATIONS) + Internal Chat Note (Quick Actions).
+  // -------------------------------------------------------------
+
+  it("Phase 19F — sidebar drops Billing, Send Message, New Patient and surfaces Documents / Chat / Internal Chat Note", async () => {
+    await waitForAdminLoaded();
+    const nav = screen.getByTestId("sidebar-nav");
+
+    // Removed surfaces.
+    expect(within(nav).queryByTestId("sidebar-item-billing")).toBeNull();
+    expect(within(nav).queryByTestId("sidebar-item-send-message")).toBeNull();
+    expect(within(nav).queryByTestId("sidebar-item-new-patient")).toBeNull();
+    // No "Billing" text anywhere in the sidebar.
+    expect(nav.textContent || "").not.toMatch(/\bBilling\b/);
+    // No "Send Message" text anywhere in the sidebar.
+    expect(nav.textContent || "").not.toMatch(/\bSend Message\b/i);
+
+    // New surfaces.
+    expect(
+      within(nav).getByTestId("sidebar-item-documents")
+    ).toBeInTheDocument();
+    expect(within(nav).getByTestId("sidebar-item-chat")).toBeInTheDocument();
+    expect(
+      within(nav).getByTestId("sidebar-item-internal-chat-note")
+    ).toBeInTheDocument();
+  });
 });

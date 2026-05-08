@@ -1636,21 +1636,50 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
   white-space: nowrap;
 }
 
-/* Phase 19B — Billing tab disclaimer banner. Renders the
-   "ChartNav does not auto-code, auto-bill, or submit claims"
-   contract loud and on-screen. */
-.ctw__disclaimer {
-  grid-column: 1 / -1;
-  background: #fffbeb;
-  border: 1px solid #fcd34d;
-  border-left: 4px solid #d97706;
-  border-radius: var(--cn-radius-md);
-  padding: 12px 16px;
-  font-size: 13px;
-  color: #78350f;
-  line-height: 1.5;
+/* Phase 19F — intentional-empty-state copy for the patient-header
+   meta line (DOB / Phone) and the demographic strip. Slightly
+   smaller, italic, --cn-dim so the absent-data labels read as
+   "intentional placeholder" rather than "missing data." */
+.ctw__meta-empty,
+.ctw__demo-value--empty {
+  color: var(--cn-dim);
+  font-style: italic;
+  font-weight: 400;
 }
-.ctw__disclaimer strong { color: #92400e; }
+
+/* Phase 19F — Timeline card is now a wide Overview card holding
+   encounter timestamps + workflow events list + composer. */
+.ctw-timeline__stamps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 24px;
+  margin-bottom: 4px;
+}
+.ctw-timeline__heading,
+.ctw-timeline__composer-heading {
+  margin: 8px 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cn-fg);
+}
+.ctw-timeline__events {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ctw-timeline__composer {
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--cn-line);
+}
+.ctw-timeline__demo-note {
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--cn-line);
+}
 
 /* Sticky patient + encounter header */
 .ctw__patient-header {
