@@ -1577,13 +1577,23 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
 }
 
 /* Phase 19B — demographic strip below the patient/encounter
-   line, matching the clinical reference design. */
+   line, matching the clinical reference design. Phase 19D
+   polish: subtle background tint so the strip reads as a
+   contained band (not "the bottom of the header"), tighter
+   vertical rhythm, and a default muted value tone so the "—"
+   placeholders for fields not yet wired (Gender / Allergies /
+   Conditions / Medications / Next Appt — those columns aren't
+   on the Encounter type yet) look intentional rather than
+   buggy. */
 .ctw__demographics {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 12px;
-  padding-top: 10px;
+  gap: 14px 18px;
+  margin-top: 10px;
+  padding: 12px 14px;
   border-top: 1px solid var(--ctw-border);
+  border-radius: var(--cn-radius-md);
+  background: rgba(15, 23, 42, 0.025);
 }
 @media (max-width: 1100px) {
   .ctw__demographics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -1594,18 +1604,19 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
 .ctw__demo-cell {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   min-width: 0;
 }
 .ctw__demo-label {
   font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ctw-muted);
 }
 .ctw__demo-value {
   font-size: 13px;
+  font-weight: 500;
   color: var(--ctw-fg);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1715,7 +1726,9 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
 .ctw-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
+  /* Phase 19D — slightly more breathing room between cards
+     so they read as discrete review surfaces, not a wall. */
+  gap: 18px;
 }
 @media (max-width: 900px) {
   .ctw-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1726,11 +1739,22 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
 .ctw-card {
   background: var(--cn-surface);
   border: 1px solid var(--cn-line);
-  border-radius: var(--cn-radius-md);
-  padding: 14px 16px;
+  /* Phase 19D — bumped from --cn-radius-md (10px) to --cn-radius-lg
+     (14px) for a softer "rounded-2xl"-style border, and added
+     --cn-shadow-sm so cards lift visibly off the panel
+     background. transition wires a subtle hover affordance. */
+  border-radius: var(--cn-radius-lg);
+  box-shadow: var(--cn-shadow-sm);
+  padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  transition: box-shadow 0.18s var(--cn-ease),
+              border-color 0.18s var(--cn-ease);
+}
+.ctw-card:hover {
+  border-color: var(--cn-line-strong);
+  box-shadow: var(--cn-shadow-md);
 }
 .ctw-card--wide { grid-column: 1 / -1; }
 .ctw-card__title {
