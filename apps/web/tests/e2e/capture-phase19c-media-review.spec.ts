@@ -10,22 +10,32 @@ import { resolve } from "node:path";
  * into the directory pointed to by the `CAPTURE_OUT_DIR` env
  * var (default: `$HOME/Desktop/Chartnav/ChartNav_Media_Review_Phase19B/01_New_Screenshots`).
  *
+ * Lives in `tests/e2e/` so the project's `playwright.config.ts`
+ * (which sets `testDir: "./tests/e2e"`) discovers it. The
+ * `test.skip()` gate below means this spec does NOTHING unless
+ * the operator explicitly sets `CAPTURE_OUT_DIR` — so a normal
+ * `npx playwright test` for e2e dev work still runs only the
+ * workflow / a11y suites, not capture. CI also doesn't set
+ * `CAPTURE_OUT_DIR`, so even if a future CI change widens the
+ * spec list, capture stays inert.
+ *
  * Why this exists as a Playwright TEST rather than a standalone
- * Node script: the existing `playwright.config.ts` already boots
- * both the API (port 8001) and the web (port 5174) cleanly via
- * `webServer:`, against an ephemeral SQLite file with the seeded
- * fake-data demo. CI uses this exact harness, so the Playwright
- * install is known-good. A direct `import("playwright")` from a
- * standalone script can hit the corrupted-node_modules edge
- * (e.g. `Cannot find module './mcp/test/browserBackend'`); using
- * `npx playwright test` sidesteps it.
+ * Node script: `playwright.config.ts` already boots both the API
+ * (port 8001) and the web (port 5174) cleanly via `webServer:`,
+ * against an ephemeral SQLite file with the seeded fake-data
+ * demo. CI uses this exact harness, so the Playwright install
+ * is known-good. A direct `import("playwright")` from a
+ * standalone script can hit corrupted-node_modules edges (e.g.
+ * `Cannot find module './mcp/test/browserBackend'` or
+ * `'./reporters/base'`); using `npx playwright test` sidesteps
+ * those entirely.
  *
  * Usage (Mac, after `bash tools/media-review/capture_phase19c_media.sh`):
  *
  *   CAPTURE_OUT_DIR="$HOME/Desktop/Chartnav/ChartNav_Media_Review_Phase19B/01_New_Screenshots" \
- *     npx --prefix apps/web playwright test \
+ *     npx playwright test \
  *       --project=chromium \
- *       tests/media-review/capture-phase19b.spec.ts
+ *       tests/e2e/capture-phase19c-media-review.spec.ts
  *
  * Safety contract:
  *   - Uses the seeded admin@chartnav.local identity + the
@@ -44,6 +54,18 @@ const OUT_DIR =
     "ChartNav_Media_Review_Phase19B",
     "01_New_Screenshots"
   );
+
+// Skip the entire spec unless the operator explicitly opted in
+// via CAPTURE_OUT_DIR. Without this guard, a normal
+// `npx playwright test` would run capture on every dev's
+// machine and dump 10 PNGs onto their Desktop — surprising
+// and noisy. With the gate, the spec is opt-in and only the
+// helper bash script (which sets the env var) drives it.
+test.skip(
+  !process.env.CAPTURE_OUT_DIR,
+  "Phase 19C capture spec — set CAPTURE_OUT_DIR to enable. " +
+    "Driven via tools/media-review/capture_phase19c_media.sh."
+);
 
 // Tab catalog must match ClinicalTabbedWorkspace.tsx (Phase 19B).
 const TABS: { slug: string; filename: string }[] = [

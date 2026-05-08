@@ -61,7 +61,7 @@ CHARTNAV_MEDIA_REVIEW_DIR="$HOME/path/to/review" \
 | File | Purpose |
 |---|---|
 | `capture_phase19c_media.sh` | Bash entry point — folder bootstrap, archive, template generation, delegation to Playwright |
-| `../../apps/web/tests/media-review/capture-phase19b.spec.ts` | Playwright spec that drives the 10-tab capture using the existing CI-tested harness |
+| `../../apps/web/tests/e2e/capture-phase19c-media-review.spec.ts` | Playwright spec that drives the 10-tab capture using the existing CI-tested harness. Lives in `tests/e2e/` so `playwright.config.ts` discovers it; auto-skips unless `CAPTURE_OUT_DIR` is set so it never runs on a normal e2e dev pass. |
 | `README.md` | This file |
 
 ## Why this delegates to `npx playwright test` instead of running

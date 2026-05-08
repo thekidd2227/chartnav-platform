@@ -351,8 +351,11 @@ if [ ! -d "$REPO_ROOT/apps/web/node_modules/@playwright/test" ]; then
   exit 0
 fi
 
-# Sanity: the spec we delegate to.
-SPEC="apps/web/tests/media-review/capture-phase19b.spec.ts"
+# Sanity: the spec we delegate to. It MUST live under
+# apps/web/tests/e2e/ because playwright.config.ts sets
+# testDir: "./tests/e2e" — specs outside that root are not
+# discovered.
+SPEC="apps/web/tests/e2e/capture-phase19c-media-review.spec.ts"
 if [ ! -f "$REPO_ROOT/$SPEC" ]; then
   echo "   skip — capture spec missing at $SPEC"
   echo "   Make sure your branch is up to date: git pull"
@@ -360,14 +363,16 @@ if [ ! -f "$REPO_ROOT/$SPEC" ]; then
 fi
 
 # Run from the apps/web workspace so playwright.config.ts is
-# picked up. CAPTURE_OUT_DIR is honored by the spec.
+# picked up. CAPTURE_OUT_DIR is honored by the spec — and is
+# REQUIRED: without it the spec auto-skips (so a normal
+# e2e dev run never accidentally writes to Desktop).
 (
   cd "$REPO_ROOT/apps/web"
   CAPTURE_OUT_DIR="$REVIEW_DIR/01_New_Screenshots" \
     npx playwright test \
       --project=chromium \
       --reporter=list \
-      tests/media-review/capture-phase19b.spec.ts
+      tests/e2e/capture-phase19c-media-review.spec.ts
 ) || {
   echo
   echo "   Capture failed. Common fixes:"
