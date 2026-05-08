@@ -59,9 +59,9 @@ URL chip, so buyers never see `localhost:8000` on screen. The
 identity chip reads **Identity Admin · Org 1** with the email
 in the chip's `title=` attribute (Phase 19).
 
-## Tab map (Phase 19 layout)
+## Tab map (Phase 19 + 19B layout)
 
-The encounter detail is now a 9-tab clinical workspace. Two
+The encounter detail is now a 10-tab clinical workspace. Two
 tabs hold the demo content used by the website cuts; capture
 the tab transition (1-second click + panel transition) when
 moving between Documentation and Imaging — that's part of the
@@ -69,14 +69,21 @@ new product feel.
 
 | Tab | What's inside | Used by stages |
 |---|---|---|
-| **Documentation / EMR-EHR** | Scribe · Patient summary · Pre-visit brief · Provider action queue | Stages 1, 4, 5, 6 |
+| **Documentation / EMR/EHR** | Scribe · Patient summary · Pre-visit brief · Provider action queue | Stages 1, 4, 5, 6 |
 | **Imaging** | OD/OS retinal diagram | Stages 2, 3 |
 | **Clinical / Ophthalmology** | Phase 17B Clinical Signal Filtering banner + collapsible groups | Optional hero |
 
-Other tabs (Overview, Labs/Orders Review, Calendar,
-Communications, Documents, Chat) are not part of the seven-stage
+Other tabs (Overview, Orders & Labs, Calendar, Communications,
+Documents, Chat, Billing) are not part of the seven-stage
 website cut and should not appear in the per-stage stills.
-They DO appear in the *9-tab navigation reveal* hero.
+They DO appear in the *10-tab navigation reveal* hero.
+
+**Phase 19B notes:** *Orders & Labs* is a renamed, review-only
+tab (replaces "Labs / Orders Review"); *Billing* is a new
+administrative review placeholder with an explicit
+*"ChartNav does not auto-code, auto-bill, or submit claims"*
+disclaimer. Neither tab is a workflow capture target — they
+exist to show the platform breadth in the navigation reveal.
 
 ---
 
@@ -91,14 +98,14 @@ website use only — they are not in-product features.
   encounter detail with `enc-row-1` (Morgan Lee) selected.
   Identity chip reads **Identity Admin · Org 1**; the API URL
   chip is hidden by `?demo=1`. Show the sticky patient-encounter
-  header and the 9-tab clinical workspace bar (Overview,
-  Clinical, Documentation, Imaging, Labs/Orders Review, Calendar,
-  Communications, Documents, Chat). Land on the **Documentation
-  / EMR-EHR** tab so the scribe / summary / brief / action-queue
+  header and the 10-tab clinical workspace bar (Overview,
+  Clinical, Documentation, Imaging, Orders & Labs, Calendar,
+  Communications, Documents, Chat, Billing). Land on the **Documentation
+  / EMR/EHR** tab so the scribe / summary / brief / action-queue
   panels are visible.
 - **Hero — safety banner.** Tight screenshot of the
   Phase 11 action queue banner copy on the **Documentation /
-  EMR-EHR** tab: *"Provider action suggestions — review required.
+  EMR/EHR** tab: *"Provider action suggestions — review required.
   ChartNav does not create orders, send referrals, message
   patients, or take action automatically."*
 - **Hero — guided demo mode.** Wide screenshot of the workspace
@@ -106,12 +113,12 @@ website use only — they are not in-product features.
   Step 1 of 8 with the *DEMO MODE · fake data only* badge.
   The API URL chip is hidden; the identity chip reads
   **Identity Admin · Org 1**.
-- **Hero — 9-tab navigation reveal.** 5–8 second clip of a
-  deliberate left-to-right hover-pan across the 9-tab bar of
+- **Hero — 10-tab navigation reveal.** 5–8 second clip of a
+  deliberate left-to-right hover-pan across the 10-tab bar of
   the clinical workspace (Overview → Clinical → Documentation
-  → Imaging → Labs/Orders Review → Calendar → Communications →
-  Documents → Chat). No voice-over. Reads as "this is a real
-  product, not a single screen."
+  → Imaging → Orders & Labs → Calendar → Communications →
+  Documents → Chat → Billing). No voice-over. Reads as "this is
+  a real product, not a single screen."
 - **Hero — Clinical Signal Filtering banner.** 10–15 second
   clip on the **Clinical / Ophthalmology** tab. Slow camera
   pan over the Phase 17B Clinical Signal Filtering banner and
@@ -129,7 +136,7 @@ Each stage shot starts with a 1-second click on its anchor tab
 so the capture reads as "this lives inside a real workspace,"
 not a single panel floating in the void.
 
-- **Stage 1 · Scribe lifecycle.** *Tab: Documentation / EMR-EHR.*
+- **Stage 1 · Scribe lifecycle.** *Tab: Documentation / EMR/EHR.*
   Click the Documentation tab → paste source text →
   *Process* → *Mark reviewed* → *Finalize*. End on the read-only
   finalized state.
@@ -139,17 +146,17 @@ not a single panel floating in the void.
 - **Stage 3 · OD/OS diagram apply / save / sign.** *Tab: Imaging.*
   Continues from Stage 2 (already on Imaging tab). Apply one
   proposal; *Save*; *Sign*. End on the signed read-only state.
-- **Stage 4 · Patient summary.** *Tab: Documentation / EMR-EHR.*
+- **Stage 4 · Patient summary.** *Tab: Documentation / EMR/EHR.*
   Click the Documentation tab → show the patient-summary
   banner copy (*"Do not send to patient until finalized by the
   provider."*) → *Create* → small edit → *Mark reviewed* →
   *Finalize*. End on the finalized read-only state.
-- **Stage 5 · Pre-visit brief.** *Tab: Documentation / EMR-EHR.*
+- **Stage 5 · Pre-visit brief.** *Tab: Documentation / EMR/EHR.*
   Continues from Stage 4 (already on Documentation tab).
   *Generate*. Show source-counts tiles, last-visit recap, and at
   least one data-gap entry.
 - **Stage 6 · Provider action queue.** *Tab: Documentation /
-  EMR-EHR.* Continues from Stage 5 (already on Documentation
+  EMR/EHR.* Continues from Stage 5 (already on Documentation
   tab). Show the queue banner copy → *Generate* → Accept on one
   item → Dismiss on a second → Complete on the accepted one.
 - **Stage 7 · Guided demo mode.** *Tab-agnostic — the stepper

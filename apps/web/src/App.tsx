@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   API_URL,
   ALLOWED_STATUSES,
@@ -273,7 +279,11 @@ export default function App() {
       </header>
 
       <div className="layout">
-        <aside className="layout__list">
+        <aside className="layout__list" data-testid="clinical-sidebar">
+          <ClinicalSidebarNav
+            canCreate={canCreate}
+            onNewEncounter={() => setShowCreate(true)}
+          />
           <FilterBar
             value={filters}
             onChange={(next) => {
@@ -387,6 +397,146 @@ export default function App() {
 }
 
 // ---------- subcomponents -------------------------------------------------
+
+/**
+ * Phase 19B — clinical-sidebar grouped navigation.
+ *
+ * Renders the CORE / CLINICAL / OPERATIONS / ADMIN structure
+ * shown in the reference design. Only the **Encounters** entry
+ * drives behavior today (it scrolls the existing encounter list
+ * below into view); the other entries render as visually-correct
+ * placeholders with `disabled` + a `title` hint so they read as
+ * future-phase scaffolding rather than vaporware.
+ *
+ * Quick Actions reuses the same pattern: only **New Encounter**
+ * is wired today (it opens the existing CreateEncounterModal);
+ * the other quick actions render as disabled placeholders.
+ *
+ * The grouped nav is intentionally non-routing — App.tsx is a
+ * single-page app right now. Wiring real routes is a separate
+ * phase.
+ */
+function ClinicalSidebarNav({
+  canCreate,
+  onNewEncounter,
+}: {
+  canCreate: boolean;
+  onNewEncounter: () => void;
+}) {
+  return (
+    <nav className="sidebar-nav" data-testid="sidebar-nav" aria-label="Clinical navigation">
+      <SidebarGroup label="Core" testid="sidebar-group-core">
+        <SidebarItem testid="sidebar-item-dashboard" disabled>
+          Dashboard
+        </SidebarItem>
+        <SidebarItem testid="sidebar-item-calendar" disabled>
+          Calendar
+        </SidebarItem>
+        <SidebarItem testid="sidebar-item-encounters" active>
+          Encounters
+        </SidebarItem>
+      </SidebarGroup>
+      <SidebarGroup label="Clinical" testid="sidebar-group-clinical">
+        <SidebarItem testid="sidebar-item-patients" disabled>
+          Patients
+        </SidebarItem>
+        <SidebarItem testid="sidebar-item-lab-orders" disabled>
+          Lab / Orders
+        </SidebarItem>
+      </SidebarGroup>
+      <SidebarGroup label="Operations" testid="sidebar-group-operations">
+        <SidebarItem testid="sidebar-item-messages" disabled>
+          Messages
+        </SidebarItem>
+        <SidebarItem testid="sidebar-item-tasks" disabled>
+          Tasks
+        </SidebarItem>
+      </SidebarGroup>
+      <SidebarGroup label="Admin" testid="sidebar-group-admin">
+        <SidebarItem testid="sidebar-item-billing" disabled>
+          Billing
+        </SidebarItem>
+        <SidebarItem testid="sidebar-item-reports" disabled>
+          Reports
+        </SidebarItem>
+        <SidebarItem testid="sidebar-item-settings" disabled>
+          Settings
+        </SidebarItem>
+      </SidebarGroup>
+      <SidebarGroup label="Quick Actions" testid="sidebar-group-quick-actions">
+        <SidebarItem
+          testid="sidebar-item-new-encounter"
+          onClick={canCreate ? onNewEncounter : undefined}
+          disabled={!canCreate}
+        >
+          New Encounter
+        </SidebarItem>
+        <SidebarItem testid="sidebar-item-new-patient" disabled>
+          New Patient
+        </SidebarItem>
+        <SidebarItem testid="sidebar-item-record-dictation" disabled>
+          Record Dictation
+        </SidebarItem>
+        <SidebarItem testid="sidebar-item-upload-imaging" disabled>
+          Upload Imaging
+        </SidebarItem>
+        <SidebarItem testid="sidebar-item-send-message" disabled>
+          Send Message
+        </SidebarItem>
+      </SidebarGroup>
+    </nav>
+  );
+}
+
+function SidebarGroup({
+  label,
+  testid,
+  children,
+}: {
+  label: string;
+  testid: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="sidebar-nav__group" data-testid={testid}>
+      <div className="sidebar-nav__group-label">{label}</div>
+      <ul className="sidebar-nav__list">{children}</ul>
+    </div>
+  );
+}
+
+function SidebarItem({
+  testid,
+  active,
+  disabled,
+  onClick,
+  children,
+}: {
+  testid: string;
+  active?: boolean;
+  disabled?: boolean;
+  onClick?: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <li>
+      <button
+        type="button"
+        className={
+          "sidebar-nav__item" +
+          (active ? " sidebar-nav__item--active" : "") +
+          (disabled ? " sidebar-nav__item--disabled" : "")
+        }
+        data-testid={testid}
+        disabled={disabled}
+        title={disabled ? "Available in a future phase" : undefined}
+        onClick={onClick}
+      >
+        {children}
+      </button>
+    </li>
+  );
+}
 
 function IdentityBadge({
   me,

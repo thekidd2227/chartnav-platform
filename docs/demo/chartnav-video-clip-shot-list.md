@@ -47,19 +47,30 @@ URL chip — buyers never see `localhost:8000` on screen. The
 identity chip reads **Identity Admin · Org 1** with the email
 in the `title=` attribute (Phase 19).
 
-## Tab map (Phase 19 layout)
+## Tab map (Phase 19 + 19B layout)
 
-The encounter detail is now a tabbed clinical workspace. Two
+The encounter detail is now a 10-tab clinical workspace. Two
 tabs hold all the demo content:
 
 | Tab | Surface | Used by clips |
 |---|---|---|
-| **Documentation / EMR-EHR** | Scribe · Patient summary · Pre-visit brief · Provider action queue | 1, 4, 5, 6 |
+| **Documentation / EMR/EHR** | Scribe · Patient summary · Pre-visit brief · Provider action queue | 1, 4, 5, 6 |
 | **Imaging** | OD/OS retinal diagram | 2, 3 |
 
 Capture the tab transition (1-second click + panel transition)
 when moving between Documentation and Imaging — that's part of
 the new product feel.
+
+The other 8 tabs (Overview · Clinical · Orders & Labs · Calendar
+· Communications · Documents · Chat · Billing) appear in the
+hero "navigation reveal" hover-pan but are NOT featured in the
+per-clip workflow shots. Phase 19B adds:
+
+- *Orders & Labs* (renamed from Labs / Orders Review) — review-only.
+- *Billing* — administrative review placeholder with the explicit
+  *"ChartNav does not auto-code, auto-bill, or submit claims"*
+  disclaimer banner. Do not capture clicks; the tab is
+  intentionally action-light.
 
 ---
 
@@ -67,7 +78,7 @@ the new product feel.
 
 ### Clip 1 · Scribe lifecycle
 
-> Tab: **Documentation / EMR-EHR**
+> Tab: **Documentation / EMR/EHR**
 
 - **Length**: 30 – 45 seconds
 - **Setup**: open `enc-row-1`, click the Documentation tab.
@@ -112,7 +123,7 @@ the new product feel.
 
 ### Clip 4 · Patient-friendly summary
 
-> Tab: **Documentation / EMR-EHR**
+> Tab: **Documentation / EMR/EHR**
 
 - **Length**: 30 – 45 seconds
 - **Setup**: click the Documentation tab.
@@ -128,7 +139,7 @@ the new product feel.
 
 ### Clip 5 · Pre-visit brief
 
-> Tab: **Documentation / EMR-EHR**
+> Tab: **Documentation / EMR/EHR**
 
 - **Length**: 20 – 30 seconds
 - **Setup**: continues from Clip 4 — already on Documentation tab.
@@ -142,7 +153,7 @@ the new product feel.
 
 ### Clip 6 · Provider action queue
 
-> Tab: **Documentation / EMR-EHR**
+> Tab: **Documentation / EMR/EHR**
 
 - **Length**: 30 – 45 seconds
 - **Setup**: continues from Clip 5 — already on Documentation tab.
@@ -164,7 +175,7 @@ the new product feel.
   appearing for ~10 – 15 seconds. Include the tab transitions
   between Documentation and Imaging — they read as "this is a
   real product, not a single screen." End on a screen card or
-  full-workspace shot showing the 9-tab bar.
+  full-workspace shot showing the 10-tab bar.
 - **Voice-over beat**: the demo-script lead-in ("Five minutes,
   seven steps, every step provider-reviewed.") plus the safety-
   guardrail bullet list as on-screen text overlay (no claim of
@@ -185,14 +196,14 @@ the new product feel.
   Builds the diagram."
 - **Capture order**: Clinical-tab click → banner visible → pan.
 
-### Clip 9 · 9-tab navigation reveal (optional, hero shot)
+### Clip 9 · 10-tab navigation reveal (optional, hero shot)
 
 - **Length**: 5 – 8 seconds
 - **What's on screen**: the encounter detail header with the
   patient pill (`Identity Admin · Org 1`) + a deliberate
-  left-to-right hover across the 9 tabs (Overview, Clinical,
-  Documentation, Imaging, Labs/Orders Review, Calendar,
-  Communications, Documents, Chat).
+  left-to-right hover across the 10 tabs (Overview, Clinical,
+  Documentation, Imaging, Orders & Labs, Calendar,
+  Communications, Documents, Chat, Billing).
 - **Voice-over beat**: none — this is a visual reveal for the
   master cut and the website hero.
 - **Capture order**: hover-pan across the tab bar.

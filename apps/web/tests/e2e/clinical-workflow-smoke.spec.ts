@@ -55,11 +55,12 @@ async function openTab(
     | "clinical"
     | "documentation"
     | "imaging"
-    | "labs-orders-review"
+    | "orders-labs"
     | "calendar"
     | "communications"
     | "documents"
     | "chat"
+    | "billing"
 ) {
   await page.locator(`[data-testid=ctw-tab-${slug}]`).click();
   await page.waitForSelector(`[data-testid=ctw-panel-${slug}]`);
@@ -146,7 +147,7 @@ test.describe("Clinical workflow smoke — Phase 12", () => {
       /portal push/i,
       /prescribe/i,
     ];
-    for (const tab of ["documentation", "labs-orders-review", "communications"] as const) {
+    for (const tab of ["documentation", "orders-labs", "communications", "billing"] as const) {
       await openTab(page, tab);
       for (const label of forbiddenLabels) {
         await expect(

@@ -271,6 +271,68 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
 }
 
 /* ============================================================
+   Phase 19B — clinical sidebar grouped navigation.
+   Shown above the encounter filter + list. Only the Encounters
+   item is currently active; other items are visually-correct
+   placeholders for future phases.
+   ============================================================ */
+.sidebar-nav {
+  padding: 16px 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border-bottom: 1px solid var(--cn-line);
+}
+.sidebar-nav__group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sidebar-nav__group-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cn-dim);
+  padding: 0 6px;
+  margin-bottom: 2px;
+}
+.sidebar-nav__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sidebar-nav__item {
+  background: transparent;
+  border: none;
+  text-align: left;
+  width: 100%;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--cn-fg);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s var(--cn-ease), color 0.15s var(--cn-ease);
+}
+.sidebar-nav__item:hover:not(:disabled) {
+  background: rgba(15, 118, 110, 0.06);
+}
+.sidebar-nav__item--active {
+  background: rgba(15, 118, 110, 0.12);
+  color: #0f766e;
+  font-weight: 600;
+}
+.sidebar-nav__item--disabled,
+.sidebar-nav__item:disabled {
+  color: var(--cn-dim);
+  cursor: not-allowed;
+}
+
+/* ============================================================
    Filters + list
    ============================================================ */
 
@@ -1485,10 +1547,76 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
  * =========================================================== */
 
 .ctw {
+  /* Phase 19B — workspace-scoped palette override.
+     The global brand stays at #0B6E79 (asserted by Phase 17D
+     theme-token sync); the clinical workspace UI uses the
+     reference-design teal locally only. */
+  --cn-primary: #0f766e;
+  --ctw-primary: #0f766e;
+  --ctw-accent: #14b8a6;
+  --ctw-danger: #dc2626;
+  --ctw-bg: #f9fafb;
+  --ctw-card: #ffffff;
+  --ctw-border: #e5e7eb;
+  --ctw-muted: #64748b;
+  --ctw-fg: #111827;
+
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
+
+/* Phase 19B — demographic strip below the patient/encounter
+   line, matching the clinical reference design. */
+.ctw__demographics {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--ctw-border);
+}
+@media (max-width: 1100px) {
+  .ctw__demographics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (max-width: 700px) {
+  .ctw__demographics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.ctw__demo-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.ctw__demo-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ctw-muted);
+}
+.ctw__demo-value {
+  font-size: 13px;
+  color: var(--ctw-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Phase 19B — Billing tab disclaimer banner. Renders the
+   "ChartNav does not auto-code, auto-bill, or submit claims"
+   contract loud and on-screen. */
+.ctw__disclaimer {
+  grid-column: 1 / -1;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-left: 4px solid #d97706;
+  border-radius: var(--cn-radius-md);
+  padding: 12px 16px;
+  font-size: 13px;
+  color: #78350f;
+  line-height: 1.5;
+}
+.ctw__disclaimer strong { color: #92400e; }
 
 /* Sticky patient + encounter header */
 .ctw__patient-header {

@@ -1,21 +1,31 @@
 /**
- * ClinicalTabbedWorkspace — Phase 19.
+ * ClinicalTabbedWorkspace — Phase 19 + Phase 19B correction.
  *
- * Replaces the single-page encounter detail with a 9-tab clinical
+ * Replaces the single-page encounter detail with a 10-tab clinical
  * workspace. The Documentation tab wraps the existing NoteWorkspace
- * (the scribe → review → finalize lifecycle is unchanged). The
- * Imaging tab wraps the existing EyeDiagramPanel (OD/OS retinal
- * diagram). The Chat tab is a frontend-only internal staff chat
- * with .txt / .json export. Every other tab is a properly-labeled
- * read-only review surface with "No data yet" empty states.
+ * (scribe → review → finalize is unchanged). The Imaging tab wraps
+ * the existing EyeDiagramPanel (OD/OS retinal diagram). The Chat
+ * tab is a frontend-only internal staff chat with .txt / .json
+ * export. Every other tab is a properly-labeled read-only review
+ * surface with "No data yet" empty states.
  *
- * Safe-claims contract — every label below has been screened
- * against the Phase 17B / 18 forbidden-claims list:
+ * Phase 19B reintroduces a **review-only Billing tab**: it shows
+ * CPT codes, charges, and insurance status as flat text labels for
+ * administrative review and explicitly disables every interactive
+ * billing action (no Submit Claim, no Auto-code, no Auto-bill, no
+ * Send Claim, no Charge Patient, no Bill Insurance). The disclaimer
+ * banner makes the contract loud: ChartNav does not auto-code,
+ * auto-bill, or submit claims.
  *
- *   - NO billing / CPT / charges / insurance / claim submission /
- *     coding / payment / revenue-cycle UI.
+ * Safe-claims contract — every interactive label below has been
+ * screened against the Phase 17B / 18 forbidden-claims list:
+ *
+ *   - NO automated billing surface. Billing tab is administrative
+ *     review-only (View / Add Note / Mark Reviewed). All claim-
+ *     submission / auto-code / auto-bill / auto-charge actions are
+ *     forbidden as button labels.
  *   - NO "Submit order" / "Place order" / "Send referral" /
- *     "Bill" / "Code" buttons. The Labs/Orders Review tab is
+ *     "Bill" / "Code" interactive buttons. The Orders & Labs tab is
  *     review-only ("View" / "Mark reviewed" / "Add note").
  *   - NO "Send to patient" / "Patient portal" / "External message
  *     delivery" / "Automated patient message" surfaces. The
@@ -64,24 +74,26 @@ type TabId =
   | "clinical"
   | "documentation"
   | "imaging"
-  | "labs-orders-review"
+  | "orders-labs"
   | "calendar"
   | "communications"
   | "documents"
-  | "chat";
+  | "chat"
+  | "billing";
 
 type TabSpec = { id: TabId; label: string };
 
 const TABS: TabSpec[] = [
   { id: "overview", label: "Overview" },
   { id: "clinical", label: "Clinical / Ophthalmology" },
-  { id: "documentation", label: "Documentation / EMR-EHR" },
+  { id: "documentation", label: "Documentation / EMR/EHR" },
   { id: "imaging", label: "Imaging" },
-  { id: "labs-orders-review", label: "Labs / Orders Review" },
+  { id: "orders-labs", label: "Orders & Labs" },
   { id: "calendar", label: "Calendar" },
   { id: "communications", label: "Communications" },
   { id: "documents", label: "Documents" },
   { id: "chat", label: "Chat" },
+  { id: "billing", label: "Billing" },
 ];
 
 // ---------------------------------------------------------------
@@ -147,13 +159,14 @@ export function ClinicalTabbedWorkspace(
         {active === "imaging" && (
           <ImagingTab encounter={encounter} identity={identity} me={me} />
         )}
-        {active === "labs-orders-review" && <LabsOrdersReviewTab />}
+        {active === "orders-labs" && <OrdersLabsTab />}
         {active === "calendar" && <CalendarTab encounter={encounter} />}
         {active === "communications" && (
           <CommunicationsTab encounter={encounter} me={me} />
         )}
         {active === "documents" && <DocumentsTab encounter={encounter} />}
         {active === "chat" && <ChatTab encounter={encounter} me={me} />}
+        {active === "billing" && <BillingTab />}
       </div>
     </div>
   );
@@ -168,6 +181,14 @@ function PatientEncounterHeader({
 }: {
   encounter: Encounter;
 }): JSX.Element {
+  // Phase 19B — clinical demographic strip. The Encounter type
+  // currently carries: patient_identifier, patient_name,
+  // provider_name, location_id, status, scheduled times. Fields
+  // like DOB / phone / gender / allergies / conditions /
+  // medications / last visit / next appointment are not on the
+  // type yet; they render as `—` placeholders so the strip
+  // matches the clinical reference layout without inventing data.
+  const lastVisit = fmt(encounter.completed_at);
   return (
     <header
       className="ctw__patient-header"
@@ -178,44 +199,93 @@ function PatientEncounterHeader({
           {encounter.patient_name ?? encounter.patient_identifier}
         </h2>
         <div className="ctw__patient-meta">
+          <span data-testid="ctw-patient-dob">
+            <span className="ctw__meta-label">DOB</span> —
+          </span>
           <span data-testid="ctw-patient-mrn">
             <span className="ctw__meta-label">MRN</span>{" "}
             {encounter.patient_identifier}
           </span>
-          <span>
+          <span data-testid="ctw-patient-phone">
+            <span className="ctw__meta-label">Phone</span> —
+          </span>
+        </div>
+        <div className="ctw__encounter-line">
+          <span data-testid="ctw-encounter-number">
             <span className="ctw__meta-label">Encounter #</span>
             {encounter.id}
           </span>
+          {/* `detail-status` testid preserved for back-compat with
+              App.test.tsx; the visual treatment is the same. */}
+          <span
+            className="status-pill"
+            data-status={encounter.status}
+            data-testid="detail-status"
+          >
+            {encounter.status.replace(/_/g, " ")}
+          </span>
+          <span data-testid="ctw-encounter-provider">
+            <span className="ctw__meta-label">Provider</span>{" "}
+            {encounter.provider_name ?? "—"}
+          </span>
+          <span data-testid="ctw-encounter-location">
+            <span className="ctw__meta-label">Location</span> #
+            {encounter.location_id}
+          </span>
+          {/* `detail-source-chip` testid preserved for back-compat. */}
+          <span
+            className="source-chip"
+            data-testid="detail-source-chip"
+            data-source={encounter._source ?? "chartnav"}
+          >
+            {encounterSourceLabel(encounter)}
+          </span>
         </div>
       </div>
-      <div className="ctw__encounter-line">
-        {/* `detail-status` testid preserved for back-compat with the
-            App.test.tsx suite; the visual treatment is the same. */}
-        <span
-          className="status-pill"
-          data-status={encounter.status}
-          data-testid="detail-status"
-        >
-          {encounter.status.replace(/_/g, " ")}
-        </span>
-        <span data-testid="ctw-encounter-provider">
-          <span className="ctw__meta-label">Provider</span>{" "}
+      <div
+        className="ctw__demographics"
+        data-testid="ctw-patient-demographics"
+      >
+        <DemographicCell label="Gender" testid="ctw-demo-gender">
+          —
+        </DemographicCell>
+        <DemographicCell label="Allergies" testid="ctw-demo-allergies">
+          —
+        </DemographicCell>
+        <DemographicCell label="Conditions" testid="ctw-demo-conditions">
+          —
+        </DemographicCell>
+        <DemographicCell label="Medications" testid="ctw-demo-medications">
+          —
+        </DemographicCell>
+        <DemographicCell label="Last Visit" testid="ctw-demo-last-visit">
+          {lastVisit}
+        </DemographicCell>
+        <DemographicCell label="Next Appt" testid="ctw-demo-next-appt">
+          —
+        </DemographicCell>
+        <DemographicCell label="Provider" testid="ctw-demo-provider">
           {encounter.provider_name ?? "—"}
-        </span>
-        <span data-testid="ctw-encounter-location">
-          <span className="ctw__meta-label">Location</span> #
-          {encounter.location_id}
-        </span>
-        {/* `detail-source-chip` testid preserved for back-compat. */}
-        <span
-          className="source-chip"
-          data-testid="detail-source-chip"
-          data-source={encounter._source ?? "chartnav"}
-        >
-          {encounterSourceLabel(encounter)}
-        </span>
+        </DemographicCell>
       </div>
     </header>
+  );
+}
+
+function DemographicCell({
+  label,
+  testid,
+  children,
+}: {
+  label: string;
+  testid: string;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <div className="ctw__demo-cell" data-testid={testid}>
+      <span className="ctw__demo-label">{label}</span>
+      <span className="ctw__demo-value">{children}</span>
+    </div>
   );
 }
 
@@ -475,12 +545,12 @@ function ImagingTab({
 }
 
 // ---------------------------------------------------------------
-// Labs / Orders Review (REVIEW-ONLY).
+// Orders & Labs (REVIEW-ONLY).
 // ---------------------------------------------------------------
 
-function LabsOrdersReviewTab(): JSX.Element {
+function OrdersLabsTab(): JSX.Element {
   return (
-    <div className="ctw-grid" data-testid="ctw-labs-orders-review">
+    <div className="ctw-grid" data-testid="ctw-orders-labs">
       <Card title="Lab Results">
         <EmptyState>
           Review-only view of lab results sent into ChartNav from the
@@ -514,8 +584,8 @@ function LabsOrdersReviewTab(): JSX.Element {
       <p className="ctw__footnote">
         Allowed actions on this tab: <strong>View</strong>,{" "}
         <strong>Mark reviewed</strong>, <strong>Add note</strong>.
-        ChartNav never submits orders, sends referrals, codes, bills,
-        or attaches CPT / insurance claims.
+        ChartNav never submits orders, sends referrals, or auto-codes
+        / auto-bills items reviewed here.
       </p>
     </div>
   );
@@ -986,6 +1056,73 @@ function ChatTab({
         delivery. No automated patient messaging. The thread persists
         only in this browser's localStorage and is intended for
         operator demos and rehearsals.
+      </p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------
+// Billing — REVIEW-ONLY administrative placeholder (Phase 19B).
+//
+// CPT codes, charges, and insurance status surface as flat text
+// for administrative review. Every interactive billing action
+// (Submit Claim, Auto-code, Auto-bill, Send Claim, Charge Patient,
+// Bill Insurance) is forbidden as a label here — the disclaimer
+// banner makes the contract explicit. Review-only actions match
+// the Orders & Labs tab: View / Add Note / Mark Reviewed.
+// ---------------------------------------------------------------
+
+function BillingTab(): JSX.Element {
+  return (
+    <div className="ctw-grid" data-testid="ctw-billing">
+      <div
+        className="ctw__disclaimer"
+        data-testid="ctw-billing-disclaimer"
+        role="note"
+      >
+        <strong>Billing review placeholder.</strong> ChartNav does
+        not auto-code, auto-bill, or submit claims. CPT codes and
+        charges shown below come from the practice's existing
+        billing system and surface here for administrative review
+        only.
+      </div>
+      <Card title="CPT Codes">
+        <EmptyState>
+          CPT codes attached to this encounter by the practice's
+          billing system surface here for review. No code is
+          generated, edited, or submitted by ChartNav.
+        </EmptyState>
+        <ReviewOnlyActionRow />
+      </Card>
+      <Card title="Charges">
+        <EmptyState>
+          Charges entered upstream surface here as a flat read-only
+          list. ChartNav does not calculate or post charges.
+        </EmptyState>
+        <ReviewOnlyActionRow />
+      </Card>
+      <Card title="Insurance Status">
+        <EmptyState>
+          Eligibility and authorization state from the practice's
+          payer integration surface here. ChartNav does not verify
+          eligibility or contact payers.
+        </EmptyState>
+        <ReviewOnlyActionRow />
+      </Card>
+      <Card title="Billing Review Notes" wide>
+        <EmptyState>
+          Administrative review notes attached to a CPT code or
+          charge. Use <strong>Add note</strong> after reviewing;
+          {" "}
+          <strong>Mark reviewed</strong> closes the row.
+        </EmptyState>
+        <ReviewOnlyActionRow />
+      </Card>
+      <p className="ctw__footnote">
+        Allowed actions on this tab: <strong>View</strong>,{" "}
+        <strong>Add note</strong>, <strong>Mark reviewed</strong>.
+        ChartNav never auto-codes, auto-bills, charges patients,
+        or submits claims to insurance.
       </p>
     </div>
   );

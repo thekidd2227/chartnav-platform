@@ -1,5 +1,5 @@
 /**
- * Phase 19 — Clinical Tabbed Workspace tests.
+ * Phase 19 + Phase 19B — Clinical Tabbed Workspace tests.
  *
  * The existing App tests (App.test.tsx) verify integration: the
  * `transitions` / `transition-${s}` / `detail-status` /
@@ -9,14 +9,21 @@
  * This file exercises the standalone ClinicalTabbedWorkspace
  * component:
  *
- *   - 9 tabs render with the expected labels
+ *   - 10 tabs render with the expected labels (Phase 19B added a
+ *     review-only Billing tab; "Labs / Orders Review" is now
+ *     "Orders & Labs"; Chat is retained from Phase 19)
  *   - tab switching shows / hides the right panels
  *   - safe-claims labels are present in each tab
  *   - forbidden UI labels (place order, submit referral, send to
- *     patient, CPT, billing, etc.) appear nowhere in any tab
+ *     patient, billing automation, etc.) appear nowhere as
+ *     interactive button / heading / input text
  *   - the Chat tab persists messages to localStorage and exports
  *     .txt / .json
  *   - the Communications tab is internal-only
+ *   - the Billing tab is review-only: surface labels (CPT Codes,
+ *     Charges, Insurance Status) appear only as card headings, and
+ *     the disclaimer makes the no-auto-code / no-auto-bill / no-
+ *     submit-claim contract explicit
  */
 
 import { render, screen, within, fireEvent } from "@testing-library/react";
@@ -100,22 +107,47 @@ describe("Phase 19 — Clinical tabbed workspace", () => {
     expect(head).toHaveTextContent("Location");
   });
 
-  it("renders all 9 tabs in the tab bar", () => {
+  it("renders the Phase 19B demographic strip (Gender / Allergies / Conditions / Medications / Last Visit / Next Appt / Provider)", () => {
+    renderWorkspace();
+    expect(screen.getByTestId("ctw-patient-demographics")).toBeInTheDocument();
+    expect(screen.getByTestId("ctw-demo-gender")).toHaveTextContent(/Gender/);
+    expect(screen.getByTestId("ctw-demo-allergies")).toHaveTextContent(
+      /Allergies/
+    );
+    expect(screen.getByTestId("ctw-demo-conditions")).toHaveTextContent(
+      /Conditions/
+    );
+    expect(screen.getByTestId("ctw-demo-medications")).toHaveTextContent(
+      /Medications/
+    );
+    expect(screen.getByTestId("ctw-demo-last-visit")).toHaveTextContent(
+      /Last Visit/
+    );
+    expect(screen.getByTestId("ctw-demo-next-appt")).toHaveTextContent(
+      /Next Appt/
+    );
+    expect(screen.getByTestId("ctw-demo-provider")).toHaveTextContent(
+      /Provider/
+    );
+  });
+
+  it("renders all 10 tabs in the tab bar (Phase 19 + 19B with Chat retained + Billing added)", () => {
     renderWorkspace();
     const bar = screen.getByTestId("ctw-tabbar");
     const tabs = within(bar).getAllByRole("tab");
-    expect(tabs).toHaveLength(9);
+    expect(tabs).toHaveLength(10);
     const labels = tabs.map((t) => t.textContent);
     expect(labels).toEqual([
       "Overview",
       "Clinical / Ophthalmology",
-      "Documentation / EMR-EHR",
+      "Documentation / EMR/EHR",
       "Imaging",
-      "Labs / Orders Review",
+      "Orders & Labs",
       "Calendar",
       "Communications",
       "Documents",
       "Chat",
+      "Billing",
     ]);
   });
 
@@ -134,11 +166,12 @@ describe("Phase 19 — Clinical tabbed workspace", () => {
     for (const slug of [
       "clinical",
       "imaging",
-      "labs-orders-review",
+      "orders-labs",
       "calendar",
       "communications",
       "documents",
       "chat",
+      "billing",
     ]) {
       await user.click(screen.getByTestId(`ctw-tab-${slug}`));
       expect(screen.getByTestId(`ctw-panel-${slug}`)).toBeInTheDocument();
@@ -158,23 +191,30 @@ describe("Phase 19 — Clinical tabbed workspace", () => {
 // Safe-claims contract — forbidden UI labels appear NOWHERE.
 // ---------------------------------------------------------------
 
-describe("Phase 19 — workspace contains no forbidden order / billing / patient-send labels on interactive elements", () => {
+describe("Phase 19 + 19B — workspace contains no forbidden order / patient-send / automated-billing labels on interactive elements", () => {
   // The forbidden phrases below MAY appear inside safety footnotes
   // (e.g. "ChartNav does not place lab orders" / "does not deliver
-  // to a patient portal") because those paragraphs ARE the safe-
+  // to a patient portal" / "ChartNav does not auto-code, auto-bill,
+  // or submit claims") because those paragraphs ARE the safe-
   // claims contract. Same negative-assertion pattern Phase 17B and
   // Phase 18 already use. What we forbid is the phrase appearing
   // as a button label, heading, or interactive control — those are
   // the surfaces that ship to a buyer.
+  //
+  // Phase 19B: "CPT Codes" / "Charges" / "Insurance Status" are
+  // legitimate Billing-tab card headings and are NOT banned. The
+  // Billing-specific assertion below covers the auto-billing
+  // contract independently.
   it.each([
     ["overview"],
     ["clinical"],
     ["imaging"],
-    ["labs-orders-review"],
+    ["orders-labs"],
     ["calendar"],
     ["communications"],
     ["documents"],
     ["chat"],
+    ["billing"],
   ])(
     "tab %s has no forbidden labels on buttons / headings / inputs",
     async (slug) => {
@@ -196,14 +236,18 @@ describe("Phase 19 — workspace contains no forbidden order / billing / patient
           "place order",
           "send referral",
           "submit referral",
-          "cpt code",
           "claim submission",
-          "insurance claim",
           "billing automation",
           "send to patient",
           "patient portal",
           "automated patient message",
           "auto-message",
+          "submit claim",
+          "auto-code",
+          "auto-bill",
+          "send claim",
+          "charge patient",
+          "bill insurance",
         ]) {
           expect(
             t,
@@ -213,15 +257,6 @@ describe("Phase 19 — workspace contains no forbidden order / billing / patient
       }
     }
   );
-
-  it("there is no 'Billing' tab", () => {
-    renderWorkspace();
-    expect(screen.queryByTestId("ctw-tab-billing")).not.toBeInTheDocument();
-    const labels = within(screen.getByTestId("ctw-tabbar"))
-      .getAllByRole("tab")
-      .map((t) => (t.textContent || "").toLowerCase());
-    expect(labels).not.toContain("billing");
-  });
 
   it("the 'Communications' surface uses negative-assertion safety language only (the words 'patient portal' and 'send to patient' may appear in negative-context safety footnotes by design)", async () => {
     const user = userEvent.setup();
@@ -246,15 +281,15 @@ describe("Phase 19 — workspace contains no forbidden order / billing / patient
 });
 
 // ---------------------------------------------------------------
-// Labs / Orders Review — review-only.
+// Orders & Labs — review-only (renamed from Labs / Orders Review).
 // ---------------------------------------------------------------
 
-describe("Phase 19 — Labs / Orders Review tab is review-only", () => {
+describe("Phase 19B — Orders & Labs tab is review-only", () => {
   it("renders only View / Mark reviewed / Add note actions (no submit/place/send buttons)", async () => {
     const user = userEvent.setup();
     renderWorkspace();
-    await user.click(screen.getByTestId("ctw-tab-labs-orders-review"));
-    const panel = screen.getByTestId("ctw-panel-labs-orders-review");
+    await user.click(screen.getByTestId("ctw-tab-orders-labs"));
+    const panel = screen.getByTestId("ctw-panel-orders-labs");
     const buttons = within(panel).getAllByRole("button");
     for (const b of buttons) {
       const t = (b.textContent || "").toLowerCase();
@@ -265,11 +300,63 @@ describe("Phase 19 — Labs / Orders Review tab is review-only", () => {
   it("includes Lab Results / Imaging Orders / Procedure Plan / Review Notes sections", async () => {
     const user = userEvent.setup();
     renderWorkspace();
-    await user.click(screen.getByTestId("ctw-tab-labs-orders-review"));
+    await user.click(screen.getByTestId("ctw-tab-orders-labs"));
     expect(screen.getByTestId("ctw-card-lab-results")).toBeInTheDocument();
     expect(screen.getByTestId("ctw-card-imaging-orders")).toBeInTheDocument();
     expect(screen.getByTestId("ctw-card-procedure-plan")).toBeInTheDocument();
     expect(screen.getByTestId("ctw-card-review-notes")).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------
+// Billing — review-only with disclaimer (Phase 19B).
+// ---------------------------------------------------------------
+
+describe("Phase 19B — Billing tab is administrative review-only with disclaimer", () => {
+  it("renders the auto-billing disclaimer banner", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(screen.getByTestId("ctw-tab-billing"));
+    const disclaimer = screen.getByTestId("ctw-billing-disclaimer");
+    expect(disclaimer).toBeInTheDocument();
+    expect(disclaimer.textContent || "").toMatch(
+      /does not auto-code, auto-bill, or submit claims/i
+    );
+  });
+
+  it("includes CPT Codes / Charges / Insurance Status / Billing Review Notes sections as headings only", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(screen.getByTestId("ctw-tab-billing"));
+    expect(screen.getByTestId("ctw-card-cpt-codes")).toBeInTheDocument();
+    expect(screen.getByTestId("ctw-card-charges")).toBeInTheDocument();
+    expect(screen.getByTestId("ctw-card-insurance-status")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("ctw-card-billing-review-notes")
+    ).toBeInTheDocument();
+  });
+
+  it("renders only View / Mark reviewed / Add note as button labels (no Submit Claim / Auto-code / Auto-bill / Send Claim / Charge Patient / Bill Insurance)", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(screen.getByTestId("ctw-tab-billing"));
+    const panel = screen.getByTestId("ctw-panel-billing");
+    const buttons = within(panel).getAllByRole("button");
+    for (const b of buttons) {
+      const t = (b.textContent || "").toLowerCase();
+      expect(t).toMatch(/^(view|mark reviewed|add note)$/);
+    }
+  });
+
+  it("review-only action buttons are disabled (no clickable billing actions)", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(screen.getByTestId("ctw-tab-billing"));
+    const panel = screen.getByTestId("ctw-panel-billing");
+    const buttons = within(panel).getAllByRole("button");
+    for (const b of buttons) {
+      expect(b).toBeDisabled();
+    }
   });
 });
 
