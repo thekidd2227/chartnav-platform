@@ -293,7 +293,10 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--cn-dim);
+  /* Phase 19B fix — group labels live on --cn-bg-alt (#EEF2F5);
+     --cn-dim (#64748B) is only 3.77:1 there, fails WCAG AA. Use
+     --cn-muted (#475569) which is ~5.9:1 on the sidebar bg. */
+  color: var(--cn-muted);
   padding: 0 6px;
   margin-bottom: 2px;
 }
@@ -322,12 +325,19 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
   background: rgba(15, 118, 110, 0.06);
 }
 .sidebar-nav__item--active {
-  background: rgba(15, 118, 110, 0.12);
+  /* Phase 19B fix — the previous 12% teal tint produced an
+     effective ~#D4E2E5 background on which #0f766e text sits at
+     ~4.0:1 (fails AA 4.5:1). White bg gives 5.4:1 + reads as a
+     "selected" item; the left stripe carries the visual weight. */
+  background: var(--cn-surface);
   color: #0f766e;
   font-weight: 600;
+  box-shadow: inset 3px 0 0 #0f766e;
 }
 .sidebar-nav__item--disabled,
 .sidebar-nav__item:disabled {
+  /* Disabled controls are exempt from axe color-contrast, but
+     the visible color is intentionally muted. */
   color: var(--cn-dim);
   cursor: not-allowed;
 }
