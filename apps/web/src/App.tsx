@@ -360,11 +360,31 @@ export default function App() {
       </header>
 
       <div className="layout">
-        <aside className="layout__list" data-testid="clinical-sidebar">
+        {/* Phase 19J.C — left rail split into two distinct columns:
+            (1) the burgundy clinical-sidebar nav sits in its own
+                ~240px column, and
+            (2) the FilterBar + EncounterList + pagination sit in a
+                separate ~320px encounter-list column.
+            The third column is the detail/workspace surface. The
+            three-column rhythm matches the reference clinical
+            layout. `data-testid="clinical-sidebar"` is preserved on
+            the burgundy sidebar so existing tests/screenshots that
+            reference it continue to work. */}
+        <aside
+          className="layout__sidebar"
+          data-testid="clinical-sidebar"
+        >
           <ClinicalSidebarNav
             canCreate={canCreate}
             onNewEncounter={() => setShowCreate(true)}
           />
+        </aside>
+
+        <aside
+          className="layout__list"
+          data-testid="encounter-list-pane"
+          aria-label="Encounter list"
+        >
           <FilterBar
             value={filters}
             onChange={(next) => {
