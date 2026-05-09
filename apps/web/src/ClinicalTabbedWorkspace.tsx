@@ -393,8 +393,16 @@ function OverviewTab({
     ? allowedNextStatuses(role, encounter.status)
     : [];
 
+  // Phase 19J.B — Overview reflows to the reference clinical layout:
+  //   Row 1 — Patient Snapshot · Visit Summary · Clinical Alerts · Favorites
+  //   Row 2 — Recent Encounters · Clinical Notes · Tasks · Care Team
+  //   Row 3 — Timeline (full width)
+  // The earlier 3-column wall now reads as discrete review surfaces in
+  // the 4-up reference rhythm. Empty-state copy stays honest — none of
+  // these cards invent data the encounter doesn't carry.
   return (
     <div className="ctw-grid" data-testid="ctw-overview">
+      {/* Row 1 ------------------------------------------------------- */}
       <Card title="Patient snapshot">
         <Field label="Name">
           {encounter.patient_name ?? encounter.patient_identifier}
@@ -403,6 +411,7 @@ function OverviewTab({
         <Field label="Provider">
           {encounter.provider_name ?? "Not assigned"}
         </Field>
+        <Field label="Organization">#{encounter.organization_id}</Field>
       </Card>
 
       <Card title="Visit summary">
@@ -412,31 +421,15 @@ function OverviewTab({
             {encounter.status.replace(/_/g, " ")}
           </span>
         </Field>
-        <Field label="Organization">#{encounter.organization_id}</Field>
+        <Field label="Scheduled">{fmt(encounter.scheduled_at)}</Field>
         <Field label="Location">#{encounter.location_id}</Field>
       </Card>
 
-      <Card title="Alerts">
+      <Card title="Clinical alerts">
         <EmptyState>
           No active alerts. ChartNav surfaces audit-friendly
           provider-review prompts only — never autonomous-diagnosis
           alerts.
-        </EmptyState>
-      </Card>
-
-      <Card title="Recent encounters">
-        <EmptyState>
-          The encounter list lives in the left sidebar. Recent-encounter
-          history per patient will surface here once the backend
-          endpoint lands.
-        </EmptyState>
-      </Card>
-
-      <Card title="Tasks">
-        <EmptyState>
-          Provider review tasks live in the Documentation tab's action
-          review queue. This card surfaces tasks from the practice's
-          existing systems if/when wired.
         </EmptyState>
       </Card>
 
@@ -448,6 +441,41 @@ function OverviewTab({
         </EmptyState>
       </Card>
 
+      {/* Row 2 ------------------------------------------------------- */}
+      <Card title="Recent encounters">
+        <EmptyState>
+          The encounter list lives in the left sidebar. Recent-encounter
+          history per patient will surface here once the backend
+          endpoint lands.
+        </EmptyState>
+      </Card>
+
+      <Card title="Clinical notes">
+        <EmptyState>
+          Signed notes for this patient surface here once the
+          documentation pipeline writes a note. Drafts under review live
+          in the Documentation tab.
+        </EmptyState>
+      </Card>
+
+      <Card title="Tasks">
+        <EmptyState>
+          Provider review tasks live in the Documentation tab's action
+          review queue. This card surfaces tasks from the practice's
+          existing systems if/when wired.
+        </EmptyState>
+      </Card>
+
+      <Card title="Care team">
+        <EmptyState>
+          Provider, reviewer, and PCP roles for this encounter surface
+          here once the backend roster endpoint lands. Provider on
+          record:{" "}
+          <strong>{encounter.provider_name ?? "Not assigned"}</strong>.
+        </EmptyState>
+      </Card>
+
+      {/* Row 3 — Timeline spans the full grid -------------------- */}
       <Card title="Timeline" wide>
         <div
           className="ctw-timeline__stamps"

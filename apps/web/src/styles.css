@@ -1868,12 +1868,18 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
 }
 
 /* Card grid */
+/* Phase 19J.B — Overview drops into the reference clinical 4-up
+   rhythm (Row 1 + Row 2 are 4 cards each, Row 3 is the full-width
+   Timeline via .ctw-card--wide). Below 1200px we step down to 3,
+   then 2, then 1 column so the cards never go narrower than ~260px
+   without collapsing the row. */
 .ctw-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  /* Phase 19D — slightly more breathing room between cards
-     so they read as discrete review surfaces, not a wall. */
-  gap: 18px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+@media (max-width: 1200px) {
+  .ctw-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 }
 @media (max-width: 900px) {
   .ctw-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
