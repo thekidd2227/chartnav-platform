@@ -11,57 +11,57 @@
   },
   {
     "file": "intake-ready-chart.mp4",
-    "title": "Step 1 — Digital Intake Becomes a Ready Chart",
-    "description": "The patient completes intake on their device and the staff queue updates without manual re-entry. The visit starts before check-in does.",
+    "title": "Encounter List to Ready Chart",
+    "description": "Pick a patient from the encounter rail. Overview opens with the chart already shaped — Patient Snapshot, Visit Summary, Clinical Alerts, Favorites. Recorded against the Phase 19J UI.",
     "tag": "Intake",
-    "overlay": "Patient intake → instantly structured",
+    "overlay": "Encounter list → ready chart",
     "priority": 1,
-    "seconds": 8
+    "seconds": 9
   },
   {
     "file": "workup-ready-chart.mp4",
-    "title": "Step 2 — Technician Workup Carries Into the Exam",
-    "description": "Without ChartNav, physicians rebuild the visit. With it, the chart is prepared by the technician and ready before the physician opens it.",
+    "title": "Workup Flows Into Overview",
+    "description": "Row-1 cards on Overview carry the technician's prep into the exam before the provider opens the chart. Recorded against the Phase 19J UI.",
     "tag": "Clinical Workflow",
-    "overlay": "Technician workup → flows forward",
+    "overlay": "Workup → ready on Overview",
     "priority": 2,
     "seconds": 8
   },
   {
     "file": "imaging-in-chart.mp4",
-    "title": "Step 3 — Imaging Lands Where the Physician Needs It",
-    "description": "OCT, fundus, and visual-field studies route into the correct encounter context — not into a parallel viewer the physician has to chase.",
+    "title": "Imaging Tab in the New Workspace",
+    "description": "Upload, OCT, Fundus, Attachments, Imaging Notes, Selected Image Viewer cards on the Imaging tab. OD/OS retinal workbench sits below. Recorded against the Phase 19J UI.",
     "tag": "Imaging",
-    "overlay": "Imaging → auto-attached",
+    "overlay": "Imaging → in encounter",
     "priority": 3,
-    "seconds": 8
+    "seconds": 10
   },
   {
     "file": "hands-free-scribing.mp4",
-    "title": "Step 4 — Hands-Free Scribing While You Examine",
-    "description": "Dictate during the exam — ChartNav captures the transcript, structures it into a SOAP draft, and hands it back ready to sign. No keyboard, no clicking, no scribe in the room.",
+    "title": "Documentation Tab — Stepper + Workbench",
+    "description": "Documentation opens with the Transcript → Extracted Facts → AI Draft → Final Note stepper above the embedded NoteWorkspace. Recorded against the Phase 19J UI.",
     "tag": "Hands-Free Scribing",
-    "overlay": "Physician → hands stay on the patient",
+    "overlay": "Hands stay on the patient",
     "priority": 4,
     "seconds": 10,
     "featured": true
   },
   {
     "file": "consult-letter.mp4",
-    "title": "Step 5 — Consult Letters Generated From the Signed Note",
-    "description": "Once the note is signed, the referring-provider letter renders from the encounter record. No re-typing into a separate letter tool.",
+    "title": "From Signed Note to Consult Letter",
+    "description": "Documentation stepper carries notes from draft to Final Note. Documents tab indexes consult letters, referral PDFs, and reports. Recorded against the Phase 19J UI.",
     "tag": "Referrals",
-    "overlay": "Consult letter → generated from the note",
+    "overlay": "Letter → generated from the note",
     "priority": 5,
-    "seconds": 8
+    "seconds": 11
   },
   {
     "file": "admin-dashboard.mp4",
-    "title": "Step 6 — Operational Metrics Without Spreadsheet Chasing",
-    "description": "Leadership opens the operations panel and reviews approvals, blocked notes, and identity in one place. Claims don't disappear into a black box.",
+    "title": "Admin Sidebar Group + Visit Status",
+    "description": "Admin sidebar surfaces Reports + Settings; Overview's Visit Summary card carries the encounter status pill leadership scans. Recorded against the Phase 19J UI.",
     "tag": "Admin",
-    "overlay": "Admin → KPIs update live",
+    "overlay": "Admin → status visible",
     "priority": 6,
-    "seconds": 7
+    "seconds": 9
   }
 ]
