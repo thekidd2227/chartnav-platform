@@ -571,7 +571,7 @@ describe("Phase 19 — Chat tab is internal staff chat (demo-local)", () => {
     expect(screen.getByTestId("ctw-chat-composer")).toBeInTheDocument();
   });
 
-  it("sends a message and persists to localStorage", async () => {
+  it("sends a message and persists to localStorage (recipient-scoped key, Phase 19I)", async () => {
     const user = userEvent.setup();
     renderWorkspace();
     await user.click(screen.getByTestId("ctw-tab-chat"));
@@ -582,7 +582,11 @@ describe("Phase 19 — Chat tab is internal staff chat (demo-local)", () => {
     expect(screen.getByTestId("ctw-chat-thread")).toHaveTextContent(
       "Quick handoff to clinician for review"
     );
-    const stored = window.localStorage.getItem("chartnav.encounter.1.chat");
+    // Phase 19I — chat is recipient-scoped. The default
+    // recipient on first render is "carter" (Dr. Carter).
+    const stored = window.localStorage.getItem(
+      "chartnav.encounter.1.chat.carter"
+    );
     expect(stored).toBeTruthy();
     expect(stored).toContain("Quick handoff to clinician for review");
   });
@@ -597,5 +601,273 @@ describe("Phase 19 — Chat tab is internal staff chat (demo-local)", () => {
     expect(screen.getByTestId("ctw-chat-export-json")).toHaveTextContent(
       /\.json/
     );
+  });
+});
+
+// ---------------------------------------------------------------
+// Phase 19I — Chat recipient selector. Staff can pick which
+// internal user they're messaging; the thread is scoped to the
+// selected recipient; the composer placeholder reflects the
+// recipient name; export filenames include the recipient slug.
+// ---------------------------------------------------------------
+
+describe("Phase 19I — Chat recipient selector", () => {
+  it("renders the recipient selector with the four demo internal recipients", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(screen.getByTestId("ctw-tab-chat"));
+
+    const recipientSelect = screen.getByTestId(
+      "ctw-chat-recipient-select"
+    ) as HTMLSelectElement;
+    expect(recipientSelect).toBeInTheDocument();
+
+    // Four demo recipients (no patient recipients — the safe-
+    // claims contract bans patient messaging).
+    for (const id of ["carter", "patel", "admin-front-desk", "reviewer"]) {
+      expect(
+        screen.getByTestId(`ctw-chat-recipient-option-${id}`)
+      ).toBeInTheDocument();
+    }
+    expect(recipientSelect.options.length).toBe(4);
+  });
+
+  it("first recipient (Dr. Carter) is selected by default and the composer placeholder reflects it", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(screen.getByTestId("ctw-tab-chat"));
+
+    const recipientSelect = screen.getByTestId(
+      "ctw-chat-recipient-select"
+    ) as HTMLSelectElement;
+    expect(recipientSelect.value).toBe("carter");
+
+    const composer = screen.getByTestId(
+      "ctw-chat-composer"
+    ) as HTMLTextAreaElement;
+    expect(composer.placeholder).toMatch(/Message Dr\. Carter internally/);
+  });
+
+  it("changing the recipient updates the placeholder + recipient card", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(screen.getByTestId("ctw-tab-chat"));
+
+    const recipientSelect = screen.getByTestId(
+      "ctw-chat-recipient-select"
+    ) as HTMLSelectElement;
+    await user.selectOptions(recipientSelect, "reviewer");
+
+    const composer = screen.getByTestId(
+      "ctw-chat-composer"
+    ) as HTMLTextAreaElement;
+    expect(composer.placeholder).toMatch(/Message Reviewer internally/);
+    expect(screen.getByTestId("ctw-chat-recipient-card")).toHaveTextContent(
+      /Reviewer/
+    );
+    expect(
+      screen.getByTestId("ctw-chat-recipient-presence")
+    ).toHaveTextContent(/Offline/);
+  });
+
+  it("the thread is scoped per-recipient (messages don't bleed between recipients)", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(screen.getByTestId("ctw-tab-chat"));
+
+    // Send a message to Dr. Carter (default).
+    fireEvent.change(screen.getByTestId("ctw-chat-composer"), {
+      target: { value: "Carter, please review imaging." },
+    });
+    await user.click(screen.getByTestId("ctw-chat-send"));
+    expect(screen.getByTestId("ctw-chat-thread")).toHaveTextContent(
+      "Carter, please review imaging."
+    );
+
+    // Switch to Dr. Patel — Carter's message must not appear.
+    await user.selectOptions(
+      screen.getByTestId("ctw-chat-recipient-select"),
+      "patel"
+    );
+    expect(screen.getByTestId("ctw-chat-thread")).not.toHaveTextContent(
+      "Carter, please review imaging."
+    );
+
+    // Send a message to Dr. Patel.
+    fireEvent.change(screen.getByTestId("ctw-chat-composer"), {
+      target: { value: "Patel, scheduling follow-up." },
+    });
+    await user.click(screen.getByTestId("ctw-chat-send"));
+    expect(screen.getByTestId("ctw-chat-thread")).toHaveTextContent(
+      "Patel, scheduling follow-up."
+    );
+
+    // Switch back to Dr. Carter — only Carter's message visible.
+    await user.selectOptions(
+      screen.getByTestId("ctw-chat-recipient-select"),
+      "carter"
+    );
+    expect(screen.getByTestId("ctw-chat-thread")).toHaveTextContent(
+      "Carter, please review imaging."
+    );
+    expect(screen.getByTestId("ctw-chat-thread")).not.toHaveTextContent(
+      "Patel, scheduling follow-up."
+    );
+
+    // Two distinct localStorage keys, one per recipient.
+    expect(
+      window.localStorage.getItem("chartnav.encounter.1.chat.carter")
+    ).toContain("Carter, please review imaging.");
+    expect(
+      window.localStorage.getItem("chartnav.encounter.1.chat.patel")
+    ).toContain("Patel, scheduling follow-up.");
+  });
+
+  it("recipient list contains no patient-side recipients (no patient messaging)", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(screen.getByTestId("ctw-tab-chat"));
+
+    const recipientSelect = screen.getByTestId(
+      "ctw-chat-recipient-select"
+    ) as HTMLSelectElement;
+    const optionsText = Array.from(recipientSelect.options)
+      .map((o) => o.textContent?.toLowerCase() ?? "")
+      .join(" ");
+    for (const banned of [
+      "patient",
+      "send to patient",
+      "patient portal",
+      "external",
+    ]) {
+      expect(optionsText).not.toContain(banned);
+    }
+  });
+});
+
+// ---------------------------------------------------------------
+// Phase 19I — Imaging tab opens with a 6-card workspace grid;
+// the OD/OS retinal workbench is no longer the first thing the
+// buyer sees.
+// ---------------------------------------------------------------
+
+describe("Phase 19I — Imaging tab card grid", () => {
+  it("renders Upload imaging / OCT / Fundus / Attachments / Imaging notes / Selected image viewer cards", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(screen.getByTestId("ctw-tab-imaging"));
+
+    expect(
+      screen.getByTestId("ctw-card-upload-imaging")
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("ctw-card-oct-images")).toBeInTheDocument();
+    expect(screen.getByTestId("ctw-card-fundus-photos")).toBeInTheDocument();
+    expect(screen.getByTestId("ctw-card-attachments")).toBeInTheDocument();
+    expect(screen.getByTestId("ctw-card-imaging-notes")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("ctw-card-selected-image-viewer")
+    ).toBeInTheDocument();
+    // OD/OS workbench still present, but as its own wide card.
+    expect(
+      screen.getByTestId("ctw-card-od-os-retinal-workbench")
+    ).toBeInTheDocument();
+  });
+
+  it("renders the workspace grid before the OD/OS retinal workbench", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(screen.getByTestId("ctw-tab-imaging"));
+
+    const grid = screen.getByTestId("ctw-imaging-grid");
+    const workbench = screen.getByTestId("ctw-card-od-os-retinal-workbench");
+    // Document order: grid before workbench.
+    expect(
+      grid.compareDocumentPosition(workbench) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+});
+
+// ---------------------------------------------------------------
+// Phase 19I — Clinical / Ophthalmology tab is now grouped pill
+// cards (no <details>/<summary>/<ul> bullet-list look).
+// ---------------------------------------------------------------
+
+describe("Phase 19I — Clinical tab is grouped pill cards (not a bullet list)", () => {
+  it("renders the six grouped cards in the brief order with Favorites pinned first", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(screen.getByTestId("ctw-tab-clinical"));
+
+    const ids = [
+      "favorites",
+      "retina",
+      "cornea",
+      "glaucoma",
+      "oculoplastics",
+      "general",
+    ];
+    for (const id of ids) {
+      expect(
+        screen.getByTestId(`ctw-clinical-group-${id}`)
+      ).toBeInTheDocument();
+    }
+    const favorites = screen.getByTestId("ctw-clinical-group-favorites");
+    const retina = screen.getByTestId("ctw-clinical-group-retina");
+    expect(
+      favorites.compareDocumentPosition(retina) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  it("does not render the prior bullet-list <details>/<summary> structure", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(screen.getByTestId("ctw-tab-clinical"));
+
+    const panel = screen.getByTestId("ctw-panel-clinical");
+    // The pre-19I implementation rendered <details> + <summary>.
+    // The post-19I implementation should have neither anywhere
+    // in the Clinical panel.
+    expect(panel.querySelector("details")).toBeNull();
+    expect(panel.querySelector("summary")).toBeNull();
+  });
+
+  it("renders pill buttons for each shortcut item", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(screen.getByTestId("ctw-tab-clinical"));
+
+    // Check a representative pill from each non-empty group.
+    expect(
+      screen.getByTestId("ctw-clinical-pill-retina-drusen")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("ctw-clinical-pill-cornea-dry-eye")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("ctw-clinical-pill-glaucoma-iop-elevated")
+    ).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------
+// Phase 19I — Documentation tab is wrapped in a stepper +
+// workbench shell.
+// ---------------------------------------------------------------
+
+describe("Phase 19I — Documentation tab stepper", () => {
+  it("renders the Transcript -> Extracted Facts -> AI Draft -> Final Note stepper", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(screen.getByTestId("ctw-tab-documentation"));
+
+    expect(screen.getByTestId("ctw-doc-stepper")).toBeInTheDocument();
+    for (const id of ["transcript", "facts", "draft", "final"]) {
+      expect(
+        screen.getByTestId(`ctw-doc-stepper-${id}`)
+      ).toBeInTheDocument();
+    }
+    expect(screen.getByTestId("ctw-doc-workbench")).toBeInTheDocument();
   });
 });
