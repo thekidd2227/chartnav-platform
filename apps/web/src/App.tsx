@@ -245,6 +245,31 @@ export default function App() {
           />
           <span className="sub">Workflow</span>
         </div>
+        {/* Phase 19J — center-anchored workspace search. Static
+            placeholder for now; wiring real search across patients,
+            encounters, and chart artifacts is scoped for Phase 19J.B.
+            Aria-labelled so the input is reachable for assistive
+            tech and testable. */}
+        <div className="header-search" data-testid="header-search-wrap">
+          <span className="header-search__icon" aria-hidden="true">
+            {/* magnifier glyph kept inline so we don't need an icon
+                package addition for Phase 19J.A. */}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+                 strokeLinejoin="round">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.5-3.5" />
+            </svg>
+          </span>
+          <input
+            type="search"
+            className="header-search__input"
+            placeholder="Search patient, encounter, or chart..."
+            aria-label="Search patient, encounter, or chart"
+            data-testid="header-search-input"
+            disabled
+          />
+        </div>
         <div className="header-meta">
           <IdentityBadge me={me} meError={meError} meLoading={meLoading} />
           {/*
@@ -425,6 +450,13 @@ function ClinicalSidebarNav({
 }) {
   return (
     <nav className="sidebar-nav" data-testid="sidebar-nav" aria-label="Clinical navigation">
+      {/* Phase 19J — group structure mirrors the reference clinical
+          workspace layout. Patients sits with the rest of the
+          patient-record surfaces (CORE), Documents moves next to
+          Lab/Orders so all clinical-record surfaces share one group
+          (CLINICAL), and ADMIN reduces to Reports + Settings. No
+          Billing — ChartNav does not bill, code, submit claims, or
+          handle insurance. */}
       <SidebarGroup label="Core" testid="sidebar-group-core">
         <SidebarItem testid="sidebar-item-dashboard" disabled>
           Dashboard
@@ -435,33 +467,30 @@ function ClinicalSidebarNav({
         <SidebarItem testid="sidebar-item-encounters" active>
           Encounters
         </SidebarItem>
-      </SidebarGroup>
-      <SidebarGroup label="Clinical" testid="sidebar-group-clinical">
         <SidebarItem testid="sidebar-item-patients" disabled>
           Patients
         </SidebarItem>
-        <SidebarItem testid="sidebar-item-lab-orders" disabled>
-          Lab / Orders
-        </SidebarItem>
       </SidebarGroup>
       <SidebarGroup label="Operations" testid="sidebar-group-operations">
-        <SidebarItem testid="sidebar-item-tasks" disabled>
-          Tasks
-        </SidebarItem>
         <SidebarItem testid="sidebar-item-messages" disabled>
           Messages
+        </SidebarItem>
+        <SidebarItem testid="sidebar-item-tasks" disabled>
+          Tasks
         </SidebarItem>
         <SidebarItem testid="sidebar-item-chat" disabled>
           Chat
         </SidebarItem>
       </SidebarGroup>
-      {/* Phase 19F — Admin no longer surfaces Billing. ChartNav
-          does not bill, code, submit claims, or handle insurance.
-          Documents replaces Billing as the third Admin item. */}
-      <SidebarGroup label="Admin" testid="sidebar-group-admin">
+      <SidebarGroup label="Clinical" testid="sidebar-group-clinical">
+        <SidebarItem testid="sidebar-item-lab-orders" disabled>
+          Lab / Orders
+        </SidebarItem>
         <SidebarItem testid="sidebar-item-documents" disabled>
           Documents
         </SidebarItem>
+      </SidebarGroup>
+      <SidebarGroup label="Admin" testid="sidebar-group-admin">
         <SidebarItem testid="sidebar-item-reports" disabled>
           Reports
         </SidebarItem>

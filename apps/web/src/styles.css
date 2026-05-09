@@ -99,15 +99,81 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
 .app-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 16px;
-  padding: 14px 24px;
+  /* Phase 19J — tighter top header (~52–56px tall) per reference
+     clinical layout. Search input sits centered between the brand
+     and identity meta; brand fills its natural width on the left,
+     header-meta fills natural width on the right, search stretches
+     to fill the middle gap. */
+  padding: 10px 24px;
   border-bottom: 1px solid var(--cn-line);
   background: var(--cn-surface);
   position: sticky;
   top: 0;
   z-index: 10;
   box-shadow: var(--cn-shadow-sm);
+}
+
+/* Phase 19J — header search input. Static placeholder for J.A;
+   real search wiring lands in J.B. Styled to read as a polished
+   workspace search field, not a debug input. */
+.header-search {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 520px;
+  min-width: 0;
+  padding: 0 14px;
+  height: 36px;
+  border: 1px solid var(--cn-line-strong);
+  border-radius: var(--cn-radius-pill);
+  background: var(--cn-surface-alt);
+  color: var(--cn-muted);
+  transition: border-color 0.15s var(--cn-ease),
+              box-shadow 0.15s var(--cn-ease),
+              background 0.15s var(--cn-ease);
+}
+.header-search:focus-within {
+  border-color: var(--cn-primary);
+  box-shadow: 0 0 0 3px var(--cn-primary-tint);
+  background: var(--cn-surface);
+}
+.header-search__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--cn-dim);
+  flex: 0 0 auto;
+}
+.header-search__input {
+  flex: 1 1 auto;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--cn-fg);
+  min-width: 0;
+}
+.header-search__input::placeholder {
+  color: var(--cn-dim);
+}
+.header-search__input:disabled {
+  /* Phase 19J.A — search input is intentionally disabled until
+     wiring lands in 19J.B. Keep it visually crisp so the disabled
+     state doesn't read as broken. */
+  cursor: not-allowed;
+  color: var(--cn-muted);
+  -webkit-text-fill-color: var(--cn-muted);
+  opacity: 1;
+}
+@media (max-width: 900px) {
+  .header-search {
+    /* On narrower viewports the search collapses out so the brand
+       and identity meta keep their breathing room. */
+    display: none;
+  }
 }
 
 .brand {
