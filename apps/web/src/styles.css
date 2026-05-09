@@ -277,31 +277,42 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
    placeholders for future phases.
    ============================================================ */
 .sidebar-nav {
-  /* Phase 19E — brand-red/burgundy sidebar nav. Scoped to the
-     grouped-nav block ONLY: the encounter list + filters below
-     keep their pale --cn-bg-alt background so the work surface
-     stays clean and readable. The bottom border separates the
-     two zones visually. */
-  background: #7f1d1d;
+  /* Phase 19E — brand-red/burgundy sidebar nav. Phase 19I
+     polish: subtle vertical gradient (#7f1d1d top -> #5e1414
+     bottom) so the wall reads as depth, not a flat block.
+     Scoped to the grouped-nav block ONLY: the encounter list
+     + filters below keep their pale --cn-bg-alt background so
+     the work surface stays clean and readable. */
+  background: linear-gradient(180deg, #7f1d1d 0%, #5e1414 100%);
   padding: 16px 12px 14px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.18);
+  gap: 16px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.22);
 }
 .sidebar-nav__group {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  /* Phase 19I — hairline divider above each group (except the
+     first) so groups read as discrete sections, not one long
+     wall. */
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.sidebar-nav__group:first-child {
+  padding-top: 0;
+  border-top: 0;
 }
 .sidebar-nav__group-label {
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  /* Phase 19E — light pink (#fecaca) on burgundy yields ~8.9:1,
-     well above WCAG AA 4.5:1 for normal text. */
-  color: #fecaca;
+  /* Phase 19I — bumped to a slightly brighter cream (#fed7d7)
+     so group labels pop off the gradient. ~9.4:1 on the
+     burgundy mid-tone, still well above WCAG AA. */
+  color: #fed7d7;
   padding: 0 6px;
   margin-bottom: 2px;
 }
@@ -330,18 +341,19 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
               box-shadow 0.15s var(--cn-ease);
 }
 .sidebar-nav__item:hover:not(:disabled) {
-  /* Phase 19E — subtle white-overlay hover on burgundy. */
-  background: rgba(255, 255, 255, 0.10);
+  /* Phase 19I — bumped from 0.10 to 0.14 for clearer hover
+     affordance without going loud. */
+  background: rgba(255, 255, 255, 0.14);
   color: #ffffff;
 }
 .sidebar-nav__item--active {
-  /* Phase 19E — teal active accent on burgundy. The 3px inset
-     left stripe uses --ctw-accent (#14b8a6) so it punches off
-     the deep red without going neon. The slight black-tint bg
-     (rgba(0,0,0,0.18)) deepens the active row to read as
-     "selected"; white text stays high-contrast (~10.5:1 on
-     the resulting effective tone). */
-  background: rgba(0, 0, 0, 0.18);
+  /* Phase 19E + 19I — teal active accent on burgundy. The 3px
+     inset left stripe uses --ctw-accent (#14b8a6). Phase 19I
+     deepens the active-row bg from 0.18 to 0.26 black-tint so
+     the selected row reads as a clear "pressed in" treatment
+     rather than a faint shade — and the teal stripe pops off
+     it more cleanly. */
+  background: rgba(0, 0, 0, 0.26);
   color: #ffffff;
   font-weight: 600;
   box-shadow: inset 3px 0 0 #14b8a6;
@@ -1733,8 +1745,14 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
 
 /* Tab bar */
 .ctw__tabbar {
+  /* Phase 19I — desktop tab row must show all 9 tabs cleanly
+     at 1440px. We keep overflow-x: auto as a narrow-viewport
+     safety net but tighten the tab metrics so the bar fits
+     edge-to-edge without horizontal scroll on a normal demo
+     monitor. Tabs flex-shrink so a long label like
+     "Documentation / EMR/EHR" won't push siblings off-screen. */
   display: flex;
-  gap: 4px;
+  gap: 2px;
   border-bottom: 1px solid var(--cn-line);
   padding: 0 4px;
   overflow-x: auto;
@@ -1743,7 +1761,7 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
 .ctw__tab {
   background: transparent;
   border: none;
-  padding: 10px 14px;
+  padding: 10px 10px;
   font: inherit;
   font-size: 13px;
   font-weight: 500;
@@ -1751,7 +1769,20 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
   cursor: pointer;
   border-bottom: 2px solid transparent;
   white-space: nowrap;
+  flex: 0 1 auto;
   transition: color 0.15s var(--cn-ease), border-color 0.15s var(--cn-ease);
+}
+@media (min-width: 1280px) {
+  /* Roomier desktop: keep the tighter base padding but add
+     small horizontal breathing room. Bar fits 9 tabs edge-to-
+     edge at 1440px with no scroll. */
+  .ctw__tab { padding: 11px 12px; font-size: 13px; }
+}
+@media (max-width: 1100px) {
+  /* Approaching tablet: shrink padding + font slightly so the
+     bar still fits. Below this width the overflow-x scroll
+     handles the rest. */
+  .ctw__tab { padding: 9px 8px; font-size: 12px; }
 }
 .ctw__tab:hover {
   color: var(--cn-fg);
@@ -1875,8 +1906,16 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
   margin-top: 8px;
 }
 
-/* Clinical tab */
-.ctw-clinical { display: flex; flex-direction: column; gap: 12px; }
+/* Clinical tab — Phase 19I restructure
+   The prior <details><summary><ul> bullet-list look was
+   replaced by a grid of Cards with pill-button shortcuts.
+   Pills are visually buttons but intentionally inert
+   (disabled) — they're pinning shortcuts the clinician would
+   drag into the Documentation draft, not actions ChartNav
+   takes on its own. Favorites is pinned first per the brief
+   and gets a subtle accent so it reads as the recommended
+   entry point. */
+.ctw-clinical { display: flex; flex-direction: column; gap: 14px; }
 .ctw-clinical__search {
   padding: 10px 14px;
   border: 1px solid var(--cn-line-strong);
@@ -1885,28 +1924,153 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
   font-size: 14px;
   background: var(--cn-surface);
 }
-.ctw-clinical__groups {
+.ctw-clinical__grid {
+  /* Inherits .ctw-grid (3 cols / 2 / 1 responsive) — no
+     additional rules needed beyond row-spacing. */
+}
+.ctw-clinical__group--favorites {
+  /* Subtle teal accent to mark the pinned Favorites group as
+     the recommended entry point. */
+  border-color: var(--cn-primary-tint);
+  box-shadow:
+    inset 3px 0 0 var(--cn-primary),
+    var(--cn-shadow-sm);
+}
+.ctw-clinical__group--favorites .ctw-card__title {
+  color: var(--cn-primary);
+}
+.ctw-clinical__pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ctw-clinical__pill {
+  display: inline-flex;
+  align-items: center;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--cn-fg);
+  background: var(--cn-bg-alt);
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-pill);
+  padding: 4px 12px;
+  white-space: nowrap;
+  cursor: not-allowed;
+  /* The pills are visually interactive but disabled for now
+     (pinning into a draft is a Phase 19I+ wire-up). 0.85
+     opacity keeps them readable but distinguishable from a
+     fully-enabled control. */
+  opacity: 0.85;
+  transition: background 0.15s var(--cn-ease);
+}
+.ctw-clinical__pill:hover {
+  background: var(--cn-primary-soft);
+}
+
+/* Documentation tab — Phase 19I stepper + workbench frame.
+   Wraps NoteWorkspace so the buyer sees a clear Transcript ->
+   Extracted Facts -> AI Draft -> Final Note workflow header
+   above the existing scribe panel. */
+.ctw-documentation {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.ctw-doc-stepper {
+  background: var(--cn-surface);
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-lg);
+  box-shadow: var(--cn-shadow-sm);
+  padding: 14px 18px;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-.ctw-clinical__groups details {
-  background: var(--cn-surface);
-  border: 1px solid var(--cn-line);
-  border-radius: var(--cn-radius-md);
-  padding: 10px 14px;
+.ctw-doc-stepper__steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  align-items: center;
 }
-.ctw-clinical__groups summary {
-  cursor: pointer;
+.ctw-doc-stepper__step {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
   font-weight: 600;
-  font-size: 14px;
   color: var(--cn-fg);
 }
-.ctw-clinical__items {
-  margin: 8px 0 0;
-  padding-left: 18px;
-  font-size: 13px;
-  color: var(--cn-muted);
+.ctw-doc-stepper__step + .ctw-doc-stepper__step::before {
+  content: "→";
+  margin-right: 8px;
+  color: var(--cn-dim);
+  font-weight: 400;
+}
+.ctw-doc-stepper__index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--cn-radius-pill);
+  background: var(--cn-primary-soft);
+  color: var(--cn-primary);
+  font-size: 11px;
+  font-weight: 700;
+}
+.ctw-doc-stepper__label {
+  font-weight: 600;
+  color: var(--cn-fg);
+}
+.ctw-doc-stepper__caption {
+  margin: 0;
+  font-size: 12px;
+  color: var(--cn-dim);
+}
+.ctw-doc-workbench {
+  background: var(--cn-surface);
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-lg);
+  box-shadow: var(--cn-shadow-sm);
+  padding: 4px;
+  /* NoteWorkspace renders its own internal sections; this
+     wrapper just frames it with the same card chrome the rest
+     of the workspace uses. The 4px padding keeps NoteWorkspace
+     visually inset without touching its own internal layout. */
+}
+
+/* Imaging tab — Phase 19I extra polish. The tab now opens with
+   the upload/OCT/fundus/attachments/notes/viewer grid; the
+   OD/OS retinal workbench follows as its own wide card so the
+   raw canvas is no longer the first thing the buyer sees. */
+.ctw-imaging {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Narrow / tablet viewport — Phase 19I "don't look broken"
+   fallback. Below 900px the layout aside that holds the
+   sidebar nav + encounter list already stacks above the
+   workspace (existing rule); the additional rules below tighten
+   the patient header so it doesn't overflow awkwardly and let
+   the doc-stepper wrap onto multiple lines without breaking. */
+@media (max-width: 900px) {
+  .ctw__patient-line { gap: 10px; }
+  .ctw__encounter-line { gap: 8px; }
+  .ctw-doc-stepper__steps { gap: 4px 10px; }
+}
+@media (max-width: 600px) {
+  .ctw__patient-name { font-size: 16px; }
+  .ctw__demographics {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px 12px;
+    padding: 10px 12px;
+  }
 }
 
 /* Communications */
@@ -1973,6 +2137,65 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
   color: var(--cn-pulse);
   border-radius: var(--cn-radius-sm);
 }
+/* Phase 19I — recipient selector. Scopes the Chat thread to
+   one internal staff member (no patient recipients listed). */
+.ctw-chat__recipient {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: var(--cn-surface);
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-md);
+  padding: 10px 14px;
+}
+.ctw-chat__recipient-select {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 10px;
+  border: 1px solid var(--cn-line-strong);
+  border-radius: var(--cn-radius-sm);
+  background: var(--cn-surface);
+  color: var(--cn-fg);
+  min-width: 220px;
+}
+.ctw-chat__recipient-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  background: var(--cn-bg-alt);
+  border-radius: var(--cn-radius-pill);
+  font-size: 12px;
+}
+.ctw-chat__recipient-name {
+  font-weight: 600;
+  color: var(--cn-fg);
+}
+.ctw-chat__recipient-role {
+  color: var(--cn-muted);
+}
+.ctw-chat__recipient-presence {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: var(--cn-radius-pill);
+}
+.ctw-chat__recipient-presence--online {
+  background: var(--cn-success-tint);
+  color: var(--cn-success);
+}
+.ctw-chat__recipient-presence--away {
+  background: var(--cn-warning-tint);
+  color: var(--cn-warning);
+}
+.ctw-chat__recipient-presence--offline {
+  background: var(--cn-bg-alt);
+  color: var(--cn-dim);
+}
+
 .ctw-chat__participants {
   display: flex;
   align-items: center;

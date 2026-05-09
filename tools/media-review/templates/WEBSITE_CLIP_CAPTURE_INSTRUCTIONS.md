@@ -165,40 +165,83 @@ all three placeholders in frame.
 
 ---
 
-## website_clip_05_internal_chat
+## website_clip_05_labs_orders_review_only
 
-**Filename:** `website_clip_05_internal_chat.mp4`
-**Purpose:** Internal team coordination section.
+**Filename:** `website_clip_05_labs_orders_review_only.mp4`
+**Purpose:** Review-only proof section.
 **Duration target:** 8–12 seconds.
 **Route:** `http://localhost:5173/?demo=1`
 
-**Start screen:** workspace mounted, click **Chat** tab.
+**Start screen:** workspace mounted, click **Labs / Orders
+Review** tab.
+
+**Click path:**
+1. Pause for 1–2 s on the four review-only cards (Lab Results,
+   Imaging Orders, Procedure Plan, Review Notes).
+2. Hover over the disabled **View / Mark reviewed / Add note**
+   buttons.
+3. Pan over the disclaimer footnote.
+
+**Stop screen:** Labs / Orders Review tab fully visible with
+the disclaimer footnote in frame.
+
+**Show:**
+- Four review-only cards.
+- The "Allowed actions: View / Mark reviewed / Add note"
+  footnote.
+- Disabled state on every action button — no clickable
+  orders, no Submit / Place / Send.
+
+**Avoid:**
+- Pretending the buttons work — they're disabled by design.
+- Submit Order / Place Order / Send Referral language anywhere
+  in frame.
+
+---
+
+## website_clip_06_internal_chat_recipient_selector
+
+**Filename:** `website_clip_06_internal_chat_recipient_selector.mp4`
+**Purpose:** Internal team coordination section (Phase 19I).
+**Duration target:** 8–12 seconds.
+**Route:** `http://localhost:5173/?demo=1`
+
+**Start screen:** workspace mounted, click **Chat** tab. Default
+recipient is Dr. Carter.
 
 **Click path:**
 1. Pause for 1–2 s on the demo-local warning ("Demo-local
    internal chat — do not enter real PHI").
-2. Pan over the staff thread.
-3. Briefly hover the **Export .txt** and **Export .json**
+2. Pan over the **recipient selector** ("Send internal message
+   to") and the recipient card showing Dr. Carter / Clinician /
+   Online.
+3. Click the recipient dropdown and switch to **Dr. Patel**.
+   The recipient card updates to Dr. Patel / Clinician / Away
+   and the composer placeholder updates to "Message Dr. Patel
+   internally…".
+4. Briefly hover the **Export .txt** and **Export .json**
    buttons.
 
-**Stop screen:** Chat tab fully visible with warning + Export
-buttons in frame.
+**Stop screen:** Chat tab visible with the Dr. Patel recipient
+card + Export buttons in frame.
 
 **Show:**
 - Demo-local warning text.
-- Internal staff thread.
+- Recipient selector dropdown.
+- Recipient card with name / role / presence indicator.
+- Composer placeholder reflecting selected recipient.
 - Export .txt / Export .json buttons.
 
 **Avoid:**
-- Sending a message that includes anything resembling real
-  PHI.
+- Listing a patient as a recipient. (None should appear — if
+  the dropdown surfaces "patient", stop and file an issue.)
 - Anything that suggests the chat reaches a patient.
 
 ---
 
-## website_clip_06_full_workspace_navigation
+## website_clip_07_full_workspace_navigation
 
-**Filename:** `website_clip_06_full_workspace_navigation.mp4`
+**Filename:** `website_clip_07_full_workspace_navigation.mp4`
 **Purpose:** Longer demo preview.
 **Duration target:** 25–45 seconds.
 **Route:** `http://localhost:5173/?demo=1`

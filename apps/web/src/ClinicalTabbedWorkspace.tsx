@@ -176,19 +176,10 @@ export function ClinicalTabbedWorkspace(
         )}
         {active === "clinical" && <ClinicalTab />}
         {active === "documentation" && typeof encounter.id === "number" && (
-          <NoteWorkspace
+          <DocumentationTab
             identity={identity}
             me={me}
-            encounterId={encounter.id}
-            patientId={
-              typeof encounter.patient_id === "number"
-                ? encounter.patient_id
-                : null
-            }
-            patientDisplay={
-              encounter.patient_name ?? encounter.patient_identifier
-            }
-            providerDisplay={encounter.provider_name}
+            encounter={encounter}
           />
         )}
         {active === "imaging" && (
@@ -655,36 +646,85 @@ function renderEventData(ev: WorkflowEvent): string {
 // ---------------------------------------------------------------
 
 function ClinicalTab(): JSX.Element {
-  const groups: Array<{ name: string; items: string[] }> = [
+  // Phase 19I — Clinical / Ophthalmology surface restructured
+  // from a `<details><summary><ul>` bullet-list (which read as
+  // a raw HTML page in screenshot review) into a grid of
+  // Cards with pill-button shortcuts. Favorites is pinned
+  // first per the Phase 19I brief; other groups follow the
+  // brief order. Pills are visually buttons but are
+  // intentionally inert (disabled) — these are review-prompt
+  // shortcuts the clinician will pin into a draft, not
+  // diagnoses ChartNav generates.
+  const groups: Array<{ id: string; name: string; items: string[] }> = [
     {
-      name: "Cornea / Anterior segment",
-      items: ["Dry eye", "Keratitis", "Corneal abrasion", "Epithelial defect"],
+      id: "favorites",
+      name: "Favorites",
+      items: [], // Empty by default; a clinician pins entries here.
     },
     {
+      id: "retina",
       name: "Retina / AMD / DME",
-      items: ["Drusen", "Dot/blot hemorrhage", "Flame hemorrhage", "Microaneurysm"],
+      items: [
+        "Drusen",
+        "Dot/blot hemorrhage",
+        "Flame hemorrhage",
+        "Microaneurysm",
+        "Macular edema",
+        "Subretinal fluid",
+      ],
     },
     {
-      name: "Oculoplastics / Lids / Adnexa",
-      items: ["Chalazion", "Blepharitis", "Entropion", "Ectropion"],
+      id: "cornea",
+      name: "Cornea / Anterior Segment",
+      items: [
+        "Dry eye",
+        "Keratitis",
+        "Corneal abrasion",
+        "Epithelial defect",
+        "Pterygium",
+        "Anterior chamber depth",
+      ],
     },
     {
+      id: "glaucoma",
       name: "Glaucoma",
-      items: ["IOP elevated", "Disc cupping", "Visual field defect"],
+      items: [
+        "IOP elevated",
+        "Disc cupping",
+        "Visual field defect",
+        "Optic disc pallor",
+      ],
+    },
+    {
+      id: "oculoplastics",
+      name: "Oculoplastics / Lids / Adnexa",
+      items: [
+        "Chalazion",
+        "Blepharitis",
+        "Entropion",
+        "Ectropion",
+        "Ptosis",
+      ],
+    },
+    {
+      id: "general",
+      name: "General Ophthalmology",
+      items: [
+        "Conjunctivitis",
+        "Allergic conjunctivitis",
+        "Visual acuity decreased",
+        "Refraction change",
+      ],
     },
   ];
 
-  const [open, setOpen] = useState<string | null>(groups[0].name);
   const [search, setSearch] = useState("");
+  const q = search.trim().toLowerCase();
 
-  const filtered = groups
-    .map((g) => ({
-      ...g,
-      items: g.items.filter((i) =>
-        i.toLowerCase().includes(search.toLowerCase())
-      ),
-    }))
-    .filter((g) => g.items.length > 0 || !search);
+  const filtered = groups.map((g) => ({
+    ...g,
+    items: q ? g.items.filter((i) => i.toLowerCase().includes(q)) : g.items,
+  }));
 
   return (
     <div className="ctw-clinical" data-testid="ctw-clinical">
@@ -696,33 +736,129 @@ function ClinicalTab(): JSX.Element {
         data-testid="ctw-clinical-search"
         className="ctw-clinical__search"
       />
-      <div className="ctw-clinical__groups">
-        {filtered.map((g) => {
-          const isOpen = open === g.name || !!search;
-          return (
-            <details
-              key={g.name}
-              open={isOpen}
-              data-testid={`ctw-clinical-group-${g.name.replace(/\W+/g, "-").toLowerCase()}`}
-              onToggle={(e) => {
-                if ((e.target as HTMLDetailsElement).open) setOpen(g.name);
-              }}
-            >
-              <summary>{g.name}</summary>
-              <ul className="ctw-clinical__items">
-                {g.items.map((i) => (
-                  <li key={i}>{i}</li>
-                ))}
-              </ul>
-            </details>
-          );
-        })}
+      <div className="ctw-grid ctw-clinical__grid">
+        {filtered.map((g) => (
+          <section
+            key={g.id}
+            className={
+              "ctw-card ctw-clinical__group" +
+              (g.id === "favorites" ? " ctw-clinical__group--favorites" : "")
+            }
+            data-testid={`ctw-clinical-group-${g.id}`}
+          >
+            <h3 className="ctw-card__title">{g.name}</h3>
+            <div className="ctw-card__body">
+              {g.items.length === 0 ? (
+                <EmptyState>
+                  {g.id === "favorites"
+                    ? "Pin shortcuts you use most often. Selected pills appear here on subsequent visits."
+                    : q
+                    ? "No shortcuts match the search."
+                    : "No shortcuts in this group yet."}
+                </EmptyState>
+              ) : (
+                <div
+                  className="ctw-clinical__pills"
+                  data-testid={`ctw-clinical-pills-${g.id}`}
+                >
+                  {g.items.map((i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      className="ctw-clinical__pill"
+                      disabled
+                      title="Pin into the active draft from the Documentation tab"
+                      data-testid={`ctw-clinical-pill-${g.id}-${i
+                        .toLowerCase()
+                        .replace(/\W+/g, "-")}`}
+                    >
+                      {i}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        ))}
       </div>
       <p className="ctw__footnote">
         Provider-reviewed workflow support. ChartNav does not diagnose,
         create orders, send referrals, bill, or message patients
         automatically. Clinical shortcuts surface review prompts only.
       </p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------
+// Documentation — wraps NoteWorkspace in a polished workbench
+// shell with a Transcript → Extracted Facts → AI Draft → Final
+// Note stepper header (Phase 19I). NoteWorkspace itself is
+// untouched (Phase 17/18/19 contract).
+// ---------------------------------------------------------------
+
+const DOC_STEPS = [
+  { id: "transcript", label: "Transcript" },
+  { id: "facts", label: "Extracted Facts" },
+  { id: "draft", label: "AI Draft" },
+  { id: "final", label: "Final Note" },
+] as const;
+
+function DocumentationTab({
+  identity,
+  me,
+  encounter,
+}: {
+  identity: string;
+  me: Me;
+  encounter: Encounter;
+}): JSX.Element {
+  return (
+    <div
+      className="ctw-documentation"
+      data-testid="ctw-documentation"
+    >
+      <header
+        className="ctw-doc-stepper"
+        data-testid="ctw-doc-stepper"
+        aria-label="Documentation workflow stages"
+      >
+        <ol className="ctw-doc-stepper__steps">
+          {DOC_STEPS.map((s, idx) => (
+            <li
+              key={s.id}
+              className="ctw-doc-stepper__step"
+              data-testid={`ctw-doc-stepper-${s.id}`}
+            >
+              <span className="ctw-doc-stepper__index">{idx + 1}</span>
+              <span className="ctw-doc-stepper__label">{s.label}</span>
+            </li>
+          ))}
+        </ol>
+        <p className="ctw-doc-stepper__caption">
+          Provider-reviewed at every stage. ChartNav drafts; the
+          clinician signs.
+        </p>
+      </header>
+      <div
+        className="ctw-doc-workbench"
+        data-testid="ctw-doc-workbench"
+      >
+        <NoteWorkspace
+          identity={identity}
+          me={me}
+          encounterId={encounter.id as number}
+          patientId={
+            typeof encounter.patient_id === "number"
+              ? encounter.patient_id
+              : null
+          }
+          patientDisplay={
+            encounter.patient_name ?? encounter.patient_identifier
+          }
+          providerDisplay={encounter.provider_name}
+        />
+      </div>
     </div>
   );
 }
@@ -739,13 +875,61 @@ function ImagingTab({
   identity: string;
   me: Me;
 }): JSX.Element {
+  // Phase 19I — Imaging tab restructure. Top-level surface
+  // shows the imaging *workspace* (Upload / OCT / Fundus /
+  // Attachments / Imaging Notes / Selected Image Viewer) so
+  // a buyer doesn't land on the raw OD/OS retinal canvas as
+  // the first thing on the tab. The OD/OS Retinal Workbench
+  // moves to the bottom inside a polished wide card so it
+  // still demos prominently but is framed as one tool inside
+  // a broader imaging surface.
   const patientId =
     typeof encounter.patient_id === "number" ? encounter.patient_id : null;
   const encounterId =
     typeof encounter.id === "number" ? encounter.id : null;
   return (
     <div className="ctw-imaging" data-testid="ctw-imaging">
-      <Card title="OD/OS retinal diagram" wide>
+      <div className="ctw-grid" data-testid="ctw-imaging-grid">
+        <Card title="Upload imaging">
+          <EmptyState>
+            Drag-and-drop OCT, fundus, or external imaging from the
+            practice's media bucket. ChartNav views and annotates
+            uploaded studies — it does not order imaging.
+          </EmptyState>
+        </Card>
+        <Card title="OCT images">
+          <EmptyState>
+            OCT studies attached to this encounter surface here once
+            the practice's OCT integration is wired. Demo placeholder.
+          </EmptyState>
+        </Card>
+        <Card title="Fundus photos">
+          <EmptyState>
+            Fundus photographs surface here from the practice's
+            existing imaging workflow. Demo placeholder.
+          </EmptyState>
+        </Card>
+        <Card title="Attachments">
+          <EmptyState>
+            Outside-image attachments (referral PDFs, scanned reports)
+            land here. Demo placeholder.
+          </EmptyState>
+        </Card>
+        <Card title="Imaging notes">
+          <EmptyState>
+            Provider notes attached to a study or scan. Use the
+            review-only annotation surface below.
+          </EmptyState>
+        </Card>
+        <Card title="Selected image viewer">
+          <EmptyState>
+            Click an imaging tile above to load it here. ChartNav
+            renders the study read-only; provider review is required
+            before any finding lands in the draft note.
+          </EmptyState>
+        </Card>
+      </div>
+      <Card title="OD/OS retinal workbench" wide>
         {patientId !== null ? (
           <EyeDiagramPanel
             identity={identity}
@@ -759,13 +943,12 @@ function ImagingTab({
           </EmptyState>
         )}
       </Card>
-      <Card title="Imaging notes">
-        <EmptyState>
-          OCT, fundus photos, and external imaging will surface here
-          when the practice wires a media bucket. ChartNav does not
-          order imaging — it views and annotates.
-        </EmptyState>
-      </Card>
+      <p className="ctw__footnote">
+        ChartNav does not order imaging. Studies surface here from the
+        practice's existing imaging workflow; ChartNav views,
+        annotates, and routes provider-reviewed findings into the
+        draft note.
+      </p>
     </div>
   );
 }
@@ -1091,6 +1274,24 @@ interface ChatMessage {
   created_at: string;
 }
 
+// Phase 19I — internal staff recipients available in the Chat
+// tab. These are demo-local (no backend round-trip); the
+// dropdown lets the operator scope the thread to a single
+// recipient so the export captures one conversation rather
+// than a single concatenated log. No patient-side recipients
+// — the safe-claims contract bans patient messaging.
+const CHAT_RECIPIENTS: Array<{
+  id: string;
+  name: string;
+  role: string;
+  presence: "online" | "offline" | "away";
+}> = [
+  { id: "carter", name: "Dr. Carter", role: "Clinician", presence: "online" },
+  { id: "patel", name: "Dr. Patel", role: "Clinician", presence: "away" },
+  { id: "admin-front-desk", name: "Admin", role: "Front Desk", presence: "online" },
+  { id: "reviewer", name: "Reviewer", role: "Reviewer", presence: "offline" },
+];
+
 function ChatTab({
   encounter,
   me,
@@ -1098,17 +1299,37 @@ function ChatTab({
   encounter: Encounter;
   me: Me;
 }): JSX.Element {
-  const storageKey = `chartnav.encounter.${encounter.id}.chat`;
-  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+  // Phase 19I — recipient-scoped storage. Each recipient has
+  // its own thread keyed by encounter + recipient id.
+  const [recipientId, setRecipientId] = useState<string>(
+    CHAT_RECIPIENTS[0].id
+  );
+  const recipient =
+    CHAT_RECIPIENTS.find((r) => r.id === recipientId) ?? CHAT_RECIPIENTS[0];
+
+  const storageKey =
+    `chartnav.encounter.${encounter.id}.chat.${recipientId}`;
+  const [messagesByRecipient, setMessagesByRecipient] = useState<
+    Record<string, ChatMessage[]>
+  >({});
+
+  // Lazy-load the active thread from localStorage when the
+  // recipient changes (or first render).
+  useEffect(() => {
     try {
       const raw = window.localStorage.getItem(storageKey);
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
+      const parsed = raw ? JSON.parse(raw) : [];
+      setMessagesByRecipient((prev) => ({
+        ...prev,
+        [recipientId]: Array.isArray(parsed) ? parsed : [],
+      }));
     } catch {
-      return [];
+      setMessagesByRecipient((prev) => ({ ...prev, [recipientId]: [] }));
     }
-  });
+  }, [recipientId, storageKey]);
+
+  const messages = messagesByRecipient[recipientId] ?? [];
+
   const [draft, setDraft] = useState("");
   const [participant, setParticipant] = useState<
     "Staff" | "Clinician" | "Reviewer"
@@ -1120,9 +1341,13 @@ function ChatTab({
       : "Staff"
   );
 
+  // Persist the active thread when it changes.
   useEffect(() => {
     try {
-      window.localStorage.setItem(storageKey, JSON.stringify(messages));
+      window.localStorage.setItem(
+        storageKey,
+        JSON.stringify(messages)
+      );
     } catch {
       // ignore
     }
@@ -1138,7 +1363,10 @@ function ChatTab({
       body: text,
       created_at: new Date().toISOString(),
     };
-    setMessages((prev) => [...prev, entry]);
+    setMessagesByRecipient((prev) => ({
+      ...prev,
+      [recipientId]: [...(prev[recipientId] ?? []), entry],
+    }));
     setDraft("");
   };
 
@@ -1151,19 +1379,28 @@ function ChatTab({
     const blob = new Blob(
       [
         `# ChartNav internal chat — encounter #${encounter.id}\n` +
+          `# Recipient: ${recipient.name} (${recipient.role})\n` +
           `# Demo-local. Do not paste real PHI.\n` +
           `# Exported ${new Date().toISOString()}\n\n` +
           lines.join("\n"),
       ],
       { type: "text/plain" }
     );
-    triggerDownload(blob, `chartnav-chat-encounter-${encounter.id}.txt`);
-  }, [messages, encounter.id]);
+    triggerDownload(
+      blob,
+      `chartnav-chat-encounter-${encounter.id}-${recipient.id}.txt`
+    );
+  }, [messages, encounter.id, recipient]);
 
   const exportJson = useCallback(() => {
     const payload = {
       kind: "chartnav-internal-chat-export",
       encounter_id: encounter.id,
+      recipient: {
+        id: recipient.id,
+        name: recipient.name,
+        role: recipient.role,
+      },
       exported_at: new Date().toISOString(),
       note: "Demo-local. Do not paste real PHI.",
       messages,
@@ -1171,16 +1408,19 @@ function ChatTab({
     const blob = new Blob([JSON.stringify(payload, null, 2)], {
       type: "application/json",
     });
-    triggerDownload(blob, `chartnav-chat-encounter-${encounter.id}.json`);
-  }, [messages, encounter.id]);
+    triggerDownload(
+      blob,
+      `chartnav-chat-encounter-${encounter.id}-${recipient.id}.json`
+    );
+  }, [messages, encounter.id, recipient]);
 
   const clearAll = () => {
     if (
       window.confirm(
-        "Clear this encounter's local chat thread? This cannot be undone."
+        `Clear the chat thread with ${recipient.name}? This cannot be undone.`
       )
     ) {
-      setMessages([]);
+      setMessagesByRecipient((prev) => ({ ...prev, [recipientId]: [] }));
     }
   };
 
@@ -1192,6 +1432,66 @@ function ChatTab({
       >
         Demo-local internal chat — do not enter real PHI.
       </div>
+
+      {/* Phase 19I — recipient selector. Scopes the thread,
+          composer placeholder, and export filename to one
+          internal staff member. No patient recipients are
+          listed; the safe-claims contract bans patient
+          messaging. */}
+      <div
+        className="ctw-chat__recipient"
+        data-testid="ctw-chat-recipient"
+      >
+        <label
+          htmlFor="ctw-chat-recipient-select"
+          className="ctw__meta-label"
+        >
+          Send internal message to
+        </label>
+        <select
+          id="ctw-chat-recipient-select"
+          className="ctw-chat__recipient-select"
+          data-testid="ctw-chat-recipient-select"
+          value={recipientId}
+          onChange={(e) => setRecipientId(e.target.value)}
+        >
+          {CHAT_RECIPIENTS.map((r) => (
+            <option
+              key={r.id}
+              value={r.id}
+              data-testid={`ctw-chat-recipient-option-${r.id}`}
+            >
+              {r.name} — {r.role}
+            </option>
+          ))}
+        </select>
+        <div
+          className="ctw-chat__recipient-card"
+          data-testid="ctw-chat-recipient-card"
+        >
+          <span className="ctw-chat__recipient-name">
+            {recipient.name}
+          </span>
+          <span className="ctw-chat__recipient-role">
+            {recipient.role}
+          </span>
+          <span
+            className={
+              "ctw-chat__recipient-presence ctw-chat__recipient-presence--" +
+              recipient.presence
+            }
+            data-presence={recipient.presence}
+            data-testid="ctw-chat-recipient-presence"
+          >
+            {recipient.presence === "online"
+              ? "Online"
+              : recipient.presence === "away"
+              ? "Away"
+              : "Offline"}
+          </span>
+        </div>
+      </div>
+
       <div className="ctw-chat__participants" data-testid="ctw-chat-participants">
         <span className="ctw__meta-label">Speaking as</span>
         {(["Staff", "Clinician", "Reviewer"] as const).map((p) => (
@@ -1212,8 +1512,8 @@ function ChatTab({
       <div className="ctw-chat__thread" data-testid="ctw-chat-thread">
         {messages.length === 0 ? (
           <EmptyState>
-            No messages yet. Pick a participant role above and send the
-            first internal handoff.
+            No messages yet with {recipient.name}. Pick a participant
+            role above and send the first internal handoff.
           </EmptyState>
         ) : (
           messages.map((m) => (
@@ -1237,7 +1537,7 @@ function ChatTab({
       </div>
       <textarea
         className="ctw-chat__composer"
-        placeholder="Internal staff message…"
+        placeholder={`Message ${recipient.name} internally…`}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         data-testid="ctw-chat-composer"

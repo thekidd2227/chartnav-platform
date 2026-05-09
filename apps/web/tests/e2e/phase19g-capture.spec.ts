@@ -95,8 +95,9 @@ test.describe("Phase 19G — media review screenshot capture", () => {
       });
     }
 
-    // Per the Phase 19F final tab list — exactly 9 tabs, no
-    // Billing.
+    // Per the Phase 19F + 19I final tab list — exactly 9 tabs,
+    // no Billing. Phase 19I adds a recipient selector to the
+    // Chat tab so the file is named accordingly.
     await shotTab("overview", "01_overview.png");
     await shotTab("clinical", "02_clinical_ophthalmology.png");
     await shotTab("documentation", "03_documentation_emr_ehr.png");
@@ -105,7 +106,7 @@ test.describe("Phase 19G — media review screenshot capture", () => {
     await shotTab("calendar", "06_calendar.png");
     await shotTab("communications", "07_communications.png");
     await shotTab("documents", "08_documents.png");
-    await shotTab("chat", "09_chat.png");
+    await shotTab("chat", "09_chat_recipient_selector.png");
 
     // 10 — sidebar + topbar closeup. Crops the left-hand grouped
     // sidebar nav (Phase 19E burgundy + teal active stripe).
@@ -117,10 +118,9 @@ test.describe("Phase 19G — media review screenshot capture", () => {
     // 19E red-accent stripe.
     await shotPatientHeader(page, "11_patient_header_demographics.png");
 
-    // 12 — narrow viewport (mobile). Set viewport to a typical
-    // phone-portrait size and screenshot the same Overview tab
-    // so the responsive collapse is visible.
-    await shotMobile(page, "12_mobile_or_narrow_layout.png");
+    // 12 — narrow viewport. Phase 19I tightens the narrow
+    // fallback so the layout stops looking broken at <600px.
+    await shotMobile(page, "12_narrow_layout.png");
   });
 });
 
