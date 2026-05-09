@@ -210,6 +210,48 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
   gap: 10px;
   flex-wrap: wrap;
 }
+
+/* Phase 19J — workspace-shortcut icon row (notification / help /
+   security) between the search input and identity meta. Each icon
+   is a square 32px button with a teal-tinted hover that matches the
+   shell's clinical accent. Disabled in 19J.A — wires to real
+   notification / help / security panels in 19J.C. */
+.header-icons {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.header-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid transparent;
+  border-radius: var(--cn-radius-md);
+  background: transparent;
+  color: var(--cn-muted);
+  cursor: pointer;
+  transition: background 0.15s var(--cn-ease),
+              color 0.15s var(--cn-ease),
+              border-color 0.15s var(--cn-ease);
+}
+.header-icon-btn:hover:not(:disabled) {
+  background: var(--cn-primary-soft);
+  color: var(--cn-primary);
+  border-color: var(--cn-primary-tint);
+}
+.header-icon-btn:focus-visible {
+  outline: none;
+  border-color: var(--cn-primary);
+  box-shadow: 0 0 0 3px var(--cn-primary-tint);
+}
+.header-icon-btn:disabled {
+  cursor: not-allowed;
+  /* Keep icons crisp even in disabled-static state so the chrome
+     doesn't read as broken. */
+  opacity: 0.85;
+}
 .header-meta .chip {
   background: var(--cn-surface-alt);
   border: 1px solid var(--cn-line);
@@ -1915,6 +1957,37 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
     0 1px 3px rgba(15, 23, 42, 0.05);
 }
 .ctw-card--wide { grid-column: 1 / -1; }
+
+/* Phase 19J — Favorites list inside the Overview row-1 Favorites
+   card. Star-bulleted rows match the reference clinical layout's
+   pinned-shortcut treatment. */
+.ctw-favorites__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ctw-favorites__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  color: var(--cn-fg);
+  line-height: 1.4;
+}
+.ctw-favorites__star {
+  color: var(--cn-warning);
+  font-size: 13px;
+  line-height: 1;
+}
+.ctw-favorites__label {
+  flex: 1 1 auto;
+}
+.ctw-favorites__note {
+  margin-top: 4px;
+}
 .ctw-card__title {
   margin: 0;
   font-size: 12px;
