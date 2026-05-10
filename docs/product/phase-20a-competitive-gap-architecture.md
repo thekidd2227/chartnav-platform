@@ -5,12 +5,14 @@
 > **No code, no schema, no migrations, no media binaries.** All
 > changes ship as Markdown under `docs/product/`.
 
-This is the index for an eight-document set produced as Phase 20A.
-It audits the current ChartNav repo and lays out a precise
-implementation blueprint for the next competitive upgrade layer:
-structured data, ophthalmology specialty modules, an imaging
-pipeline, multi-clinic scaling, role-based clinic workflows, and
-sharper ophthalmology-specific public positioning.
+This is the index for the **nine-document** set produced as
+Phase 20A (eight original docs plus the Phase 20A.1 HIPAA
+readiness layer). It audits the current ChartNav repo and lays
+out a precise implementation blueprint for the next competitive
+upgrade layer: structured data, ophthalmology specialty
+modules, an imaging pipeline, multi-clinic scaling, role-based
+clinic workflows, sharper ophthalmology-specific public
+positioning, and a HIPAA-regulated deployment readiness layer.
 
 The repo audit confirms a recurring pattern: **ChartNav's clinical
 encounter-level workflow is stronger than its market-facing
@@ -21,7 +23,7 @@ governance, FHIR adapter foundation) into longitudinal disease
 tracking, clinic-wide work queues, an imaging review pipeline,
 and a multi-location operating model.
 
-## The eight docs
+## The nine docs
 
 | # | Doc | Scope |
 |---|---|---|
@@ -32,7 +34,8 @@ and a multi-location operating model.
 | 5 | [`chartnav-imaging-pipeline-plan.md`](./chartnav-imaging-pipeline-plan.md) | OCT / fundus / VF / biometry metadata pipeline with provider-review queue |
 | 6 | [`chartnav-multi-clinic-scaling-plan.md`](./chartnav-multi-clinic-scaling-plan.md) | Provider-location assignments, location rooms, schedule blocks, operating hours |
 | 7 | [`chartnav-ophthalmology-positioning-gap-plan.md`](./chartnav-ophthalmology-positioning-gap-plan.md) | Website / deck / demo positioning rewrite — eye-clinic lane language + subspecialty stratification + safer non-goals |
-| 8 | [`chartnav-phase-20-22-implementation-roadmap.md`](./chartnav-phase-20-22-implementation-roadmap.md) | Recommended phased build order (20B, 20C, 21A, 21B, 21C, 22) with scope, files-touched, tests, risks, "do not touch" lists |
+| 8 | [`chartnav-phase-20-22-implementation-roadmap.md`](./chartnav-phase-20-22-implementation-roadmap.md) | Recommended phased build order (20B, 20C, 21A, 21B, 21C, 22, **23**) with scope, files-touched, tests, risks, "do not touch" lists. Filename retained from Phase 20A; content extended to include Phase 23 in Phase 20A.1. |
+| 9 | [`chartnav-hipaa-regulated-deployment-readiness-plan.md`](./chartnav-hipaa-regulated-deployment-readiness-plan.md) | **Phase 20A.1 addition.** HIPAA-regulated deployment readiness — legal / contract / technical / audit / backup / incident-response / vendor / operational policy / validation layers. Defines what's needed before real PHI; explicitly states ChartNav is **not HIPAA compliant by default** and **not HIPAA certified.** |
 
 ## Repo audit — what already exists
 
@@ -109,6 +112,7 @@ What's missing:
 - H — **Multi-location / multi-provider dashboards** (single org, multi-location supported in data but no cross-location dashboards)
 - I — **Role-specific dashboards** for front desk / technician / doctor / reviewer / admin (no dashboard endpoints; admin has `/admin/deployment/*` ops-level only)
 - J — **Ophthalmology-specific marketing** (positioning is Retina-only despite product depth in Glaucoma + Cornea)
+- K — **HIPAA-regulated deployment readiness** (no BAA template / customer responsibility matrix / subprocessor inventory / PHI data-flow map / incident runbook / admin audit dashboard; Phase 23, planned in Phase 20A.1)
 
 ## Reading order
 
@@ -119,6 +123,8 @@ What's missing:
 ## Hard constraints that bind every plan in this set
 
 - ❌ No HIPAA-compliant claim
+- ❌ No HIPAA-certified claim
+- ❌ No "approved for real PHI by default" claim
 - ❌ No certified EHR claim
 - ❌ No autonomous-diagnosis claim
 - ❌ No automatic orders / referrals / patient messaging / coding / billing
@@ -130,6 +136,7 @@ What's missing:
 - ✅ Every proposed table / endpoint / UI is described, not built
 - ✅ Every proposed claim is paired with the repo evidence that supports it
 - ✅ Every "future" mention is explicitly labeled future
+- ✅ Any reference to HIPAA readiness uses the exact safe readiness statement from the [HIPAA-regulated deployment readiness plan](./chartnav-hipaa-regulated-deployment-readiness-plan.md#9-exact-safe-readiness-statement)
 
 ## Validation
 

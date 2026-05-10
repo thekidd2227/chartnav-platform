@@ -1,30 +1,48 @@
-# ChartNav Phase 20–22 Implementation Roadmap
+# ChartNav Phase 20–23 Implementation Roadmap
 
-> **Type:** Roadmap synthesis. Reads the other 7 Phase 20A
+> **Type:** Roadmap synthesis. Reads the other 8 Phase 20A
 > planning docs and orders them into shippable phases with
 > scope, files-touched, tests, risks, and "do not touch" lists.
+>
+> **Filename retained** as `chartnav-phase-20-22-implementation-roadmap.md`
+> to avoid renaming churn. The roadmap content covers
+> **Phase 20B → 20C → 21A → 21B → 21C → 22 → 23** (the
+> Phase 23 HIPAA-regulated deployment readiness layer was added
+> in Phase 20A.1 alongside the rest of this set).
 
-This roadmap covers six phases (**20B → 20C → 21A → 21B → 21C →
-22**). Each phase is sized to ship as one PR, behind one merge,
+This roadmap covers seven phases (**20B → 20C → 21A → 21B → 21C
+→ 22 → 23**). Each phase is sized to ship as one PR (or a small
+sequence of subphase PRs in the case of 23), behind one merge,
 with one validation pass.
 
 ## Phase ordering rationale
 
 ```
-Phase 20A   ──── plan only (this PR)
+Phase 20A   ──── plan only (PR #29)
+Phase 20A.1 ──── plan only — adds Phase 23 HIPAA readiness (PR #29 amend)
 Phase 20B   ──── structured data layer (foundation)
 Phase 20C   ──── role-based dashboards (consumes 20B)
 Phase 21A   ──── ophthalmology specialty modules (consumes 20B + extends existing)
 Phase 21B   ──── imaging pipeline (extends 21A + existing chart_artifacts)
 Phase 21C   ──── ophthalmology positioning (consumes evidence from 20B/20C/21A/21B)
 Phase 22    ──── multi-clinic scaling (extends 20B + locations)
+Phase 23    ──── HIPAA-regulated deployment readiness (legal / technical / audit /
+                 backup / incident-response / vendor / operational policy / validation)
 ```
 
 The order is deliberately **data → dashboards → specialty depth →
-imaging → public positioning → multi-clinic operations**.
-Positioning (21C) lands after the underlying capability ships
-so every claim is anchored to merged code, not a planning
-artifact.
+imaging → public positioning → multi-clinic operations →
+HIPAA-regulated deployment readiness**. Positioning (21C) lands
+after the underlying capability ships so every claim is anchored
+to merged code, not a planning artifact.
+
+**Phase 23 dependency note.** Phase 23 can begin **in parallel**
+with product work (20B → 22) — its docs-only subphases (23A–C)
+do not conflict with code PRs. The product-code subphases (23D–F)
+land last because they need the docs as the source of truth.
+**Real PHI cannot begin until Phase 23 gates are completed and
+approved** (see Section 9 of the [HIPAA-regulated deployment
+readiness plan](./chartnav-hipaa-regulated-deployment-readiness-plan.md#9-exact-safe-readiness-statement)).
 
 ## Phase 20B — Structured Data Layer
 
@@ -366,16 +384,83 @@ artifact.
 
 ---
 
+---
+
+## Phase 23 — HIPAA-Regulated Deployment Readiness
+
+**Plan doc:** [`chartnav-hipaa-regulated-deployment-readiness-plan.md`](./chartnav-hipaa-regulated-deployment-readiness-plan.md)
+
+> **Phase 23 prepares ChartNav for security review. It does
+> not constitute the security review itself or its outcome.
+> ChartNav is not HIPAA compliant by default. ChartNav is not
+> HIPAA certified.** See Section 9 of the plan for the exact
+> approved readiness statement.
+
+### Scope
+
+Six subphases (23A → 23F). Subphases 23A–C are **docs-only**
+(legal / contract / policy artifacts). Subphases 23D–F are
+**product code** (admin-only, read-only over existing data,
+audit-logged) plus operational tooling.
+
+### Subphases (one PR each)
+
+| Subphase | Scope | Type | Deliverables |
+|---|---|---|---|
+| **23A** | HIPAA Readiness Control Matrix + Customer Responsibility Matrix | docs-only | `docs/compliance/chartnav-hipaa-readiness-control-matrix.md`, `docs/compliance/chartnav-customer-responsibility-matrix.md` |
+| **23B** | PHI Data Flow + Subprocessor / Vendor Inventory | docs-only | `docs/security/chartnav-phi-data-flow-map.md`, `docs/compliance/chartnav-subprocessor-inventory.md`, `docs/compliance/chartnav-baa-vendor-readiness-checklist.md` |
+| **23C** | Policies + Incident / Breach Runbooks | docs-only | `docs/security/chartnav-access-control-policy.md`, `docs/security/chartnav-backup-disaster-recovery-policy.md`, `docs/security/chartnav-support-phi-handling-policy.md`, `docs/security/chartnav-incident-breach-response-runbook.md`, `docs/security/chartnav-security-risk-analysis-template.md` |
+| **23D** | Admin Security Dashboard + Audit Event Export | product code (admin-only) | `apps/api/app/api/admin_security.py`, `apps/api/app/services/audit_export.py`, `apps/web/src/AdminSecurityDashboard.tsx`, tests |
+| **23E** | Backup / Restore Evidence + Monitoring Evidence | product code + scripts | `scripts/verify_backup_integrity.sh`, `scripts/restore_test_runner.sh`, `apps/api/app/api/backup_status.py`, `apps/web/src/AdminBackupStatus.tsx` |
+| **23F** | Final Controlled-Pilot Real-PHI Gate Review Packet | product code + scripts + docs | `docs/compliance/chartnav-controlled-pilot-real-phi-gate-review-packet.md`, `scripts/generate_pilot_readiness_packet.sh`, `apps/api/app/api/production_readiness.py`, `apps/web/src/AdminProductionReadiness.tsx` |
+
+### Tests required (per subphase)
+
+- claims-check + website-claims-check 0 fail / 0 warn on every subphase
+- Forbidden-phrase grep on every new doc — every HIPAA-positive phrase must be in safe negative-assertion context
+- For 23D/E/F: RBAC tests (admin-only); org isolation tests; audit row written for every read; PHI-safe payload guard on every export endpoint
+- For 23F: production-readiness endpoint covered by known-good / known-bad config fixtures
+- No real PHI in any test fixture across all six subphases
+
+### Risks
+
+- **Doc-as-compliance misread.** Risk: the practice reads the policy artifacts and assumes ChartNav is now HIPAA compliant. **Mitigation:** every doc opens with the exact safe readiness statement; every UI score includes the same statement.
+- **Vendor egress drift.** Risk: a future PR adds a new vendor surface (e.g., a new STT provider) without updating the subprocessor inventory. **Mitigation:** Phase 23B's inventory is a `docs/compliance/` source-of-truth file; subsequent vendor-adding PRs must update it (enforced by reviewer convention).
+- **Admin dashboard PHI leak.** Risk: an export endpoint accidentally surfaces clinical text from `security_audit_events.detail`. **Mitigation:** the existing audit detail contract is metadata-only; Phase 23D adds an explicit test that scans exported payloads for clinical-text shape patterns.
+- **Real-PHI go-live without all gates.** Risk: a deploying party skips a gate (e.g., starts real PHI without the BAA). **Mitigation:** the production-readiness endpoint computes the readiness score from existing config; the practice's signed go-live document is required separately and is off-repo.
+
+### Merge criteria (per subphase)
+
+- All 8 CI checks green
+- claims-check + website-claims-check 0 fail / 0 warn
+- For docs-only subphases: scope confined to `docs/compliance/` + `docs/security/` + the roadmap update
+- For product-code subphases: admin-only RBAC enforced; PHI-safe payloads tested; no schema changes (Phase 23 reads existing tables)
+- The exact safe readiness statement (Plan doc Section 9) appears verbatim in every new artifact that mentions HIPAA readiness
+
+### Do NOT touch (across all of Phase 23)
+
+- ❌ Real BAAs (signed off-repo by the practice and ChartNav)
+- ❌ Real practice-owned production backups
+- ❌ Real PHI in any test / fixture / demo / capture
+- ❌ Practice security review acceptance (that's the practice's signed acceptance, not a code change)
+- ❌ Real-PHI deployment activation (that's gated on the signed go-live document)
+- ❌ Clinical workflow tables / endpoints / surfaces (Phase 23 is admin-only, read-only over existing data)
+
+---
+
 ## Cross-phase invariants
 
-These rules bind every phase in this roadmap:
+These rules bind every phase in this roadmap (20B → 23):
 
 - ✅ Every migration is forward + reverse on SQLite + Postgres
 - ✅ Every new endpoint has org-isolation + RBAC + audit row
 - ✅ Every shipped UI claim is anchored to merged code
 - ✅ Every "future" / "planned" capability is tagged as such in copy
 - ✅ Every PR is squash-merged with a CI-green precondition
+- ✅ Any reference to HIPAA readiness uses the exact safe readiness statement (Plan doc Section 9)
 - ❌ No HIPAA-compliant claim
+- ❌ No HIPAA-certified claim
+- ❌ No "approved for real PHI by default" claim
 - ❌ No certified-EHR claim
 - ❌ No autonomous-diagnosis claim
 - ❌ No automatic orders / referrals / patient messaging / coding / billing claim
@@ -389,4 +474,5 @@ These rules bind every phase in this roadmap:
 - **21A and 21B are independent.** Specialty modules don't depend on imaging; imaging doesn't depend on specialty modules. They can land in parallel if there's reviewer bandwidth.
 - **21C waits for 21A + 21B.** Positioning copy must be true at merge time. If 21A merges but 21B is still in flight, Phase 21C can ship a "subspecialty-stratified" cut that excludes imaging claims; full 21C ships after 21B.
 - **22 is independent of 21.** Multi-clinic scaling doesn't depend on specialty depth. It depends only on Phase 20B's structured data layer. Can land any time after 20B.
-- **Real PHI is a separate gate** orthogonal to all of the above. Every phase in this roadmap operates on synthetic / redacted demo data only.
+- **23 is independent of 20–22.** Phase 23 can begin in parallel with product work. The docs-only subphases (23A–C) don't conflict with code PRs; the product-code subphases (23D–F) only depend on existing tables (`security_audit_events`, `ai_governance_log`, etc.) so they can land any time. **Real PHI cannot begin until Phase 23 gates are completed and the practice's signed go-live document is on file.**
+- **Real PHI is a separate gate** orthogonal to all of the above. Every phase in this roadmap operates on synthetic / redacted demo data only. The Phase 23 plan defines the exact gates that must close before real PHI begins.
