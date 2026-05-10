@@ -29,8 +29,16 @@ def test_list_users_scoped(client):
     r = client.get("/users", headers=ADMIN1)
     assert r.status_code == 200
     emails = {u["email"] for u in r.json()}
-    # Org1 has three users, none from northside should leak.
-    assert emails == {"admin@chartnav.local", "clin@chartnav.local", "rev@chartnav.local"}
+    # Org1 has five users (admin, clinician, reviewer, plus the
+    # Phase 20C front_desk and technician identities). None from
+    # northside should leak.
+    assert emails == {
+        "admin@chartnav.local",
+        "clin@chartnav.local",
+        "rev@chartnav.local",
+        "front@chartnav.local",
+        "tech@chartnav.local",
+    }
 
 
 def test_encounters_scoped_by_caller_org(client, seeded_ids):

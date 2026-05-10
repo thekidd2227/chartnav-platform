@@ -76,8 +76,13 @@ def client(test_db):
 ADMIN1 = {"X-User-Email": "admin@chartnav.local"}
 CLIN1 = {"X-User-Email": "clin@chartnav.local"}
 REV1 = {"X-User-Email": "rev@chartnav.local"}
+# Phase 20C — additive operational role identities seeded per org.
+FRONT1 = {"X-User-Email": "front@chartnav.local"}
+TECH1 = {"X-User-Email": "tech@chartnav.local"}
 ADMIN2 = {"X-User-Email": "admin@northside.local"}
 CLIN2 = {"X-User-Email": "clin@northside.local"}
+FRONT2 = {"X-User-Email": "front@northside.local"}
+TECH2 = {"X-User-Email": "tech@northside.local"}
 
 
 @pytest.fixture()

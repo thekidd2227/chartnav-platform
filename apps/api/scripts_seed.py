@@ -21,6 +21,11 @@ ORGS = [
             ("admin@chartnav.local", "ChartNav Admin", "admin"),
             ("clin@chartnav.local", "Casey Clinician", "clinician"),
             ("rev@chartnav.local", "Riley Reviewer", "reviewer"),
+            # Phase 20C — additive operational roles for the
+            # role-based dashboards. Demo-local synthetic identities;
+            # no real PHI.
+            ("front@chartnav.local", "Frankie Front-Desk", "front_desk"),
+            ("tech@chartnav.local", "Taylor Technician", "technician"),
         ],
         "patients": [
             {
@@ -82,6 +87,9 @@ ORGS = [
         "users": [
             ("admin@northside.local", "Northside Admin", "admin"),
             ("clin@northside.local", "Noa Clinician", "clinician"),
+            # Phase 20C — additive operational roles.
+            ("front@northside.local", "Nora Front-Desk", "front_desk"),
+            ("tech@northside.local", "Nash Technician", "technician"),
         ],
         "patients": [
             {
