@@ -38,6 +38,12 @@ import { NoteWorkspace } from "./NoteWorkspace";
 import { SEEDED_IDENTITIES, loadIdentity, saveIdentity } from "./identity";
 import { isDemoModeEnabled } from "./GuidedDemoMode";
 import { ClinicalTabbedWorkspace } from "./ClinicalTabbedWorkspace";
+import { RoleDashboard } from "./RoleDashboard";
+
+// Phase 20C — single-page top-level view switch. The encounters
+// workspace stays the default; the Dashboard CORE entry switches the
+// detail pane to the read-only role-based dashboard.
+type TopView = "encounters" | "dashboard";
 
 type Banner =
   | { kind: "ok"; msg: string }
@@ -65,6 +71,7 @@ export default function App() {
   const [banner, setBanner] = useState<Banner>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
+  const [topView, setTopView] = useState<TopView>("encounters");
 
   // Pagination
   const PAGE_SIZE = 25;
@@ -283,6 +290,9 @@ export default function App() {
           <ClinicalSidebarNav
             canCreate={canCreate}
             onNewEncounter={() => setShowCreate(true)}
+            topView={topView}
+            onShowDashboard={() => setTopView("dashboard")}
+            onShowEncounters={() => setTopView("encounters")}
           />
           <FilterBar
             value={filters}
@@ -333,7 +343,9 @@ export default function App() {
               {banner.msg}
             </div>
           )}
-          {selectedId == null ? (
+          {topView === "dashboard" && me ? (
+            <RoleDashboard identity={identity} me={me} />
+          ) : selectedId == null ? (
             <div className="empty">
               Select an encounter from the list to see details, events, and allowed actions.
               {canCreate && (
@@ -419,20 +431,37 @@ export default function App() {
 function ClinicalSidebarNav({
   canCreate,
   onNewEncounter,
+  topView,
+  onShowDashboard,
+  onShowEncounters,
 }: {
   canCreate: boolean;
   onNewEncounter: () => void;
+  topView: TopView;
+  onShowDashboard: () => void;
+  onShowEncounters: () => void;
 }) {
   return (
     <nav className="sidebar-nav" data-testid="sidebar-nav" aria-label="Clinical navigation">
       <SidebarGroup label="Core" testid="sidebar-group-core">
-        <SidebarItem testid="sidebar-item-dashboard" disabled>
+        {/* Phase 20C — Dashboard now opens the role-based summary
+            view on the right. Existing Encounters behavior is
+            unchanged when the user switches back. */}
+        <SidebarItem
+          testid="sidebar-item-dashboard"
+          active={topView === "dashboard"}
+          onClick={onShowDashboard}
+        >
           Dashboard
         </SidebarItem>
         <SidebarItem testid="sidebar-item-calendar" disabled>
           Calendar
         </SidebarItem>
-        <SidebarItem testid="sidebar-item-encounters" active>
+        <SidebarItem
+          testid="sidebar-item-encounters"
+          active={topView === "encounters"}
+          onClick={onShowEncounters}
+        >
           Encounters
         </SidebarItem>
       </SidebarGroup>
@@ -584,6 +613,10 @@ function IdentityBadge({
       ? "Clinician"
       : me.role === "reviewer"
       ? "Reviewer"
+      : me.role === "front_desk"
+      ? "Front Desk"
+      : me.role === "technician"
+      ? "Technician"
       : me.role;
   return (
     <span

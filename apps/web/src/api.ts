@@ -22,7 +22,18 @@ export class ApiError extends Error {
   }
 }
 
-export type Role = "admin" | "clinician" | "reviewer";
+// Phase 20C — extended with `front_desk` and `technician` to mirror
+// the backend `users.role` CHECK constraint. Existing role helpers
+// (`canCreateEncounter`, `canCreateEvent`, `allowedNextStatuses`)
+// keep their current semantics — front desk and technician are not
+// granted encounter mutation rights here; they get role-based
+// dashboards via the `/dashboards/*` endpoints.
+export type Role =
+  | "admin"
+  | "clinician"
+  | "reviewer"
+  | "front_desk"
+  | "technician";
 
 export interface Me {
   user_id: number;
@@ -2840,4 +2851,179 @@ export function updateRoleView(
     method: "PATCH",
     body: JSON.stringify(body),
   });
+}
+
+// =============================================================
+// Phase 20C — Role-based clinic dashboards
+// =============================================================
+//
+// Read-only summary endpoints aggregating Phase 20B's
+// work_queue_items + a few existing tables (note_versions,
+// locations, providers, role_view_presets) into role-specific
+// cards. Five roles: front_desk, technician, clinician (doctor),
+// reviewer, admin. Each role can read its own dashboard; admin
+// can view any role's dashboard via the role= query param.
+
+export type DashboardRole =
+  | "front_desk"
+  | "technician"
+  | "clinician"
+  | "reviewer"
+  | "admin";
+
+export interface DashboardScope {
+  organization_id: number;
+  location_id?: number | null;
+  provider_id?: number | null;
+}
+
+export interface DashboardQueueItemCompact {
+  id: number;
+  queue_type: string;
+  priority: QueuePriority;
+  status: QueueStatus;
+  assigned_role: string | null;
+  assigned_user_id: number | null;
+  patient_id: number | null;
+  encounter_id: number | null;
+  provider_id: number | null;
+  location_id: number | null;
+  due_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FrontDeskDashboard {
+  role: "front_desk";
+  scope: DashboardScope;
+  counts: {
+    today_queue_count: number;
+    check_in_pending_count: number;
+    ready_for_workup_count: number;
+    checkout_pending_count: number;
+    follow_up_needed_count: number;
+  };
+  recent_or_due_items: DashboardQueueItemCompact[];
+}
+
+export interface TechnicianDashboard {
+  role: "technician";
+  scope: DashboardScope;
+  counts: {
+    workup_pending_count: number;
+    imaging_needed_count: number;
+    dilation_pending_count: number;
+    testing_pending_count: number;
+    ready_for_doctor_count: number;
+  };
+  assigned_items: DashboardQueueItemCompact[];
+}
+
+export interface DoctorDashboard {
+  role: "clinician";
+  scope: DashboardScope;
+  counts: {
+    ready_for_doctor_count: number;
+    documentation_in_progress_count: number;
+    notes_ready_for_signoff_count: number;
+    high_priority_items_count: number;
+    imaging_ready_for_review_count: number;
+  };
+  assigned_provider_items: DashboardQueueItemCompact[];
+}
+
+export interface ReviewerDashboard {
+  role: "reviewer";
+  scope: DashboardScope;
+  counts: {
+    notes_awaiting_review_count: number;
+    diagram_proposals_review_count: number;
+    ai_draft_review_count: number;
+    audit_exceptions_count: number;
+    blocked_items_count: number;
+  };
+  review_needed_items: DashboardQueueItemCompact[];
+}
+
+export interface AdminDashboard {
+  role: "admin";
+  scope: DashboardScope;
+  counts: {
+    total_open_queue_items: number;
+    overdue_queue_items: number;
+    unsigned_notes_count: number;
+  };
+  work_queue_by_status: Record<string, number>;
+  work_queue_by_priority: Record<string, number>;
+  work_queue_by_role: Record<string, number>;
+  work_queue_by_queue_type: Record<string, number>;
+  location_summary: { active_count: number };
+  provider_summary: { total_count: number };
+  role_view_presets_summary: Record<string, number>;
+}
+
+export type DashboardSummary =
+  | FrontDeskDashboard
+  | TechnicianDashboard
+  | DoctorDashboard
+  | ReviewerDashboard
+  | AdminDashboard;
+
+export interface DashboardFilters {
+  locationId?: number;
+  providerId?: number;
+  role?: DashboardRole;
+}
+
+function _dashboardQs(filters: DashboardFilters): string {
+  const params = new URLSearchParams();
+  if (filters.locationId !== undefined)
+    params.set("location_id", String(filters.locationId));
+  if (filters.providerId !== undefined)
+    params.set("provider_id", String(filters.providerId));
+  if (filters.role) params.set("role", filters.role);
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
+
+export function getMyDashboard(
+  email: string,
+  filters: DashboardFilters = {}
+): Promise<DashboardSummary> {
+  return request(`/dashboards/me${_dashboardQs(filters)}`, { email });
+}
+
+export function getFrontDeskDashboard(
+  email: string,
+  filters: DashboardFilters = {}
+): Promise<FrontDeskDashboard> {
+  return request(`/dashboards/front-desk${_dashboardQs(filters)}`, { email });
+}
+
+export function getTechnicianDashboard(
+  email: string,
+  filters: DashboardFilters = {}
+): Promise<TechnicianDashboard> {
+  return request(`/dashboards/technician${_dashboardQs(filters)}`, { email });
+}
+
+export function getDoctorDashboard(
+  email: string,
+  filters: DashboardFilters = {}
+): Promise<DoctorDashboard> {
+  return request(`/dashboards/doctor${_dashboardQs(filters)}`, { email });
+}
+
+export function getReviewerDashboard(
+  email: string,
+  filters: DashboardFilters = {}
+): Promise<ReviewerDashboard> {
+  return request(`/dashboards/reviewer${_dashboardQs(filters)}`, { email });
+}
+
+export function getAdminDashboard(
+  email: string,
+  filters: DashboardFilters = {}
+): Promise<AdminDashboard> {
+  return request(`/dashboards/admin${_dashboardQs(filters)}`, { email });
 }
