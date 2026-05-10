@@ -2279,3 +2279,565 @@ export function completeProviderActionItem(
     { email, method: "POST" }
   );
 }
+
+// =============================================================
+// Phase 20B — Structured data layer
+// =============================================================
+//
+// Type definitions + thin wrapper functions for the structured-data
+// endpoints (patient_segments / patient_segment_memberships /
+// patient_tags / patient_problem_list / clinic_workflow_templates /
+// clinic_workflow_stages / work_queue_items / role_view_presets).
+//
+// No UI components ship in Phase 20B — these typings are for
+// downstream phases (20C dashboards, 21A specialty modules) to
+// consume the API contract.
+
+// ----- enums -------------------------------------------------------
+
+export type Phase20BEye = "OD" | "OS" | "OU";
+
+export type ProblemStatus = "active" | "monitoring" | "inactive" | "resolved";
+
+export type QueuePriority = "low" | "normal" | "high" | "urgent";
+
+export type QueueStatus =
+  | "open"
+  | "in_progress"
+  | "blocked"
+  | "completed"
+  | "dismissed";
+
+export type WorkflowOwnerRole =
+  | "admin"
+  | "clinician"
+  | "reviewer"
+  | "front_desk"
+  | "technician";
+
+export type ViewPresetRole = WorkflowOwnerRole;
+
+// ----- segments + memberships -------------------------------------
+
+export interface PatientSegment {
+  id: number;
+  organization_id: number;
+  name: string;
+  description: string | null;
+  segment_type: string;
+  criteria_json: Record<string, unknown> | unknown[] | null;
+  is_active: boolean;
+  created_by_user_id: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PatientSegmentMembership {
+  id: number;
+  organization_id: number;
+  patient_id: number;
+  segment_id: number;
+  source: string;
+  reason: string | null;
+  created_at: string;
+}
+
+export interface SegmentCreateBody {
+  name: string;
+  description?: string | null;
+  segment_type: string;
+  criteria_json?: Record<string, unknown> | null;
+  is_active?: boolean;
+}
+
+export interface SegmentUpdateBody {
+  name?: string;
+  description?: string | null;
+  segment_type?: string;
+  criteria_json?: Record<string, unknown> | null;
+  is_active?: boolean;
+}
+
+export function listSegments(
+  email: string,
+  opts: {
+    includeInactive?: boolean;
+    q?: string;
+    segmentType?: string;
+    limit?: number;
+    offset?: number;
+  } = {}
+): Promise<PatientSegment[]> {
+  const params = new URLSearchParams();
+  if (opts.includeInactive) params.set("include_inactive", "true");
+  if (opts.q) params.set("q", opts.q);
+  if (opts.segmentType) params.set("segment_type", opts.segmentType);
+  if (opts.limit !== undefined) params.set("limit", String(opts.limit));
+  if (opts.offset !== undefined) params.set("offset", String(opts.offset));
+  const qs = params.toString();
+  return request(`/segments${qs ? `?${qs}` : ""}`, { email });
+}
+
+export function createSegment(
+  email: string,
+  body: SegmentCreateBody
+): Promise<PatientSegment> {
+  return request("/segments", {
+    email,
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateSegment(
+  email: string,
+  segmentId: number,
+  body: SegmentUpdateBody
+): Promise<PatientSegment> {
+  return request(`/segments/${segmentId}`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export function listPatientSegments(
+  email: string,
+  patientId: number
+): Promise<PatientSegmentMembership[]> {
+  return request(`/patients/${patientId}/segments`, { email });
+}
+
+export function addPatientSegment(
+  email: string,
+  patientId: number,
+  body: { segment_id: number; source: string; reason?: string | null }
+): Promise<PatientSegmentMembership> {
+  return request(`/patients/${patientId}/segments`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function removePatientSegment(
+  email: string,
+  patientId: number,
+  segmentId: number
+): Promise<{ removed: boolean; membership_id: number }> {
+  return request(`/patients/${patientId}/segments/${segmentId}`, {
+    email,
+    method: "DELETE",
+  });
+}
+
+// ----- patient_tags ------------------------------------------------
+
+export interface PatientTag {
+  id: number;
+  organization_id: number;
+  patient_id: number;
+  tag: string;
+  color: string | null;
+  created_by_user_id: number | null;
+  created_at: string;
+}
+
+export function listPatientTags(
+  email: string,
+  patientId: number
+): Promise<PatientTag[]> {
+  return request(`/patients/${patientId}/tags`, { email });
+}
+
+export function addPatientTag(
+  email: string,
+  patientId: number,
+  body: { tag: string; color?: string | null }
+): Promise<PatientTag> {
+  return request(`/patients/${patientId}/tags`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function deletePatientTag(
+  email: string,
+  patientId: number,
+  tagId: number
+): Promise<{ removed: boolean; tag_id: number }> {
+  return request(`/patients/${patientId}/tags/${tagId}`, {
+    email,
+    method: "DELETE",
+  });
+}
+
+// ----- patient_problem_list ---------------------------------------
+
+export interface PatientProblemItem {
+  id: number;
+  organization_id: number;
+  patient_id: number;
+  condition_code: string | null;
+  condition_label: string;
+  specialty: string | null;
+  eye: Phase20BEye | null;
+  status: ProblemStatus;
+  onset_date: string | null;
+  last_reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProblemCreateBody {
+  condition_code?: string | null;
+  condition_label: string;
+  specialty?: string | null;
+  eye?: Phase20BEye | null;
+  status?: ProblemStatus;
+  onset_date?: string | null;
+  last_reviewed_at?: string | null;
+}
+
+export interface ProblemUpdateBody {
+  condition_code?: string | null;
+  condition_label?: string;
+  specialty?: string | null;
+  eye?: Phase20BEye | null;
+  status?: ProblemStatus;
+  onset_date?: string | null;
+  last_reviewed_at?: string | null;
+}
+
+export function listProblemList(
+  email: string,
+  patientId: number,
+  opts: {
+    specialty?: string;
+    status?: ProblemStatus;
+    eye?: Phase20BEye;
+  } = {}
+): Promise<PatientProblemItem[]> {
+  const params = new URLSearchParams();
+  if (opts.specialty) params.set("specialty", opts.specialty);
+  if (opts.status) params.set("status", opts.status);
+  if (opts.eye) params.set("eye", opts.eye);
+  const qs = params.toString();
+  return request(
+    `/patients/${patientId}/problem-list${qs ? `?${qs}` : ""}`,
+    { email }
+  );
+}
+
+export function addProblem(
+  email: string,
+  patientId: number,
+  body: ProblemCreateBody
+): Promise<PatientProblemItem> {
+  return request(`/patients/${patientId}/problem-list`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateProblem(
+  email: string,
+  patientId: number,
+  itemId: number,
+  body: ProblemUpdateBody
+): Promise<PatientProblemItem> {
+  return request(`/patients/${patientId}/problem-list/${itemId}`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+// ----- clinic_workflow_templates + stages -------------------------
+
+export interface ClinicWorkflowTemplate {
+  id: number;
+  organization_id: number;
+  name: string;
+  specialty: string | null;
+  role_owner: WorkflowOwnerRole;
+  description: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClinicWorkflowStage {
+  id: number;
+  organization_id: number;
+  template_id: number;
+  name: string;
+  stage_order: number;
+  role_owner: WorkflowOwnerRole;
+  sla_minutes: number | null;
+  created_at: string;
+}
+
+export function listWorkflowTemplates(
+  email: string,
+  opts: {
+    includeInactive?: boolean;
+    specialty?: string;
+    roleOwner?: WorkflowOwnerRole;
+  } = {}
+): Promise<ClinicWorkflowTemplate[]> {
+  const params = new URLSearchParams();
+  if (opts.includeInactive) params.set("include_inactive", "true");
+  if (opts.specialty) params.set("specialty", opts.specialty);
+  if (opts.roleOwner) params.set("role_owner", opts.roleOwner);
+  const qs = params.toString();
+  return request(`/workflow-templates${qs ? `?${qs}` : ""}`, { email });
+}
+
+export function createWorkflowTemplate(
+  email: string,
+  body: {
+    name: string;
+    specialty?: string | null;
+    role_owner: WorkflowOwnerRole;
+    description?: string | null;
+    is_active?: boolean;
+  }
+): Promise<ClinicWorkflowTemplate> {
+  return request("/workflow-templates", {
+    email,
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateWorkflowTemplate(
+  email: string,
+  templateId: number,
+  body: Partial<{
+    name: string;
+    specialty: string | null;
+    role_owner: WorkflowOwnerRole;
+    description: string | null;
+    is_active: boolean;
+  }>
+): Promise<ClinicWorkflowTemplate> {
+  return request(`/workflow-templates/${templateId}`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export function listWorkflowStages(
+  email: string,
+  templateId: number
+): Promise<ClinicWorkflowStage[]> {
+  return request(`/workflow-templates/${templateId}/stages`, { email });
+}
+
+export function createWorkflowStage(
+  email: string,
+  templateId: number,
+  body: {
+    name: string;
+    stage_order: number;
+    role_owner: WorkflowOwnerRole;
+    sla_minutes?: number | null;
+  }
+): Promise<ClinicWorkflowStage> {
+  return request(`/workflow-templates/${templateId}/stages`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateWorkflowStage(
+  email: string,
+  stageId: number,
+  body: Partial<{
+    name: string;
+    stage_order: number;
+    role_owner: WorkflowOwnerRole;
+    sla_minutes: number | null;
+  }>
+): Promise<ClinicWorkflowStage> {
+  return request(`/workflow-stages/${stageId}`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+// ----- work_queue_items -------------------------------------------
+
+export interface WorkQueueItem {
+  id: number;
+  organization_id: number;
+  location_id: number | null;
+  patient_id: number | null;
+  encounter_id: number | null;
+  provider_id: number | null;
+  queue_type: string;
+  priority: QueuePriority;
+  status: QueueStatus;
+  assigned_role: string | null;
+  assigned_user_id: number | null;
+  due_at: string | null;
+  source: string;
+  payload_json: Record<string, unknown> | unknown[] | null;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+}
+
+export interface WorkQueueListOpts {
+  locationId?: number;
+  patientId?: number;
+  encounterId?: number;
+  providerId?: number;
+  queueType?: string;
+  priority?: QueuePriority;
+  status?: QueueStatus;
+  assignedRole?: string;
+  assignedUserId?: number;
+  dueBefore?: string;
+  dueAfter?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export function listWorkQueue(
+  email: string,
+  opts: WorkQueueListOpts = {}
+): Promise<WorkQueueItem[]> {
+  const params = new URLSearchParams();
+  if (opts.locationId !== undefined)
+    params.set("location_id", String(opts.locationId));
+  if (opts.patientId !== undefined)
+    params.set("patient_id", String(opts.patientId));
+  if (opts.encounterId !== undefined)
+    params.set("encounter_id", String(opts.encounterId));
+  if (opts.providerId !== undefined)
+    params.set("provider_id", String(opts.providerId));
+  if (opts.queueType) params.set("queue_type", opts.queueType);
+  if (opts.priority) params.set("priority", opts.priority);
+  if (opts.status) params.set("status", opts.status);
+  if (opts.assignedRole) params.set("assigned_role", opts.assignedRole);
+  if (opts.assignedUserId !== undefined)
+    params.set("assigned_user_id", String(opts.assignedUserId));
+  if (opts.dueBefore) params.set("due_before", opts.dueBefore);
+  if (opts.dueAfter) params.set("due_after", opts.dueAfter);
+  if (opts.limit !== undefined) params.set("limit", String(opts.limit));
+  if (opts.offset !== undefined) params.set("offset", String(opts.offset));
+  const qs = params.toString();
+  return request(`/work-queues${qs ? `?${qs}` : ""}`, { email });
+}
+
+export function createWorkQueueItem(
+  email: string,
+  body: {
+    location_id?: number | null;
+    patient_id?: number | null;
+    encounter_id?: number | null;
+    provider_id?: number | null;
+    queue_type: string;
+    priority?: QueuePriority;
+    status?: QueueStatus;
+    assigned_role?: string | null;
+    assigned_user_id?: number | null;
+    due_at?: string | null;
+    source?: string;
+    payload_json?: Record<string, unknown> | unknown[] | null;
+  }
+): Promise<WorkQueueItem> {
+  return request("/work-queues", {
+    email,
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateWorkQueueItem(
+  email: string,
+  itemId: number,
+  body: Partial<{
+    priority: QueuePriority;
+    status: QueueStatus;
+    assigned_role: string | null;
+    assigned_user_id: number | null;
+    due_at: string | null;
+    payload_json: Record<string, unknown> | unknown[] | null;
+    completed_at: string | null;
+  }>
+): Promise<WorkQueueItem> {
+  return request(`/work-queues/${itemId}`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+// ----- role_view_presets ------------------------------------------
+
+export interface RoleViewPreset {
+  id: number;
+  organization_id: number;
+  role: ViewPresetRole;
+  name: string;
+  filters_json: Record<string, unknown> | unknown[] | null;
+  columns_json: Record<string, unknown> | unknown[] | null;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export function listRoleViews(
+  email: string,
+  opts: { role?: ViewPresetRole; includeNonDefault?: boolean } = {}
+): Promise<RoleViewPreset[]> {
+  const params = new URLSearchParams();
+  if (opts.role) params.set("role", opts.role);
+  if (opts.includeNonDefault === false)
+    params.set("include_non_default", "false");
+  const qs = params.toString();
+  return request(`/role-views${qs ? `?${qs}` : ""}`, { email });
+}
+
+export function createRoleView(
+  email: string,
+  body: {
+    role: ViewPresetRole;
+    name: string;
+    filters_json?: Record<string, unknown> | unknown[] | null;
+    columns_json?: Record<string, unknown> | unknown[] | null;
+    is_default?: boolean;
+  }
+): Promise<RoleViewPreset> {
+  return request("/role-views", {
+    email,
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateRoleView(
+  email: string,
+  presetId: number,
+  body: Partial<{
+    role: ViewPresetRole;
+    name: string;
+    filters_json: Record<string, unknown> | unknown[] | null;
+    columns_json: Record<string, unknown> | unknown[] | null;
+    is_default: boolean;
+  }>
+): Promise<RoleViewPreset> {
+  return request(`/role-views/${presetId}`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
