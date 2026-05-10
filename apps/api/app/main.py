@@ -14,6 +14,7 @@ from app.api.pre_visit_briefs import router as pre_visit_briefs_router
 from app.api.provider_action_items import router as provider_action_items_router
 from app.api.routes import router
 from app.api.scribe_sessions import router as scribe_sessions_router
+from app.api.structured_data import router as structured_data_router
 from app.audit import record as audit_record, should_audit
 from app.config import settings
 from app.logging_config import configure_logging
@@ -123,3 +124,4 @@ app.include_router(scribe_sessions_router)
 app.include_router(patient_summaries_router)
 app.include_router(pre_visit_briefs_router)
 app.include_router(provider_action_items_router)
+app.include_router(structured_data_router)
