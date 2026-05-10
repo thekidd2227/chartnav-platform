@@ -99,15 +99,81 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
 .app-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 16px;
-  padding: 14px 24px;
+  /* Phase 19J — tighter top header (~52–56px tall) per reference
+     clinical layout. Search input sits centered between the brand
+     and identity meta; brand fills its natural width on the left,
+     header-meta fills natural width on the right, search stretches
+     to fill the middle gap. */
+  padding: 10px 24px;
   border-bottom: 1px solid var(--cn-line);
   background: var(--cn-surface);
   position: sticky;
   top: 0;
   z-index: 10;
   box-shadow: var(--cn-shadow-sm);
+}
+
+/* Phase 19J — header search input. Static placeholder for J.A;
+   real search wiring lands in J.B. Styled to read as a polished
+   workspace search field, not a debug input. */
+.header-search {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 520px;
+  min-width: 0;
+  padding: 0 14px;
+  height: 36px;
+  border: 1px solid var(--cn-line-strong);
+  border-radius: var(--cn-radius-pill);
+  background: var(--cn-surface-alt);
+  color: var(--cn-muted);
+  transition: border-color 0.15s var(--cn-ease),
+              box-shadow 0.15s var(--cn-ease),
+              background 0.15s var(--cn-ease);
+}
+.header-search:focus-within {
+  border-color: var(--cn-primary);
+  box-shadow: 0 0 0 3px var(--cn-primary-tint);
+  background: var(--cn-surface);
+}
+.header-search__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--cn-dim);
+  flex: 0 0 auto;
+}
+.header-search__input {
+  flex: 1 1 auto;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--cn-fg);
+  min-width: 0;
+}
+.header-search__input::placeholder {
+  color: var(--cn-dim);
+}
+.header-search__input:disabled {
+  /* Phase 19J.A — search input is intentionally disabled until
+     wiring lands in 19J.B. Keep it visually crisp so the disabled
+     state doesn't read as broken. */
+  cursor: not-allowed;
+  color: var(--cn-muted);
+  -webkit-text-fill-color: var(--cn-muted);
+  opacity: 1;
+}
+@media (max-width: 900px) {
+  .header-search {
+    /* On narrower viewports the search collapses out so the brand
+       and identity meta keep their breathing room. */
+    display: none;
+  }
 }
 
 .brand {
@@ -143,6 +209,48 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+/* Phase 19J — workspace-shortcut icon row (notification / help /
+   security) between the search input and identity meta. Each icon
+   is a square 32px button with a teal-tinted hover that matches the
+   shell's clinical accent. Disabled in 19J.A — wires to real
+   notification / help / security panels in 19J.C. */
+.header-icons {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.header-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid transparent;
+  border-radius: var(--cn-radius-md);
+  background: transparent;
+  color: var(--cn-muted);
+  cursor: pointer;
+  transition: background 0.15s var(--cn-ease),
+              color 0.15s var(--cn-ease),
+              border-color 0.15s var(--cn-ease);
+}
+.header-icon-btn:hover:not(:disabled) {
+  background: var(--cn-primary-soft);
+  color: var(--cn-primary);
+  border-color: var(--cn-primary-tint);
+}
+.header-icon-btn:focus-visible {
+  outline: none;
+  border-color: var(--cn-primary);
+  box-shadow: 0 0 0 3px var(--cn-primary-tint);
+}
+.header-icon-btn:disabled {
+  cursor: not-allowed;
+  /* Keep icons crisp even in disabled-static state so the chrome
+     doesn't read as broken. */
+  opacity: 0.85;
 }
 .header-meta .chip {
   background: var(--cn-surface-alt);
@@ -249,24 +357,50 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
    Two-pane layout
    ============================================================ */
 
+/* Phase 19J.C — three-column reference shell:
+   [ Sidebar 240px ][ Encounter list 320px ][ Detail/workspace 1fr ]
+   Each column scrolls independently so the workspace can grow without
+   pushing the sidebar/list off-screen. */
 .layout {
   display: grid;
-  grid-template-columns: 380px 1fr;
+  grid-template-columns: 240px 320px 1fr;
   flex: 1;
   min-height: 0;
   background: var(--cn-bg);
+}
+.layout__sidebar {
+  /* Burgundy column — extends from header to footer. The sidebar-nav
+     inside no longer needs to draw its own gradient wall; this column
+     IS the wall. */
+  background: linear-gradient(180deg, #7f1d1d 0%, #5e1414 100%);
+  border-right: 1px solid rgba(0, 0, 0, 0.22);
+  overflow-y: auto;
+  /* Slim teal-tinted scrollbar so the burgundy doesn't fight a dark
+     OS scrollbar. */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.18) transparent;
 }
 .layout__list {
   border-right: 1px solid var(--cn-line);
   overflow-y: auto;
   background: var(--cn-bg-alt);
+  display: flex;
+  flex-direction: column;
 }
 .layout__detail {
   overflow-y: auto;
   padding: 24px 28px 40px;
 }
+@media (max-width: 1100px) {
+  /* Approaching narrow desktop: trim the encounter list column so the
+     workspace keeps its breathing room. */
+  .layout { grid-template-columns: 220px 280px 1fr; }
+}
 @media (max-width: 920px) {
+  /* Tablet & below: collapse to a single column so the workspace
+     fills the viewport. Sidebar + list stack vertically above. */
   .layout { grid-template-columns: 1fr; height: auto; }
+  .layout__sidebar { border-right: 0; max-height: 280px; }
   .layout__list { border-right: 0; border-bottom: 1px solid var(--cn-line); max-height: 50vh; }
 }
 
@@ -277,18 +411,15 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
    placeholders for future phases.
    ============================================================ */
 .sidebar-nav {
-  /* Phase 19E — brand-red/burgundy sidebar nav. Phase 19I
-     polish: subtle vertical gradient (#7f1d1d top -> #5e1414
-     bottom) so the wall reads as depth, not a flat block.
-     Scoped to the grouped-nav block ONLY: the encounter list
-     + filters below keep their pale --cn-bg-alt background so
-     the work surface stays clean and readable. */
-  background: linear-gradient(180deg, #7f1d1d 0%, #5e1414 100%);
+  /* Phase 19J.C — burgundy gradient now lives on .layout__sidebar
+     (the parent column) so the nav itself is transparent. The
+     visual wall extends edge-to-edge of the column without a
+     visible inner padding band. */
+  background: transparent;
   padding: 16px 12px 14px;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.22);
 }
 .sidebar-nav__group {
   display: flex;
@@ -1610,15 +1741,19 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
    Conditions / Medications / Next Appt — those columns aren't
    on the Encounter type yet) look intentional rather than
    buggy. */
+/* Phase 19J.C — demographic strip reads as a single bordered white
+   row per the reference clinical layout (no surrounding tinted
+   band; clean hairline border around all sides; tighter vertical
+   rhythm). */
 .ctw__demographics {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 14px 18px;
+  gap: 10px 18px;
   margin-top: 10px;
-  padding: 12px 14px;
-  border-top: 1px solid var(--ctw-border);
+  padding: 10px 14px;
+  border: 1px solid var(--cn-line);
   border-radius: var(--cn-radius-md);
-  background: rgba(15, 23, 42, 0.025);
+  background: var(--cn-surface);
 }
 @media (max-width: 1100px) {
   .ctw__demographics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -1713,9 +1848,14 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
     inset 0 2px 0 #dc2626,
     0 1px 0 rgba(15, 23, 42, 0.04);
 }
+/* Phase 19J.C — patient header reflows to the reference one-row
+   layout. Name + DOB / MRN / Phone sit on the left; encounter
+   number, status pill, provider, location push to the far right
+   via `margin-left: auto` on `.ctw__encounter-line`. The
+   demographic strip sits below in a single bordered row. */
 .ctw__patient-line {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 16px;
   flex-wrap: wrap;
 }
@@ -1724,15 +1864,28 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
   font-size: 18px;
   font-weight: 700;
   color: var(--cn-fg);
+  flex: 0 0 auto;
 }
-.ctw__patient-meta,
-.ctw__encounter-line {
+.ctw__patient-meta {
   display: flex;
   align-items: center;
   gap: 16px;
   flex-wrap: wrap;
   font-size: 13px;
   color: var(--cn-muted);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.ctw__encounter-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--cn-muted);
+  /* Push the encounter meta to the far right of the patient line. */
+  margin-left: auto;
+  flex: 0 0 auto;
 }
 .ctw__meta-label {
   font-size: 10px;
@@ -1745,26 +1898,26 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
 
 /* Tab bar */
 .ctw__tabbar {
-  /* Phase 19I — desktop tab row must show all 9 tabs cleanly
-     at 1440px. We keep overflow-x: auto as a narrow-viewport
-     safety net but tighten the tab metrics so the bar fits
-     edge-to-edge without horizontal scroll on a normal demo
-     monitor. Tabs flex-shrink so a long label like
-     "Documentation / EMR/EHR" won't push siblings off-screen. */
+  /* Phase 19J.C — tighten tab-bar density to match the reference.
+     Desktop renders 9 tabs edge-to-edge at the new 1fr workspace
+     column width without horizontal scroll. overflow-x stays as a
+     narrow-viewport safety net. Tab row sits flush to the left edge
+     of the workspace column with a hairline bottom border. */
   display: flex;
-  gap: 2px;
+  gap: 0;
   border-bottom: 1px solid var(--cn-line);
-  padding: 0 4px;
+  padding: 0;
   overflow-x: auto;
   scrollbar-width: thin;
 }
 .ctw__tab {
   background: transparent;
   border: none;
-  padding: 10px 10px;
+  padding: 10px 11px;
   font: inherit;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 500;
+  letter-spacing: 0.005em;
   color: var(--cn-muted);
   cursor: pointer;
   border-bottom: 2px solid transparent;
@@ -1773,15 +1926,13 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
   transition: color 0.15s var(--cn-ease), border-color 0.15s var(--cn-ease);
 }
 @media (min-width: 1280px) {
-  /* Roomier desktop: keep the tighter base padding but add
-     small horizontal breathing room. Bar fits 9 tabs edge-to-
-     edge at 1440px with no scroll. */
-  .ctw__tab { padding: 11px 12px; font-size: 13px; }
+  /* Wide desktop — small horizontal breathing room without growing
+     past the 1fr workspace column width. */
+  .ctw__tab { padding: 11px 13px; font-size: 13px; }
 }
 @media (max-width: 1100px) {
-  /* Approaching tablet: shrink padding + font slightly so the
-     bar still fits. Below this width the overflow-x scroll
-     handles the rest. */
+  /* Narrow desktop — shrink padding so 9 tabs still fit before the
+     overflow-x scrollbar kicks in. */
   .ctw__tab { padding: 9px 8px; font-size: 12px; }
 }
 .ctw__tab:hover {
@@ -1793,21 +1944,31 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
   font-weight: 600;
 }
 
+/* Phase 19J.C — tab content panel reads as the work surface, not
+   another card inside a card. Removed the inner border/background
+   chrome (the per-tab cards/grids already carry their own surface
+   treatment) and tightened padding so the active tab sits flush
+   under the tab bar without an extra layered wall. */
 .ctw__panel {
-  background: var(--cn-bg);
-  border: 1px solid var(--cn-line);
-  border-radius: var(--cn-radius-md);
-  padding: 20px;
+  background: transparent;
+  border: 0;
+  padding: 16px 0 0;
   min-height: 280px;
 }
 
 /* Card grid */
+/* Phase 19J.B — Overview drops into the reference clinical 4-up
+   rhythm (Row 1 + Row 2 are 4 cards each, Row 3 is the full-width
+   Timeline via .ctw-card--wide). Below 1200px we step down to 3,
+   then 2, then 1 column so the cards never go narrower than ~260px
+   without collapsing the row. */
 .ctw-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  /* Phase 19D — slightly more breathing room between cards
-     so they read as discrete review surfaces, not a wall. */
-  gap: 18px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+@media (max-width: 1200px) {
+  .ctw-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 }
 @media (max-width: 900px) {
   .ctw-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1843,6 +2004,37 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
     0 1px 3px rgba(15, 23, 42, 0.05);
 }
 .ctw-card--wide { grid-column: 1 / -1; }
+
+/* Phase 19J — Favorites list inside the Overview row-1 Favorites
+   card. Star-bulleted rows match the reference clinical layout's
+   pinned-shortcut treatment. */
+.ctw-favorites__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ctw-favorites__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  color: var(--cn-fg);
+  line-height: 1.4;
+}
+.ctw-favorites__star {
+  color: var(--cn-warning);
+  font-size: 13px;
+  line-height: 1;
+}
+.ctw-favorites__label {
+  flex: 1 1 auto;
+}
+.ctw-favorites__note {
+  margin-top: 4px;
+}
 .ctw-card__title {
   margin: 0;
   font-size: 12px;

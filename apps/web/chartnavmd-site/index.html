@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ChartNav MD — Hands-Free Ophthalmology Scribing Software</title>
+  <meta name="description"
+    content="ChartNav MD is hands-free scribing software for ophthalmology practices. Capture exam findings during the visit, sign cleaner notes, and reduce documentation drag — with PHI redaction, human review, and audit logging by default." />
+  <link rel="canonical" href="https://chartnavmd.com/" />
+  <link rel="icon" href="/brand/chartnav-favicon.svg" type="image/svg+xml" />
+
+  <meta property="og:type"        content="website" />
+  <meta property="og:url"         content="https://chartnavmd.com/" />
+  <meta property="og:title"       content="ChartNav MD — Hands-Free Ophthalmology Scribing" />
+  <meta property="og:description" content="Hands-free scribing built for ophthalmology. Capture findings during the visit, sign cleaner notes, and keep providers focused on the patient." />
+  <meta property="og:image"       content="https://chartnavmd.com/og.jpg" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+  <script src="/reveal.js" defer></script>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      { "@type": "Organization", "name": "ARCG Systems", "url": "https://arcgsystems.com" },
+      { "@type": "WebSite", "name": "ChartNav MD", "url": "https://chartnavmd.com/", "publisher": { "@type": "Organization", "name": "ARCG Systems" } },
+      {
+        "@type": "MedicalApplication",
+        "name": "ChartNav MD",
+        "applicationCategory": "MedicalApplication",
+        "applicationSubCategory": "Hands-Free Scribing for Ophthalmology",
+        "operatingSystem": "Web (modern browsers)",
+        "url": "https://chartnavmd.com/",
+        "publisher": { "@type": "Organization", "name": "ARCG Systems" },
+        "description": "Hands-free ophthalmology scribing software. Capture findings during the exam, sign structured notes, and reduce after-hours charting in eye-care practices.",
+        "featureList": [
+          "Hands-free exam scribing for ophthalmology",
+          "Structured encounter templates per subspecialty",
+          "Imaging surfaced inside the encounter (OCT, fundus, VF, anterior segment)",
+          "PHI redaction on every AI call",
+          "Clinician review gate before any AI output is final",
+          "Immutable AI audit log with role-based access"
+        ],
+        "audience": { "@type": "MedicalAudience", "audienceType": "Ophthalmology practices" }
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+
+<header class="site-header" id="site-header">
+  <div class="site-header__inner">
+    <a href="/" class="site-header__logo" aria-label="ChartNav MD home">
+      <img src="/brand/chartnav-logo.svg" alt="ChartNav" />
+    </a>
+    <ul class="site-header__nav" role="list">
+      <li><a href="/" class="is-active">Home</a></li>
+      <li><a href="/ehr/">EMR/EHR</a></li>
+      <li><a href="/platform/">Platform</a></li>
+      <li><a href="/ophthalmology/">Ophthalmology</a></li>
+      <li><a href="/implementation/">Implementation</a></li>
+      <li><a href="/ai-security/">AI Security</a></li>
+      <li><a href="/security/">Security &amp; Trust</a></li>
+    </ul>
+    <div class="site-header__cta">
+      <a href="#assessment" class="btn btn--primary">Request Assessment</a>
+    </div>
+    <button class="site-header__menu-btn" aria-label="Open menu" onclick="document.getElementById('site-header').dataset.open=document.getElementById('site-header').dataset.open==='true'?'false':'true'">Menu</button>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="container">
+    <p class="eyebrow">The ophthalmology EMR / EHR, built around the visit</p>
+    <h1 class="hero__h1">Hands-free scribing. Built for the eye.</h1>
+    <p class="hero__sub">
+      <span class="brand-text"><span class="chart">Chart</span><span class="nav">Nav</span></span> works alongside the EMR or EHR you already run today — and is built to replace it as your practice grows. The visit gets captured. The chart fills itself.
+    </p>
+    <div class="hero__ctas">
+      <a href="#assessment" class="btn btn--primary">Request Assessment</a>
+      <a href="/ehr/" class="btn btn--ghost">See the EMR/EHR →</a>
+    </div>
+    <div class="hero__chips" aria-label="Platform attributes">
+      <span class="chip">Hands-free capture</span>
+      <span class="chip">IBM watsonx-powered</span>
+      <span class="chip">Provider review required</span>
+      <span class="chip">Audit logging</span>
+      <span class="chip">EMR-ready</span>
+    </div>
+  </div>
+</section>
+
+<section class="savings">
+  <div class="container">
+    <p class="eyebrow">What a documentation hire costs your practice</p>
+    <h2 class="section-h">Stop paying someone else to type the visit.</h2>
+    <p class="section-sub">Most ophthalmology clinics carry a payroll line — in-room or remote — just to keep up with documentation. ChartNav captures the visit instead. The note writes itself, the chart fills itself, and that role stops being a line item.</p>
+
+    <div class="card-grid" role="list">
+      <article class="card" role="listitem">
+        <p class="card__num">PAYROLL</p>
+        <h3 class="card__h">No additional hire</h3>
+        <p class="card__p">No in-room helper. No remote vendor invoice. Documentation runs on the platform you already pay for.</p>
+      </article>
+      <article class="card" role="listitem">
+        <p class="card__num">CAPACITY</p>
+        <h3 class="card__h">Provider time, returned</h3>
+        <p class="card__p">No oversight of a second person typing your visit. The provider stays with the patient.</p>
+      </article>
+      <article class="card" role="listitem">
+        <p class="card__num">QUALITY</p>
+        <h3 class="card__h">Built for the lane</h3>
+        <p class="card__p">Ophthalmology-shaped output — not a generalist working from second-hand notes.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<div class="strip" role="complementary" aria-label="Security overview">
+  <div class="strip__inner">
+    <p class="strip__copy">
+      <strong>Auditable AI by default —</strong> PHI redaction, human review, and an immutable audit log on every call.
+    </p>
+    <a href="/ai-security/" class="strip__link">AI security details →</a>
+  </div>
+</div>
+
+<section class="vshow" aria-labelledby="vshow-h2">
+  <div class="container">
+    <p class="eyebrow">See a visit, end to end</p>
+    <h2 class="section-h" id="vshow-h2">Watch a real ophthalmology visit run on ChartNav.</h2>
+
+    <div class="vshow__layout">
+      <div class="vshow__copy">
+        <span class="vshow__tag" id="vshow-tag">Workspace tour</span>
+        <h3 class="vshow__title" id="vshow-title">The new ChartNav workspace, end to end</h3>
+        <p class="vshow__desc" id="vshow-desc">A short tour of the redesigned clinical workspace — Overview, Clinical, Documentation, Imaging, and the internal-staff Chat selector.</p>
+      </div>
+      <div class="vshow__frame">
+        <video class="vshow__video is-active" data-i="0" src="/videos/phase-19j-demo.mp4"                           muted playsinline preload="metadata" controls aria-label="ChartNav workspace tour — new design"></video>
+        <video class="vshow__video"           data-i="1" src="/videos/intake-ready-chart.mp4"                      muted playsinline preload="metadata" controls aria-label="Digital intake becomes a ready chart"></video>
+        <video class="vshow__video"           data-i="2" src="/videos/workup-ready-chart.mp4"                      muted playsinline preload="metadata" controls aria-label="Technician workup carries into the exam"></video>
+        <video class="vshow__video"           data-i="3" src="/videos/imaging-in-chart.mp4"                        muted playsinline preload="metadata" controls aria-label="Imaging lands inside the encounter"></video>
+        <video class="vshow__video"           data-i="4" src="/videos/hands-free-scribing.mp4"                     muted playsinline preload="metadata" controls aria-label="Hands-free scribing during the exam"></video>
+        <video class="vshow__video"           data-i="5" src="/videos/consult-letter.mp4"                          muted playsinline preload="metadata" controls aria-label="Consult letters from the signed note"></video>
+        <video class="vshow__video"           data-i="6" src="/videos/admin-dashboard.mp4"                         muted playsinline preload="metadata" controls aria-label="Operational metrics dashboard"></video>
+        <video class="vshow__video"           data-i="7" src="/chartnav/videos/chartnav-calendar-workflow.mp4"     muted playsinline preload="metadata" controls aria-label="Calendar workflow"></video>
+        <video class="vshow__video"           data-i="8" src="/chartnav/videos/chartnav-doctor-final-signoff.mp4"  muted playsinline preload="metadata" controls aria-label="Doctor final sign-off"></video>
+        <video class="vshow__video"           data-i="9" src="/chartnav/videos/chartnav-reminders-workflow.mp4"    muted playsinline preload="metadata" controls aria-label="Reminders and follow-up"></video>
+        <video class="vshow__video"           data-i="10" src="/chartnav/videos/chartnav-patient-handoff-workflow.mp4" muted playsinline preload="metadata" controls aria-label="Patient handoff"></video>
+        <button class="vshow__nav vshow__nav--prev" type="button" aria-label="Previous clip" id="vshow-prev">&lsaquo;</button>
+        <button class="vshow__nav vshow__nav--next" type="button" aria-label="Next clip"     id="vshow-next">&rsaquo;</button>
+        <div class="vshow__overlay" id="vshow-overlay">ChartNav workspace → new design</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="ba">
+  <div class="container">
+    <p class="eyebrow">What changes</p>
+    <h2 class="section-h">Cleaner visits. Calmer notes.</h2>
+    <div class="ba-grid" role="list">
+      <div class="ba-col ba-col--before" role="listitem">
+        <p class="ba-col__h">Without ChartNav</p>
+        <ul>
+          <li>Typing during the exam</li>
+          <li>Notes finished after hours</li>
+          <li>Conversation interrupted</li>
+        </ul>
+      </div>
+      <div class="ba-col ba-col--after" role="listitem">
+        <p class="ba-col__h">With ChartNav</p>
+        <ul>
+          <li>Hands-free capture</li>
+          <li>Drafts ready by end of day</li>
+          <li>Provider stays with the patient</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    <p class="eyebrow">Built around the visit</p>
+    <h2 class="section-h">Six layers. One workflow.</h2>
+    <div class="card-grid" role="list">
+      <article class="card" role="listitem"><p class="card__num">01 — SCRIBING</p><h3 class="card__h">Hands-free charting</h3></article>
+      <article class="card" role="listitem"><p class="card__num">02 — IMAGING</p><h3 class="card__h">Imaging in context</h3></article>
+      <article class="card" role="listitem"><p class="card__num">03 — INTAKE</p><h3 class="card__h">Pre-visit ready</h3></article>
+      <article class="card" role="listitem"><p class="card__num">04 — SCHEDULING</p><h3 class="card__h">Lane-aware</h3></article>
+      <article class="card" role="listitem"><p class="card__num">05 — FRONT OFFICE</p><h3 class="card__h">One desk view</h3></article>
+      <article class="card" role="listitem"><p class="card__num">06 — BILLING</p><h3 class="card__h">Billing visibility</h3></article>
+    </div>
+  </div>
+</section>
+
+<section id="assessment" class="assess">
+  <div class="container container--xs" style="text-align:center;">
+    <p class="eyebrow">Request assessment</p>
+    <h2 class="section-h" style="max-width: 22ch; margin-left:auto; margin-right:auto;">Start with a workflow assessment.</h2>
+    <p class="section-sub" style="margin-left:auto; margin-right:auto;">An advisor maps your charting workflow and shows where ChartNav fits — before any commitment.</p>
+
+    <div id="form-success" role="status" aria-live="polite">
+      <h3>Request received.</h3>
+      <p>A ChartNav advisor will be in touch within one business day.</p>
+    </div>
+
+    <form id="assess-form" class="assess__form" novalidate onsubmit="handleSubmit(event)">
+      <div class="ohnohoney" aria-hidden="true">
+        <label for="company_website">Website</label>
+        <input type="text" id="company_website" name="company_website" tabindex="-1" autocomplete="off" />
+      </div>
+      <div class="form-row">
+        <div class="field"><label for="first_name">First name *</label><input type="text" id="first_name" name="first_name" required autocomplete="given-name" /></div>
+        <div class="field"><label for="last_name">Last name *</label><input type="text" id="last_name" name="last_name" required autocomplete="family-name" /></div>
+      </div>
+      <div class="field"><label for="work_email">Work email *</label><input type="email" id="work_email" name="work_email" required autocomplete="email" /></div>
+      <div class="field"><label for="org_name">Organization name *</label><input type="text" id="org_name" name="org_name" required /></div>
+      <div class="form-row">
+        <div class="field"><label for="org_type">Organization type</label>
+          <select id="org_type" name="org_type">
+            <option value="">Select type</option>
+            <option value="private_practice">Private Practice</option>
+            <option value="hospital_health_system">Hospital / Health System</option>
+            <option value="enterprise">Enterprise Organization</option>
+            <option value="government">Government / Contractor</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="field"><label for="providers">Provider count</label>
+          <select id="providers" name="providers">
+            <option value="">Select range</option>
+            <option value="1-3">1–3</option>
+            <option value="4-10">4–10</option>
+            <option value="11-25">11–25</option>
+            <option value="25+">25+</option>
+          </select>
+        </div>
+      </div>
+      <div class="field"><label for="role">Your role *</label>
+        <select id="role" name="role" required>
+          <option value="">Select role</option>
+          <option value="practice_admin">Practice Administrator</option>
+          <option value="medical_director">Medical Director</option>
+          <option value="physician_owner">Physician Owner</option>
+          <option value="it_security">IT / Security</option>
+          <option value="operations">Operations</option>
+          <option value="procurement">Procurement</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn--primary" style="width:100%; justify-content:center; margin-top:.25rem;">Request Assessment</button>
+      <p class="form__notice">ChartNav advisors respond within one business day. No automated sales sequences.</p>
+    </form>
+  </div>
+</section>
+
+<footer class="site-footer">
+  <div class="site-footer__inner">
+    <span class="site-footer__brand"><img src="/brand/chartnav-mark.svg" alt="" aria-hidden="true" /><span class="brand-text"><span class="chart">Chart</span><span class="nav">Nav</span></span> <span style="color:var(--cn-dim);font-size:.875rem;">MD</span></span>
+    <ul class="site-footer__links" role="list">
+      <li><a href="/platform/">Platform</a></li>
+      <li><a href="/ophthalmology/">Ophthalmology</a></li>
+      <li><a href="/implementation/">Implementation</a></li>
+      <li><a href="/ai-security/">AI Security</a></li>
+      <li><a href="/security/">Security &amp; Trust</a></li>
+    </ul>
+    <p class="site-footer__copy">© 2026 ARCG Systems. ChartNav is a product of ARCG Systems.</p>
+  </div>
+</footer>
+
+<script>
+  // Video showcase — auto-rotate, click thumbs to jump.
+  // Captions match /videos/manifest.json one-to-one.
+  (function () {
+    var manifest = [
+      { tag: "Workspace tour",      title: "The new ChartNav workspace, end to end",       desc: "A short tour of the redesigned clinical workspace — Overview, Clinical, Documentation, Imaging, and the internal-staff Chat selector.", overlay: "ChartNav workspace → new design",          seconds: 23 },
+      { tag: "Intake",              title: "Encounter list to ready chart",                desc: "Pick a patient from the encounter rail. The Overview tab opens with the chart already shaped — Patient Snapshot, Visit Summary, Clinical Alerts, Favorites.", overlay: "Encounter list → ready chart",        seconds: 9 },
+      { tag: "Clinical Workflow",   title: "Workup flows into Overview",                   desc: "Row-1 cards on Overview carry the technician's prep into the exam — Patient Snapshot, Visit Summary, Clinical Alerts, and pinned Favorites — before the provider opens the chart.", overlay: "Workup → ready on Overview",      seconds: 8 },
+      { tag: "Imaging",             title: "Imaging tab in the new workspace",             desc: "Upload, OCT, Fundus, Attachments, Imaging Notes, and Selected Image Viewer cards land on the Imaging tab. The OD/OS retinal workbench sits below.",            overlay: "Imaging → in encounter",                   seconds: 10 },
+      { tag: "Hands-Free Scribing", title: "Documentation tab — stepper + workbench",      desc: "Documentation opens with the Transcript → Extracted Facts → AI Draft → Final Note stepper above the embedded NoteWorkspace.",                                  overlay: "Hands stay on the patient",                seconds: 10 },
+      { tag: "Referrals",           title: "From signed note to consult letter",           desc: "The Documentation stepper carries notes from draft to Final Note. Documents tab indexes consult letters, referral PDFs, and reports.",                              overlay: "Letter → generated from the note",         seconds: 11 },
+      { tag: "Admin",               title: "Admin sidebar group + visit status",           desc: "Admin sidebar surfaces Reports + Settings; Overview's Visit Summary card carries the encounter status pill leadership scans.",                                       overlay: "Admin → status visible",                   seconds: 9 },
+      { tag: "Calendar",            title: "Calendar tab — read-only schedule",            desc: "Calendar tab shows scheduled / started / completed timestamps + provider + location for the active encounter.",                                                      overlay: "Calendar → in context",                    seconds: 9 },
+      { tag: "Final Sign-Off",      title: "Documentation stepper — Draft to Final",       desc: "The AI Draft and Final Note steps anchor the provider review path. Workbench below carries the signed-note attestation.",                                            overlay: "Provider review → signed + audited",       seconds: 10 },
+      { tag: "Reminders",           title: "Tasks card + Communications handoff",          desc: "Tasks card on Overview surfaces follow-up work. Communications tab carries the internal staff handoff thread.",                                                       overlay: "Reminders → handed off",                   seconds: 10 },
+      { tag: "Patient Handoff",     title: "Care Team + Chat recipient selector",          desc: "Care Team card on Overview names the provider on record. Chat tab's recipient selector scopes the internal handoff thread.",                                          overlay: "Handoff → routed internally",              seconds: 10 }
+    ];
+    var videos = document.querySelectorAll(".vshow__video");
+    if (!videos.length) return;
+    var tag     = document.getElementById("vshow-tag");
+    var title   = document.getElementById("vshow-title");
+    var desc    = document.getElementById("vshow-desc");
+    var overlay = document.getElementById("vshow-overlay");
+    var prevBtn = document.getElementById("vshow-prev");
+    var nextBtn = document.getElementById("vshow-next");
+    var current = 0;
+    var timer   = null;
+    var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    function show(i) {
+      for (var idx = 0; idx < videos.length; idx++) {
+        var v = videos[idx];
+        if (idx === i) {
+          v.classList.add("is-active");
+          try { v.currentTime = 0; var p = v.play(); if (p && p.catch) p.catch(function () {}); } catch (e) {}
+        } else {
+          v.classList.remove("is-active");
+          try { v.pause(); } catch (e) {}
+        }
+      }
+      var m = manifest[i];
+      if (m) {
+        if (tag)     tag.textContent     = m.tag;
+        if (title)   title.textContent   = m.title;
+        if (desc)    desc.textContent    = m.desc;
+        if (overlay) overlay.textContent = m.overlay;
+      }
+      current = i;
+    }
+    function next() { show((current + 1) % videos.length); }
+    function prev() { show((current - 1 + videos.length) % videos.length); }
+    function schedule() {
+      if (reduced) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(next, 7000);
+    }
+    if (prevBtn) prevBtn.addEventListener("click", function () { prev(); schedule(); });
+    if (nextBtn) nextBtn.addEventListener("click", function () { next(); schedule(); });
+    for (var v = 0; v < videos.length; v++) {
+      videos[v].addEventListener("ended",   schedule);
+      videos[v].addEventListener("playing", schedule);
+    }
+    show(0);
+    schedule();
+  })();
+
+  // Subtle scroll-linked parallax for the video frame.
+  // Drives --cn-parallax (px). Reduced-motion users get nothing.
+  (function () {
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    var frame = document.querySelector(".vshow__frame");
+    if (!frame) return;
+    var raf = null;
+    function update() {
+      raf = null;
+      var rect = frame.getBoundingClientRect();
+      var vh = window.innerHeight || document.documentElement.clientHeight;
+      var center = rect.top + rect.height / 2;
+      var progress = (center - vh / 2) / vh;
+      progress = Math.max(-1, Math.min(1, progress));
+      var range = window.innerWidth <= 720 ? 4 : 8;
+      var ty = (-progress * range).toFixed(2);
+      frame.style.setProperty("--cn-parallax", ty + "px");
+    }
+    function onScroll() { if (!raf) raf = requestAnimationFrame(update); }
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    update();
+  })();
+
+  const _formLoad = Date.now();
+  async function handleSubmit(e) {
+    e.preventDefault();
+    const f = e.target;
+    if (f.company_website.value) return;
+    if (Date.now() - _formLoad < 2500) return;
+    const payload = {
+      first_name: f.first_name.value.trim(),
+      last_name:  f.last_name.value.trim(),
+      email:      f.work_email.value.trim(),
+      org_name:   f.org_name.value.trim(),
+      org_type:   f.org_type.value,
+      providers:  f.providers.value,
+      role:       f.role.value,
+      source:     'chartnavmd.com',
+      form_type:  'assessment',
+    };
+    const WEBHOOK = '%%WEBHOOK_URL%%';
+    try {
+      if (WEBHOOK && !WEBHOOK.startsWith('%%')) {
+        await fetch(WEBHOOK, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      } else {
+        console.log('[ChartNav MD] Lead (webhook not configured):', payload);
+      }
+    } catch (err) {
+      console.error('[ChartNav MD] Webhook error:', err);
+    }
+    f.style.display = 'none';
+    const success = document.getElementById('form-success');
+    success.classList.add('visible');
+    success.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+</script>
+</body>
+</html>

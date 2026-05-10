@@ -393,8 +393,16 @@ function OverviewTab({
     ? allowedNextStatuses(role, encounter.status)
     : [];
 
+  // Phase 19J.B — Overview reflows to the reference clinical layout:
+  //   Row 1 — Patient Snapshot · Visit Summary · Clinical Alerts · Favorites
+  //   Row 2 — Recent Encounters · Clinical Notes · Tasks · Care Team
+  //   Row 3 — Timeline (full width)
+  // The earlier 3-column wall now reads as discrete review surfaces in
+  // the 4-up reference rhythm. Empty-state copy stays honest — none of
+  // these cards invent data the encounter doesn't carry.
   return (
     <div className="ctw-grid" data-testid="ctw-overview">
+      {/* Row 1 ------------------------------------------------------- */}
       <Card title="Patient snapshot">
         <Field label="Name">
           {encounter.patient_name ?? encounter.patient_identifier}
@@ -403,6 +411,7 @@ function OverviewTab({
         <Field label="Provider">
           {encounter.provider_name ?? "Not assigned"}
         </Field>
+        <Field label="Organization">#{encounter.organization_id}</Field>
       </Card>
 
       <Card title="Visit summary">
@@ -412,11 +421,11 @@ function OverviewTab({
             {encounter.status.replace(/_/g, " ")}
           </span>
         </Field>
-        <Field label="Organization">#{encounter.organization_id}</Field>
+        <Field label="Scheduled">{fmt(encounter.scheduled_at)}</Field>
         <Field label="Location">#{encounter.location_id}</Field>
       </Card>
 
-      <Card title="Alerts">
+      <Card title="Clinical alerts">
         <EmptyState>
           No active alerts. ChartNav surfaces audit-friendly
           provider-review prompts only — never autonomous-diagnosis
@@ -424,11 +433,61 @@ function OverviewTab({
         </EmptyState>
       </Card>
 
+      <Card title="Favorites">
+        {/* Phase 19J — Favorites surfaces ophthalmology protocol /
+            template entry points per the reference clinical layout.
+            Pills are inert in the demo (the Documentation tab is
+            where a clinician actually drops a template into a
+            draft); these read as the saved-shortcut list a
+            clinician would pin for fast access. */}
+        <ul
+          className="ctw-favorites__list"
+          data-testid="ctw-favorites-list"
+        >
+          {[
+            "Dry Eye Disease Protocol",
+            "OCT Macula 3-Line Protocol",
+            "VF 24-2 SITA Standard",
+            "Glaucoma Summary Sheet",
+            "Diabetic Eye Exam Template",
+          ].map((label) => (
+            <li
+              key={label}
+              className="ctw-favorites__item"
+              data-testid={`ctw-favorites-item-${label
+                .toLowerCase()
+                .replace(/\W+/g, "-")}`}
+            >
+              <span
+                className="ctw-favorites__star"
+                aria-hidden="true"
+              >
+                ★
+              </span>
+              <span className="ctw-favorites__label">{label}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="ctw__footnote ctw-favorites__note">
+          Provider-pinned protocols and templates. Drop into the
+          active draft from the Documentation tab.
+        </p>
+      </Card>
+
+      {/* Row 2 ------------------------------------------------------- */}
       <Card title="Recent encounters">
         <EmptyState>
           The encounter list lives in the left sidebar. Recent-encounter
           history per patient will surface here once the backend
           endpoint lands.
+        </EmptyState>
+      </Card>
+
+      <Card title="Clinical notes">
+        <EmptyState>
+          Signed notes for this patient surface here once the
+          documentation pipeline writes a note. Drafts under review live
+          in the Documentation tab.
         </EmptyState>
       </Card>
 
@@ -440,14 +499,16 @@ function OverviewTab({
         </EmptyState>
       </Card>
 
-      <Card title="Favorites">
+      <Card title="Care team">
         <EmptyState>
-          Pin frequently-used clinical shortcuts and templates here.
-          The library lives in the Clinical / Ophthalmology tab and
-          syncs into this panel once a clinician marks favorites.
+          Provider, reviewer, and PCP roles for this encounter surface
+          here once the backend roster endpoint lands. Provider on
+          record:{" "}
+          <strong>{encounter.provider_name ?? "Not assigned"}</strong>.
         </EmptyState>
       </Card>
 
+      {/* Row 3 — Timeline spans the full grid -------------------- */}
       <Card title="Timeline" wide>
         <div
           className="ctw-timeline__stamps"

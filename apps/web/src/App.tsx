@@ -245,7 +245,88 @@ export default function App() {
           />
           <span className="sub">Workflow</span>
         </div>
+        {/* Phase 19J — center-anchored workspace search. Static
+            placeholder for now; wiring real search across patients,
+            encounters, and chart artifacts is scoped for Phase 19J.B.
+            Aria-labelled so the input is reachable for assistive
+            tech and testable. */}
+        <div className="header-search" data-testid="header-search-wrap">
+          <span className="header-search__icon" aria-hidden="true">
+            {/* magnifier glyph kept inline so we don't need an icon
+                package addition for Phase 19J.A. */}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+                 strokeLinejoin="round">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.5-3.5" />
+            </svg>
+          </span>
+          <input
+            type="search"
+            className="header-search__input"
+            placeholder="Search patient, encounter, or chart..."
+            aria-label="Search patient, encounter, or chart"
+            data-testid="header-search-input"
+            disabled
+          />
+        </div>
         <div className="header-meta">
+          {/* Phase 19J — small notification / help / security icons
+              between the search and identity per the reference
+              clinical layout. Buttons are accessible + decorative
+              (disabled); behavior wires in Phase 19J.C. */}
+          <div
+            className="header-icons"
+            role="group"
+            aria-label="Workspace shortcuts"
+            data-testid="header-icons"
+          >
+            <button
+              type="button"
+              className="header-icon-btn"
+              data-testid="header-icon-notifications"
+              aria-label="Notifications"
+              title="Notifications"
+              disabled
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" strokeWidth="2"
+                   strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+                <path d="M10 21a2 2 0 0 0 4 0" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              className="header-icon-btn"
+              data-testid="header-icon-help"
+              aria-label="Help"
+              title="Help"
+              disabled
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" strokeWidth="2"
+                   strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-1 .5-1.5 1.2-1.5 2.2" />
+                <circle cx="12" cy="17" r="0.6" fill="currentColor" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              className="header-icon-btn"
+              data-testid="header-icon-security"
+              aria-label="Security"
+              title="Security"
+              disabled
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" strokeWidth="2"
+                   strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3z" />
+              </svg>
+            </button>
+          </div>
           <IdentityBadge me={me} meError={meError} meLoading={meLoading} />
           {/*
             Phase 19 — hide the dev API URL chip in demo mode so a
@@ -279,11 +360,31 @@ export default function App() {
       </header>
 
       <div className="layout">
-        <aside className="layout__list" data-testid="clinical-sidebar">
+        {/* Phase 19J.C — left rail split into two distinct columns:
+            (1) the burgundy clinical-sidebar nav sits in its own
+                ~240px column, and
+            (2) the FilterBar + EncounterList + pagination sit in a
+                separate ~320px encounter-list column.
+            The third column is the detail/workspace surface. The
+            three-column rhythm matches the reference clinical
+            layout. `data-testid="clinical-sidebar"` is preserved on
+            the burgundy sidebar so existing tests/screenshots that
+            reference it continue to work. */}
+        <aside
+          className="layout__sidebar"
+          data-testid="clinical-sidebar"
+        >
           <ClinicalSidebarNav
             canCreate={canCreate}
             onNewEncounter={() => setShowCreate(true)}
           />
+        </aside>
+
+        <aside
+          className="layout__list"
+          data-testid="encounter-list-pane"
+          aria-label="Encounter list"
+        >
           <FilterBar
             value={filters}
             onChange={(next) => {
@@ -425,6 +526,13 @@ function ClinicalSidebarNav({
 }) {
   return (
     <nav className="sidebar-nav" data-testid="sidebar-nav" aria-label="Clinical navigation">
+      {/* Phase 19J — group structure mirrors the reference clinical
+          workspace layout. Patients sits with the rest of the
+          patient-record surfaces (CORE), Documents moves next to
+          Lab/Orders so all clinical-record surfaces share one group
+          (CLINICAL), and ADMIN reduces to Reports + Settings. No
+          Billing — ChartNav does not bill, code, submit claims, or
+          handle insurance. */}
       <SidebarGroup label="Core" testid="sidebar-group-core">
         <SidebarItem testid="sidebar-item-dashboard" disabled>
           Dashboard
@@ -435,33 +543,30 @@ function ClinicalSidebarNav({
         <SidebarItem testid="sidebar-item-encounters" active>
           Encounters
         </SidebarItem>
-      </SidebarGroup>
-      <SidebarGroup label="Clinical" testid="sidebar-group-clinical">
         <SidebarItem testid="sidebar-item-patients" disabled>
           Patients
         </SidebarItem>
-        <SidebarItem testid="sidebar-item-lab-orders" disabled>
-          Lab / Orders
-        </SidebarItem>
       </SidebarGroup>
       <SidebarGroup label="Operations" testid="sidebar-group-operations">
-        <SidebarItem testid="sidebar-item-tasks" disabled>
-          Tasks
-        </SidebarItem>
         <SidebarItem testid="sidebar-item-messages" disabled>
           Messages
+        </SidebarItem>
+        <SidebarItem testid="sidebar-item-tasks" disabled>
+          Tasks
         </SidebarItem>
         <SidebarItem testid="sidebar-item-chat" disabled>
           Chat
         </SidebarItem>
       </SidebarGroup>
-      {/* Phase 19F — Admin no longer surfaces Billing. ChartNav
-          does not bill, code, submit claims, or handle insurance.
-          Documents replaces Billing as the third Admin item. */}
-      <SidebarGroup label="Admin" testid="sidebar-group-admin">
+      <SidebarGroup label="Clinical" testid="sidebar-group-clinical">
+        <SidebarItem testid="sidebar-item-lab-orders" disabled>
+          Lab / Orders
+        </SidebarItem>
         <SidebarItem testid="sidebar-item-documents" disabled>
           Documents
         </SidebarItem>
+      </SidebarGroup>
+      <SidebarGroup label="Admin" testid="sidebar-group-admin">
         <SidebarItem testid="sidebar-item-reports" disabled>
           Reports
         </SidebarItem>

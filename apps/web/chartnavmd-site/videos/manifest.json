@@ -1,0 +1,67 @@
+[
+  {
+    "file": "phase-19j-demo.mp4",
+    "title": "ChartNav Workspace — Phase 19J UI",
+    "description": "A short tour of the redesigned ChartNav clinical workspace: Overview, Clinical / Ophthalmology, Documentation / EMR-EHR, Imaging, and the internal-staff Chat recipient selector. Demo data only.",
+    "tag": "Workspace tour",
+    "overlay": "ChartNav workspace → new design",
+    "priority": 0,
+    "seconds": 23,
+    "featured": true
+  },
+  {
+    "file": "intake-ready-chart.mp4",
+    "title": "Encounter List to Ready Chart",
+    "description": "Pick a patient from the encounter rail. Overview opens with the chart already shaped — Patient Snapshot, Visit Summary, Clinical Alerts, Favorites. Recorded against the Phase 19J UI.",
+    "tag": "Intake",
+    "overlay": "Encounter list → ready chart",
+    "priority": 1,
+    "seconds": 9
+  },
+  {
+    "file": "workup-ready-chart.mp4",
+    "title": "Workup Flows Into Overview",
+    "description": "Row-1 cards on Overview carry the technician's prep into the exam before the provider opens the chart. Recorded against the Phase 19J UI.",
+    "tag": "Clinical Workflow",
+    "overlay": "Workup → ready on Overview",
+    "priority": 2,
+    "seconds": 8
+  },
+  {
+    "file": "imaging-in-chart.mp4",
+    "title": "Imaging Tab in the New Workspace",
+    "description": "Upload, OCT, Fundus, Attachments, Imaging Notes, Selected Image Viewer cards on the Imaging tab. OD/OS retinal workbench sits below. Recorded against the Phase 19J UI.",
+    "tag": "Imaging",
+    "overlay": "Imaging → in encounter",
+    "priority": 3,
+    "seconds": 10
+  },
+  {
+    "file": "hands-free-scribing.mp4",
+    "title": "Documentation Tab — Stepper + Workbench",
+    "description": "Documentation opens with the Transcript → Extracted Facts → AI Draft → Final Note stepper above the embedded NoteWorkspace. Recorded against the Phase 19J UI.",
+    "tag": "Hands-Free Scribing",
+    "overlay": "Hands stay on the patient",
+    "priority": 4,
+    "seconds": 10,
+    "featured": true
+  },
+  {
+    "file": "consult-letter.mp4",
+    "title": "From Signed Note to Consult Letter",
+    "description": "Documentation stepper carries notes from draft to Final Note. Documents tab indexes consult letters, referral PDFs, and reports. Recorded against the Phase 19J UI.",
+    "tag": "Referrals",
+    "overlay": "Letter → generated from the note",
+    "priority": 5,
+    "seconds": 11
+  },
+  {
+    "file": "admin-dashboard.mp4",
+    "title": "Admin Sidebar Group + Visit Status",
+    "description": "Admin sidebar surfaces Reports + Settings; Overview's Visit Summary card carries the encounter status pill leadership scans. Recorded against the Phase 19J UI.",
+    "tag": "Admin",
+    "overlay": "Admin → status visible",
+    "priority": 6,
+    "seconds": 9
+  }
+]
