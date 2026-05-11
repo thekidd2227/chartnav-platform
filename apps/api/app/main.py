@@ -9,6 +9,7 @@ from starlette.responses import JSONResponse
 
 from app.api.admin_security import router as admin_security_router
 from app.api.eye_diagrams import router as eye_diagrams_router
+from app.api.imaging_pipeline import router as imaging_pipeline_router
 from app.api.patient_summaries import router as patient_summaries_router
 from app.api.pre_visit_briefs import router as pre_visit_briefs_router
 from app.api.provider_action_items import router as provider_action_items_router
@@ -129,3 +130,4 @@ app.include_router(provider_action_items_router)
 app.include_router(structured_data_router)
 app.include_router(role_dashboards_router)
 app.include_router(specialty_tracking_router)
+app.include_router(imaging_pipeline_router)

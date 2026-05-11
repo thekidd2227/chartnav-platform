@@ -57,6 +57,7 @@ import {
 } from "./api";
 import { NoteWorkspace } from "./NoteWorkspace";
 import { EyeDiagramPanel } from "./EyeDiagramPanel";
+import { ImagingPipelinePanel } from "./ImagingPipelinePanel";
 import { SpecialtyTrackingPanel } from "./SpecialtyTrackingPanel";
 
 // Local fmt — same shape as App.tsx::fmt. Inlined to avoid a
@@ -897,6 +898,7 @@ function DocumentationTab({
 function ImagingTab({
   encounter,
   identity,
+  me,
 }: {
   encounter: Encounter;
   identity: string;
@@ -916,6 +918,18 @@ function ImagingTab({
     typeof encounter.id === "number" ? encounter.id : null;
   return (
     <div className="ctw-imaging" data-testid="ctw-imaging">
+      {/* Phase 21B — Imaging pipeline (metadata + review workflow).
+          Renders at the top of the Imaging tab so the structured
+          study list is the first thing a clinician/technician sees.
+          The placeholder cards below remain as documentation of
+          future surfaces; the OD/OS retinal workbench stays at the
+          bottom. */}
+      <ImagingPipelinePanel
+        identity={identity}
+        me={me}
+        patientId={patientId}
+        encounterId={encounterId}
+      />
       <div className="ctw-grid" data-testid="ctw-imaging-grid">
         <Card title="Upload imaging">
           <EmptyState>

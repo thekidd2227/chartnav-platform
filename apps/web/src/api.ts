@@ -3332,3 +3332,213 @@ export function createPatientGlaucomaVisualField(
     body: JSON.stringify(input),
   });
 }
+
+// =============================================================
+// Phase 21B — Ophthalmology imaging pipeline (metadata only)
+// =============================================================
+//
+// Read + provider-reviewed write surface for `imaging_studies`,
+// `imaging_files`, and `imaging_measurements`. METADATA ONLY —
+// no binary file content is sent through this layer. Modality
+// labels are generic; ChartNav does not claim integrations with
+// any specific device or vendor.
+
+export type ImagingModality =
+  | "oct_macula"
+  | "oct_rnfl"
+  | "fundus_photo"
+  | "widefield_fundus"
+  | "visual_field_24_2"
+  | "visual_field_10_2"
+  | "biometry_packet"
+  | "external_pdf"
+  | "other";
+
+export type ImagingEye = "OD" | "OS" | "OU" | "NA";
+
+export type ImagingStudyStatus =
+  | "pending_upload"
+  | "uploaded"
+  | "ready_for_review"
+  | "reviewed"
+  | "archived";
+
+export type ImagingFileKind = "image" | "report_pdf" | "raw_export";
+
+export type ImagingMeasurementSource =
+  | "manual"
+  | "demo"
+  | "imported_metadata";
+
+export interface ImagingStudy {
+  id: number;
+  organization_id: number;
+  patient_id: number;
+  encounter_id: number | null;
+  modality: ImagingModality;
+  eye: ImagingEye;
+  status: ImagingStudyStatus;
+  captured_at: string | null;
+  reviewed_by_user_id: number | null;
+  reviewed_at: string | null;
+  notes: string | null;
+  created_by_user_id: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ImagingStudyCreateInput {
+  modality: ImagingModality;
+  eye: ImagingEye;
+  status?: ImagingStudyStatus;
+  captured_at?: string | null;
+  notes?: string | null;
+  encounter_id?: number | null;
+}
+
+export interface ImagingStudyUpdateInput {
+  status?: ImagingStudyStatus;
+  captured_at?: string | null;
+  notes?: string | null;
+}
+
+export interface ImagingStudyReviewInput {
+  notes?: string | null;
+}
+
+export interface ImagingFileMetadata {
+  id: number;
+  organization_id: number;
+  study_id: number;
+  file_kind: ImagingFileKind;
+  storage_uri: string | null;
+  file_name: string;
+  content_type: string | null;
+  size_bytes: number | null;
+  checksum_sha256: string | null;
+  created_by_user_id: number;
+  created_at: string;
+}
+
+export interface ImagingFileCreateInput {
+  file_kind: ImagingFileKind;
+  file_name: string;
+  storage_uri?: string | null;
+  content_type?: string | null;
+  size_bytes?: number | null;
+  checksum_sha256?: string | null;
+}
+
+export interface ImagingMeasurement {
+  id: number;
+  organization_id: number;
+  study_id: number;
+  measurement_type: string;
+  eye: ImagingEye;
+  value: string;
+  unit: string | null;
+  source: ImagingMeasurementSource;
+  created_by_user_id: number;
+  created_at: string;
+}
+
+export interface ImagingMeasurementCreateInput {
+  measurement_type: string;
+  eye: ImagingEye;
+  value: string;
+  unit?: string | null;
+  source?: ImagingMeasurementSource;
+}
+
+export interface ImagingListResponse<T> {
+  items: T[];
+  total: number;
+}
+
+export function listPatientImagingStudies(
+  email: string,
+  patientId: number
+): Promise<ImagingListResponse<ImagingStudy>> {
+  return request(`/patients/${patientId}/imaging-studies`, { email });
+}
+
+export function createPatientImagingStudy(
+  email: string,
+  patientId: number,
+  input: ImagingStudyCreateInput
+): Promise<ImagingStudy> {
+  return request(`/patients/${patientId}/imaging-studies`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function getImagingStudy(
+  email: string,
+  studyId: number
+): Promise<ImagingStudy> {
+  return request(`/imaging-studies/${studyId}`, { email });
+}
+
+export function updateImagingStudy(
+  email: string,
+  studyId: number,
+  input: ImagingStudyUpdateInput
+): Promise<ImagingStudy> {
+  return request(`/imaging-studies/${studyId}`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function markImagingStudyReviewed(
+  email: string,
+  studyId: number,
+  input: ImagingStudyReviewInput = {}
+): Promise<ImagingStudy> {
+  return request(`/imaging-studies/${studyId}/review`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function listImagingStudyFiles(
+  email: string,
+  studyId: number
+): Promise<ImagingListResponse<ImagingFileMetadata>> {
+  return request(`/imaging-studies/${studyId}/files`, { email });
+}
+
+export function createImagingStudyFile(
+  email: string,
+  studyId: number,
+  input: ImagingFileCreateInput
+): Promise<ImagingFileMetadata> {
+  return request(`/imaging-studies/${studyId}/files`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function listImagingStudyMeasurements(
+  email: string,
+  studyId: number
+): Promise<ImagingListResponse<ImagingMeasurement>> {
+  return request(`/imaging-studies/${studyId}/measurements`, { email });
+}
+
+export function createImagingStudyMeasurement(
+  email: string,
+  studyId: number,
+  input: ImagingMeasurementCreateInput
+): Promise<ImagingMeasurement> {
+  return request(`/imaging-studies/${studyId}/measurements`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
