@@ -17,7 +17,15 @@ from __future__ import annotations
 
 import sqlite3
 
+import pytest
+
 from tests.conftest import ADMIN1, ADMIN2, CLIN1, CLIN2, FRONT1, REV1, TECH1
+
+
+@pytest.fixture()
+def test_db(test_db_with_wedge):
+    """Phase 24B tests require the wedge; override the conftest default."""
+    return test_db_with_wedge
 
 
 # Forbidden positive-claim phrases that must never appear in seeded
