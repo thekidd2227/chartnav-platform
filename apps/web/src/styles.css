@@ -3118,3 +3118,111 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
   background: var(--cn-bg);
   margin: 0;
 }
+
+/* ============================================================
+   Phase 23 — Security Readiness panel
+   Admin-only metadata-only readiness checklist.
+   ============================================================ */
+.security-readiness {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  background: white;
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-md);
+}
+.security-readiness--blocked { background: var(--cn-bg-alt); }
+.security-readiness__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.security-readiness__title { margin: 0; font-size: 16px; color: var(--cn-fg); }
+.security-readiness__subtitle { margin: 4px 0 0; }
+.security-readiness__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.security-readiness__row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  gap: 4px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-sm);
+  background: var(--cn-bg);
+}
+.security-readiness__row--ok {
+  border-color: var(--cn-primary-tint);
+  background: var(--cn-primary-soft);
+}
+.security-readiness__row--warn {
+  border-color: var(--cn-warning);
+  background: var(--cn-warning-tint);
+}
+.security-readiness__row--fail {
+  border-color: #b91c1c;
+  background: #fee2e2;
+}
+.security-readiness__row-label {
+  grid-column: 1 / 2;
+  font-weight: 600;
+  color: var(--cn-fg);
+  font-size: 13px;
+}
+.security-readiness__row-status {
+  grid-column: 2 / 3;
+  grid-row: 1 / 2;
+  text-align: right;
+}
+.security-readiness__row-description {
+  grid-column: 1 / 3;
+  font-size: 12px;
+}
+.security-readiness__pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  text-transform: capitalize;
+  border: 1px solid var(--cn-line-strong);
+}
+.security-readiness__pill--ok {
+  background: white;
+  color: var(--cn-primary);
+  border-color: var(--cn-primary);
+}
+.security-readiness__pill--warn {
+  background: white;
+  color: var(--cn-warning);
+  border-color: var(--cn-warning);
+}
+.security-readiness__pill--fail {
+  background: white;
+  color: #b91c1c;
+  border-color: #b91c1c;
+}
+.security-readiness__disclaimer {
+  margin: 6px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-sm);
+  background: var(--cn-bg-alt);
+}
+.security-readiness__empty {
+  padding: 10px 12px;
+  border: 1px dashed var(--cn-line-strong);
+  border-radius: var(--cn-radius-sm);
+  color: var(--cn-muted);
+  font-size: 13px;
+  background: var(--cn-bg);
+  margin: 0;
+}

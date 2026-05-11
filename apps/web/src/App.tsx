@@ -40,11 +40,16 @@ import { isDemoModeEnabled } from "./GuidedDemoMode";
 import { ClinicalTabbedWorkspace } from "./ClinicalTabbedWorkspace";
 import { MultiClinicDashboard } from "./MultiClinicDashboard";
 import { RoleDashboard } from "./RoleDashboard";
+import { SecurityReadinessPanel } from "./SecurityReadinessPanel";
 
 // Phase 20C — single-page top-level view switch. The encounters
 // workspace stays the default; the Dashboard CORE entry switches the
 // detail pane to the read-only role-based dashboard.
-type TopView = "encounters" | "dashboard" | "multi-clinic";
+type TopView =
+  | "encounters"
+  | "dashboard"
+  | "multi-clinic"
+  | "security-readiness";
 
 type Banner =
   | { kind: "ok"; msg: string }
@@ -296,6 +301,8 @@ export default function App() {
             onShowEncounters={() => setTopView("encounters")}
             onShowMultiClinic={() => setTopView("multi-clinic")}
             canViewMultiClinic={canAdmin}
+            onShowSecurityReadiness={() => setTopView("security-readiness")}
+            canViewSecurityReadiness={canAdmin}
           />
           <FilterBar
             value={filters}
@@ -350,6 +357,8 @@ export default function App() {
             <RoleDashboard identity={identity} me={me} />
           ) : topView === "multi-clinic" && me ? (
             <MultiClinicDashboard identity={identity} me={me} />
+          ) : topView === "security-readiness" && me ? (
+            <SecurityReadinessPanel identity={identity} me={me} />
           ) : selectedId == null ? (
             <div className="empty">
               Select an encounter from the list to see details, events, and allowed actions.
@@ -441,6 +450,8 @@ function ClinicalSidebarNav({
   onShowEncounters,
   onShowMultiClinic,
   canViewMultiClinic,
+  onShowSecurityReadiness,
+  canViewSecurityReadiness,
 }: {
   canCreate: boolean;
   onNewEncounter: () => void;
@@ -449,6 +460,8 @@ function ClinicalSidebarNav({
   onShowEncounters: () => void;
   onShowMultiClinic: () => void;
   canViewMultiClinic: boolean;
+  onShowSecurityReadiness: () => void;
+  canViewSecurityReadiness: boolean;
 }) {
   return (
     <nav className="sidebar-nav" data-testid="sidebar-nav" aria-label="Clinical navigation">
@@ -507,6 +520,18 @@ function ClinicalSidebarNav({
           does not bill, code, submit claims, or handle insurance.
           Documents replaces Billing as the third Admin item. */}
       <SidebarGroup label="Admin" testid="sidebar-group-admin">
+        {/* Phase 23 — Security Readiness checklist. Admin-only;
+            non-admin identities see a disabled placeholder. */}
+        <SidebarItem
+          testid="sidebar-item-security-readiness"
+          active={topView === "security-readiness"}
+          onClick={
+            canViewSecurityReadiness ? onShowSecurityReadiness : undefined
+          }
+          disabled={!canViewSecurityReadiness}
+        >
+          Security Readiness
+        </SidebarItem>
         <SidebarItem testid="sidebar-item-documents" disabled>
           Documents
         </SidebarItem>

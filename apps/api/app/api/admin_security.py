@@ -338,3 +338,100 @@ def update_review_status(
         "record_id": record_id,
         "review_status": updated.human_review_status,
     }
+
+
+# ---------------------------------------------------------------------
+# Phase 23 — GET /admin/security/readiness
+# ---------------------------------------------------------------------
+#
+# Lightweight metadata-only readiness summary admins can call to check
+# the **shape** of the runtime environment against the Phase 23
+# real-PHI go-live gate. Returns status labels only — never env values,
+# never secrets, never PHI.
+#
+# Status labels:
+#   - "configured"        — env var set with a non-empty value
+#   - "missing"           — env var unset or empty
+#   - "required"          — control required but state must be verified
+#                           outside the application (practice action)
+#   - "external_required" — control owned by hosting / identity /
+#                           vendor; outside ChartNav's runtime knowledge
+#   - "disabled"          — feature intentionally disabled (safe state)
+
+
+def _env_status(name: str) -> str:
+    import os
+
+    return "configured" if (os.environ.get(name) or "").strip() else "missing"
+
+
+def _auth_mode_label() -> str:
+    import os
+
+    mode = (os.environ.get("CHARTNAV_AUTH_MODE") or "header").strip()
+    if mode == "bearer":
+        return "configured"
+    return "missing"
+
+
+def _database_kind_label() -> str:
+    import os
+
+    url = (os.environ.get("DATABASE_URL") or "").strip()
+    if url.startswith(("postgresql://", "postgresql+psycopg://", "postgresql+psycopg2://", "postgres://")):
+        return "configured"
+    return "missing"
+
+
+def _stt_provider_label() -> str:
+    import os
+
+    provider = (os.environ.get("CHARTNAV_STT_PROVIDER") or "stub").strip()
+    if provider in ("stub", "none"):
+        return "disabled"
+    if provider == "openai_whisper":
+        # External egress; practice approval gate.
+        return "external_required"
+    return "missing"
+
+
+@router.get("/readiness")
+def get_security_readiness(
+    caller: Caller = Depends(_AdminOnly),
+) -> dict[str, Any]:
+    """Phase 23 — admin-only real-PHI readiness summary.
+
+    Returns metadata-only status labels. **Never** returns env values,
+    secrets, or PHI. This endpoint is informational only — passing
+    every check does **not** make ChartNav HIPAA-compliant or
+    approved for real PHI by default. The full go-live gate lives in
+    docs/security/chartnav-real-phi-go-live-gate.md.
+    """
+    return {
+        "organization_id": caller.organization_id,
+        "auth_mode": _auth_mode_label(),
+        "database_kind": _database_kind_label(),
+        "audit_retention_configured": _env_status(
+            "CHARTNAV_AUDIT_RETENTION_DAYS"
+        ),
+        "cors_explicit_configured": _env_status(
+            "CHARTNAV_CORS_ALLOW_ORIGINS"
+        ),
+        "jwt_issuer_configured": _env_status("CHARTNAV_JWT_ISSUER"),
+        "jwt_audience_configured": _env_status("CHARTNAV_JWT_AUDIENCE"),
+        "jwt_jwks_url_configured": _env_status("CHARTNAV_JWT_JWKS_URL"),
+        "stt_provider": _stt_provider_label(),
+        # The following are external_required — they live outside the
+        # API's runtime knowledge but are tracked in the readiness
+        # control matrix and the go-live gate.
+        "backup_config_documented": "external_required",
+        "logging_config_documented": "external_required",
+        "monitoring_config_documented": "external_required",
+        "incident_contacts_documented": "external_required",
+        "baa_status_configured": "external_required",
+        "vendor_review_status_configured": "external_required",
+        "real_phi_go_live_gate_status": "external_required",
+        # Explicit contract — must not be misread as a compliance
+        # attestation.
+        "compliance_attestation": "ChartNav is not HIPAA-certified. ChartNav is not approved for real PHI by default. This endpoint reports metadata-only environment shape; it does not attest to compliance.",
+    }
