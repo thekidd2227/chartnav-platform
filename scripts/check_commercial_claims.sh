@@ -185,6 +185,28 @@ FORBIDDEN_CAPABILITY=(
   "replaces providers"
   "AI draws automatically"
   "AI decides"
+  # Phase 24A — Manus public-claims audit additions. Negative
+  # phrasings ("the chart does not fill itself", "ChartNav does
+  # not replace your EHR") are exempted by the negative-context
+  # check below.
+  "hands-free scribing"
+  "hands-free scribe"
+  "chart fills itself"
+  "chart writes itself"
+  "note fills itself"
+  "note writes itself"
+  "replaces your EHR"
+  "replace your EHR"
+  "replaces your EMR"
+  "replace your EMR"
+  "EHR replacement"
+  "EMR replacement"
+  "powered by IBM"
+  "powered by watsonx"
+  "watsonx-powered"
+  "IBM-powered"
+  "billing-aware coding"
+  "coding recommendations"
   "AI diagnosis"
   "automatic charting"
   "hands-free diagnosis"

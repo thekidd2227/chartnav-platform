@@ -120,10 +120,15 @@ const SAFETY_BULLETS: string[] = [
 ];
 
 const NON_GOALS: string[] = [
-  "Not a certified EHR replacement.",
-  "Not autonomous diagnosis.",
-  "Not automatic orders, coding, referrals, or patient messaging.",
-  "Not real-PHI production without legal / security review and a BAA.",
+  "Not a certified EHR. ChartNav sits alongside your existing EHR; it does not replace it.",
+  "Not HIPAA-certified. Real-PHI pilot requires BAA, security review, production auth, approved hosting, monitoring, backups, incident contacts, and written practice approval.",
+  "Not autonomous diagnosis. Provider interpretation stays with the clinician.",
+  "Does not autofill IOP, refraction, or cup-to-disc ratio.",
+  "Does not interpret OCT scans, fundus photographs, or visual fields.",
+  "Does not select IOL power or anti-VEGF dosing.",
+  "Does not place orders, send referrals, submit claims, or handle insurance.",
+  "Does not send patient messages automatically. No patient-facing surface.",
+  "Not a current integration with any specific imaging-device vendor.",
 ];
 
 interface SafetyModelRow {
@@ -370,16 +375,20 @@ export function LandingPage({
           className="landing-page__hero-title"
           data-testid="landing-hero-title"
         >
-          ChartNav is an ophthalmology-specific clinical workflow
-          assistant — provider-reviewed at every step.
+          ChartNav is the clinical workflow layer for ophthalmology
+          practices — provider-reviewed at every step.
         </h1>
         <p
           className="landing-page__hero-sub"
           data-testid="landing-hero-sub"
         >
-          Help your providers review documentation, retinal findings,
-          OD/OS diagrams, patient summaries, pre-visit context, and
-          action queues — without giving up control.
+          Front desk to tech workup to imaging review to provider
+          sign-off — built for eye-care lanes. Role-based clinic
+          dashboards, structured retina and glaucoma tracking, an
+          imaging metadata pipeline, OD/OS retinal diagram review,
+          and provider-reviewed documentation in one workspace.
+          Provider-reviewed at every step. Provider-controlled at
+          every transition.
         </p>
 
         <p
@@ -388,7 +397,9 @@ export function LandingPage({
         >
           Provider-reviewed workflow support. ChartNav does not
           diagnose, create orders, send referrals, bill, or message
-          patients automatically.
+          patients automatically. ChartNav does not interpret OCTs,
+          fundus photos, or visual fields. ChartNav does not submit
+          claims or handle insurance.
         </p>
 
         <div

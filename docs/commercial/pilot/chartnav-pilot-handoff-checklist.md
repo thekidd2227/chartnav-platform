@@ -109,7 +109,7 @@ After every box above is checked:
 - Order entry, coding, referrals, patient messaging — none of
   these are part of ChartNav.
 - HIPAA / SOC 2 certification — we are not certified.
-- EHR replacement — ChartNav sits alongside the EHR.
+- Not an EHR replacement — ChartNav sits alongside the EHR.
 - Long-term commercial pricing (post-pilot) — that conversation
   happens at the post-pilot decision meeting, using the pricing
   block from
