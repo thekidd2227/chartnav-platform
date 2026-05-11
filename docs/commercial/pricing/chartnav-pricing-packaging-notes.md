@@ -4,6 +4,12 @@
 > pulls pricing from this file. Pricing is a hypothesis — labeled
 > as such — until validated by signed pilot agreements and paid
 > customers.
+>
+> **Phase 21C-follow-up.** Pricing structure unchanged. Value
+> framing re-anchored around the ophthalmology clinic workflow
+> layer (role dashboards + structured data + retina/glaucoma
+> tracking + imaging metadata + provider-reviewed documentation +
+> internal coordination). See *Value framing* section below.
 
 ---
 
@@ -169,3 +175,68 @@ We have **not heard** specific cost-ceiling guidance from
 prospective practices yet. Pricing above is a hypothesis; pilot
 conversations will tell us where the practice's price elasticity
 lands.
+
+---
+
+## Value framing *(Phase 21C-follow-up)*
+
+When discussing pricing with a practice, anchor the value
+conversation in the ophthalmology clinic workflow layer — not in
+generic scribe replacement. The Phase 20B / 20C / 21A / 21B
+product surfaces merged into `main` are now buyer-visible product
+proof.
+
+### Anchor the value conversation around these surfaces
+
+- **Role-based clinic dashboards** — five role views over a
+  shared structured work queue. Practical buyer value: each role
+  sees only the queues it owns; admin can audit across roles.
+- **Structured data foundation** — patient segments, tags,
+  problem list, clinic workflow templates / stages, work queue
+  items, role view presets. Practical buyer value: structured
+  patient context the EHR doesn't carry natively.
+- **Retina + glaucoma specialty tracking** — per-patient,
+  per-eye review state + measurement event history.
+- **Imaging metadata + review pipeline** — generic modality
+  labels, metadata only (no binaries), provider review workflow.
+- **OD/OS retinal diagram + Clinical Signal Filtering** —
+  provider-reviewed annotations, immutable signed artifacts.
+- **Provider-reviewed documentation** — transcript → findings
+  → AI draft → final note with the provider-review badge on
+  every step.
+- **Internal coordination** — Chat with recipient selector;
+  staff coordination only; no patient-facing messaging.
+
+### Conservative ROI framing (no metrics invented)
+
+Where the deck asks for ROI / savings language, use this list.
+Do **not** invent percentages. Do **not** name customers.
+
+- May **reduce documentation and coordination friction** —
+  pre-visit briefs and structured findings reduce manual rework.
+- May **support faster review workflows** — role dashboards and
+  provider review queues route work without manual triage.
+- May **reduce duplicate data entry** — structured patient
+  context, retina/glaucoma tracking, and imaging metadata
+  surface together in the encounter chart.
+- **Subject to pilot measurement.** ROI numbers come from the
+  4–6 week controlled pilot, not from this doc.
+
+### Forbidden framing in pricing conversations
+
+Do not say any of the following. Each is forbidden in pricing
+conversations and in every buyer-facing surface:
+
+- Do not say "Replaces your scribe — save $X/month."
+- Do not say "HIPAA-compliant; deploy immediately." ChartNav is not HIPAA-compliant.
+- Do not say "Auto-grade DR saves chart time." ChartNav does not auto-grade DR.
+- Do not say "Auto-determine cup-to-disc saves chart time." ChartNav does not auto-determine cup-to-disc ratio.
+- Do not say "Auto-select IOL power saves chart time." ChartNav does not auto-select IOL power.
+- Do not say "Auto-recommend anti-VEGF dosing saves chart time." ChartNav does not auto-recommend anti-VEGF dosing.
+- Do not say any device vendor name (Cirrus, Spectralis, Triton, Optos, IOLMaster, Humphrey, Topcon) as a current integration — those adapters are future / planned, not shipped.
+- Do not say "IRIS Registry submission" as a current capability. ChartNav does not submit to IRIS Registry today.
+- Do not say "MIPS submission" as a current capability. ChartNav does not submit MIPS metrics today.
+- Do not say customer-count, pilot-count, or revenue claims that do not exist yet.
+
+The full forbidden phrase set lives in
+`docs/commercial/chartnav-ophthalmology-positioning-language-guide.md`.

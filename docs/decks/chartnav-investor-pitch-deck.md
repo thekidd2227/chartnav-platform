@@ -97,51 +97,81 @@ autonomous-diagnosis behavior — none of those apply to ChartNav.
   ("filters / captures / builds") and walk the example aloud.
 - **Visual:** four-row card showing the four classifications.
 
-## Slide 6 — Product
+## Slide 6 — Product — the ophthalmology clinic workflow layer
 
-- **Title:** Eight provider-reviewed modules.
+- **Title:** A specialty workflow layer, not a scribe.
+- **Content (seven product pillars):**
+  - **Role-based clinic dashboards** — five role views
+    (front desk, technician, doctor, reviewer, admin) over a
+    shared structured work queue.
+  - **Structured data foundation** — patient segments, tags,
+    problem list, clinic workflow templates and stages, work
+    queue items, role view presets.
+  - **Retina + glaucoma specialty tracking** — per-patient,
+    per-eye structured tracking + retina injection events +
+    IOP measurements + visual field tests.
+  - **Imaging metadata + review pipeline** — generic modality
+    labels (OCT macula, OCT RNFL, fundus, widefield, VF 24-2 /
+    10-2, biometry, external PDF); metadata only, no image
+    binaries.
+  - **OD/OS retinal diagram + Clinical Signal Filtering** —
+    provider-reviewed retinal annotations; immutable signed
+    artifacts; explicit forks on edit.
+  - **Provider-reviewed documentation** — transcript →
+    extracted findings → AI draft → final note; the provider
+    drives every transition.
+  - **Internal coordination** — Chat with recipient selector
+    targeting staff identities; no patient-facing messaging.
+- **Speaker notes:** Each pillar is built and tested today.
+  Pilot-readiness wraps deployment; demo delivery wraps live
+  walkthrough.
+- **Visual:** 7-card grid.
+
+## Slide 7 — Workflow — the eye-clinic lane cycle
+
+- **Title:** Built for eye-care lanes. Provider drives every
+  transition.
 - **Content:**
-  - Clinical Signal Filtering (prime differentiator).
-  - AI scribe session lifecycle.
-  - Findings-to-retinal-diagram proposal review.
-  - OD/OS retinal drawing canvas.
-  - Patient-friendly summary draft.
-  - Pre-visit clinical brief.
-  - Provider action review queue.
-  - Guided demo mode.
-- **Speaker notes:** Each module is a built and tested workflow
-  surface. The pilot-readiness package wraps deployment; the demo
-  delivery package wraps live walkthrough.
-- **Visual:** 8-card grid.
-
-## Slide 7 — Workflow
-
-- **Title:** Seven explicit steps. Provider drives every transition.
-- **Content:** scribe → proposals → diagram → summary → brief →
-  action queue → guided demo.
-- **Speaker notes:** End-to-end smoke coverage exists across all
-  seven steps.
-- **Visual:** workflow diagram.
+  - Front desk → technician workup (VA / IOP / refraction /
+    dilation) → ancillary imaging review → MD encounter →
+    review / sign-off → checkout / follow-up / internal
+    coordination.
+- **Speaker notes:** End-to-end smoke coverage exists across
+  the full lane cycle. A horizontal scribe app cannot model
+  any of this.
+- **Visual:** horizontal lane-cycle bar with 6 steps.
 
 ## Slide 8 — Build proof: what is already working
 
 - **Title:** What's already built and tested.
 - **Content:**
+  - Role-based clinic dashboards (five role views).
+  - Structured data layer (segments, tags, problem list, work
+    queue, role view presets).
+  - Retina + glaucoma specialty tracking (5 tables, RBAC, audit
+    metadata-only).
+  - Imaging metadata + review pipeline (3 tables, generic
+    modality labels, `data:` URI rejection).
+  - OD/OS retinal drawing canvas with immutable signed
+    artifacts; edits fork.
+  - Clinical Signal Filtering separating chatter / findings /
+    uncertainty / proposed annotations.
   - Provider-reviewed AI scribe lifecycle (draft → review →
     finalize).
   - Findings-to-retinal-diagram proposal review.
-  - OD/OS retinal drawing canvas with immutable signed artifacts.
   - Patient-friendly summary draft (provider-reviewed).
   - Pre-visit clinical brief.
-  - Provider action review queue (review tasks only — no orders).
+  - Provider action review queue (review tasks only — no
+    orders).
+  - Internal Chat with recipient selector (staff only).
   - End-to-end clinical workflow smoke coverage.
   - Guided demo mode for live walkthroughs.
   - Public proof page for buyer self-discovery.
   - Pilot-readiness package (8-doc security review packet, BAA
     template, deployment guide, transition plan).
-- **Speaker notes:** Every item above is built and tested today.
-  Buyers can see it run live in the fake-patient demo.
-- **Visual:** capability checklist (10 items, no phase numbers).
+- **Speaker notes:** Every item above is built and tested
+  today. Buyers can see it run live in the fake-patient demo.
+- **Visual:** capability checklist (16 items).
 
 ## Slide 9 — Provider-in-control safety
 

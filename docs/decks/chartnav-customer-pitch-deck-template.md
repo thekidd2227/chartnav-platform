@@ -41,6 +41,36 @@ orders / coding / referrals / patient-messaging claims.
 - **Speaker notes:** Quote them where possible (with permission).
 - **Visual:** quote cards.
 
+## Slide 2b — Subspecialty mix
+
+- **Title:** What **{{PRACTICE_NAME}}** specializes in.
+- **Content:**
+  - Subspecialty mix: **{{PRACTICE_SUBSPECIALTY_MIX}}**.
+  - Examples: *Retina-heavy injection clinic / Glaucoma
+    surveillance clinic / Comprehensive (cataract + cornea) /
+    Pediatric / Oculoplastics.*
+  - Map subspecialty mix to ChartNav surfaces:
+    - **Retina-heavy** → retina tracking + retina injection
+      events + OCT macula / fundus / widefield imaging metadata
+      + OD/OS retinal diagram.
+    - **Glaucoma surveillance** → glaucoma tracking + IOP
+      measurement events + visual field tests + OCT RNFL +
+      visual field 24-2 / 10-2 imaging metadata.
+    - **Cataract / refractive** → biometry packet metadata +
+      external PDF report metadata + clinical shortcut bank.
+    - **Cornea / anterior segment** → clinical shortcut bank
+      (Dry eye, Keratitis, Pterygium, etc.).
+    - **Oculoplastics** → clinical shortcut bank (Chalazion,
+      Blepharitis, Entropion, Ectropion, Ptosis).
+    - **Pediatric / strabismus** → planned. No structured
+      tracking shipped yet — only the clinical shortcut bank.
+- **Speaker notes:** Fill `{{PRACTICE_SUBSPECIALTY_MIX}}` with the
+  practice's stated mix from discovery. Do not promise pediatric
+  or cornea structured tracking — those are planned, not
+  shipped. Do not claim a device-vendor adapter.
+- **Visual:** subspecialty chip strip with the practice's mix
+  highlighted.
+
 ## Slide 3 — Clinical Signal Filtering — tailored for **{{PRACTICE_NAME}}**
 
 - **Title:** Filters conversation. Captures findings. Builds the diagram.

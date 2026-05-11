@@ -28,20 +28,35 @@ referrals / patient messaging.
 
 - **Title:** What ChartNav can do today.
 - **Content:**
+  - **Role-based clinic dashboards** — five role views (front
+    desk, technician, doctor, reviewer, admin) over a shared
+    structured work queue.
+  - **Structured data foundation** — patient segments, tags,
+    problem list, clinic workflow templates and stages, work
+    queue items, role view presets.
+  - **Retina + glaucoma specialty tracking** — per-patient,
+    per-eye structured tracking; retina injection events; IOP
+    measurements; visual field tests.
+  - **Imaging metadata + review pipeline** — generic modality
+    labels (OCT macula, OCT RNFL, fundus, widefield, VF 24-2 /
+    10-2, biometry packet, external PDF); metadata only, no
+    image binaries.
+  - **OD/OS retinal drawing canvas** — first-class diagram with
+    closed symbol vocabulary; signed artifacts immutable; edits
+    fork.
   - **Clinical Signal Filtering** — filters conversation,
-    captures findings, and builds the diagram; separates chatter,
+    captures findings, builds the diagram; separates chatter,
     findings, uncertainty; proposes retinal diagram annotations.
   - **Provider-reviewed AI scribe lifecycle** — draft → review
     → finalize.
   - **Findings-to-retinal-diagram proposal review** — provider
     applies, edits, or rejects each proposal.
-  - **OD/OS retinal drawing canvas** — first-class diagram with
-    closed symbol vocabulary; signed artifacts immutable; edits
-    fork.
   - **Patient-friendly summary draft** — provider-reviewed.
   - **Pre-visit clinical brief** — derived view of available
     chart records with explicit data gaps.
   - **Provider action review queue** — review tasks only.
+  - **Internal Chat with recipient selector** — staff
+    coordination only; no patient-facing messaging.
   - **End-to-end clinical workflow smoke coverage** — every
     module integrates.
   - **Guided demo mode** — opt-in presenter overlay for live
@@ -51,8 +66,7 @@ referrals / patient messaging.
     packet, BAA template, deployment guide, transition plan.
 - **Speaker notes:** Every item above is built and tested today.
   Buyers can see it run live in the fake-patient demo.
-- **Visual:** capability checklist (11 items, no engineering
-  phase numbers).
+- **Visual:** capability checklist (16 items).
 
 ## Slide 3 — Commercial launch package (now shipping)
 
