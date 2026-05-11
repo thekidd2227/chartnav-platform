@@ -2429,3 +2429,232 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+
+/* ============================================================
+   Phase 21A — Retina + Glaucoma specialty tracking
+   Provider-reviewed cards rendered at the top of the Clinical
+   tab. Reuses --cn-* tokens — no new design language.
+   ============================================================ */
+.specialty-tracking {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 16px;
+  background: white;
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-md);
+  margin-bottom: 16px;
+}
+.specialty-tracking--blocked {
+  background: var(--cn-bg-alt);
+}
+.specialty-tracking__header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.specialty-tracking__title {
+  margin: 0;
+  font-size: 16px;
+  color: var(--cn-fg);
+}
+.specialty-tracking__subtitle {
+  margin: 0;
+}
+.specialty-tracking__section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid var(--cn-line);
+  padding-top: 14px;
+}
+.specialty-tracking__section:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+.specialty-tracking__sec-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.specialty-tracking__sec-head--small .specialty-tracking__sec-title {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--cn-muted);
+}
+.specialty-tracking__sec-title {
+  margin: 0;
+  font-size: 14px;
+  color: var(--cn-fg);
+}
+.specialty-tracking__cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.specialty-tracking__card {
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-sm);
+  padding: 12px;
+  background: var(--cn-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.specialty-tracking__card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.specialty-tracking__card-title {
+  margin: 0;
+  font-size: 14px;
+  color: var(--cn-fg);
+  flex: 1 1 auto;
+}
+.specialty-tracking__pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 1px solid var(--cn-line-strong);
+  border-radius: 999px;
+  background: white;
+  color: var(--cn-fg);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+.specialty-tracking__status {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  text-transform: capitalize;
+  border: 1px solid var(--cn-line-strong);
+  background: var(--cn-bg-alt);
+  color: var(--cn-fg);
+}
+.specialty-tracking__status--needs_review,
+.specialty-tracking__status--draft {
+  background: var(--cn-warning-tint);
+  border-color: var(--cn-warning);
+  color: var(--cn-warning);
+}
+.specialty-tracking__status--reviewed {
+  background: var(--cn-primary-soft);
+  border-color: var(--cn-primary-tint);
+  color: var(--cn-primary);
+}
+.specialty-tracking__dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px 14px;
+  margin: 0;
+}
+.specialty-tracking__field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+}
+.specialty-tracking__field--wide {
+  grid-column: 1 / -1;
+}
+.specialty-tracking__field dt {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--cn-muted);
+  margin: 0;
+}
+.specialty-tracking__field dd {
+  margin: 0;
+  color: var(--cn-fg);
+  white-space: pre-wrap;
+}
+.specialty-tracking__card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.specialty-tracking__card-actions select {
+  padding: 4px 8px;
+  border: 1px solid var(--cn-line-strong);
+  border-radius: var(--cn-radius-sm);
+  background: white;
+  color: var(--cn-fg);
+  font: inherit;
+  font-size: 12px;
+}
+.specialty-tracking__empty {
+  padding: 10px 12px;
+  border: 1px dashed var(--cn-line-strong);
+  border-radius: var(--cn-radius-sm);
+  color: var(--cn-muted);
+  font-size: 13px;
+  background: var(--cn-bg);
+  margin: 0;
+}
+.specialty-tracking__form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-sm);
+  padding: 12px;
+  background: white;
+}
+.specialty-tracking__form--inline {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  align-items: end;
+  gap: 10px;
+}
+.specialty-tracking__field-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--cn-muted);
+}
+.specialty-tracking__field-row input,
+.specialty-tracking__field-row textarea,
+.specialty-tracking__field-row select {
+  padding: 6px 8px;
+  border: 1px solid var(--cn-line-strong);
+  border-radius: var(--cn-radius-sm);
+  font: inherit;
+  font-size: 13px;
+  color: var(--cn-fg);
+  background: white;
+}
+.specialty-tracking__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  background: white;
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-sm);
+  overflow: hidden;
+}
+.specialty-tracking__table th,
+.specialty-tracking__table td {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--cn-line);
+}
+.specialty-tracking__table th {
+  background: var(--cn-bg-alt);
+  font-weight: 600;
+  color: var(--cn-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.specialty-tracking__table tbody tr:last-child td {
+  border-bottom: none;
+}
