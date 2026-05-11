@@ -3542,3 +3542,351 @@ export function createImagingStudyMeasurement(
     body: JSON.stringify(input),
   });
 }
+
+// =============================================================
+// Phase 22 — Multi-clinic / multi-provider scaling
+// =============================================================
+
+export type LocationRoomType =
+  | "exam"
+  | "imaging"
+  | "testing"
+  | "procedure"
+  | "admin"
+  | "other";
+
+export type ProviderScheduleBlockType =
+  | "clinic"
+  | "surgery"
+  | "injection"
+  | "testing"
+  | "admin"
+  | "unavailable"
+  | "other";
+
+export interface ProviderLocationAssignment {
+  id: number;
+  organization_id: number;
+  provider_id: number;
+  location_id: number;
+  is_primary: number | boolean;
+  is_active: number | boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProviderLocationAssignmentCreateInput {
+  provider_id: number;
+  location_id: number;
+  is_primary?: boolean;
+  is_active?: boolean;
+}
+
+export interface ProviderLocationAssignmentUpdateInput {
+  is_primary?: boolean;
+  is_active?: boolean;
+}
+
+export interface LocationRoom {
+  id: number;
+  organization_id: number;
+  location_id: number;
+  name: string;
+  room_type: LocationRoomType;
+  is_active: number | boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LocationRoomCreateInput {
+  name: string;
+  room_type: LocationRoomType;
+  is_active?: boolean;
+}
+
+export interface LocationRoomUpdateInput {
+  name?: string;
+  room_type?: LocationRoomType;
+  is_active?: boolean;
+}
+
+export interface ProviderScheduleBlock {
+  id: number;
+  organization_id: number;
+  provider_id: number;
+  location_id: number;
+  start_at: string;
+  end_at: string;
+  block_type: ProviderScheduleBlockType;
+  capacity: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProviderScheduleBlockCreateInput {
+  provider_id: number;
+  location_id: number;
+  start_at: string;
+  end_at: string;
+  block_type: ProviderScheduleBlockType;
+  capacity?: number | null;
+}
+
+export interface ProviderScheduleBlockUpdateInput {
+  start_at?: string;
+  end_at?: string;
+  block_type?: ProviderScheduleBlockType;
+  capacity?: number | null;
+}
+
+export interface ProviderScheduleBlockFilters {
+  provider_id?: number;
+  location_id?: number;
+  block_type?: ProviderScheduleBlockType;
+  start_after?: string;
+  start_before?: string;
+}
+
+export interface ClinicOperatingHours {
+  id: number;
+  organization_id: number;
+  location_id: number;
+  day_of_week: number;
+  opens_at: string | null;
+  closes_at: string | null;
+  is_closed: number | boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClinicOperatingHoursCreateInput {
+  location_id: number;
+  day_of_week: number;
+  opens_at?: string | null;
+  closes_at?: string | null;
+  is_closed?: boolean;
+}
+
+export interface ClinicOperatingHoursUpdateInput {
+  opens_at?: string | null;
+  closes_at?: string | null;
+  is_closed?: boolean;
+}
+
+export interface LocationDashboardSummary {
+  location_id: number;
+  organization_id: number;
+  counts: {
+    open_queue_items: number;
+    ready_for_workup: number;
+    imaging_needed: number;
+    ready_for_doctor: number;
+    review_needed: number;
+    provider_count: number;
+    room_count: number;
+    active_schedule_blocks_today: number;
+  };
+}
+
+export interface ProviderDashboardSummary {
+  provider_id: number;
+  organization_id: number;
+  counts: {
+    assigned_queue_items: number;
+    ready_for_doctor: number;
+    imaging_review: number;
+    signoff_needed: number;
+    review_needed: number;
+    schedule_blocks_today: number;
+    locations_today: number;
+  };
+}
+
+export interface MultiClinicSummary {
+  organization_id: number;
+  locations: Array<{
+    location_id: number;
+    open_queue_items: number;
+    ready_for_doctor: number;
+    active_rooms: number;
+    schedule_blocks_today: number;
+  }>;
+  providers: Array<{
+    provider_id: number;
+    open_queue_items: number;
+    schedule_blocks_today: number;
+  }>;
+  queue_by_status: Record<string, number>;
+  queue_by_priority: Record<string, number>;
+  queue_by_assigned_role: Record<string, number>;
+  queue_by_queue_type: Record<string, number>;
+}
+
+export interface MultiClinicListResponse<T> {
+  items: T[];
+  total: number;
+}
+
+function _multiClinicQs(filters: object): string {
+  const parts = new URLSearchParams();
+  for (const [k, v] of Object.entries(filters as Record<string, unknown>)) {
+    if (v === undefined || v === null) continue;
+    parts.set(k, String(v));
+  }
+  const qs = parts.toString();
+  return qs ? `?${qs}` : "";
+}
+
+export function listProviderLocationAssignments(
+  email: string,
+  filters: { provider_id?: number; location_id?: number; is_active?: boolean } = {}
+): Promise<MultiClinicListResponse<ProviderLocationAssignment>> {
+  return request(
+    `/provider-location-assignments${_multiClinicQs(filters)}`,
+    { email }
+  );
+}
+
+export function createProviderLocationAssignment(
+  email: string,
+  input: ProviderLocationAssignmentCreateInput
+): Promise<ProviderLocationAssignment> {
+  return request(`/provider-location-assignments`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateProviderLocationAssignment(
+  email: string,
+  assignmentId: number,
+  input: ProviderLocationAssignmentUpdateInput
+): Promise<ProviderLocationAssignment> {
+  return request(`/provider-location-assignments/${assignmentId}`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function listLocationRooms(
+  email: string,
+  locationId: number,
+  filters: { is_active?: boolean } = {}
+): Promise<MultiClinicListResponse<LocationRoom>> {
+  return request(
+    `/locations/${locationId}/rooms${_multiClinicQs(filters)}`,
+    { email }
+  );
+}
+
+export function createLocationRoom(
+  email: string,
+  locationId: number,
+  input: LocationRoomCreateInput
+): Promise<LocationRoom> {
+  return request(`/locations/${locationId}/rooms`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateLocationRoom(
+  email: string,
+  roomId: number,
+  input: LocationRoomUpdateInput
+): Promise<LocationRoom> {
+  return request(`/location-rooms/${roomId}`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function listProviderScheduleBlocks(
+  email: string,
+  filters: ProviderScheduleBlockFilters = {}
+): Promise<MultiClinicListResponse<ProviderScheduleBlock>> {
+  return request(
+    `/provider-schedule-blocks${_multiClinicQs(filters)}`,
+    { email }
+  );
+}
+
+export function createProviderScheduleBlock(
+  email: string,
+  input: ProviderScheduleBlockCreateInput
+): Promise<ProviderScheduleBlock> {
+  return request(`/provider-schedule-blocks`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateProviderScheduleBlock(
+  email: string,
+  blockId: number,
+  input: ProviderScheduleBlockUpdateInput
+): Promise<ProviderScheduleBlock> {
+  return request(`/provider-schedule-blocks/${blockId}`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function listClinicOperatingHours(
+  email: string,
+  filters: { location_id?: number } = {}
+): Promise<MultiClinicListResponse<ClinicOperatingHours>> {
+  return request(
+    `/clinic-operating-hours${_multiClinicQs(filters)}`,
+    { email }
+  );
+}
+
+export function createClinicOperatingHours(
+  email: string,
+  input: ClinicOperatingHoursCreateInput
+): Promise<ClinicOperatingHours> {
+  return request(`/clinic-operating-hours`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateClinicOperatingHours(
+  email: string,
+  hoursId: number,
+  input: ClinicOperatingHoursUpdateInput
+): Promise<ClinicOperatingHours> {
+  return request(`/clinic-operating-hours/${hoursId}`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function getLocationDashboard(
+  email: string,
+  locationId: number
+): Promise<LocationDashboardSummary> {
+  return request(`/locations/${locationId}/dashboard`, { email });
+}
+
+export function getProviderDashboard(
+  email: string,
+  providerId: number
+): Promise<ProviderDashboardSummary> {
+  return request(`/providers/${providerId}/dashboard`, { email });
+}
+
+export function getAdminMultiClinicSummary(
+  email: string
+): Promise<MultiClinicSummary> {
+  return request(`/admin/multi-clinic-summary`, { email });
+}

@@ -38,12 +38,13 @@ import { NoteWorkspace } from "./NoteWorkspace";
 import { SEEDED_IDENTITIES, loadIdentity, saveIdentity } from "./identity";
 import { isDemoModeEnabled } from "./GuidedDemoMode";
 import { ClinicalTabbedWorkspace } from "./ClinicalTabbedWorkspace";
+import { MultiClinicDashboard } from "./MultiClinicDashboard";
 import { RoleDashboard } from "./RoleDashboard";
 
 // Phase 20C — single-page top-level view switch. The encounters
 // workspace stays the default; the Dashboard CORE entry switches the
 // detail pane to the read-only role-based dashboard.
-type TopView = "encounters" | "dashboard";
+type TopView = "encounters" | "dashboard" | "multi-clinic";
 
 type Banner =
   | { kind: "ok"; msg: string }
@@ -293,6 +294,8 @@ export default function App() {
             topView={topView}
             onShowDashboard={() => setTopView("dashboard")}
             onShowEncounters={() => setTopView("encounters")}
+            onShowMultiClinic={() => setTopView("multi-clinic")}
+            canViewMultiClinic={canAdmin}
           />
           <FilterBar
             value={filters}
@@ -345,6 +348,8 @@ export default function App() {
           )}
           {topView === "dashboard" && me ? (
             <RoleDashboard identity={identity} me={me} />
+          ) : topView === "multi-clinic" && me ? (
+            <MultiClinicDashboard identity={identity} me={me} />
           ) : selectedId == null ? (
             <div className="empty">
               Select an encounter from the list to see details, events, and allowed actions.
@@ -434,12 +439,16 @@ function ClinicalSidebarNav({
   topView,
   onShowDashboard,
   onShowEncounters,
+  onShowMultiClinic,
+  canViewMultiClinic,
 }: {
   canCreate: boolean;
   onNewEncounter: () => void;
   topView: TopView;
   onShowDashboard: () => void;
   onShowEncounters: () => void;
+  onShowMultiClinic: () => void;
+  canViewMultiClinic: boolean;
 }) {
   return (
     <nav className="sidebar-nav" data-testid="sidebar-nav" aria-label="Clinical navigation">
@@ -474,6 +483,16 @@ function ClinicalSidebarNav({
         </SidebarItem>
       </SidebarGroup>
       <SidebarGroup label="Operations" testid="sidebar-group-operations">
+        {/* Phase 22 — Multi-Clinic admin rollup. Admin-only;
+            non-admin identities see a disabled placeholder. */}
+        <SidebarItem
+          testid="sidebar-item-multi-clinic"
+          active={topView === "multi-clinic"}
+          onClick={canViewMultiClinic ? onShowMultiClinic : undefined}
+          disabled={!canViewMultiClinic}
+        >
+          Multi-Clinic
+        </SidebarItem>
         <SidebarItem testid="sidebar-item-tasks" disabled>
           Tasks
         </SidebarItem>
