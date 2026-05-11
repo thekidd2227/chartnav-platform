@@ -57,6 +57,7 @@ import {
 } from "./api";
 import { NoteWorkspace } from "./NoteWorkspace";
 import { EyeDiagramPanel } from "./EyeDiagramPanel";
+import { SpecialtyTrackingPanel } from "./SpecialtyTrackingPanel";
 
 // Local fmt — same shape as App.tsx::fmt. Inlined to avoid a
 // shared-utility refactor that would balloon Phase 19's diff.
@@ -174,7 +175,9 @@ export function ClinicalTabbedWorkspace(
             isDemo={isDemo}
           />
         )}
-        {active === "clinical" && <ClinicalTab />}
+        {active === "clinical" && (
+          <ClinicalTab identity={identity} me={me} encounter={encounter} />
+        )}
         {active === "documentation" && typeof encounter.id === "number" && (
           <DocumentationTab
             identity={identity}
@@ -645,7 +648,19 @@ function renderEventData(ev: WorkflowEvent): string {
 // Clinical (Ophthalmology).
 // ---------------------------------------------------------------
 
-function ClinicalTab(): JSX.Element {
+function ClinicalTab({
+  identity,
+  me,
+  encounter,
+}: {
+  identity: string;
+  me: Me;
+  encounter: Encounter;
+}): JSX.Element {
+  // Phase 21A — Specialty Tracking (Retina + Glaucoma) renders at
+  // the top of the Clinical tab when the encounter is linked to a
+  // native patient. The shortcut grid below is unchanged.
+  //
   // Phase 19I — Clinical / Ophthalmology surface restructured
   // from a `<details><summary><ul>` bullet-list (which read as
   // a raw HTML page in screenshot review) into a grid of
@@ -655,6 +670,10 @@ function ClinicalTab(): JSX.Element {
   // intentionally inert (disabled) — these are review-prompt
   // shortcuts the clinician will pin into a draft, not
   // diagnoses ChartNav generates.
+  const patientId =
+    typeof encounter.patient_id === "number" ? encounter.patient_id : null;
+  const encounterId =
+    typeof encounter.id === "number" ? encounter.id : null;
   const groups: Array<{ id: string; name: string; items: string[] }> = [
     {
       id: "favorites",
@@ -728,6 +747,14 @@ function ClinicalTab(): JSX.Element {
 
   return (
     <div className="ctw-clinical" data-testid="ctw-clinical">
+      {patientId !== null && (
+        <SpecialtyTrackingPanel
+          identity={identity}
+          me={me}
+          patientId={patientId}
+          encounterId={encounterId}
+        />
+      )}
       <input
         type="search"
         placeholder="Search clinical shortcuts…"

@@ -3027,3 +3027,308 @@ export function getAdminDashboard(
 ): Promise<AdminDashboard> {
   return request(`/dashboards/admin${_dashboardQs(filters)}`, { email });
 }
+
+// =============================================================
+// Phase 21A — Retina + Glaucoma specialty tracking
+// =============================================================
+//
+// Read + provider-reviewed write surface for the five tables added
+// in `e6f7a8b9c0d1_phase_21a_specialty_tracking`. The frontend only
+// renders structured fields the backend persists — this layer does
+// no diagnosis automation, no dosing, no auto-grading.
+
+export type SpecialtyEye = "OD" | "OS" | "OU";
+export type SpecialtyEyeOdOs = "OD" | "OS";
+export type SpecialtyReviewStatus =
+  | "draft"
+  | "needs_review"
+  | "reviewed"
+  | "archived";
+
+export interface RetinaTrackingRecord {
+  id: number;
+  organization_id: number;
+  patient_id: number;
+  encounter_id: number | null;
+  eye: SpecialtyEye;
+  condition: string;
+  severity: string | null;
+  last_oct_at: string | null;
+  last_fundus_at: string | null;
+  injection_history_summary: string | null;
+  follow_up_interval: string | null;
+  provider_assessment: string | null;
+  review_status: SpecialtyReviewStatus;
+  created_by_user_id: number;
+  updated_by_user_id: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RetinaTrackingCreateInput {
+  eye: SpecialtyEye;
+  condition: string;
+  severity?: string | null;
+  last_oct_at?: string | null;
+  last_fundus_at?: string | null;
+  injection_history_summary?: string | null;
+  follow_up_interval?: string | null;
+  provider_assessment?: string | null;
+  review_status?: SpecialtyReviewStatus;
+  encounter_id?: number | null;
+}
+
+export interface RetinaTrackingUpdateInput {
+  severity?: string | null;
+  last_oct_at?: string | null;
+  last_fundus_at?: string | null;
+  injection_history_summary?: string | null;
+  follow_up_interval?: string | null;
+  provider_assessment?: string | null;
+  review_status?: SpecialtyReviewStatus;
+}
+
+export interface RetinaInjectionEvent {
+  id: number;
+  organization_id: number;
+  patient_id: number;
+  encounter_id: number | null;
+  eye: SpecialtyEye;
+  medication: string | null;
+  procedure_date: string | null;
+  laterality: string | null;
+  notes: string | null;
+  created_by_user_id: number;
+  created_at: string;
+}
+
+export interface RetinaInjectionCreateInput {
+  eye: SpecialtyEye;
+  medication?: string | null;
+  procedure_date?: string | null;
+  laterality?: string | null;
+  notes?: string | null;
+  encounter_id?: number | null;
+}
+
+export interface GlaucomaTrackingRecord {
+  id: number;
+  organization_id: number;
+  patient_id: number;
+  encounter_id: number | null;
+  eye: SpecialtyEye;
+  glaucoma_type: string | null;
+  target_iop: number | null;
+  latest_iop: number | null;
+  cup_to_disc_ratio: number | null;
+  rnfl_status: string | null;
+  visual_field_status: string | null;
+  medication_plan: string | null;
+  progression_risk_label: string | null;
+  provider_assessment: string | null;
+  review_status: SpecialtyReviewStatus;
+  created_by_user_id: number;
+  updated_by_user_id: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GlaucomaTrackingCreateInput {
+  eye: SpecialtyEye;
+  glaucoma_type?: string | null;
+  target_iop?: number | null;
+  latest_iop?: number | null;
+  cup_to_disc_ratio?: number | null;
+  rnfl_status?: string | null;
+  visual_field_status?: string | null;
+  medication_plan?: string | null;
+  progression_risk_label?: string | null;
+  provider_assessment?: string | null;
+  review_status?: SpecialtyReviewStatus;
+  encounter_id?: number | null;
+}
+
+export interface GlaucomaTrackingUpdateInput {
+  glaucoma_type?: string | null;
+  target_iop?: number | null;
+  latest_iop?: number | null;
+  cup_to_disc_ratio?: number | null;
+  rnfl_status?: string | null;
+  visual_field_status?: string | null;
+  medication_plan?: string | null;
+  progression_risk_label?: string | null;
+  provider_assessment?: string | null;
+  review_status?: SpecialtyReviewStatus;
+}
+
+export interface GlaucomaIopMeasurement {
+  id: number;
+  organization_id: number;
+  patient_id: number;
+  encounter_id: number | null;
+  eye: SpecialtyEyeOdOs;
+  iop_value: number;
+  measured_at: string | null;
+  method: string | null;
+  created_by_user_id: number;
+  created_at: string;
+}
+
+export interface GlaucomaIopCreateInput {
+  eye: SpecialtyEyeOdOs;
+  iop_value: number;
+  measured_at?: string | null;
+  method?: string | null;
+  encounter_id?: number | null;
+}
+
+export interface GlaucomaVisualFieldTest {
+  id: number;
+  organization_id: number;
+  patient_id: number;
+  encounter_id: number | null;
+  eye: SpecialtyEye;
+  test_type: string | null;
+  performed_at: string | null;
+  result_summary: string | null;
+  reliability: string | null;
+  progression_flag: string | null;
+  created_by_user_id: number;
+  created_at: string;
+}
+
+export interface GlaucomaVisualFieldCreateInput {
+  eye: SpecialtyEye;
+  test_type?: string | null;
+  performed_at?: string | null;
+  result_summary?: string | null;
+  reliability?: string | null;
+  progression_flag?: string | null;
+  encounter_id?: number | null;
+}
+
+export interface SpecialtyListResponse<T> {
+  items: T[];
+  total: number;
+}
+
+export function listPatientRetinaTracking(
+  email: string,
+  patientId: number
+): Promise<SpecialtyListResponse<RetinaTrackingRecord>> {
+  return request(`/patients/${patientId}/retina`, { email });
+}
+
+export function createPatientRetinaTracking(
+  email: string,
+  patientId: number,
+  input: RetinaTrackingCreateInput
+): Promise<RetinaTrackingRecord> {
+  return request(`/patients/${patientId}/retina`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updatePatientRetinaTracking(
+  email: string,
+  patientId: number,
+  recordId: number,
+  input: RetinaTrackingUpdateInput
+): Promise<RetinaTrackingRecord> {
+  return request(`/patients/${patientId}/retina/${recordId}`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function listPatientRetinaInjections(
+  email: string,
+  patientId: number
+): Promise<SpecialtyListResponse<RetinaInjectionEvent>> {
+  return request(`/patients/${patientId}/retina/injections`, { email });
+}
+
+export function createPatientRetinaInjection(
+  email: string,
+  patientId: number,
+  input: RetinaInjectionCreateInput
+): Promise<RetinaInjectionEvent> {
+  return request(`/patients/${patientId}/retina/injections`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function listPatientGlaucomaTracking(
+  email: string,
+  patientId: number
+): Promise<SpecialtyListResponse<GlaucomaTrackingRecord>> {
+  return request(`/patients/${patientId}/glaucoma`, { email });
+}
+
+export function createPatientGlaucomaTracking(
+  email: string,
+  patientId: number,
+  input: GlaucomaTrackingCreateInput
+): Promise<GlaucomaTrackingRecord> {
+  return request(`/patients/${patientId}/glaucoma`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updatePatientGlaucomaTracking(
+  email: string,
+  patientId: number,
+  recordId: number,
+  input: GlaucomaTrackingUpdateInput
+): Promise<GlaucomaTrackingRecord> {
+  return request(`/patients/${patientId}/glaucoma/${recordId}`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function listPatientGlaucomaIopMeasurements(
+  email: string,
+  patientId: number
+): Promise<SpecialtyListResponse<GlaucomaIopMeasurement>> {
+  return request(`/patients/${patientId}/glaucoma/iop`, { email });
+}
+
+export function createPatientGlaucomaIopMeasurement(
+  email: string,
+  patientId: number,
+  input: GlaucomaIopCreateInput
+): Promise<GlaucomaIopMeasurement> {
+  return request(`/patients/${patientId}/glaucoma/iop`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function listPatientGlaucomaVisualFields(
+  email: string,
+  patientId: number
+): Promise<SpecialtyListResponse<GlaucomaVisualFieldTest>> {
+  return request(`/patients/${patientId}/glaucoma/visual-fields`, { email });
+}
+
+export function createPatientGlaucomaVisualField(
+  email: string,
+  patientId: number,
+  input: GlaucomaVisualFieldCreateInput
+): Promise<GlaucomaVisualFieldTest> {
+  return request(`/patients/${patientId}/glaucoma/visual-fields`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
