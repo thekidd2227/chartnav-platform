@@ -190,6 +190,22 @@ FORBIDDEN_CAPABILITY=(
   "hands-free diagnosis"
   "hands-free charting"
   "hands-off documentation"
+  # Phase 21C — ophthalmology-specific positive-claim guards.
+  # Negative phrasings ("does not auto-grade DR", "auto-grade DR is not
+  # implemented") are exempted by the negative-context check below.
+  "auto-grade DR"
+  "auto-grade diabetic retinopathy"
+  "auto-interpret OCT"
+  "autonomous imaging interpretation"
+  "auto-determine cup-to-disc"
+  "auto-measure central macular thickness"
+  "auto-measure RNFL thickness"
+  "auto-select IOL power"
+  "auto-recommend anti-VEGF"
+  "auto-suggest anti-VEGF"
+  "auto-flag glaucoma progression"
+  "IRIS Registry submission"
+  "MIPS submission"
 )
 
 ALL_DOCS=("${DECKS[@]}" "${SUPPORT[@]}" "${DEMO_PKG[@]}")
@@ -207,7 +223,11 @@ for f in "${ALL_DOCS[@]}"; do
   case "$f" in
     *"chartnav-approved-claims-language.md"|\
     *"chartnav-brand-guidelines-deck.md"|\
-    *"chartnav-buyer-objection-handling.md")
+    *"chartnav-buyer-objection-handling.md"|\
+    *"chartnav-ophthalmology-positioning-language-guide.md")
+      # Phase 21C — language guide enumerates banned phrases as a
+      # reference; skip the same way the approved-claims-language
+      # catalog is skipped.
       continue
       ;;
   esac

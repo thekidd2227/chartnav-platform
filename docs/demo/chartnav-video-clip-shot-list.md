@@ -242,3 +242,51 @@ in-app demo guide only.
 
 If we ever check media into the repo, do it in a Phase that
 explicitly justifies it — Phase 13 does not.
+
+---
+
+## Phase 21C addendum — ophthalmology specialty clips
+
+Three additional editorial clips capture the Phase 20C / 21A /
+21B surfaces. Same editorial guardrails apply (fake-data stack
+only; reset between captures; safe-claims voice-over).
+
+### Clip 21C-1 — Role-based dashboards *(Phase 20C)* — 20 s
+
+- Identity: `admin@chartnav.local`.
+- Sidebar → CORE → Dashboard.
+- Switch the **View as** selector through front desk →
+  technician → doctor → reviewer → admin.
+- Caption (single line, on-screen): "Role-based clinic
+  dashboards. Provider-controlled at every transition."
+
+### Clip 21C-2 — Retina + glaucoma tracking *(Phase 21A)* — 25 s
+
+- Identity: `clin@chartnav.local`.
+- Open `PT-1001 Morgan Lee` → Clinical tab.
+- Scroll to the Specialty Tracking panel at the top.
+- Show the retina tracking card → Mark reviewed.
+- Show the glaucoma tracking card + IOP measurements table.
+- Caption: "Provider-reviewed retina + glaucoma tracking. No
+  autofill. No autonomous diagnosis."
+
+### Clip 21C-3 — Imaging pipeline *(Phase 21B)* — 20 s
+
+- Identity: `clin@chartnav.local`.
+- Encounter workspace → Imaging tab.
+- Click an OCT macula study in the left list.
+- Show the file metadata + measurements table.
+- Mark reviewed.
+- Caption: "Imaging metadata + review pipeline. File metadata
+  only. No image binaries. No device-vendor integration claims."
+
+### Forbidden on every Phase 21C clip
+
+- No spoken or on-screen vendor names (Cirrus / Spectralis /
+  Triton / Optos / IOLMaster / Humphrey / Topcon).
+- No "auto-interpret OCT" / "auto-grade DR" / "auto-flag
+  progression" wording.
+- No HIPAA compliance / certified EHR / autonomous diagnosis
+  claims.
+- No patient-facing messaging or order-submission wording.
+- No real PHI.

@@ -219,3 +219,172 @@ Maria Jackson (VP Operations, formerly Lead Scribe at McKesson,
 recruiting advisors — target archetypes are a retina sub-
 specialist, a practice administrator, and a healthcare-IT
 operator."*
+
+---
+
+## Phase 21C — ophthalmology specialty objections
+
+The objection set below extends the existing list with
+ophthalmology-specific concerns surfaced by the Phase 20B / 20C
+/ 21A / 21B product depth merged into `main`. Pair with the
+positioning language guide at
+`docs/commercial/chartnav-ophthalmology-positioning-language-guide.md`
+and the homepage positioning doc at
+`docs/website/chartnav-ophthalmology-homepage-positioning.md`.
+
+### "Is this just another scribe?"
+
+**Answer:** *"No. Scribing is one layer. ChartNav also connects
+role-based clinic dashboards, a structured data layer with
+patient segments / tags / problem list / work queues, retina and
+glaucoma tracking, an imaging metadata + review pipeline,
+provider-reviewed retinal diagrams, the NoteWorkspace
+documentation flow, and an internal Chat for staff coordination.
+The whole product is the ophthalmology clinic workflow layer —
+documentation is one slice."*
+
+**Don't say:** "We replace your scribe." "AI scribe."
+
+---
+
+### "Does ChartNav interpret OCTs or fundus photos?"
+
+**Answer:** *"No. The imaging pipeline records study metadata
+and review state — modality, eye, status, capture date, file
+metadata, structured measurements the provider types in.
+ChartNav stores the URI, not the binary. Provider interpretation
+stays with the clinician."*
+
+**Don't say:** "Auto-interpret OCT." "Auto-grade DR." "Auto-
+measure central macular thickness." "Auto-measure RNFL
+thickness."
+
+---
+
+### "Does ChartNav diagnose glaucoma progression or retina disease?"
+
+**Answer:** *"No. ChartNav supports structured tracking and
+review workflows. Diagnosis and management decisions remain
+provider-authored. Cup-to-disc ratio, RNFL status, visual field
+status, progression risk label — all provider-entered.
+Severity, follow-up interval, provider assessment on the retina
+side — all provider-entered."*
+
+**Don't say:** "Auto-flag progression." "Auto-determine cup-to-
+disc ratio." "Auto-grade DR severity."
+
+---
+
+### "Does ChartNav order tests, imaging, or referrals automatically?"
+
+**Answer:** *"No. Labs / Orders Review is read-only. ChartNav
+does not submit orders, referrals, or imaging requests. The
+imaging pipeline records studies the practice has already
+captured upstream — it is not an ordering system."*
+
+**Don't say:** "Automatic orders." "Automatic referrals."
+"Submit imaging request."
+
+---
+
+### "Does ChartNav select IOL power or anti-VEGF dosing?"
+
+**Answer:** *"No. Biometry packets surface in the imaging
+pipeline as metadata + review status — the provider selects the
+IOL. Retina injection events record what the provider gave —
+ChartNav does not recommend a drug or a dose."*
+
+**Don't say:** "Auto-select IOL power." "Auto-recommend anti-VEGF
+dose." "Auto-suggest medication."
+
+---
+
+### "Is ChartNav HIPAA compliant?"
+
+**Answer:** *"ChartNav is not certified to HIPAA and is not
+approved for real PHI by default. The product is built around
+HIPAA-aware data-handling practices — provider-in-the-loop,
+audit metadata-only, org isolation, no patient-side delivery,
+no external-LLM PHI egress — but software itself is not
+'certified to HIPAA' and we don't claim it is. A controlled PHI
+pilot requires a Business Associate Agreement, security review,
+production auth, approved hosting, backups, monitoring, vendor
+review, incident contacts, and written practice approval."*
+
+**Don't say:** "HIPAA compliant." "HIPAA certified."
+
+---
+
+### "Do you integrate with Cirrus / Spectralis / Triton / Optos / IOLMaster / Humphrey?"
+
+**Answer:** *"Not today. ChartNav has an imaging metadata +
+review foundation with generic modality labels — OCT macula,
+OCT RNFL, fundus photo, widefield fundus, visual field 24-2 /
+10-2, biometry packet, external PDF. Vendor-specific adapters
+are on the roadmap; we will not claim an adapter exists unless
+the code ships."*
+
+**Don't say:** "We integrate with Cirrus / Spectralis / Triton
+/ Optos / IOLMaster / Humphrey / Topcon" *unless* the adapter
+actually ships.
+
+---
+
+### "Do you support cornea / cataract / oculoplastics / pediatric tracking?"
+
+**Answer:** *"Cornea, cataract, oculoplastics, and pediatric are
+all served today by the clinical shortcut bank — Dry eye,
+Keratitis, Pterygium, Chalazion, Blepharitis, Entropion,
+Ectropion, Ptosis, and so on are pinnable shortcuts the
+provider applies during documentation. Structured tracking
+tables for cornea, cataract pre-op, oculoplastics, and pediatric
+are planned for later phases — the foundation merged into main
+today is retina + glaucoma tracking + the imaging metadata
+pipeline."*
+
+**Don't say:** "We track cornea K-max today." "We have a
+cataract pre-op packet." "MRD1 and levator are tracked." Those
+are planned, not implemented.
+
+---
+
+### "Does ChartNav submit to IRIS Registry or report MIPS?"
+
+**Answer:** *"Not today. Both are on the roadmap. ChartNav
+does not currently submit to the IRIS Registry and does not
+currently report MIPS metrics. We will say it the day the
+adapter ships."*
+
+**Don't say:** "We submit to IRIS Registry." "MIPS reporting
+included."
+
+---
+
+### "Does the technician identity see the same data as the doctor?"
+
+**Answer:** *"Role-based, but layered. Both can read clinical
+data within their org. The technician can create imaging
+studies, file metadata, measurement events, and retina injection
+events — that's the operator-capture role. The technician
+cannot mark a study reviewed, cannot create or patch a
+retina/glaucoma tracking row. Reviewer is read-only across all
+clinical specialty surfaces. Front desk has no access to the
+clinical specialty surfaces at all."*
+
+**Don't say:** "Everyone sees everything." "Technicians can sign
+notes."
+
+---
+
+### "What happens if a real PHI screenshot accidentally lands on the demo stack?"
+
+**Answer:** *"The demo stack is hard-wired to the fake-data
+seed. Cross-org reads return 404 with no existence leak. Audit
+events are metadata-only — provider_assessment, notes,
+storage_uri, file_name, and measurement values are never
+serialized into audit detail. If a screenshot accidentally
+captures real PHI, the contract is to abort the capture, file
+an incident, and reset the local stack."*
+
+**Don't say:** "It can't happen." "Real PHI is fine on the
+demo stack."
