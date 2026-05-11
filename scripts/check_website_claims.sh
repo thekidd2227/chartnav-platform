@@ -63,15 +63,24 @@ fi
 echo
 
 # 3. Required negative-assertion phrasing.
+#
+# Phase 24A — required-phrase list updated to match the
+# ophthalmology-specific non-goals block. The landing page must
+# include explicit negative assertions across: EHR replacement,
+# HIPAA-certified, autonomous diagnosis, OCT interpretation,
+# IOL power selection, real-PHI gate, patient messaging.
 echo "3. Negative-assertion phrasing on LandingPage"
 if [ -f "$LANDING" ]; then
   for phrase in \
     "Provider-reviewed workflow support" \
     "does not diagnose" \
     "does not.*diagnose, create orders, send referrals, bill, or message patients" \
-    "Not a certified EHR replacement" \
+    "Not a certified EHR" \
+    "Not HIPAA-certified" \
     "Not autonomous diagnosis" \
-    "Not real-PHI production"; do
+    "Does not autofill IOP" \
+    "Does not interpret OCT" \
+    "Real-PHI pilot requires BAA"; do
     if grep -Eq "$phrase" "$LANDING"; then
       echo "   ok       $phrase"
     else
@@ -105,11 +114,20 @@ forbidden_capability_positive=(
   "replaces a doctor"
 )
 if [ -f "$LANDING" ]; then
+  # Phase 24A — compliance claims now use the same negative-context
+  # guard as capability claims. The landing page intentionally
+  # includes "Not HIPAA-certified" + "Not a certified EHR" as
+  # negative assertions; the guard exempts those.
   for pattern in "${forbidden_positive[@]}"; do
-    if grep -Eiq "$pattern" "$LANDING"; then
+    while IFS= read -r line; do
+      lower="$(printf '%s' "$line" | tr 'A-Z' 'a-z')"
+      if printf '%s' "$lower" | grep -Eq "(does not|never|\\bnot\\s|not approved)"; then
+        continue
+      fi
       echo "   FAIL — forbidden compliance claim: $pattern"
+      echo "          $line"
       fail_count=$((fail_count + 1))
-    fi
+    done < <(grep -i "$pattern" "$LANDING" || true)
   done
   for pattern in "${forbidden_capability_positive[@]}"; do
     while IFS= read -r line; do

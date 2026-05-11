@@ -117,7 +117,7 @@ clinical-action automation we don't ship.
   - Don't claim HIPAA / SOC 2 / FDA / certified-EHR.
   - Don't promise orders / coding / referrals / patient
     messaging.
-  - Don't represent ChartNav as an EHR replacement.
+  - Do not represent ChartNav as an EHR replacement. ChartNav is not an EHR replacement.
   - Don't paraphrase the safety contract — use the buyer
     objection-handling answers verbatim.
 - **Speaker notes:** Partners share the same forbidden-claims

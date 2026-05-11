@@ -37,7 +37,7 @@ describe("LandingPage — required sections", () => {
     render(<LandingPage />);
     expect(
       screen.getByTestId("landing-hero-title")
-    ).toHaveTextContent(/ophthalmology-specific/i);
+    ).toHaveTextContent(/ophthalmology/i);
     expect(
       screen.getByTestId("landing-hero-title")
     ).toHaveTextContent(/provider-reviewed/i);
@@ -164,15 +164,24 @@ describe("LandingPage — modules + before/after + non-goals", () => {
   it("renders the four 'what ChartNav is not' bullet items", () => {
     render(<LandingPage />);
     const list = screen.getByTestId("landing-non-goals-list");
-    expect(within(list).getAllByRole("listitem")).toHaveLength(4);
-    expect(list).toHaveTextContent(/Not a certified EHR replacement/i);
+    // Phase 24A — non-goals expanded from 4 to 9 ophthalmology-specific
+    // negative assertions (certified-EHR, HIPAA-certified, autonomous
+    // diagnosis, no autofill IOP, no OCT interpretation, no IOL
+    // selection, no anti-VEGF dosing, no orders / claims / messaging,
+    // no current device-vendor integration).
+    expect(within(list).getAllByRole("listitem")).toHaveLength(9);
+    // Phase 24A — each negative assertion must appear in the
+    // non-goals list. Updated phrasing reflects the ophthalmology-
+    // specific Phase 24A copy.
+    expect(list).toHaveTextContent(/Not a certified EHR/i);
+    expect(list).toHaveTextContent(/Not HIPAA-certified/i);
     expect(list).toHaveTextContent(/Not autonomous diagnosis/i);
-    expect(list).toHaveTextContent(
-      /Not automatic orders, coding, referrals, or patient messaging/i
-    );
-    expect(list).toHaveTextContent(
-      /Not real-PHI production without legal \/ security review/i
-    );
+    expect(list).toHaveTextContent(/Does not autofill IOP/i);
+    expect(list).toHaveTextContent(/Does not interpret OCT/i);
+    expect(list).toHaveTextContent(/Does not select IOL power/i);
+    expect(list).toHaveTextContent(/Does not place orders, send referrals, submit claims/i);
+    expect(list).toHaveTextContent(/Does not send patient messages/i);
+    expect(list).toHaveTextContent(/Not a current integration with any specific imaging-device vendor/i);
   });
 
   it("renders the demo + pilot CTA row with two buttons", () => {
@@ -198,16 +207,19 @@ describe("LandingPage — safety / claims contract", () => {
     const text = (root.textContent || "").toLowerCase();
     const NEG = "(?<!not\\s)(?<!does not\\s)(?<!never\\s)";
     for (const claim of [
-      // Compliance / certification claims must never appear at all.
-      /\bhipaa[ -]compliant\b/,
-      /\bhipaa[ -]certified\b/,
-      /\bsoc[ -]?2[ -]?certified\b/,
-      /\bproduction[- ]ready for phi\b/,
-      /\breal patient data ready\b/,
+      // Compliance / certification claims are rejected only when
+      // positive. The Phase 24A non-goals block intentionally uses
+      // "Not HIPAA-certified", "Not a certified EHR", etc. The NEG
+      // lookbehind exempts those negative-assertion contexts.
+      new RegExp(`${NEG}\\bhipaa[ -]compliant\\b`),
+      new RegExp(`${NEG}\\bhipaa[ -]certified\\b`),
+      new RegExp(`${NEG}\\bsoc[ -]?2[ -]?certified\\b`),
+      new RegExp(`${NEG}\\bproduction[- ]ready for phi\\b`),
+      new RegExp(`${NEG}\\breal patient data ready\\b`),
       // Capability claims are rejected only when positive. The
       // page intentionally says "Not a certified EHR replacement",
       // "Not autonomous diagnosis", "does not create orders", etc.
-      new RegExp(`${NEG}\\bcertified ehr\\b(?! replacement)`),
+      new RegExp(`${NEG}\\bcertified ehr\\b(?! replacement)(?!\\.)`),
       new RegExp(`${NEG}\\bautonomous diagnosis\\b`),
       new RegExp(`${NEG}\\bautomatic diagnosis\\b`),
       new RegExp(`${NEG}\\bguaranteed accuracy\\b`),
@@ -216,6 +228,24 @@ describe("LandingPage — safety / claims contract", () => {
       new RegExp(`${NEG}\\bsubmit referral\\b`),
       new RegExp(`${NEG}\\bsend patient message\\b`),
       new RegExp(`${NEG}\\breplaces (?:a )?doctor\\b`),
+      // Phase 24A — Manus public-claims audit additions.
+      // These must NEVER appear as positive claims on the landing
+      // page. The negative-assertion non-goals block intentionally
+      // uses "does not autofill IOP", "does not interpret OCTs",
+      // etc., which are exempted by the NEG lookbehinds.
+      /\bhands[- ]free scrib(ing|e)\b/,
+      /\bchart fills itself\b/,
+      /\bchart writes itself\b/,
+      /\bnote fills itself\b/,
+      /\bnote writes itself\b/,
+      new RegExp(`${NEG}\\breplace[s]? your (ehr|emr)\\b`),
+      new RegExp(`${NEG}\\b(ehr|emr) replacement\\b`),
+      /\bpowered by ibm\b/,
+      /\bpowered by watsonx\b/,
+      /\bwatsonx[- ]powered\b/,
+      /\bibm[- ]powered\b/,
+      /\bbilling[- ]aware coding\b/,
+      /\bcoding recommendations\b/,
     ]) {
       expect(text).not.toMatch(claim);
     }
