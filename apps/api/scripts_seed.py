@@ -7,10 +7,23 @@ backend. All SQL uses portable constructs (`COALESCE`, named binds).
 from __future__ import annotations
 
 import json
+import os
 
 from sqlalchemy import text
 
 from app.db import insert_returning_id, transaction
+
+
+def _wedge_enabled() -> bool:
+    """Phase 24B wedge gate.
+
+    Default ON for direct invocations (demo, Playwright e2e seed).
+    Backend pytest fixtures set ``CHARTNAV_SEED_PHASE_24B_WEDGE=0`` so
+    that Phase 20B / 20C count-based tests continue to see the empty
+    baseline they were written against. The Phase 24B test file
+    re-enables the wedge via its own ``test_db_with_wedge`` fixture.
+    """
+    return os.environ.get("CHARTNAV_SEED_PHASE_24B_WEDGE", "1") != "0"
 
 ORGS = [
     {
@@ -712,9 +725,12 @@ def main() -> None:
 
             # Phase 24B — seed the Morgan Lee retina follow-up wedge
             # (work queue items, retina tracking, OCT + fundus imaging
-            # metadata, internal follow-up task). Idempotent.
+            # metadata, internal follow-up task). Idempotent. Gated
+            # by `CHARTNAV_SEED_PHASE_24B_WEDGE` so backend tests can
+            # opt out and keep their pre-wedge baseline.
             if (
-                org_fx["slug"] == "demo-eye-clinic"
+                _wedge_enabled()
+                and org_fx["slug"] == "demo-eye-clinic"
                 and wedge_enc_id is not None
                 and wedge_provider_id is not None
             ):
