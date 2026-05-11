@@ -442,3 +442,35 @@ Suggested order:
 **Real PHI cannot begin** until **every** Phase 23 gate is
 completed and **the practice's signed go-live document is on
 file**. No exceptions.
+
+---
+
+## Phase 23 implementation status
+
+**Phase 23 has shipped (squash commit pending merge).** See the
+implementation doc for the full inventory:
+`docs/product/phase-23-hipaa-regulated-deployment-readiness-implementation.md`.
+
+What landed:
+
+- 11 new docs under `docs/security/` (HIPAA readiness control
+  matrix, real-PHI go-live gate, BAA / vendor checklist,
+  customer responsibility matrix, subprocessor inventory, PHI
+  data flow map, security risk analysis template, incident /
+  breach response runbook, access control policy, backup / DR
+  policy, support PHI handling policy).
+- New `GET /admin/security/readiness` endpoint (admin-only,
+  metadata-only environment-shape reporter).
+- New admin-only `SecurityReadinessPanel.tsx` rendered via the
+  ADMIN > Security Readiness sidebar entry.
+- 11 backend tests + 4 frontend tests verifying RBAC, no env
+  values leak, negative-disclaimer contract, no positive
+  compliance claims.
+- Existing controlled-pilot scripts (`validate_controlled_pilot_env.sh`
+  / `backup_controlled_pilot_postgres.sh` / `restore_*` /
+  `verify_*` / `smoke_*`) already enforce the Phase 23 contracts
+  — no script edits required.
+
+Real-PHI gates remain external (BAA execution, practice
+security review, hosting choice, backups, monitoring, audit
+retention agreement, vendor review, written practice approval).

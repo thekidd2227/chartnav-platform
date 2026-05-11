@@ -3890,3 +3890,49 @@ export function getAdminMultiClinicSummary(
 ): Promise<MultiClinicSummary> {
   return request(`/admin/multi-clinic-summary`, { email });
 }
+
+// =============================================================
+// Phase 23 — HIPAA-regulated deployment readiness
+// =============================================================
+//
+// Admin-only metadata-only readiness summary. Returns status
+// labels reflecting the shape of the runtime environment against
+// the Phase 23 real-PHI go-live gate. Never returns env values,
+// secrets, or PHI.
+//
+// Passing every check does NOT make ChartNav HIPAA-compliant or
+// approved for real PHI by default — that requires BAA, security
+// review, written practice approval, and the full go-live gate.
+
+export type SecurityReadinessLabel =
+  | "configured"
+  | "missing"
+  | "required"
+  | "external_required"
+  | "disabled";
+
+export interface SecurityReadinessSummary {
+  organization_id: number;
+  auth_mode: SecurityReadinessLabel;
+  database_kind: SecurityReadinessLabel;
+  audit_retention_configured: SecurityReadinessLabel;
+  cors_explicit_configured: SecurityReadinessLabel;
+  jwt_issuer_configured: SecurityReadinessLabel;
+  jwt_audience_configured: SecurityReadinessLabel;
+  jwt_jwks_url_configured: SecurityReadinessLabel;
+  stt_provider: SecurityReadinessLabel;
+  backup_config_documented: SecurityReadinessLabel;
+  logging_config_documented: SecurityReadinessLabel;
+  monitoring_config_documented: SecurityReadinessLabel;
+  incident_contacts_documented: SecurityReadinessLabel;
+  baa_status_configured: SecurityReadinessLabel;
+  vendor_review_status_configured: SecurityReadinessLabel;
+  real_phi_go_live_gate_status: SecurityReadinessLabel;
+  compliance_attestation: string;
+}
+
+export function getSecurityReadiness(
+  email: string
+): Promise<SecurityReadinessSummary> {
+  return request(`/admin/security/readiness`, { email });
+}
