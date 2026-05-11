@@ -2,40 +2,59 @@
 
 > Authoritative master narrative for every ChartNav deck. Pair
 > with `chartnav-approved-claims-language.md` (banned vs. allowed
-> phrasing) and the brand-guidelines deck (visual style).
+> phrasing), the ophthalmology-specific language guide at
+> `chartnav-ophthalmology-positioning-language-guide.md`
+> (sharper rules for the ophthalmology positioning), and the
+> brand-guidelines deck (visual style).
+>
+> **Phase 21C-follow-up.** Master narrative re-anchored around
+> the ophthalmology clinic workflow layer. The six-sentence
+> version names the Phase 20B / 20C / 21A / 21B product surfaces
+> shipped on `main`.
 
 ---
 
 ## Approved master narrative
 
-> **One sentence:** ChartNav is an ophthalmology-specific clinical
-> workflow assistant — provider-reviewed at every step.
+> **One sentence:** ChartNav is an ophthalmology clinic workflow
+> layer that connects intake, technician workup, imaging review,
+> retina/glaucoma tracking, provider-reviewed documentation,
+> review queues, and internal coordination — provider-reviewed
+> at every step.
 >
-> **Three sentences:** ChartNav helps ophthalmology providers
-> spend less time on charts and more time on patients. The
-> product surfaces a structured note, an OD/OS retinal canvas, a
-> patient-friendly summary, and a pre-visit brief — and a
-> provider review queue that lists review tasks only. Every
-> clinical artifact is provider-reviewed; ChartNav does not
-> diagnose, create orders, send referrals, bill, or message
-> patients automatically.
+> **Three sentences:** ChartNav is built for eye-care lanes —
+> front desk, technician workup, ancillary imaging review, MD
+> encounter, review / sign-off, and checkout / follow-up /
+> internal coordination. Role-based clinic dashboards over a
+> shared work queue, structured retina and glaucoma tracking,
+> an imaging metadata + review pipeline, and the OD/OS retinal
+> diagram with provider-reviewed annotations sit together in
+> one workspace. Every clinical artifact is provider-reviewed;
+> ChartNav does not diagnose, create orders, send referrals,
+> bill, or message patients automatically.
 >
 > **Six sentences:** ChartNav is built and operated by Ariel's
 > River Contracting Group, LLC, dba ARCG Systems — a Maryland-
 > based Service-Disabled Veteran-Owned Small Business with
 > federal healthcare past performance at the Mann-Grandstaff VA
 > Medical Center, Spokane WA. The product is ophthalmology-
-> specific by construction: an OD/OS retinal canvas,
-> ophthalmology-flavored findings vocabulary, and a closed
-> structured-note model. Eight modules run in production code:
-> AI scribe session lifecycle, findings-to-retinal-diagram
-> proposal review, OD/OS retinal drawing canvas, patient-friendly
-> summary draft, pre-visit clinical brief, provider action
-> review queue, guided demo mode, and a pilot-readiness package.
-> The provider drives every transition. Pricing is $299–$499 per
-> provider per month, $5,000 per practice per month flat, or
-> $10,000 flat for a 4–6 week controlled pilot. Real PHI requires
-> a BAA and a security review before deployment.
+> specific by construction: an OD/OS retinal canvas, ophthalmology-
+> flavored findings vocabulary, role-based clinic dashboards
+> (front desk, technician, doctor, reviewer, admin), structured
+> retina and glaucoma tracking foundation, and an imaging
+> metadata + review pipeline with generic modality labels.
+> Sixteen capability surfaces run in production code including
+> Clinical Signal Filtering, the AI scribe session lifecycle,
+> findings-to-retinal-diagram proposal review, the OD/OS retinal
+> drawing canvas with immutable signed artifacts, patient-
+> friendly summary draft, pre-visit clinical brief, provider
+> action review queue, internal Chat with recipient selector,
+> end-to-end smoke coverage, guided demo mode, public proof page,
+> and the pilot-readiness package. The provider drives every
+> transition. Pricing is $299–$499 per provider per month,
+> $5,000 per practice per month flat, or $10,000 flat for a 4–6
+> week controlled pilot. Real PHI requires a BAA and a security
+> review before deployment.
 
 Use the one-, three-, or six-sentence version depending on the
 audience and the time you have.

@@ -10,37 +10,63 @@
 
 ### Product
 
-- 8 modules in production code, all phase-numbered and
-  documented:
-  - Phase 6 — findings-to-retinal-diagram proposal review.
-  - Phase 8 — AI scribe session lifecycle.
-  - Phase 9 — provider-reviewed patient-friendly summaries.
-  - Phase 10 — provider-facing pre-visit brief.
-  - Phase 11 — provider action review queue.
-  - Phase 12 — end-to-end clinical workflow smoke review (tests
-    only, no new product surface).
-  - Phase 13 — demo-ready clinical workflow package.
-  - Phase 14 — pilot readiness / deployment hardening (docs
-    only).
-  - Phase 15 — commercial demo delivery system (Guided Demo
-    Mode).
-  - Phase 16 — website proof upgrade + conversion layer
-    (landing page).
+Sixteen capability surfaces in production code, all phase-numbered
+and documented:
+
+- Phase 6 — findings-to-retinal-diagram proposal review.
+- Phase 8 — AI scribe session lifecycle.
+- Phase 9 — provider-reviewed patient-friendly summaries.
+- Phase 10 — provider-facing pre-visit brief.
+- Phase 11 — provider action review queue.
+- Phase 12 — end-to-end clinical workflow smoke review (tests
+  only, no new product surface).
+- Phase 13 — demo-ready clinical workflow package.
+- Phase 14 — pilot readiness / deployment hardening (docs only).
+- Phase 15 — commercial demo delivery system (Guided Demo Mode).
+- Phase 16 — website proof upgrade + conversion layer (landing
+  page).
+- Phase 19F+ — Clinical / Ophthalmology shortcut bank +
+  Clinical Signal Filtering anchor + internal Chat with
+  recipient selector.
+- **Phase 20A.1** — controlled-pilot PHI readiness hardening
+  (Postgres-mode auth, audit, backups, monitoring contracts).
+- **Phase 20B** — structured data layer (patient segments,
+  tags, problem list, clinic workflow templates / stages, work
+  queue items, role view presets).
+- **Phase 20C** — role-based clinic dashboards (front desk,
+  technician, doctor, reviewer, admin) with PHI-safe payload
+  compaction and admin *View as* selector.
+- **Phase 21A** — retina + glaucoma specialty tracking (5
+  tables — retina tracking + retina injection events +
+  glaucoma tracking + IOP measurements + visual field tests)
+  with metadata-only audit and measurement-event role gating.
+- **Phase 21B** — imaging metadata + review pipeline (3 tables
+  — imaging studies + imaging files + imaging measurements)
+  with generic modality labels, `data:` URI rejection, and
+  provider-only "mark reviewed."
+- **Phase 21C** — ophthalmology positioning system (homepage
+  positioning, language guide, demo script, objection handling
+  additions, claims-check script extension).
 
 ### Commercial
 
-- 17 deck Markdown source files (Phase 17 + 17B): the original
-  15 (investor pitch, sales, demo index, customer pitch
-  template, company, product roadmap, brand guidelines,
-  educational onboarding, one-page sales, financial
-  fundraising, marketing plan, project proposal, agency
-  partner, elevator, long sales) plus the Phase 17B buyer-demo
-  and operator-demo split (the original combined demo deck is
-  now an index that routes to one of the two).
-- Clinical Signal Filtering positioned as the prime feature
-  across every buyer-facing deck (Phase 17B).
-- 6 commercial support docs (master kit, claims language,
-  objections, pricing, pilot handoff, this readiness map).
+- 17 deck Markdown source files (Phase 17 + 17B; Phase 21C-
+  follow-up rewrote nine to anchor the ophthalmology clinic
+  workflow layer positioning): buyer demo (13 slides), operator
+  demo (8 slides; expanded click path + pre-flight), sales
+  deck (13 slides), one-page sales deck (7-pillar list),
+  investor pitch, product roadmap, demo index, customer pitch
+  template (now includes `{{PRACTICE_SUBSPECIALTY_MIX}}`),
+  elevator pitch — all reflect the Phase 20B / 20C / 21A / 21B
+  product surfaces shipped on `main`.
+- Clinical Signal Filtering preserved as the prime AI-anchor
+  feature across every buyer-facing deck; expanded with role
+  dashboards, structured data, retina + glaucoma tracking,
+  imaging metadata + review pipeline, and internal coordination
+  (Phase 21C-follow-up).
+- 7 commercial support docs (master kit, claims language,
+  ophthalmology positioning language guide, objections,
+  pricing, pilot handoff, this readiness map).
 - 4 demo-package docs (startup, troubleshooting, review
   checklist, desktop delivery contract).
 - Public landing page at `/?intro=1`.
