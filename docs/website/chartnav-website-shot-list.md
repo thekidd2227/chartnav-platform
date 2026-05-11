@@ -239,3 +239,123 @@ For each capture session:
 
 If any step fails, abort the capture for that shot and re-run
 the safety checks before retrying.
+
+---
+
+## Phase 21C — ophthalmology specialty surface additions
+
+The Phase 21C positioning upgrade introduces the
+ophthalmology-specific narrative on the homepage. The recommended
+website media sections below extend the existing shot list. **No
+media is captured by this PR.** Capture work happens out-of-repo
+under the same safety contract as the earlier sections.
+
+The companion narrative + section copy lives in
+`docs/website/chartnav-ophthalmology-homepage-positioning.md`.
+
+### Homepage hero shot
+
+- **Subject:** the role-based dashboard (Phase 20C) for an admin
+  identity, showing the **View as** selector mid-toggle between
+  *Doctor* and *Reviewer*.
+- **Fallback:** Encounter workspace Overview tab on `PT-1001
+  Morgan Lee`.
+- **Caption:** "Role-based clinic dashboards. Front desk to
+  provider sign-off. Provider-reviewed at every step."
+- **Forbidden:** no vendor names, no auto-routing language, no
+  HIPAA-compliance text on screen.
+
+### Eye-clinic lane cycle band
+
+- **Subject:** horizontal step bar with the seven lane-cycle
+  steps from the homepage doc Section 3 (front desk → tech
+  workup → ancillary imaging review → MD encounter → review /
+  sign-off → checkout / follow-up / internal coordination).
+- **Source:** static graphic. May be assembled from individual
+  dashboard captures (one per lane).
+- **Caption:** "Built for eye-care lanes."
+- **Forbidden:** do not imply auto-routing of work without
+  provider review.
+
+### Retina section
+
+- **Shot 1:** Specialty Tracking panel → Retina section with a
+  populated tracking card. Capture against `PT-1001` after
+  seeding retina tracking via the demo click path.
+- **Shot 2:** OD/OS retinal diagram canvas with two demo
+  annotations (drusen + flame hemorrhage inferior).
+- **Shot 3:** Imaging Pipeline panel filtered to an OCT macula
+  + fundus photo study list.
+- **Caption:** "Retina tracking foundation. Provider-reviewed
+  annotations. Imaging metadata + review pipeline."
+- **Forbidden:** no Cirrus / Spectralis / Triton / Optos device
+  names. No "auto-grade DR" language.
+
+### Glaucoma section
+
+- **Shot 1:** Specialty Tracking panel → Glaucoma section with
+  target IOP / latest IOP / cup-to-disc / RNFL / VF status
+  values populated.
+- **Shot 2:** IOP measurements table (Goldmann row + iCare row).
+- **Shot 3:** Visual field tests table (24-2 + 10-2 rows with
+  reliability + progression flag).
+- **Caption:** "Provider-reviewed glaucoma tracking. No autofill.
+  No autonomous diagnosis."
+- **Forbidden:** no Humphrey / Octopus device names. No
+  "auto-flag progression" language.
+
+### Imaging section
+
+- **Shot:** ImagingPipelinePanel split view — studies list on
+  the left, selected study detail (file metadata + measurements
+  + review workbench) on the right.
+- **Caption:** "Imaging metadata + review pipeline. Generic
+  modality labels. File metadata only — no image binaries. No
+  device-vendor integration."
+- **Forbidden:** no vendor names, no "auto-interpret" wording.
+  Do not capture a shot where the storage URI on screen looks
+  like a `data:` URI (the route rejects those — should never
+  happen in fake-data demos, but worth noting).
+
+### Documentation section
+
+- **Shot:** NoteWorkspace stepper — Transcript → Extracted Facts
+  → AI Draft → Final Note — with the provider-review badge
+  clearly on screen.
+- **Caption:** "Provider-reviewed documentation. The provider
+  applies, edits, or rejects every proposal before anything is
+  signed."
+- **Source:** existing NoteWorkspace surface — no Phase 21C
+  changes to this component.
+
+### Internal coordination section
+
+- **Shot:** Chat tab with the recipient selector open, targeting
+  an internal staff identity.
+- **Caption:** "Internal clinic coordination. Recipient
+  selector. Conversation export. No patient-facing messaging."
+- **Forbidden:** do not narrate this as "patient messaging" —
+  it isn't.
+
+### Safety section *(specialty-specific non-goals)*
+
+A single static panel on the homepage rendering the
+negative-assertion block from
+`chartnav-ophthalmology-homepage-positioning.md` Section 5.
+**No screen capture needed.** Inline text on the website only.
+
+### Per-Phase-21C-clip safety checklist
+
+For each capture from this addendum:
+
+1. Reset the local stack (`bash scripts/reset_demo_state.sh`).
+2. Switch to the identity required by the shot (default:
+   `clin@chartnav.local` for tracking + imaging; `admin@chartnav.local`
+   for the dashboard hero).
+3. Confirm the URL and any visible captions are free of
+   forbidden phrasing (Cirrus / Spectralis / Triton / Optos /
+   IOLMaster / Humphrey / Topcon / HIPAA compliant / certified
+   EHR / autonomous diagnosis / auto-interpret).
+4. Capture.
+5. Save to out-of-repo storage. **Do not commit any media
+   binary in this PR.**

@@ -183,3 +183,69 @@ This is safe to run repeatedly because the seed is idempotent.
   artifact / completed-or-dismissed action items are intentionally
   read-only. That's the contract — call it out as a feature, not a
   bug.
+
+---
+
+## Phase 21C addendum — ophthalmology specialty surfaces
+
+Three new click paths land with Phase 20C / 21A / 21B. The
+original click path above is still valid for the Phase 6 → 11
+walkthrough. Use the steps below when the live demo includes
+the ophthalmology-specialty surfaces.
+
+### Path A — Role-based dashboards *(Phase 20C)*
+
+1. Pick an identity in the header (`admin@chartnav.local`,
+   `clin@chartnav.local`, `rev@chartnav.local`,
+   `front@chartnav.local`, or `tech@chartnav.local`).
+2. Sidebar → CORE → **Dashboard**.
+3. The right pane renders the role-specific dashboard. For an
+   admin identity, use the **View as** selector to switch
+   between front desk / technician / doctor / reviewer / admin
+   views. Non-admin identities see only their own role's
+   dashboard.
+4. Sidebar → CORE → **Encounters** to return to the encounter
+   workspace.
+
+### Path B — Retina + glaucoma specialty tracking *(Phase 21A)*
+
+1. Open any patient whose encounter has a native patient row
+   (the seeded `PT-1001 Morgan Lee` works).
+2. Open the encounter workspace → **Clinical** tab.
+3. The **Specialty Tracking** panel renders at the top of the
+   Clinical tab.
+4. Retina section: click **+ Add retina tracking** (clinician /
+   admin only), or **Mark reviewed** on an existing card.
+5. Retina injection history: click **+ Add injection event**
+   (technician / clinician / admin).
+6. Glaucoma section: similar pattern — tracking card, IOP
+   measurements table, visual field tests table.
+7. Reviewer identity: confirm the Add buttons are absent and
+   each card shows the read-only banner.
+8. Front desk identity: confirm the panel renders the blocked
+   placeholder.
+
+### Path C — Imaging pipeline *(Phase 21B)*
+
+1. Same encounter workspace as Path B.
+2. **Imaging** tab.
+3. **Imaging Pipeline** panel renders at the top.
+4. Click a study in the left-hand list. The right pane shows
+   metadata, file table, measurements table, and a review
+   workbench.
+5. **Mark reviewed** is admin / clinician only. The technician
+   identity does not see it; instead the workbench renders a
+   read-only note.
+6. **+ Add imaging study / + Add file metadata / + Add
+   measurement** are available to admin / clinician /
+   technician.
+7. Reviewer and front desk see no Add buttons.
+8. The OD/OS retinal workbench (`EyeDiagramPanel`) is unchanged
+   and lives below the pipeline panel.
+
+### Path D — Internal Chat *(existing surface)*
+
+1. Encounter workspace → **Chat** tab.
+2. Use the recipient selector to target a staff identity.
+3. The pane is internal staff coordination only — there is no
+   patient-facing message surface.
