@@ -187,6 +187,19 @@ test.describe("Phase 24B — Morgan Lee retina workflow wedge", () => {
     await expect(byType).toContainText(/follow up/i);
   });
 
+  test("admin operations dashboard surfaces Phase 24C workload aging and source proof", async ({
+    page,
+  }) => {
+    await setIdentity(page, ADMIN_ORG1);
+    await page.getByTestId("sidebar-item-multi-clinic").click();
+    await expect(page.getByTestId("multi-clinic")).toBeVisible();
+
+    await expect(page.getByTestId("card-stale-work")).toBeVisible();
+    await expect(page.getByTestId("breakdown-open-user")).toContainText(/tech@chartnav.local/i);
+    await expect(page.getByTestId("breakdown-stale-role")).toContainText(/technician/i);
+    await expect(page.getByTestId("breakdown-source")).toContainText(/phase 24c glaucoma wedge/i);
+  });
+
   test("opening Morgan Lee mounts the workspace and the Clinical / Imaging panels", async ({
     page,
   }) => {

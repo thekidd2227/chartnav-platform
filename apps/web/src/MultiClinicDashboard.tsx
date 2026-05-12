@@ -188,6 +188,16 @@ function MultiClinicForAdmin({ identity }: { identity: string }) {
               label="Queue Types Active"
               value={Object.keys(summary.queue_by_queue_type).length}
             />
+            <SummaryCard
+              testid="card-stale-work"
+              label="Stale Work Items"
+              value={summary.stale_queue_items ?? 0}
+            />
+            <SummaryCard
+              testid="card-due-today"
+              label="Due Today"
+              value={summary.due_today_queue_items ?? 0}
+            />
           </div>
 
           <div className="multi-clinic__split">
@@ -302,6 +312,26 @@ function MultiClinicForAdmin({ identity }: { identity: string }) {
               testid="breakdown-queue-type"
               header="Queue type"
               rows={summary.queue_by_queue_type}
+            />
+            <BreakdownTable
+              testid="breakdown-open-role"
+              header="Open workload by role"
+              rows={summary.open_queue_by_assigned_role ?? {}}
+            />
+            <BreakdownTable
+              testid="breakdown-open-user"
+              header="Open workload by user"
+              rows={summary.open_queue_by_assigned_user ?? {}}
+            />
+            <BreakdownTable
+              testid="breakdown-stale-role"
+              header="Stale workload by role"
+              rows={summary.stale_queue_by_assigned_role ?? {}}
+            />
+            <BreakdownTable
+              testid="breakdown-source"
+              header="Demo source"
+              rows={summary.queue_by_source ?? {}}
             />
           </div>
         </>

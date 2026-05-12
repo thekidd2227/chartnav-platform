@@ -83,6 +83,18 @@ const SUMMARY: api.MultiClinicSummary = {
     imaging_review: 1,
     workup: 2,
   },
+  queue_by_source: {
+    phase_24b_wedge: 7,
+    phase_24c_glaucoma_wedge: 2,
+  },
+  open_queue_by_assigned_role: { clinician: 4, technician: 3 },
+  open_queue_by_assigned_user: {
+    "clin@chartnav.local": 4,
+    "tech@chartnav.local": 3,
+  },
+  stale_queue_by_assigned_role: { technician: 1 },
+  stale_queue_items: 1,
+  due_today_queue_items: 0,
 };
 
 const LOC_DASH: api.LocationDashboardSummary = {
@@ -144,6 +156,8 @@ describe("MultiClinicDashboard — admin rendering", () => {
     expect(screen.getByTestId("card-total-locations")).toHaveTextContent("2");
     expect(screen.getByTestId("card-total-providers")).toHaveTextContent("2");
     expect(screen.getByTestId("card-total-open")).toHaveTextContent("5");
+    expect(screen.getByTestId("card-stale-work")).toHaveTextContent("1");
+    expect(screen.getByTestId("card-due-today")).toHaveTextContent("0");
 
     const locations = screen.getByTestId("locations-list");
     expect(within(locations).getByTestId("location-row-1")).toBeInTheDocument();
@@ -169,6 +183,10 @@ describe("MultiClinicDashboard — admin rendering", () => {
     expect(screen.getByTestId("breakdown-priority")).toBeInTheDocument();
     expect(screen.getByTestId("breakdown-role")).toBeInTheDocument();
     expect(screen.getByTestId("breakdown-queue-type")).toBeInTheDocument();
+    expect(screen.getByTestId("breakdown-open-role")).toHaveTextContent(/technician/i);
+    expect(screen.getByTestId("breakdown-open-user")).toHaveTextContent(/tech@chartnav.local/i);
+    expect(screen.getByTestId("breakdown-stale-role")).toHaveTextContent(/technician/i);
+    expect(screen.getByTestId("breakdown-source")).toHaveTextContent(/phase 24c glaucoma wedge/i);
   });
 
   it("clicking a different location refetches the location dashboard", async () => {

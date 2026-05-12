@@ -25,6 +25,17 @@ def _wedge_enabled() -> bool:
     """
     return os.environ.get("CHARTNAV_SEED_PHASE_24B_WEDGE", "1") != "0"
 
+
+def _phase_24c_enabled() -> bool:
+    """Phase 24C demo-hardening gate.
+
+    Phase 24C is intentionally coupled to the Phase 24B wedge fixture by
+    default. That keeps legacy backend tests on their pre-wedge baseline
+    when ``CHARTNAV_SEED_PHASE_24B_WEDGE=0`` while making direct demo and
+    Playwright seed runs include the expanded deterministic wedge.
+    """
+    return _wedge_enabled() and os.environ.get("CHARTNAV_SEED_PHASE_24C_WEDGE", "1") != "0"
+
 ORGS = [
     {
         "slug": "demo-eye-clinic",
@@ -377,8 +388,10 @@ def _ensure_wedge_queue_item(
     payload_title: str,
     priority: str,
     assigned_user_id: int | None = None,
+    source: str = "phase_24b_wedge",
+    due_days_offset: int | None = None,
 ) -> int:
-    """Idempotent insert keyed on (org, patient, encounter, queue_type)."""
+    """Idempotent upsert keyed on (org, patient, encounter, queue_type)."""
     row = conn.execute(
         text(
             "SELECT id FROM work_queue_items "
@@ -387,34 +400,81 @@ def _ensure_wedge_queue_item(
         ),
         {"org": org_id, "pid": patient_id, "eid": encounter_id, "qt": queue_type},
     ).mappings().first()
-    if row:
-        return int(row["id"])
     # payload_json carries the role-facing title only — Phase 20C's
     # _compact_queue_item() strips this body before serializing to
     # the dashboard response. Buyer-visible UI shows the queue type
     # + status, not this payload.
     payload = json.dumps(
-        {"title": payload_title, "source": "phase_24b_wedge", "demo": True},
+        {"title": payload_title, "source": source, "demo": True},
         sort_keys=True,
     )
-    return insert_returning_id(
-        conn,
-        "work_queue_items",
+    due_expr = "NULL"
+    if due_days_offset is not None:
+        due_expr = "DATETIME(CURRENT_TIMESTAMP, :due_offset)"
+
+    if row:
+        queue_id = int(row["id"])
+        conn.execute(
+            text(
+                "UPDATE work_queue_items SET "
+                "location_id = :loc, provider_id = :prov, priority = :priority, "
+                "status = :status, assigned_role = :role, assigned_user_id = :assignee, "
+                "source = :source, payload_json = :payload, "
+                f"due_at = {due_expr}, updated_at = CURRENT_TIMESTAMP "
+                "WHERE id = :id"
+            ),
+            {
+                "id": queue_id,
+                "loc": location_id,
+                "prov": provider_id,
+                "priority": priority,
+                "status": status,
+                "role": assigned_role,
+                "assignee": assigned_user_id,
+                "source": source,
+                "payload": payload,
+                "due_offset": f"{due_days_offset} days" if due_days_offset is not None else None,
+            },
+        )
+        return queue_id
+
+    conn.execute(
+        text(
+            "INSERT INTO work_queue_items ("
+            "organization_id, location_id, patient_id, encounter_id, provider_id, "
+            "queue_type, priority, status, assigned_role, assigned_user_id, due_at, "
+            "source, payload_json"
+            ") VALUES ("
+            ":org, :loc, :pid, :eid, :prov, :qt, :priority, :status, "
+            ":role, :assignee, "
+            + due_expr
+            + ", :source, :payload)"
+        ),
         {
-            "organization_id": org_id,
-            "location_id": location_id,
-            "patient_id": patient_id,
-            "encounter_id": encounter_id,
-            "provider_id": provider_id,
-            "queue_type": queue_type,
+            "org": org_id,
+            "loc": location_id,
+            "pid": patient_id,
+            "eid": encounter_id,
+            "prov": provider_id,
+            "qt": queue_type,
             "priority": priority,
             "status": status,
-            "assigned_role": assigned_role,
-            "assigned_user_id": assigned_user_id,
-            "source": "phase_24b_wedge",
-            "payload_json": payload,
+            "role": assigned_role,
+            "assignee": assigned_user_id,
+            "source": source,
+            "payload": payload,
+            "due_offset": f"{due_days_offset} days" if due_days_offset is not None else None,
         },
     )
+    created = conn.execute(
+        text(
+            "SELECT id FROM work_queue_items "
+            "WHERE organization_id = :org AND patient_id = :pid "
+            "AND encounter_id = :eid AND queue_type = :qt"
+        ),
+        {"org": org_id, "pid": patient_id, "eid": encounter_id, "qt": queue_type},
+    ).mappings().first()
+    return int(created["id"])
 
 
 def _ensure_retina_tracking_for_wedge(
@@ -685,6 +745,180 @@ def _seed_phase_24b_retina_wedge(
     return counts
 
 
+_PHASE_24C_GLAUCOMA_LANE = (
+    # (queue_type, status, assigned_role, title for payload, priority, due_days_offset)
+    ("glaucoma_testing_review", "open", "technician", "Technician testing review — IOP and visual-field metadata ready for provider review.", "normal", -2),
+    ("glaucoma_provider_review", "open", "clinician", "Provider review — glaucoma follow-up coordination summary.", "high", 1),
+)
+
+
+def _ensure_glaucoma_tracking_for_phase_24c(
+    conn, *, org_id: int, patient_id: int, encounter_id: int, user_id: int
+) -> int:
+    row = conn.execute(
+        text(
+            "SELECT id FROM glaucoma_tracking "
+            "WHERE organization_id = :org AND patient_id = :pid "
+            "AND encounter_id = :eid AND eye = :eye"
+        ),
+        {"org": org_id, "pid": patient_id, "eid": encounter_id, "eye": "OU"},
+    ).mappings().first()
+    payload = {
+        "glaucoma_type": "Open-angle glaucoma monitoring (provider-entered)",
+        "target_iop": 18.0,
+        "latest_iop": 19.0,
+        "cup_to_disc_ratio": 0.65,
+        "rnfl_status": "Metadata captured for provider review; no device interpretation by ChartNav.",
+        "visual_field_status": "Provider-entered visual field summary pending review.",
+        "medication_plan": "Existing provider-entered plan on file; ChartNav does not recommend medications.",
+        "progression_risk_label": "provider-entered monitoring label",
+        "provider_assessment": (
+            "Provider-reviewed glaucoma monitoring note. ChartNav stores structured "
+            "coordination fields and does not diagnose glaucoma, interpret visual "
+            "fields, recommend treatment, or send patient messages."
+        ),
+        "review_status": "needs_review",
+        "created_by_user_id": user_id,
+    }
+    if row:
+        conn.execute(
+            text(
+                "UPDATE glaucoma_tracking SET "
+                "glaucoma_type = :glaucoma_type, target_iop = :target_iop, "
+                "latest_iop = :latest_iop, cup_to_disc_ratio = :cup_to_disc_ratio, "
+                "rnfl_status = :rnfl_status, visual_field_status = :visual_field_status, "
+                "medication_plan = :medication_plan, progression_risk_label = :progression_risk_label, "
+                "provider_assessment = :provider_assessment, review_status = :review_status, "
+                "updated_at = CURRENT_TIMESTAMP WHERE id = :id"
+            ),
+            {"id": int(row["id"]), **payload},
+        )
+        return int(row["id"])
+    return insert_returning_id(
+        conn,
+        "glaucoma_tracking",
+        {
+            "organization_id": org_id,
+            "patient_id": patient_id,
+            "encounter_id": encounter_id,
+            "eye": "OU",
+            **payload,
+        },
+    )
+
+
+def _ensure_glaucoma_iop_for_phase_24c(
+    conn, *, org_id: int, patient_id: int, encounter_id: int, user_id: int, eye: str, iop_value: float
+) -> int:
+    row = conn.execute(
+        text(
+            "SELECT id FROM glaucoma_iop_measurements "
+            "WHERE organization_id = :org AND patient_id = :pid "
+            "AND encounter_id = :eid AND eye = :eye AND iop_value = :value"
+        ),
+        {"org": org_id, "pid": patient_id, "eid": encounter_id, "eye": eye, "value": iop_value},
+    ).mappings().first()
+    if row:
+        return int(row["id"])
+    return insert_returning_id(
+        conn,
+        "glaucoma_iop_measurements",
+        {
+            "organization_id": org_id,
+            "patient_id": patient_id,
+            "encounter_id": encounter_id,
+            "eye": eye,
+            "iop_value": iop_value,
+            "measured_at": None,
+            "method": "Goldmann applanation metadata (provider-entered)",
+            "created_by_user_id": user_id,
+        },
+    )
+
+
+def _ensure_glaucoma_visual_field_for_phase_24c(
+    conn, *, org_id: int, patient_id: int, encounter_id: int, user_id: int, eye: str
+) -> int:
+    row = conn.execute(
+        text(
+            "SELECT id FROM glaucoma_visual_field_tests "
+            "WHERE organization_id = :org AND patient_id = :pid "
+            "AND encounter_id = :eid AND eye = :eye AND test_type = :test_type"
+        ),
+        {"org": org_id, "pid": patient_id, "eid": encounter_id, "eye": eye, "test_type": "24-2 threshold metadata"},
+    ).mappings().first()
+    if row:
+        return int(row["id"])
+    return insert_returning_id(
+        conn,
+        "glaucoma_visual_field_tests",
+        {
+            "organization_id": org_id,
+            "patient_id": patient_id,
+            "encounter_id": encounter_id,
+            "eye": eye,
+            "test_type": "24-2 threshold metadata",
+            "performed_at": None,
+            "result_summary": "Provider-entered test summary only; ChartNav does not interpret visual fields.",
+            "reliability": "provider-entered",
+            "progression_flag": "pending provider review",
+            "created_by_user_id": user_id,
+        },
+    )
+
+
+def _seed_phase_24c_glaucoma_wedge(
+    conn,
+    *,
+    org_id: int,
+    location_id: int,
+    patient_id: int,
+    encounter_id: int,
+    provider_id: int,
+    admin_user_id: int,
+) -> dict[str, int]:
+    """Seed a lightweight second-specialty proof using the existing queue engine."""
+    counts: dict[str, int] = {"queue_items": 0, "iop_measurements": 0, "visual_field_tests": 0}
+    assignee_by_role = {
+        "technician": _user_id_for_org_role(conn, org_id, "technician"),
+        "clinician": _user_id_for_org_role(conn, org_id, "clinician"),
+    }
+
+    for qt, st, role, title, prio, due_offset in _PHASE_24C_GLAUCOMA_LANE:
+        _ensure_wedge_queue_item(
+            conn,
+            org_id=org_id,
+            patient_id=patient_id,
+            encounter_id=encounter_id,
+            provider_id=provider_id,
+            location_id=location_id,
+            queue_type=qt,
+            status=st,
+            assigned_role=role,
+            assigned_user_id=assignee_by_role.get(role),
+            payload_title=title,
+            priority=prio,
+            source="phase_24c_glaucoma_wedge",
+            due_days_offset=due_offset,
+        )
+        counts["queue_items"] += 1
+
+    counts["glaucoma_tracking_id"] = _ensure_glaucoma_tracking_for_phase_24c(
+        conn, org_id=org_id, patient_id=patient_id, encounter_id=encounter_id, user_id=admin_user_id
+    )
+    for eye, value in (("OD", 19.0), ("OS", 18.0)):
+        _ensure_glaucoma_iop_for_phase_24c(
+            conn, org_id=org_id, patient_id=patient_id, encounter_id=encounter_id, user_id=admin_user_id, eye=eye, iop_value=value
+        )
+        counts["iop_measurements"] += 1
+        _ensure_glaucoma_visual_field_for_phase_24c(
+            conn, org_id=org_id, patient_id=patient_id, encounter_id=encounter_id, user_id=admin_user_id, eye=eye
+        )
+        counts["visual_field_tests"] += 1
+
+    return counts
+
+
 def _user_id_for_org_role(conn, org_id: int, role: str) -> int | None:
     row = conn.execute(
         text(
@@ -721,6 +955,8 @@ def main() -> None:
 
             wedge_enc_id: int | None = None
             wedge_provider_id: int | None = None
+            phase24c_glaucoma_enc_id: int | None = None
+            phase24c_glaucoma_provider_id: int | None = None
             for enc_fx in org_fx["encounters"]:
                 enc_id = _get_or_create_encounter(
                     conn, org_id, loc_id, enc_fx,
@@ -735,6 +971,12 @@ def main() -> None:
                 ):
                     wedge_enc_id = enc_id
                     wedge_provider_id = provider_ids.get(enc_fx["provider_name"])
+                if (
+                    org_fx["slug"] == "demo-eye-clinic"
+                    and enc_fx.get("patient_identifier") == "PT-1002"
+                ):
+                    phase24c_glaucoma_enc_id = enc_id
+                    phase24c_glaucoma_provider_id = provider_ids.get(enc_fx["provider_name"])
 
             # Phase 24B — seed the Morgan Lee retina follow-up wedge
             # (work queue items, retina tracking, OCT + fundus imaging
@@ -758,12 +1000,37 @@ def main() -> None:
                     admin_user_id=admin_uid or 0,
                 )
                 summary.append(("phase_24b_wedge", org_id, wedge_counts))
+
+            # Phase 24C — controlled post-24B second-specialty proof.
+            # Uses Jordan Rivera's existing fake glaucoma encounter to prove
+            # the same workflow queue and specialty-tracking architecture can
+            # support another ophthalmology lane without adding clinical
+            # decisioning, orders, billing, messaging, or device interpretation.
+            if (
+                _phase_24c_enabled()
+                and org_fx["slug"] == "demo-eye-clinic"
+                and phase24c_glaucoma_enc_id is not None
+                and phase24c_glaucoma_provider_id is not None
+            ):
+                admin_uid = _admin_user_id_for_org(conn, org_id)
+                phase24c_counts = _seed_phase_24c_glaucoma_wedge(
+                    conn,
+                    org_id=org_id,
+                    location_id=loc_id,
+                    patient_id=patient_ids["PT-1002"],
+                    encounter_id=phase24c_glaucoma_enc_id,
+                    provider_id=phase24c_glaucoma_provider_id,
+                    admin_user_id=admin_uid or 0,
+                )
+                summary.append(("phase_24c_glaucoma_wedge", org_id, phase24c_counts))
             summary.append((org_fx["slug"], org_id, loc_id))
 
     print("Seed complete.")
     for item in summary:
         if item[0] == "phase_24b_wedge":
             print(f"  phase_24b_wedge: organization_id={item[1]} {item[2]}")
+        elif item[0] == "phase_24c_glaucoma_wedge":
+            print(f"  phase_24c_glaucoma_wedge: organization_id={item[1]} {item[2]}")
         else:
             slug, org_id, loc_id = item
             print(f"  {slug}: organization_id={org_id} location_id={loc_id}")

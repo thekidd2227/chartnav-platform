@@ -3720,6 +3720,12 @@ export interface MultiClinicSummary {
   queue_by_priority: Record<string, number>;
   queue_by_assigned_role: Record<string, number>;
   queue_by_queue_type: Record<string, number>;
+  queue_by_source?: Record<string, number>;
+  open_queue_by_assigned_role?: Record<string, number>;
+  open_queue_by_assigned_user?: Record<string, number>;
+  stale_queue_by_assigned_role?: Record<string, number>;
+  stale_queue_items?: number;
+  due_today_queue_items?: number;
 }
 
 export interface MultiClinicListResponse<T> {

@@ -558,6 +558,12 @@ class TestDashboards:
         assert isinstance(body["providers"], list)
         assert isinstance(body["queue_by_status"], dict)
         assert isinstance(body["queue_by_queue_type"], dict)
+        assert isinstance(body["queue_by_source"], dict)
+        assert isinstance(body["open_queue_by_assigned_role"], dict)
+        assert isinstance(body["open_queue_by_assigned_user"], dict)
+        assert isinstance(body["stale_queue_by_assigned_role"], dict)
+        assert body["stale_queue_items"] >= 0
+        assert body["due_today_queue_items"] >= 0
         # No PHI text.
         assert "payload_json" not in body
 
@@ -585,6 +591,27 @@ class TestDashboards:
         org2_loc = seeded_ids["locs_by_org"][seeded_ids["orgs"]["northside-retina"]]
         location_ids = [loc["location_id"] for loc in body["locations"]]
         assert location_ids == [org2_loc]
+
+    def test_admin_summary_phase_24c_wedge_visibility(self, test_db_with_wedge):
+        """Phase 24C admin ops rollup is asserted only on the wedge-enabled fixture."""
+        from fastapi.testclient import TestClient
+
+        from tests.conftest import _reload_app_modules
+
+        _reload_app_modules()
+        from app.main import app
+
+        client = TestClient(app)
+        r = client.get("/admin/multi-clinic-summary", headers=ADMIN1)
+        assert r.status_code == 200
+        body = r.json()
+        assert body["queue_by_source"].get("phase_24b_wedge", 0) >= 7
+        assert body["queue_by_source"].get("phase_24c_glaucoma_wedge", 0) >= 2
+        assert body["open_queue_by_assigned_user"].get("tech@chartnav.local", 0) >= 1
+        assert body["open_queue_by_assigned_user"].get("clin@chartnav.local", 0) >= 1
+        assert body["stale_queue_items"] >= 1
+        assert body["due_today_queue_items"] >= 0
+        assert body["stale_queue_by_assigned_role"].get("technician", 0) >= 1
 
 
 # =====================================================================
