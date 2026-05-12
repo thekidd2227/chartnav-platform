@@ -376,6 +376,7 @@ def _ensure_wedge_queue_item(
     assigned_role: str,
     payload_title: str,
     priority: str,
+    assigned_user_id: int | None = None,
 ) -> int:
     """Idempotent insert keyed on (org, patient, encounter, queue_type)."""
     row = conn.execute(
@@ -409,6 +410,7 @@ def _ensure_wedge_queue_item(
             "priority": priority,
             "status": status,
             "assigned_role": assigned_role,
+            "assigned_user_id": assigned_user_id,
             "source": "phase_24b_wedge",
             "payload_json": payload,
         },
@@ -588,6 +590,12 @@ def _seed_phase_24b_retina_wedge(
     """
     counts: dict[str, int] = {"queue_items": 0, "imaging_files": 0}
 
+    assignee_by_role = {
+        "front_desk": _user_id_for_org_role(conn, org_id, "front_desk"),
+        "technician": _user_id_for_org_role(conn, org_id, "technician"),
+        "clinician": _user_id_for_org_role(conn, org_id, "clinician"),
+    }
+
     for qt, st, role, title, prio in _WEDGE_QUEUE_LANE:
         _ensure_wedge_queue_item(
             conn,
@@ -599,6 +607,7 @@ def _seed_phase_24b_retina_wedge(
             queue_type=qt,
             status=st,
             assigned_role=role,
+            assigned_user_id=assignee_by_role.get(role),
             payload_title=title,
             priority=prio,
         )
@@ -676,15 +685,19 @@ def _seed_phase_24b_retina_wedge(
     return counts
 
 
-def _admin_user_id_for_org(conn, org_id: int) -> int | None:
+def _user_id_for_org_role(conn, org_id: int, role: str) -> int | None:
     row = conn.execute(
         text(
             "SELECT id FROM users WHERE organization_id = :org "
-            "AND role = 'admin' ORDER BY id LIMIT 1"
+            "AND role = :role ORDER BY id LIMIT 1"
         ),
-        {"org": org_id},
+        {"org": org_id, "role": role},
     ).mappings().first()
     return int(row["id"]) if row else None
+
+
+def _admin_user_id_for_org(conn, org_id: int) -> int | None:
+    return _user_id_for_org_role(conn, org_id, "admin")
 
 
 def main() -> None:

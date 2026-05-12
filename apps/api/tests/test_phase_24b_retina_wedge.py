@@ -142,6 +142,36 @@ class TestSeedPresence:
         # one role at a time.
         assert all(r["status"] == "open" for r in rows)
 
+    def test_queue_items_are_assigned_to_dashboard_users(self, test_db):
+        conn = sqlite3.connect(test_db)
+        conn.row_factory = sqlite3.Row
+        try:
+            org = conn.execute(
+                "SELECT id FROM organizations WHERE slug = 'demo-eye-clinic'"
+            ).fetchone()
+            users = {
+                row["role"]: row["id"]
+                for row in conn.execute(
+                    "SELECT id, role FROM users WHERE organization_id = :org "
+                    "AND role IN ('front_desk', 'technician', 'clinician')",
+                    {"org": org["id"]},
+                ).fetchall()
+            }
+            rows = conn.execute(
+                "SELECT queue_type, assigned_role, assigned_user_id "
+                "FROM work_queue_items WHERE source = 'phase_24b_wedge' "
+                "ORDER BY id"
+            ).fetchall()
+        finally:
+            conn.close()
+
+        assert users["front_desk"]
+        assert users["technician"]
+        assert users["clinician"]
+        assert len(rows) == 7
+        for row in rows:
+            assert row["assigned_user_id"] == users[row["assigned_role"]]
+
     def test_retina_tracking_row_exists(self, test_db):
         ids = _morgan_lee_ids(test_db)
         conn = sqlite3.connect(test_db)
