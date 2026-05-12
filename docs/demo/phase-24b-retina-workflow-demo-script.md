@@ -293,3 +293,11 @@ Backend authoritative test:
 The wedge is fully idempotent — running step 3 a second time
 must not duplicate any of the seven seeded queue rows, the
 retina row, or the imaging studies/files.
+
+---
+
+## Phase 24C addendum
+
+After completing the Phase 24B Morgan Lee walkthrough, use `phase-24c-demo-hardening-product-wedge-expansion.md` for the controlled post-24B operator segment. The addendum covers the Retina Workflow v2 preservation proof, the deterministic glaucoma second-specialty proof, and the Admin/Ops Dashboard queue-aging and workload visibility proof.
+
+The Phase 24C addendum does **not** change the clinical-safety boundary for this demo. Keep narration limited to workflow coordination, staff routing, operational visibility, deterministic fake data, and provider-reviewed context. Do not claim diagnosis, treatment recommendation, autonomous decisioning, patient messaging, billing, orders, or device interpretation.

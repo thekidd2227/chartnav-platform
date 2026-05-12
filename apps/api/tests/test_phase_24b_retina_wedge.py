@@ -252,6 +252,76 @@ class TestSeedPresence:
         assert "follow-up" in (r["title"] or "").lower()
 
 
+class TestPhase24CGlaucomaSeed:
+    def test_glaucoma_second_specialty_rows_exist(self, test_db):
+        conn = sqlite3.connect(test_db)
+        conn.row_factory = sqlite3.Row
+        try:
+            org = conn.execute(
+                "SELECT id FROM organizations WHERE slug = 'demo-eye-clinic'"
+            ).fetchone()
+            patient = conn.execute(
+                "SELECT id FROM patients WHERE patient_identifier = 'PT-1002' "
+                "AND organization_id = :org",
+                {"org": org["id"]},
+            ).fetchone()
+            encounter = conn.execute(
+                "SELECT id FROM encounters WHERE patient_id = :pid",
+                {"pid": patient["id"]},
+            ).fetchone()
+            tracking = conn.execute(
+                "SELECT * FROM glaucoma_tracking "
+                "WHERE organization_id = :org AND patient_id = :pid "
+                "AND encounter_id = :eid",
+                {"org": org["id"], "pid": patient["id"], "eid": encounter["id"]},
+            ).fetchall()
+            iop_rows = conn.execute(
+                "SELECT eye, iop_value FROM glaucoma_iop_measurements "
+                "WHERE organization_id = :org AND patient_id = :pid "
+                "AND encounter_id = :eid ORDER BY eye",
+                {"org": org["id"], "pid": patient["id"], "eid": encounter["id"]},
+            ).fetchall()
+            vf_rows = conn.execute(
+                "SELECT eye, test_type FROM glaucoma_visual_field_tests "
+                "WHERE organization_id = :org AND patient_id = :pid "
+                "AND encounter_id = :eid ORDER BY eye",
+                {"org": org["id"], "pid": patient["id"], "eid": encounter["id"]},
+            ).fetchall()
+        finally:
+            conn.close()
+
+        assert len(tracking) == 1
+        assert tracking[0]["review_status"] == "needs_review"
+        assert len(iop_rows) == 2
+        assert [(r["eye"], float(r["iop_value"])) for r in iop_rows] == [("OD", 19.0), ("OS", 18.0)]
+        assert len(vf_rows) == 2
+        assert {r["eye"] for r in vf_rows} == {"OD", "OS"}
+
+    def test_phase24c_queue_items_are_assigned_and_aged_for_ops_dashboard(self, test_db):
+        conn = sqlite3.connect(test_db)
+        conn.row_factory = sqlite3.Row
+        try:
+            rows = conn.execute(
+                "SELECT w.queue_type, w.priority, w.assigned_role, u.email, "
+                "w.due_at, w.source "
+                "FROM work_queue_items w "
+                "LEFT JOIN users u ON u.id = w.assigned_user_id "
+                "WHERE w.source = 'phase_24c_glaucoma_wedge' "
+                "ORDER BY w.queue_type"
+            ).fetchall()
+        finally:
+            conn.close()
+
+        assert len(rows) == 2
+        by_type = {r["queue_type"]: r for r in rows}
+        assert by_type["glaucoma_testing_review"]["assigned_role"] == "technician"
+        assert by_type["glaucoma_testing_review"]["email"] == "tech@chartnav.local"
+        assert by_type["glaucoma_testing_review"]["due_at"] is not None
+        assert by_type["glaucoma_provider_review"]["assigned_role"] == "clinician"
+        assert by_type["glaucoma_provider_review"]["email"] == "clin@chartnav.local"
+        assert by_type["glaucoma_provider_review"]["priority"] == "high"
+
+
 # =====================================================================
 # Role dashboard reflection
 # =====================================================================

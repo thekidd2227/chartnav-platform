@@ -1153,6 +1153,61 @@ def admin_multi_clinic_summary(
             out[str(key)] = int(r["c"])
         return out
 
+    def _open_group_by_user() -> dict[str, int]:
+        rows = fetch_all(
+            "SELECT COALESCE(u.email, 'unassigned') AS k, COUNT(*) AS c "
+            "FROM work_queue_items w "
+            "LEFT JOIN users u ON u.id = w.assigned_user_id "
+            "WHERE w.organization_id = :org "
+            "AND w.status IN ('open','in_progress','blocked') "
+            "GROUP BY k ORDER BY c DESC, k",
+            {"org": org},
+        )
+        return {str(r["k"]): int(r["c"]) for r in rows}
+
+    def _open_group_by_role() -> dict[str, int]:
+        rows = fetch_all(
+            "SELECT COALESCE(assigned_role, 'unassigned') AS k, COUNT(*) AS c "
+            "FROM work_queue_items "
+            "WHERE organization_id = :org "
+            "AND status IN ('open','in_progress','blocked') "
+            "GROUP BY k ORDER BY c DESC, k",
+            {"org": org},
+        )
+        return {str(r["k"]): int(r["c"]) for r in rows}
+
+    def _stale_group_by_role() -> dict[str, int]:
+        rows = fetch_all(
+            "SELECT COALESCE(assigned_role, 'unassigned') AS k, COUNT(*) AS c "
+            "FROM work_queue_items "
+            "WHERE organization_id = :org "
+            "AND status IN ('open','in_progress','blocked') "
+            "AND due_at IS NOT NULL AND due_at < CURRENT_TIMESTAMP "
+            "GROUP BY k ORDER BY c DESC, k",
+            {"org": org},
+        )
+        return {str(r["k"]): int(r["c"]) for r in rows}
+
+    stale_queue_items = int(
+        (fetch_one(
+            "SELECT COUNT(*) AS c FROM work_queue_items "
+            "WHERE organization_id = :org "
+            "AND status IN ('open','in_progress','blocked') "
+            "AND due_at IS NOT NULL AND due_at < CURRENT_TIMESTAMP",
+            {"org": org},
+        ) or {"c": 0})["c"]
+    )
+    due_today_queue_items = int(
+        (fetch_one(
+            "SELECT COUNT(*) AS c FROM work_queue_items "
+            "WHERE organization_id = :org "
+            "AND status IN ('open','in_progress','blocked') "
+            "AND due_at IS NOT NULL "
+            "AND DATE(due_at) = DATE(CURRENT_TIMESTAMP)",
+            {"org": org},
+        ) or {"c": 0})["c"]
+    )
+
     return {
         "organization_id": org,
         "locations": location_summaries,
@@ -1161,4 +1216,10 @@ def admin_multi_clinic_summary(
         "queue_by_priority": _group("priority"),
         "queue_by_assigned_role": _group("assigned_role"),
         "queue_by_queue_type": _group("queue_type"),
+        "queue_by_source": _group("source"),
+        "open_queue_by_assigned_role": _open_group_by_role(),
+        "open_queue_by_assigned_user": _open_group_by_user(),
+        "stale_queue_by_assigned_role": _stale_group_by_role(),
+        "stale_queue_items": stale_queue_items,
+        "due_today_queue_items": due_today_queue_items,
     }
