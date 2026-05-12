@@ -34,12 +34,18 @@ def _reload_app_modules() -> None:
             del sys.modules[name]
 
 
-@pytest.fixture()
-def test_db(tmp_path, monkeypatch):
+def _build_test_db(tmp_path, monkeypatch, *, seed_wedge: bool):
     db_path = tmp_path / "chartnav.db"
     url = f"sqlite:///{db_path}"
     monkeypatch.setenv("DATABASE_URL", url)
     monkeypatch.setenv("CHARTNAV_AUTH_MODE", "header")
+    # Phase 24B wedge gate. Existing Phase 20B / 20C dashboard tests
+    # assert absolute lane counts and assume an empty baseline; the
+    # wedge would add 7 rows that break those assertions. The Phase
+    # 24B test file overrides `test_db` with `test_db_with_wedge`.
+    monkeypatch.setenv(
+        "CHARTNAV_SEED_PHASE_24B_WEDGE", "1" if seed_wedge else "0"
+    )
     # Any JWT env left over from the host should not bleed into tests.
     for k in ("CHARTNAV_JWT_ISSUER", "CHARTNAV_JWT_AUDIENCE", "CHARTNAV_JWT_JWKS_URL"):
         monkeypatch.delenv(k, raising=False)
@@ -62,6 +68,16 @@ def test_db(tmp_path, monkeypatch):
     scripts_seed.main()
 
     return db_path
+
+
+@pytest.fixture()
+def test_db(tmp_path, monkeypatch):
+    return _build_test_db(tmp_path, monkeypatch, seed_wedge=False)
+
+
+@pytest.fixture()
+def test_db_with_wedge(tmp_path, monkeypatch):
+    return _build_test_db(tmp_path, monkeypatch, seed_wedge=True)
 
 
 @pytest.fixture()
