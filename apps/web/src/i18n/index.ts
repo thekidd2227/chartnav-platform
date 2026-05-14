@@ -17,11 +17,13 @@
 // page) and one user surface. Shipping a heavyweight i18n runtime
 // would increase the public bundle for ~50 strings of copy.
 
+import { APP_EN } from "./app.en";
+import { APP_ES } from "./app.es";
 import { LANDING_EN } from "./landing.en";
 import { LANDING_ES } from "./landing.es";
-import type { Language, LandingCopy } from "./types";
+import type { AppCopy, Language, LandingCopy } from "./types";
 
-export type { Language, LandingCopy } from "./types";
+export type { AppCopy, Language, LandingCopy } from "./types";
 
 export const SUPPORTED_LANGUAGES: { code: Language; label: string }[] = [
   { code: "en", label: "English" },
@@ -94,6 +96,13 @@ export function persistLanguage(lang: Language): void {
 
 export function getLandingCopy(lang: Language): LandingCopy {
   return lang === "es" ? LANDING_ES : LANDING_EN;
+}
+
+/** Phase A — authenticated workspace chrome copy. Larger panels
+ *  (RoleDashboard, NoteWorkspace, AdminPanel, etc.) will get their
+ *  own typed slices in Phase B/C. */
+export function getAppCopy(lang: Language): AppCopy {
+  return lang === "es" ? APP_ES : APP_EN;
 }
 
 /**

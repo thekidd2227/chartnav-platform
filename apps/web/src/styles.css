@@ -3535,3 +3535,44 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
 }
 .production-readiness__specialty-label { font-size: 12px; color: #5b7079; }
 .production-readiness__specialty-count { font-size: 18px; font-weight: 700; color: #0B6E79; }
+
+/* ===== Phase A — language switcher in the authenticated top bar ===== */
+.app-lang-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: #fff;
+  border: 1px solid rgba(11, 110, 121, 0.18);
+  border-radius: 999px;
+}
+.app-lang-switcher__option {
+  appearance: none;
+  background: transparent;
+  color: #0B6E79;
+  border: 0;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 999px;
+  cursor: pointer;
+  line-height: 1;
+}
+.app-lang-switcher__option:hover,
+.app-lang-switcher__option:focus-visible {
+  background: rgba(11, 110, 121, 0.1);
+  outline: none;
+}
+.app-lang-switcher__option:focus-visible {
+  box-shadow: 0 0 0 2px rgba(11, 110, 121, 0.35);
+}
+.app-lang-switcher__option--active {
+  background: #0B6E79;
+  color: #fff;
+}
+.app-lang-switcher__option--active:hover,
+.app-lang-switcher__option--active:focus-visible {
+  background: #0B6E79;
+  color: #fff;
+}
