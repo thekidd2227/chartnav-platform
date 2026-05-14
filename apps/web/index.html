@@ -28,6 +28,31 @@
       name="twitter:description"
       content="Ophthalmology clinic workflow layer. Provider-controlled. Not a certified EHR."
     />
+    <!--
+      Spanish localization (apps/web/src/i18n). The landing page's
+      React component updates `<title>` and `<meta name="description">`
+      at runtime when the active language is Spanish; these
+      `hreflang` alternates declare the available language variants
+      for SEO crawlers. Language is selected via `?lang=es` /
+      `?lang=en` (or `/es/landing` if the deploy ever route-prefixes
+      languages). Both URLs resolve to the same public landing page
+      today; the React app reads the language client-side.
+    -->
+    <link
+      rel="alternate"
+      hreflang="en"
+      href="https://www.chartnavmd.com/landing"
+    />
+    <link
+      rel="alternate"
+      hreflang="es"
+      href="https://www.chartnavmd.com/landing?lang=es"
+    />
+    <link
+      rel="alternate"
+      hreflang="x-default"
+      href="https://www.chartnavmd.com/landing"
+    />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
