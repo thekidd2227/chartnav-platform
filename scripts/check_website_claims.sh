@@ -3,16 +3,19 @@
 # claims verifier.
 #
 # What it does:
-#   1. confirms apps/web/src/LandingPage.tsx exists and contains
-#      the required negative-assertion safety phrasing;
+#   1. confirms apps/web/src/LandingPage.tsx exists and that the
+#      i18n locale source files (en + es) exist;
 #   2. confirms main.tsx wires the /landing and ?intro=1 gate;
-#   3. greps the LandingPage source for forbidden positive claims
-#      (the vitest suite at apps/web/src/test/WebsiteProofUpgrade
-#      is authoritative — this script is a lightweight pre-deploy
+#   3. greps the English locale source for the required negative-
+#      assertion safety phrasing;
+#   4. greps both the English and Spanish locale sources for
+#      forbidden positive claims (the vitest suite at
+#      apps/web/src/test/WebsiteProofUpgrade.test.tsx is
+#      authoritative — this script is a lightweight pre-deploy
 #      sanity check);
-#   4. confirms no binary media is checked in under apps/web/public
+#   5. confirms no binary media is checked in under apps/web/public
 #      beyond the small SVG brand assets that already shipped;
-#   5. prints the current git SHA + a short reminder.
+#   6. prints the current git SHA + a short reminder.
 #
 # Usage:
 #   bash scripts/check_website_claims.sh
@@ -29,6 +32,9 @@ cd "$REPO_ROOT"
 
 LANDING="apps/web/src/LandingPage.tsx"
 ROUTER="apps/web/src/main.tsx"
+LANDING_EN_COPY="apps/web/src/i18n/landing.en.ts"
+LANDING_ES_COPY="apps/web/src/i18n/landing.es.ts"
+I18N_INDEX="apps/web/src/i18n/index.ts"
 
 fail_count=0
 warn_count=0
@@ -38,7 +44,13 @@ echo
 
 # 1. Required files exist.
 echo "1. Required files"
-for f in "$LANDING" "$ROUTER" "apps/web/src/test/WebsiteProofUpgrade.test.tsx"; do
+for f in \
+  "$LANDING" \
+  "$ROUTER" \
+  "$LANDING_EN_COPY" \
+  "$LANDING_ES_COPY" \
+  "$I18N_INDEX" \
+  "apps/web/src/test/WebsiteProofUpgrade.test.tsx"; do
   if [ ! -f "$f" ]; then
     echo "   MISSING: $f"
     fail_count=$((fail_count + 1))
@@ -62,15 +74,15 @@ if [ -f "$ROUTER" ]; then
 fi
 echo
 
-# 3. Required negative-assertion phrasing.
+# 3. Required negative-assertion phrasing — English locale.
 #
 # Phase 24A — required-phrase list updated to match the
-# ophthalmology-specific non-goals block. The landing page must
-# include explicit negative assertions across: EHR replacement,
+# ophthalmology-specific non-goals block. The English locale source
+# must include explicit negative assertions across: EHR replacement,
 # HIPAA-certified, autonomous diagnosis, OCT interpretation,
 # IOL power selection, real-PHI gate, patient messaging.
-echo "3. Negative-assertion phrasing on LandingPage"
-if [ -f "$LANDING" ]; then
+echo "3. Negative-assertion phrasing (English locale)"
+if [ -f "$LANDING_EN_COPY" ]; then
   for phrase in \
     "Provider-reviewed workflow support" \
     "does not diagnose" \
@@ -81,20 +93,45 @@ if [ -f "$LANDING" ]; then
     "Does not autofill IOP" \
     "Does not interpret OCT" \
     "Real-PHI pilot requires BAA"; do
-    if grep -Eq "$phrase" "$LANDING"; then
+    if grep -Eq "$phrase" "$LANDING_EN_COPY"; then
       echo "   ok       $phrase"
     else
-      echo "   FAIL — missing phrase: $phrase"
+      echo "   FAIL — missing phrase (en): $phrase"
       fail_count=$((fail_count + 1))
     fi
   done
 fi
 echo
 
-# 4. Forbidden positive claims.
-echo "4. Forbidden positive claims (vitest is authoritative)"
-# Only flag a match if the line is not clearly negative-context
-# (does not / not / never / "Not a/an" prefix).
+# 3b. Required negative-assertion phrasing — Spanish locale.
+#
+# The Spanish copy must mirror the English non-goals block. Required
+# phrases come from the style guide at
+# docs/website/chartnav-spanish-localization-style-guide.md.
+echo "3b. Negative-assertion phrasing (Spanish locale)"
+if [ -f "$LANDING_ES_COPY" ]; then
+  for phrase in \
+    "Soporte de flujo de trabajo revisado por el proveedor" \
+    "no diagnostica" \
+    "No es un EHR certificado" \
+    "No cuenta con certificación HIPAA" \
+    "No realiza diagnóstico autónomo" \
+    "No completa automáticamente la PIO" \
+    "No interpreta exámenes de OCT" \
+    "Un piloto con PHI real" \
+    "requiere BAA"; do
+    if grep -Eq "$phrase" "$LANDING_ES_COPY"; then
+      echo "   ok       $phrase"
+    else
+      echo "   FAIL — missing phrase (es): $phrase"
+      fail_count=$((fail_count + 1))
+    fi
+  done
+fi
+echo
+
+# 4. Forbidden positive claims — English locale.
+echo "4. Forbidden positive claims — English locale"
 forbidden_positive=(
   "HIPAA[- ]compliant"
   "HIPAA[- ]certified"
@@ -113,7 +150,7 @@ forbidden_capability_positive=(
   "send patient message"
   "replaces a doctor"
 )
-if [ -f "$LANDING" ]; then
+if [ -f "$LANDING_EN_COPY" ]; then
   # Phase 24A — compliance claims now use the same negative-context
   # guard as capability claims. The landing page intentionally
   # includes "Not HIPAA-certified" + "Not a certified EHR" as
@@ -124,10 +161,10 @@ if [ -f "$LANDING" ]; then
       if printf '%s' "$lower" | grep -Eq "(does not|never|\\bnot\\s|not approved)"; then
         continue
       fi
-      echo "   FAIL — forbidden compliance claim: $pattern"
+      echo "   FAIL — forbidden compliance claim (en): $pattern"
       echo "          $line"
       fail_count=$((fail_count + 1))
-    done < <(grep -i "$pattern" "$LANDING" || true)
+    done < <(grep -i "$pattern" "$LANDING_EN_COPY" || true)
   done
   for pattern in "${forbidden_capability_positive[@]}"; do
     while IFS= read -r line; do
@@ -135,13 +172,93 @@ if [ -f "$LANDING" ]; then
       if printf '%s' "$lower" | grep -Eq "(does not|never|\\bnot\\s)"; then
         continue
       fi
-      echo "   warn — '$pattern' found outside obvious negative context: $line"
+      echo "   warn — '$pattern' (en) found outside obvious negative context: $line"
       warn_count=$((warn_count + 1))
-    done < <(grep -i "$pattern" "$LANDING" || true)
+    done < <(grep -i "$pattern" "$LANDING_EN_COPY" || true)
+  done
+fi
+echo
+
+# 4b. Forbidden positive claims — Spanish locale.
+#
+# Same claim discipline as the English locale: every phrase below
+# is allowed only inside an explicit negative-context line. The
+# negative-context regex captures "no <verb>", "no es", "no cuenta",
+# "no realiza", "no completa", "no interpreta", "no selecciona",
+# "no coloca", "no envía", "no presenta", "no procesa",
+# "no automatiza", "no reemplaza", "nunca", "sin", "prohibido",
+# "banned", and the Spanish negation contractions where they apply.
+echo "4b. Forbidden positive claims — Spanish locale"
+forbidden_positive_es=(
+  "cumple con HIPAA"
+  "certificación HIPAA"
+  "certificado HIPAA"
+  "PHI real listo"
+  "información médica protegida real lista"
+  "datos reales de pacientes listo"
+)
+forbidden_capability_positive_es=(
+  "EHR certificado"
+  "diagnóstico autónomo"
+  "diagnóstico automático"
+  "interpretación autónoma de imágenes"
+  "interpretación automática de imágenes"
+  "interpretación automática de OCT"
+  "calificación automática de retinopatía"
+  "recomendaciones de tratamiento"
+  "recomienda anti-VEGF"
+  "selecciona potencia de lente intraocular"
+  "órdenes automáticas"
+  "referencias automáticas"
+  "mensajes automáticos al paciente"
+  "mensajería al paciente"
+  "codificación automática"
+  "facturación automática"
+  "envío de reclamaciones"
+  "presentación de reclamaciones"
+  "procesamiento de seguros"
+  "gestión de seguros"
+  "integración con dispositivos"
+  "DICOM"
+  "la nota se escribe sola"
+  "la historia clínica se completa sola"
+  "manos libres"
+  "reemplaza su EHR"
+  "reemplaza el EHR"
+  "reemplaza su EMR"
+  "reemplaza el EMR"
+)
+# Spanish negative-context regex. Permissive on purpose because the
+# Spanish non-goals block uses many distinct verbs ("no diagnostica",
+# "no interpreta", "no coloca", "no envía", "no automatiza",
+# "no es un", "no cuenta con", "no realiza", "no selecciona").
+NEG_CTX_ES='(no es |no cuenta |no realiza |no completa |no interpreta |no selecciona |no coloca |no envía |no presenta |no procesa |no automatiza |no reemplaza |no diagnostica|no factura|no gestiona|nunca|sin |prohibido|banned|forbidden|\bno [a-záéíóú])'
+if [ -f "$LANDING_ES_COPY" ]; then
+  for pattern in "${forbidden_positive_es[@]}"; do
+    while IFS= read -r line; do
+      lower="$(printf '%s' "$line" | tr 'A-Z' 'a-z')"
+      if printf '%s' "$lower" | grep -Eq "$NEG_CTX_ES"; then
+        continue
+      fi
+      echo "   FAIL — forbidden compliance claim (es): $pattern"
+      echo "          $line"
+      fail_count=$((fail_count + 1))
+    done < <(grep -i "$pattern" "$LANDING_ES_COPY" || true)
+  done
+  for pattern in "${forbidden_capability_positive_es[@]}"; do
+    while IFS= read -r line; do
+      lower="$(printf '%s' "$line" | tr 'A-Z' 'a-z')"
+      if printf '%s' "$lower" | grep -Eq "$NEG_CTX_ES"; then
+        continue
+      fi
+      echo "   FAIL — forbidden capability claim (es): $pattern"
+      echo "          $line"
+      fail_count=$((fail_count + 1))
+    done < <(grep -i "$pattern" "$LANDING_ES_COPY" || true)
   done
 fi
 if [ "$fail_count" -eq 0 ] && [ "$warn_count" -eq 0 ]; then
-  echo "   ok — no forbidden positive claims detected."
+  echo "   ok — no forbidden positive claims detected (en + es)."
 fi
 echo
 
@@ -170,9 +287,12 @@ echo
 # 7. Reminders.
 echo "7. Reminders"
 echo "   - Phase 16 ships only public landing / proof page + tests + docs."
+echo "   - Spanish localization lives in apps/web/src/i18n/landing.es.ts;"
+echo "     style guide at docs/website/chartnav-spanish-localization-style-guide.md."
 echo "   - vitest at apps/web/src/test/WebsiteProofUpgrade.test.tsx is"
 echo "     authoritative for the safe-claims contract."
 echo "   - To preview the page locally, append ?intro=1 to the dev URL."
+echo "   - To preview Spanish, append ?intro=1&lang=es to the dev URL."
 echo
 
 if [ "$fail_count" -gt 0 ]; then
