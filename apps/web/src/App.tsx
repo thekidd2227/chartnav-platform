@@ -41,6 +41,7 @@ import { ClinicalTabbedWorkspace } from "./ClinicalTabbedWorkspace";
 import { MultiClinicDashboard } from "./MultiClinicDashboard";
 import { RoleDashboard } from "./RoleDashboard";
 import { SecurityReadinessPanel } from "./SecurityReadinessPanel";
+import { ProductionReadinessPanel } from "./ProductionReadinessPanel";
 
 // Phase 20C — single-page top-level view switch. The encounters
 // workspace stays the default; the Dashboard CORE entry switches the
@@ -49,7 +50,8 @@ type TopView =
   | "encounters"
   | "dashboard"
   | "multi-clinic"
-  | "security-readiness";
+  | "security-readiness"
+  | "production-readiness";
 
 type Banner =
   | { kind: "ok"; msg: string }
@@ -303,6 +305,10 @@ export default function App() {
             canViewMultiClinic={canAdmin}
             onShowSecurityReadiness={() => setTopView("security-readiness")}
             canViewSecurityReadiness={canAdmin}
+            onShowProductionReadiness={() =>
+              setTopView("production-readiness")
+            }
+            canViewProductionReadiness={canAdmin}
           />
           <FilterBar
             value={filters}
@@ -357,6 +363,8 @@ export default function App() {
             <RoleDashboard identity={identity} me={me} />
           ) : topView === "multi-clinic" && me ? (
             <MultiClinicDashboard identity={identity} me={me} />
+          ) : topView === "production-readiness" && me ? (
+            <ProductionReadinessPanel identity={identity} me={me} />
           ) : topView === "security-readiness" && me ? (
             <SecurityReadinessPanel identity={identity} me={me} />
           ) : selectedId == null ? (
@@ -452,6 +460,8 @@ function ClinicalSidebarNav({
   canViewMultiClinic,
   onShowSecurityReadiness,
   canViewSecurityReadiness,
+  onShowProductionReadiness,
+  canViewProductionReadiness,
 }: {
   canCreate: boolean;
   onNewEncounter: () => void;
@@ -462,6 +472,8 @@ function ClinicalSidebarNav({
   canViewMultiClinic: boolean;
   onShowSecurityReadiness: () => void;
   canViewSecurityReadiness: boolean;
+  onShowProductionReadiness: () => void;
+  canViewProductionReadiness: boolean;
 }) {
   return (
     <nav className="sidebar-nav" data-testid="sidebar-nav" aria-label="Clinical navigation">
@@ -531,6 +543,21 @@ function ClinicalSidebarNav({
           disabled={!canViewSecurityReadiness}
         >
           Security Readiness
+        </SidebarItem>
+        {/* Clinic-OS next-phase — production readiness combines
+            proof KPIs (live + pending markers) with per-location
+            rollout readiness. Admin-only. */}
+        <SidebarItem
+          testid="sidebar-item-production-readiness"
+          active={topView === "production-readiness"}
+          onClick={
+            canViewProductionReadiness
+              ? onShowProductionReadiness
+              : undefined
+          }
+          disabled={!canViewProductionReadiness}
+        >
+          Production Readiness
         </SidebarItem>
         <SidebarItem testid="sidebar-item-documents" disabled>
           Documents
