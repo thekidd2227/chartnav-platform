@@ -47,6 +47,20 @@ and documented:
 - **Phase 21C** — ophthalmology positioning system (homepage
   positioning, language guide, demo script, objection handling
   additions, claims-check script extension).
+- **Phase 24A** — public-claims cleanup + live-site drift
+  detection (`scripts/check_live_site_claims.sh`).
+- **Phase 24B** — deterministic Morgan Lee retina follow-up
+  workflow wedge (seed + 18-test backend assertion suite +
+  Playwright spec).
+- **Phase 24C** — sales-ready demo packaging
+  (`scripts/reset_phase24b_retina_demo.sh` + paragraph-aware
+  `scripts/check_demo_claims.sh` + runbook + shot list + QA
+  checklist under `docs/demo/`).
+- **Phase 24D** — pilot practice selection & outreach packaging
+  (8 docs under `docs/pilot/phase-24d-*.md`: selection criteria,
+  outreach message bank, discovery call script, demo invite +
+  agenda, post-demo follow-up template, fit scorecard,
+  objection cheat sheet, tracker template).
 
 ### Commercial
 

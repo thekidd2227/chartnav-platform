@@ -47,12 +47,27 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
 FILES=(
+  # Phase 24C — runbook + shot list + QA checklist.
   "docs/demo/phase-24c-retina-demo-runbook.md"
   "docs/demo/phase-24c-retina-shot-list.md"
   "docs/demo/phase-24c-demo-qa-checklist.md"
+  # Phase 24B — narration script + shot list.
   "docs/demo/phase-24b-retina-workflow-demo-script.md"
   "docs/demo/phase-24b-retina-shot-list.md"
+  # Phase 24C — demo reset shell script.
   "scripts/reset_phase24b_retina_demo.sh"
+  # Phase 24D — pilot selection + outreach + discovery + demo
+  # invite + post-demo follow-up + scorecard + objection cheat
+  # sheet + tracker template + pilot README index.
+  "docs/pilot/phase-24d-pilot-practice-selection-criteria.md"
+  "docs/pilot/phase-24d-pilot-outreach-message-bank.md"
+  "docs/pilot/phase-24d-pilot-discovery-call-script.md"
+  "docs/pilot/phase-24d-demo-invite-and-agenda.md"
+  "docs/pilot/phase-24d-post-demo-follow-up-template.md"
+  "docs/pilot/phase-24d-pilot-fit-scorecard.md"
+  "docs/pilot/phase-24d-pilot-objection-cheat-sheet.md"
+  "docs/pilot/phase-24d-pilot-tracker-template.md"
+  "docs/pilot/README.md"
 )
 
 for f in "${FILES[@]}"; do
@@ -143,19 +158,32 @@ FORBIDDEN = [
     r"insurance handling",
 ]
 
-# Same-line negative-context regex. Permissive on purpose.
+# Same-line / same-paragraph negative-context regex. Permissive on
+# purpose. Matches:
+#  - "does not", "do not", "is not", "are not", "must not", "not yet"
+#  - "never", "no <thing>", "nor", "neither"
+#  - common contractions: don't, doesn't, isn't, aren't, hasn't, etc.
+#  - markdown-emphasized "not": **not**, _not_, *not*
+#  - catalog markers: "forbidden", "banned", "do not use", "do not say"
+#  - response framing: "safe answer", "safe phrasing", "what not to say"
+#  - editorial framing: "re-record", "rewrite the draft"
 NEG_CTX = re.compile(
     r"("
-    r"does not|do not|never|forbidden|banned"
+    r"does not|do not|never|forbidden|banned|nor|neither"
     r"|no autonomous|no automatic"
-    r"|\bnot\s|\bno\s+[\"a-z]"
-    r"|do[- ]not[- ]use|do[- ]not[- ]say"
-    r"|don.?t (say|show|include|lead|use|claim)"
-    r"|must not|cannot|not approved|not pursued|not certified"
-    r"|is not|are not|re[- ]?record"
-    r"|safe answer|safe[- ]claims"
+    r"|\bnot\b|\bno\b"
+    r"|do[- ]not[- ]use|do[- ]not[- ]say|do[- ]not[- ]message"
+    r"|don.?t\b|doesn.?t\b|didn.?t\b"
+    r"|isn.?t\b|aren.?t\b|wasn.?t\b|weren.?t\b"
+    r"|hasn.?t\b|haven.?t\b|hadn.?t\b"
+    r"|won.?t\b|wouldn.?t\b|shouldn.?t\b|couldn.?t\b|can.?t\b|cannot"
+    r"|must not|mustn.?t\b|needn.?t\b"
+    r"|not approved|not pursued|not certified|not marketed|not on the roadmap"
+    r"|is not|are not|re[- ]?record|rewrite"
+    r"|safe answer|safe[- ]claims|safe phrasing"
     r"|narration|catalog|enumerate|enumerates"
-    r"|safe phrasing"
+    r"|what not to say|never say|never use|never include"
+    r"|non[- ]?goal"
     r")",
     re.IGNORECASE,
 )
