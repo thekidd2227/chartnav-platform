@@ -149,6 +149,20 @@ forbidden_capability_positive=(
   "submit referral"
   "send patient message"
   "replaces a doctor"
+  # Phase 25A / GH-012 — Cora-comparison claims are off-limits on
+  # the public site. Negative phrasings stay exempt via the same
+  # negative-context regex used for the rest of the list.
+  "beats Cora"
+  "beat Cora"
+  "Cora[- ]killer"
+  "Cora killer"
+  "replaces Cora"
+  "replace Cora"
+  "Cora replacement"
+  "alternative to Cora"
+  "better than Cora"
+  "outperforms Cora"
+  "Cora competitor"
 )
 if [ -f "$LANDING_EN_COPY" ]; then
   # Phase 24A — compliance claims now use the same negative-context

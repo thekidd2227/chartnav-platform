@@ -395,6 +395,95 @@ def _stt_provider_label() -> str:
     return "missing"
 
 
+# ---------------------------------------------------------------
+# Phase 25A / GH-002 — STT readiness deep-detail endpoint.
+# ---------------------------------------------------------------
+# `/readiness` already reports a coarse `stt_provider` label. Operators
+# rolling out real STT need more — they want to know:
+#   - what provider key is configured (stub / openai_whisper / none /
+#     unknown)
+#   - whether the API key env var is present (presence-only, never
+#     the value)
+#   - whether external egress is needed (audit gate)
+#   - what state the audio-upload path is in (accepts / fails / stub)
+# Returns metadata only. Never returns env values, secrets, or PHI.
+# The full real-PHI go-live gate still lives in
+# docs/security/chartnav-real-phi-go-live-gate.md.
+
+def _stt_readiness_summary() -> dict[str, Any]:
+    import os
+
+    raw = (os.environ.get("CHARTNAV_STT_PROVIDER") or "stub").strip()
+    provider = raw.lower()
+
+    known = {"stub", "openai_whisper", "none"}
+    provider_key_recognized = provider in known
+
+    # Presence-only checks. Never read the key.
+    has_openai_key = bool(os.environ.get("CHARTNAV_OPENAI_API_KEY"))
+
+    # What the upload pipeline will actually do.
+    if not provider_key_recognized:
+        upload_behavior = "boot_will_fail"  # select_default_provider raises
+        external_egress = "unknown"
+    elif provider == "stub":
+        upload_behavior = "accepts_returns_placeholder_transcript"
+        external_egress = "no"
+    elif provider == "none":
+        upload_behavior = "rejects_no_transcriber_installed"
+        external_egress = "no"
+    elif provider == "openai_whisper":
+        upload_behavior = (
+            "accepts_calls_openai_whisper" if has_openai_key else "boot_will_fail"
+        )
+        external_egress = "required"
+    else:  # pragma: no cover — defensive
+        upload_behavior = "unknown"
+        external_egress = "unknown"
+
+    real_phi_ready = (
+        provider == "openai_whisper"
+        and has_openai_key
+        # external_required gates outside the API runtime
+        and False  # never flip to True automatically; ops sign-off only
+    )
+
+    return {
+        "provider_key_raw": raw,
+        "provider_key_recognized": provider_key_recognized,
+        "openai_api_key_present": has_openai_key,
+        "upload_behavior": upload_behavior,
+        "external_egress": external_egress,
+        # Operator-facing contract. ChartNav never claims STT is
+        # production-ready by self-introspection alone — BAA, vendor
+        # review, and the go-live gate are off-runtime concerns that
+        # the operator confirms manually.
+        "real_phi_ready": real_phi_ready,
+        "guidance": (
+            "STT provider is metadata-only. Real-PHI use requires a "
+            "BAA, completed vendor review, and operator sign-off per "
+            "docs/security/chartnav-real-phi-go-live-gate.md. This "
+            "endpoint never reports HIPAA-compliance."
+        ),
+    }
+
+
+@router.get("/stt-readiness")
+def get_stt_readiness(
+    caller: Caller = Depends(_AdminOnly),
+) -> dict[str, Any]:
+    """Phase 25A / GH-002 — admin-only STT readiness detail.
+
+    Reports what STT provider is wired, whether the upload pipeline
+    will accept audio, and whether external egress is required. Never
+    returns secrets, API key values, or PHI. Org-scoped via the admin
+    dependency.
+    """
+    summary = _stt_readiness_summary()
+    summary["organization_id"] = caller.organization_id
+    return summary
+
+
 @router.get("/readiness")
 def get_security_readiness(
     caller: Caller = Depends(_AdminOnly),

@@ -228,6 +228,22 @@ FORBIDDEN_CAPABILITY=(
   "auto-flag glaucoma progression"
   "IRIS Registry submission"
   "MIPS submission"
+  # Phase 25A / GH-012 — Cora-comparison language. ChartNav does
+  # not benchmark against, replace, or position itself "vs Cora"
+  # in buyer-facing material. Negative phrasings ("we do not
+  # compete with Cora", "ChartNav is not a Cora replacement")
+  # are exempted by the negative-context check below.
+  "beats Cora"
+  "beat Cora"
+  "Cora[- ]killer"
+  "Cora killer"
+  "replaces Cora"
+  "replace Cora"
+  "Cora replacement"
+  "alternative to Cora"
+  "better than Cora"
+  "outperforms Cora"
+  "Cora competitor"
 )
 
 ALL_DOCS=("${DECKS[@]}" "${SUPPORT[@]}" "${DEMO_PKG[@]}")

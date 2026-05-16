@@ -21,6 +21,13 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
+# Phase 25A — auto-grant audio consent so the audio-upload subset of
+# the lifecycle test stays green; consent gating is tested in
+# test_consent.py.
+pytestmark = pytest.mark.usefixtures("audio_consent_for_seeded")
+
 
 ADMIN1 = {"X-User-Email": "admin@chartnav.local"}
 CLIN1 = {"X-User-Email": "clin@chartnav.local"}

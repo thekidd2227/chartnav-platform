@@ -43,6 +43,10 @@ import os
 
 import pytest
 
+# Phase 25A — auto-grant audio consent so this pre-existing pipeline
+# test stays green; consent gating itself is tested in test_consent.py.
+pytestmark = pytest.mark.usefixtures("audio_consent_for_seeded")
+
 
 ADMIN1 = {"X-User-Email": "admin@chartnav.local"}
 CLIN1 = {"X-User-Email": "clin@chartnav.local"}
