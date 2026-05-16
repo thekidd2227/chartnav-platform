@@ -48,6 +48,10 @@ import os
 
 import pytest
 
+# Phase 25A — these tests predate the audio-consent gate. Auto-grant
+# consent for seeded encounters so they still exercise the pipeline.
+pytestmark = pytest.mark.usefixtures("audio_consent_for_seeded")
+
 
 ADMIN1 = {"X-User-Email": "admin@chartnav.local"}
 CLIN1 = {"X-User-Email": "clin@chartnav.local"}

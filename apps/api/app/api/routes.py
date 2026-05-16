@@ -327,11 +327,46 @@ def platform_info(caller: Caller = Depends(require_caller)) -> dict:
     render mode-aware UI (banner, admin panel, source-of-truth badges).
     No secrets leak: only the adapter's self-description, not config.
     """
+    import os
     from app.config import settings as _settings
     from app.integrations import resolve_adapter
 
     adapter = resolve_adapter()
     info = adapter.info
+
+    # Phase 25A / GH-011 — demo capability banner. The frontend
+    # renders an unambiguous "demo / not approved for real PHI"
+    # strip whenever ANY of the following is true:
+    #   - STT provider is the stub (no real audio transcription)
+    #   - platform_mode is "standalone" (no upstream EHR write)
+    #   - the operator has not flipped the explicit real-PHI gate
+    #     (CHARTNAV_REAL_PHI_APPROVED=1) — the runtime never sets
+    #     this on its own; it's a manual operator switch.
+    stt_provider = (os.environ.get("CHARTNAV_STT_PROVIDER") or "stub").strip().lower()
+    real_phi_approved_env = (
+        os.environ.get("CHARTNAV_REAL_PHI_APPROVED") or ""
+    ).strip().lower() in {"1", "true", "yes"}
+
+    reasons: list[str] = []
+    if stt_provider in {"stub", ""}:
+        reasons.append("stt_stub")
+    if stt_provider == "none":
+        reasons.append("stt_none")
+    if _settings.platform_mode == "standalone":
+        reasons.append("standalone_mode")
+    if not real_phi_approved_env:
+        reasons.append("real_phi_gate_off")
+
+    demo_mode = bool(reasons)
+    banner_text = (
+        "Demo mode — not approved for real patient health information. "
+        "ChartNav is not HIPAA-certified and the real-PHI go-live gate has "
+        "not been flipped."
+    ) if demo_mode else (
+        "Operator has flipped the real-PHI gate. Local audit + retention "
+        "policies apply; ChartNav still makes no compliance attestations."
+    )
+
     return {
         "platform_mode": _settings.platform_mode,
         "integration_adapter": _settings.integration_adapter,
@@ -350,6 +385,13 @@ def platform_info(caller: Caller = Depends(require_caller)) -> dict:
             "source_of_truth": {
                 k: v.value for k, v in info.source_of_truth.items()
             },
+        },
+        "capability_banner": {
+            "demo_mode": demo_mode,
+            "reasons": reasons,
+            "stt_provider": stt_provider,
+            "real_phi_approved_env": real_phi_approved_env,
+            "banner_text": banner_text,
         },
     }
 
@@ -3779,6 +3821,24 @@ async def create_encounter_audio_input(
 
     require_create_event(caller)
     _load_encounter_for_caller(encounter_id, caller)
+
+    # Phase 25A / GH-001 — patient consent gate. Microphone permission
+    # is not patient consent. The upload pipeline must refuse audio
+    # bytes whenever the encounter's consent record is anything other
+    # than `granted`. The clinic captures consent through the
+    # /encounters/{id}/audio-consent surface; until that flips, we
+    # 403 here with a structured error so the UI can show a clear
+    # "capture consent before recording" message.
+    from app.services.consent import is_consent_granted as _consent_granted
+    if not _consent_granted(encounter_id, caller.organization_id):
+        raise _err(
+            "audio_consent_required",
+            (
+                "patient audio consent has not been captured for this "
+                "encounter; record consent before uploading audio"
+            ),
+            403,
+        )
 
     form = await request.form()
     upload = form.get("audio")

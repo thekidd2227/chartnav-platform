@@ -245,6 +245,17 @@ export interface PlatformInfo {
     };
     source_of_truth: Record<string, SourceOfTruth>;
   };
+  /** Phase 25A / GH-011 — demo-mode capability banner. Stays ON
+   *  whenever ChartNav is not in an explicitly operator-approved
+   *  real-PHI configuration. The frontend renders an unambiguous
+   *  strip at the workspace level. */
+  capability_banner?: {
+    demo_mode: boolean;
+    reasons: string[];
+    stt_provider: string;
+    real_phi_approved_env: boolean;
+    banner_text: string;
+  };
 }
 
 export function getPlatform(email: string): Promise<PlatformInfo> {
@@ -1563,6 +1574,60 @@ export async function uploadEncounterAudio(
   }
   return body as EncounterInput;
 }
+
+// ---- Phase 25A — audio consent (GH-001) -----------------------
+// The clinic captures patient consent before microphone capture.
+// The upload pipeline 403s with `audio_consent_required` when this
+// is anything other than `granted` — the UI must read this state
+// to enable/disable the Record button.
+
+export type AudioConsentStatus =
+  | "granted"
+  | "declined"
+  | "revoked"
+  | "not_recorded";
+
+export type AudioConsentMethod =
+  | "verbal"
+  | "written"
+  | "demo_fake"
+  | "unknown";
+
+export interface AudioConsent {
+  encounter_id: number;
+  organization_id: number;
+  status: AudioConsentStatus;
+  method: AudioConsentMethod;
+  actor_user_id: number | null;
+  note: string | null;
+  recording_permitted: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export function fetchAudioConsent(
+  email: string,
+  encounterId: number
+): Promise<AudioConsent> {
+  return request(`/encounters/${encounterId}/audio-consent`, { email });
+}
+
+export function setAudioConsent(
+  email: string,
+  encounterId: number,
+  body: {
+    status: AudioConsentStatus;
+    method: AudioConsentMethod;
+    note?: string | null;
+  }
+): Promise<AudioConsent> {
+  return request(`/encounters/${encounterId}/audio-consent`, {
+    email,
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
 
 /** Clinician edit of a completed input's transcript, in place.
  *  The server refuses if the input isn't in `processing_status=completed`

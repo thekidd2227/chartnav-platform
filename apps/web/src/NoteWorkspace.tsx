@@ -85,6 +85,7 @@ import {
   segmentAbbreviations,
   type ClinicalShortcut,
 } from "./clinicalShortcuts";
+import { AudioConsentPanel } from "./AudioConsentPanel";
 import { DemoClinicalWorkflowGuide } from "./DemoClinicalWorkflowGuide";
 import { EyeDiagramPanel } from "./EyeDiagramPanel";
 import { GuidedDemoMode } from "./GuidedDemoMode";
@@ -164,6 +165,13 @@ export function NoteWorkspace({
     kind: "idle",
   });
   const [recordedElapsedSec, setRecordedElapsedSec] = useState(0);
+  // Phase 25A / GH-001 — patient audio consent gate. Recording stays
+  // disabled until the server confirms `recording_permitted === true`
+  // for this encounter.
+  const [audioConsent, setAudioConsent] =
+    useState<import("./api").AudioConsent | null>(null);
+  const recordingConsentGranted =
+    audioConsent?.recording_permitted === true;
   // Forces the elapsed-time display to tick. We keep the source of
   // truth in the recorder controller; this is just a UI nudge.
   useEffect(() => {
@@ -1173,6 +1181,12 @@ export function NoteWorkspace({
               )}
           </div>
         ))}
+        <AudioConsentPanel
+          identity={identity}
+          encounterId={encounterId}
+          role={me.role}
+          onConsentChange={setAudioConsent}
+        />
         {canEdit && (
           <div
             className="event-form workspace__audio-record"
@@ -1216,8 +1230,16 @@ export function NoteWorkspace({
                   type="button"
                   className="btn btn--primary"
                   onClick={onStartRecording}
-                  disabled={!captureSupport.supported}
+                  disabled={
+                    !captureSupport.supported ||
+                    !recordingConsentGranted
+                  }
                   data-testid="audio-record-start"
+                  title={
+                    !recordingConsentGranted
+                      ? "Capture patient consent above before recording"
+                      : undefined
+                  }
                 >
                   Start recording
                 </button>
@@ -1310,12 +1332,31 @@ export function NoteWorkspace({
               Edit the transcript below after it lands before generating
               a draft.
             </p>
+            {!recordingConsentGranted && (
+              <p
+                className="subtle-note workspace__audio-consent-warn"
+                data-testid="audio-upload-consent-blocked"
+                role="status"
+              >
+                Patient audio consent is required before uploading
+                recorded audio. Capture consent in the panel above.
+              </p>
+            )}
             <div className="row">
               <button
                 type="submit"
                 className="btn btn--primary"
-                disabled={audioUploading || !audioFile}
+                disabled={
+                  audioUploading ||
+                  !audioFile ||
+                  !recordingConsentGranted
+                }
                 data-testid="audio-upload-submit"
+                title={
+                  !recordingConsentGranted
+                    ? "Capture patient consent above before uploading"
+                    : undefined
+                }
               >
                 {audioUploading ? "Uploading…" : "Upload audio"}
               </button>

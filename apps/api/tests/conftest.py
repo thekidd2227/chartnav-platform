@@ -102,6 +102,25 @@ TECH2 = {"X-User-Email": "tech@northside.local"}
 
 
 @pytest.fixture()
+def audio_consent_for_seeded(client):
+    """Phase 25A — grant `granted` consent on every seeded encounter
+    so existing audio-pipeline test suites stay green. Consent gating
+    itself is covered by tests/test_consent.py; this fixture is meant
+    for files that exercise the audio upload path and predate the
+    consent gate. Use as ``pytestmark = pytest.mark.usefixtures(
+    "audio_consent_for_seeded")`` at module scope."""
+    for headers in (ADMIN1, ADMIN2):
+        encs = client.get("/encounters", headers=headers).json()
+        for e in encs:
+            client.put(
+                f"/encounters/{e['id']}/audio-consent",
+                headers=headers,
+                json={"status": "granted", "method": "verbal"},
+            )
+    return None
+
+
+@pytest.fixture()
 def seeded_ids(test_db) -> dict:
     conn = sqlite3.connect(test_db)
     conn.row_factory = sqlite3.Row
