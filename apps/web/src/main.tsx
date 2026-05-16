@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import { InviteAccept } from "./InviteAccept";
 import { LandingPage } from "./LandingPage";
+import { resolveRootView } from "./resolveRootView";
 import "./styles.css";
 
 const root = document.getElementById("root");
@@ -10,17 +11,21 @@ if (!root) {
   throw new Error("Root element not found");
 }
 
-// Tiny hash-based route split: /accept and ?invite=... → minimal accept
-// screen; /landing or ?intro=1 → public landing / proof page (Phase
-// 16); everything else renders the main App. Keeps us from adding a
-// router dependency.
+// Hotfix — `/` on the public marketing host (chartnavmd.com) now
+// resolves to the LandingPage instead of the authenticated App.
+// Routing logic lives in apps/web/src/resolveRootView.ts so vitest
+// can pin the full mapping without importing this bootstrap module.
 function Root() {
-  const path = window.location.pathname;
-  const params = new URLSearchParams(window.location.search);
-  if (path.endsWith("/accept") || path.endsWith("/invite") || params.has("invite")) {
+  const view = resolveRootView(
+    window.location.pathname,
+    window.location.search,
+    window.location.hostname,
+  );
+  if (view === "accept") {
+    const params = new URLSearchParams(window.location.search);
     return <InviteAccept defaultToken={params.get("invite") || ""} />;
   }
-  if (path.endsWith("/landing") || params.get("intro") === "1") {
+  if (view === "landing") {
     return <LandingPage />;
   }
   return <App />;
