@@ -42,6 +42,15 @@ import { MultiClinicDashboard } from "./MultiClinicDashboard";
 import { RoleDashboard } from "./RoleDashboard";
 import { SecurityReadinessPanel } from "./SecurityReadinessPanel";
 import { ProductionReadinessPanel } from "./ProductionReadinessPanel";
+import {
+  buildLanguageHref,
+  getAppCopy,
+  getCurrentLanguage,
+  persistLanguage,
+  SUPPORTED_LANGUAGES,
+  type AppCopy,
+  type Language,
+} from "./i18n";
 
 // Phase 20C — single-page top-level view switch. The encounters
 // workspace stays the default; the Dashboard CORE entry switches the
@@ -80,6 +89,47 @@ export default function App() {
   const [showCreate, setShowCreate] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
   const [topView, setTopView] = useState<TopView>("encounters");
+
+  // Phase A — language is resolved from URL ?lang / path prefix /
+  // localStorage / default ("en"). Same resolver the landing page
+  // uses, so a user who toggles to Spanish there sees Spanish in
+  // the authenticated workspace too. Re-resolves on `popstate`.
+  const [language, setLanguage] = useState<Language>(() => getCurrentLanguage());
+  useEffect(() => {
+    const handler = () => setLanguage(getCurrentLanguage());
+    window.addEventListener("popstate", handler);
+    return () => window.removeEventListener("popstate", handler);
+  }, []);
+  const copy = getAppCopy(language);
+  // Phase A — keep <html lang> in sync so screen readers + crawlers
+  // see the right language attribute on the authenticated app, not
+  // just the landing page.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const prev = document.documentElement.lang;
+    document.documentElement.lang = language;
+    return () => {
+      document.documentElement.lang = prev;
+    };
+  }, [language]);
+  const handleLanguageChange = useCallback(
+    (next: Language) => {
+      setLanguage(next);
+      persistLanguage(next);
+      if (typeof window !== "undefined") {
+        const href = buildLanguageHref(next, {
+          pathname: window.location.pathname,
+          search: window.location.search,
+        });
+        try {
+          window.history.replaceState({}, "", href);
+        } catch {
+          // best effort
+        }
+      }
+    },
+    [],
+  );
 
   // Pagination
   const PAGE_SIZE = 25;
@@ -189,7 +239,10 @@ export default function App() {
     setShowCreate(false);
     setShowAdmin(false);
     setOffset(0);
-    setBanner({ kind: "info", msg: `Identity switched to ${email}` });
+    setBanner({
+      kind: "info",
+      msg: copy.bannerIdentitySwitchedPrefix + email,
+    });
   };
 
   const onTransition = async (status: string) => {
@@ -200,7 +253,7 @@ export default function App() {
       setEncounter(updated);
       setEvents(await getEncounterEvents(identity, encounter.id));
       await refreshList();
-      setBanner({ kind: "ok", msg: `Status → ${status}` });
+      setBanner({ kind: "ok", msg: copy.bannerStatusPrefix + status });
     } catch (e) {
       setBanner({ kind: "error", msg: friendly(e) });
     }
@@ -224,7 +277,11 @@ export default function App() {
         event_data: data,
       });
       setEvents(await getEncounterEvents(identity, encounter.id));
-      setBanner({ kind: "ok", msg: `Event '${type}' added` });
+      setBanner({
+        kind: "ok",
+        msg:
+          copy.bannerEventAddedPrefix + type + copy.bannerEventAddedSuffix,
+      });
     } catch (e) {
       setBanner({ kind: "error", msg: friendly(e) });
     }
@@ -238,7 +295,9 @@ export default function App() {
     setShowCreate(false);
     setBanner({
       kind: "ok",
-      msg: `Encounter #${created.id} created (${created.patient_identifier})`,
+      msg: copy.bannerEncounterCreatedTemplate
+        .replace("{id}", String(created.id))
+        .replace("{pid}", created.patient_identifier),
     });
   };
 
@@ -254,14 +313,19 @@ export default function App() {
           <img
             className="brand__logo"
             src="/brand/chartnav-logo.svg"
-            alt="ChartNav"
+            alt={copy.brandLogoAlt}
             width="140"
             height="32"
           />
-          <span className="sub">Workflow</span>
+          <span className="sub">{copy.brandSub}</span>
         </div>
         <div className="header-meta">
-          <IdentityBadge me={me} meError={meError} meLoading={meLoading} />
+          <IdentityBadge
+            me={me}
+            meError={meError}
+            meLoading={meLoading}
+            copy={copy}
+          />
           {/*
             Phase 19 — hide the dev API URL chip in demo mode so a
             buyer / advisor / partner watching a live demo never
@@ -269,7 +333,9 @@ export default function App() {
             in the developer's normal workflow.
           */}
           {!isDemoModeEnabled() && (
-            <span className="chip" data-testid="api-chip">API {API_URL}</span>
+            <span className="chip" data-testid="api-chip">
+              {copy.apiChipPrefix}{API_URL}
+            </span>
           )}
           {canCreate && (
             <button
@@ -277,7 +343,7 @@ export default function App() {
               onClick={() => setShowCreate(true)}
               data-testid="open-create-encounter"
             >
-              + New encounter
+              {copy.newEncounterButton}
             </button>
           )}
           {canAdmin && (
@@ -286,10 +352,19 @@ export default function App() {
               onClick={() => setShowAdmin(true)}
               data-testid="open-admin-panel"
             >
-              Admin
+              {copy.adminButton}
             </button>
           )}
-          <IdentityPicker value={identity} onChange={onIdentityChange} />
+          <IdentityPicker
+            value={identity}
+            onChange={onIdentityChange}
+            copy={copy}
+          />
+          <AppLanguageSwitcher
+            language={language}
+            copy={copy}
+            onSelect={handleLanguageChange}
+          />
         </div>
       </header>
 
@@ -309,6 +384,7 @@ export default function App() {
               setTopView("production-readiness")
             }
             canViewProductionReadiness={canAdmin}
+            copy={copy}
           />
           <FilterBar
             value={filters}
@@ -316,6 +392,7 @@ export default function App() {
               setFilters(next);
               setOffset(0);
             }}
+            copy={copy}
           />
           <EncounterList
             rows={encounters}
@@ -323,6 +400,7 @@ export default function App() {
             error={listError}
             selectedId={selectedId}
             onSelect={setSelectedId}
+            copy={copy}
           />
           {total > PAGE_SIZE && (
             <div className="pagination" data-testid="pagination">
@@ -332,10 +410,10 @@ export default function App() {
                 onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
                 data-testid="page-prev"
               >
-                ← Prev
+                {copy.pagePrev}
               </button>
               <span className="subtle-note" data-testid="page-status">
-                {offset + 1}-{Math.min(offset + PAGE_SIZE, total)} of {total}
+                {offset + 1}-{Math.min(offset + PAGE_SIZE, total)} {copy.pageOfWord} {total}
               </span>
               <button
                 className="btn"
@@ -343,7 +421,7 @@ export default function App() {
                 onClick={() => setOffset(offset + PAGE_SIZE)}
                 data-testid="page-next"
               >
-                Next →
+                {copy.pageNext}
               </button>
             </div>
           )}
@@ -369,11 +447,14 @@ export default function App() {
             <SecurityReadinessPanel identity={identity} me={me} />
           ) : selectedId == null ? (
             <div className="empty">
-              Select an encounter from the list to see details, events, and allowed actions.
+              {copy.detailEmpty}
               {canCreate && (
                 <>
                   {" "}
-                  Or click <strong>+ New encounter</strong> above to create one.
+                  <span data-testid="detail-empty-create-hint">
+                    <strong>{copy.detailEmptyCreateLink}</strong>
+                    {copy.detailEmptyCreateSuffix}
+                  </span>
                 </>
               )}
             </div>
@@ -399,6 +480,7 @@ export default function App() {
           me={me}
           onCancel={() => setShowCreate(false)}
           onSubmit={onCreateEncounter}
+          copy={copy}
         />
       )}
       {showAdmin && me && isAdmin(me.role) && (
@@ -417,13 +499,13 @@ export default function App() {
         <span className="app-footer__brand">
           <strong>ChartNav</strong>
           <span aria-hidden="true"> · </span>
-          <span>Clinical workflow platform</span>
+          <span>{copy.footerBrandTagline}</span>
         </span>
         <span
           className="app-footer__powered"
           data-testid="app-footer-arcg"
         >
-          Powered by <strong>ARCG Systems</strong>
+          {copy.footerPoweredByPrefix} <strong>{copy.footerPoweredEntity}</strong>
         </span>
       </footer>
     </>
@@ -462,6 +544,7 @@ function ClinicalSidebarNav({
   canViewSecurityReadiness,
   onShowProductionReadiness,
   canViewProductionReadiness,
+  copy,
 }: {
   canCreate: boolean;
   onNewEncounter: () => void;
@@ -474,10 +557,11 @@ function ClinicalSidebarNav({
   canViewSecurityReadiness: boolean;
   onShowProductionReadiness: () => void;
   canViewProductionReadiness: boolean;
+  copy: AppCopy;
 }) {
   return (
-    <nav className="sidebar-nav" data-testid="sidebar-nav" aria-label="Clinical navigation">
-      <SidebarGroup label="Core" testid="sidebar-group-core">
+    <nav className="sidebar-nav" data-testid="sidebar-nav" aria-label={copy.sidebarNavAriaLabel}>
+      <SidebarGroup label={copy.sidebarGroupCore} testid="sidebar-group-core">
         {/* Phase 20C — Dashboard now opens the role-based summary
             view on the right. Existing Encounters behavior is
             unchanged when the user switches back. */}
@@ -486,28 +570,28 @@ function ClinicalSidebarNav({
           active={topView === "dashboard"}
           onClick={onShowDashboard}
         >
-          Dashboard
+          {copy.sidebarItemDashboard}
         </SidebarItem>
         <SidebarItem testid="sidebar-item-calendar" disabled>
-          Calendar
+          {copy.sidebarItemCalendar}
         </SidebarItem>
         <SidebarItem
           testid="sidebar-item-encounters"
           active={topView === "encounters"}
           onClick={onShowEncounters}
         >
-          Encounters
+          {copy.sidebarItemEncounters}
         </SidebarItem>
       </SidebarGroup>
-      <SidebarGroup label="Clinical" testid="sidebar-group-clinical">
+      <SidebarGroup label={copy.sidebarGroupClinical} testid="sidebar-group-clinical">
         <SidebarItem testid="sidebar-item-patients" disabled>
-          Patients
+          {copy.sidebarItemPatients}
         </SidebarItem>
         <SidebarItem testid="sidebar-item-lab-orders" disabled>
-          Lab / Orders
+          {copy.sidebarItemLabOrders}
         </SidebarItem>
       </SidebarGroup>
-      <SidebarGroup label="Operations" testid="sidebar-group-operations">
+      <SidebarGroup label={copy.sidebarGroupOperations} testid="sidebar-group-operations">
         {/* Phase 22 — Multi-Clinic admin rollup. Admin-only;
             non-admin identities see a disabled placeholder. */}
         <SidebarItem
@@ -516,22 +600,22 @@ function ClinicalSidebarNav({
           onClick={canViewMultiClinic ? onShowMultiClinic : undefined}
           disabled={!canViewMultiClinic}
         >
-          Multi-Clinic
+          {copy.sidebarItemMultiClinic}
         </SidebarItem>
         <SidebarItem testid="sidebar-item-tasks" disabled>
-          Tasks
+          {copy.sidebarItemTasks}
         </SidebarItem>
         <SidebarItem testid="sidebar-item-messages" disabled>
-          Messages
+          {copy.sidebarItemMessages}
         </SidebarItem>
         <SidebarItem testid="sidebar-item-chat" disabled>
-          Chat
+          {copy.sidebarItemChat}
         </SidebarItem>
       </SidebarGroup>
       {/* Phase 19F — Admin no longer surfaces Billing. ChartNav
           does not bill, code, submit claims, or handle insurance.
           Documents replaces Billing as the third Admin item. */}
-      <SidebarGroup label="Admin" testid="sidebar-group-admin">
+      <SidebarGroup label={copy.sidebarGroupAdmin} testid="sidebar-group-admin">
         {/* Phase 23 — Security Readiness checklist. Admin-only;
             non-admin identities see a disabled placeholder. */}
         <SidebarItem
@@ -542,7 +626,7 @@ function ClinicalSidebarNav({
           }
           disabled={!canViewSecurityReadiness}
         >
-          Security Readiness
+          {copy.sidebarItemSecurityReadiness}
         </SidebarItem>
         {/* Clinic-OS next-phase — production readiness combines
             proof KPIs (live + pending markers) with per-location
@@ -557,38 +641,38 @@ function ClinicalSidebarNav({
           }
           disabled={!canViewProductionReadiness}
         >
-          Production Readiness
+          {copy.sidebarItemProductionReadiness}
         </SidebarItem>
         <SidebarItem testid="sidebar-item-documents" disabled>
-          Documents
+          {copy.sidebarItemDocuments}
         </SidebarItem>
         <SidebarItem testid="sidebar-item-reports" disabled>
-          Reports
+          {copy.sidebarItemReports}
         </SidebarItem>
         <SidebarItem testid="sidebar-item-settings" disabled>
-          Settings
+          {copy.sidebarItemSettings}
         </SidebarItem>
       </SidebarGroup>
       {/* Phase 19F — Quick Actions: dropped Send Message (no
           patient messaging) and New Patient (not in Phase 19F
           spec). Internal Chat Note replaces them as a fast-path
           to the internal-staff Chat tab. */}
-      <SidebarGroup label="Quick Actions" testid="sidebar-group-quick-actions">
+      <SidebarGroup label={copy.sidebarGroupQuickActions} testid="sidebar-group-quick-actions">
         <SidebarItem
           testid="sidebar-item-new-encounter"
           onClick={canCreate ? onNewEncounter : undefined}
           disabled={!canCreate}
         >
-          New Encounter
+          {copy.sidebarItemNewEncounter}
         </SidebarItem>
         <SidebarItem testid="sidebar-item-record-dictation" disabled>
-          Record Dictation
+          {copy.sidebarItemRecordDictation}
         </SidebarItem>
         <SidebarItem testid="sidebar-item-upload-imaging" disabled>
-          Upload Imaging
+          {copy.sidebarItemUploadImaging}
         </SidebarItem>
         <SidebarItem testid="sidebar-item-internal-chat-note" disabled>
-          Internal Chat Note
+          {copy.sidebarItemInternalChatNote}
         </SidebarItem>
       </SidebarGroup>
     </nav>
@@ -649,15 +733,17 @@ function IdentityBadge({
   me,
   meError,
   meLoading,
+  copy,
 }: {
   me: Me | null;
   meError: string | null;
   meLoading: boolean;
+  copy: AppCopy;
 }) {
   if (meLoading && !me)
     return (
       <span className="chip" data-testid="identity-loading">
-        resolving identity…
+        {copy.identityResolving}
       </span>
     );
   if (meError)
@@ -667,7 +753,7 @@ function IdentityBadge({
         style={{ color: "var(--danger)" }}
         data-testid="identity-error"
       >
-        auth: {meError}
+        {copy.identityAuthPrefix}{meError}
       </span>
     );
   if (!me) return <span className="chip">—</span>;
@@ -679,15 +765,15 @@ function IdentityBadge({
   // dominating the visible chip.
   const friendlyRole =
     me.role === "admin"
-      ? "Admin"
+      ? copy.roleAdmin
       : me.role === "clinician"
-      ? "Clinician"
+      ? copy.roleClinician
       : me.role === "reviewer"
-      ? "Reviewer"
+      ? copy.roleReviewer
       : me.role === "front_desk"
-      ? "Front Desk"
+      ? copy.roleFrontDesk
       : me.role === "technician"
-      ? "Technician"
+      ? copy.roleTechnician
       : me.role;
   return (
     <span
@@ -695,9 +781,9 @@ function IdentityBadge({
       data-testid="identity-badge"
       title={`${me.email} · ${me.role} · organization_id=${me.organization_id}`}
     >
-      <span className="chip__label">Identity</span>
+      <span className="chip__label">{copy.identityBadgeLabel}</span>
       <span className="chip__value">
-        {friendlyRole} · Org {me.organization_id}
+        {friendlyRole} · {copy.badgeOrgPrefix} {me.organization_id}
       </span>
     </span>
   );
@@ -706,9 +792,11 @@ function IdentityBadge({
 function IdentityPicker({
   value,
   onChange,
+  copy,
 }: {
   value: string;
   onChange: (email: string) => void;
+  copy: AppCopy;
 }) {
   const isSeeded = SEEDED_IDENTITIES.some((s) => s.email === value);
   const [custom, setCustom] = useState(isSeeded ? "" : value);
@@ -718,7 +806,7 @@ function IdentityPicker({
   return (
     <div className="identity-picker">
       <label className="subtle-note" htmlFor="dev-identity">
-        identity
+        {copy.identityPickerLabel}
       </label>
       {mode === "seeded" ? (
         <select
@@ -738,14 +826,14 @@ function IdentityPicker({
               {s.label} · {s.email}
             </option>
           ))}
-          <option value="__custom__">Custom email…</option>
+          <option value="__custom__">{copy.identityPickerCustomOption}</option>
         </select>
       ) : (
         <>
           <input
             type="email"
             value={custom}
-            placeholder="user@example.com"
+            placeholder={copy.identityPickerEmailPlaceholder}
             onChange={(e) => setCustom(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && custom.trim()) onChange(custom.trim());
@@ -755,10 +843,10 @@ function IdentityPicker({
             className="btn"
             onClick={() => custom.trim() && onChange(custom.trim())}
           >
-            use
+            {copy.identityPickerUseButton}
           </button>
           <button className="btn btn--muted" onClick={() => setMode("seeded")}>
-            seeded
+            {copy.identityPickerSeededButton}
           </button>
         </>
       )}
@@ -766,12 +854,61 @@ function IdentityPicker({
   );
 }
 
+/** Phase A — language switcher rendered next to the identity
+ *  picker in the authenticated top bar. Uses <button>s (not <a>s)
+ *  so the Phase 16 link-href contract on the landing page also
+ *  applies here: only the operator-set hrefs reach the link role. */
+function AppLanguageSwitcher({
+  language,
+  copy,
+  onSelect,
+}: {
+  language: Language;
+  copy: AppCopy;
+  onSelect: (next: Language) => void;
+}) {
+  return (
+    <nav
+      className="app-lang-switcher"
+      aria-label={copy.appSwitcherAriaLabel}
+      data-testid="app-lang-switcher"
+    >
+      {SUPPORTED_LANGUAGES.map((opt) => {
+        const isActive = opt.code === language;
+        const label =
+          opt.code === "en"
+            ? copy.appSwitcherEnglishLabel
+            : copy.appSwitcherSpanishLabel;
+        return (
+          <button
+            key={opt.code}
+            type="button"
+            className={
+              "app-lang-switcher__option"
+              + (isActive ? " app-lang-switcher__option--active" : "")
+            }
+            data-testid={`app-lang-option-${opt.code}`}
+            aria-pressed={isActive}
+            onClick={() => {
+              if (!isActive) onSelect(opt.code);
+            }}
+          >
+            {label}
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
 function FilterBar({
   value,
   onChange,
+  copy,
 }: {
   value: EncounterFilters;
   onChange: (next: EncounterFilters) => void;
+  copy: AppCopy;
 }) {
   const update = <K extends keyof EncounterFilters>(
     key: K,
@@ -789,13 +926,13 @@ function FilterBar({
   return (
     <div className="filters">
       <label>
-        Status
+        {copy.filterStatusLabel}
         <select
           data-testid="filter-status"
           value={value.status ?? ""}
           onChange={(e) => update("status", e.target.value || undefined)}
         >
-          <option value="">Any</option>
+          <option value="">{copy.filterStatusAnyOption}</option>
           {ALLOWED_STATUSES.map((s) => (
             <option key={s} value={s}>
               {s}
@@ -804,22 +941,22 @@ function FilterBar({
         </select>
       </label>
       <label>
-        Provider
+        {copy.filterProviderLabel}
         <input
           type="text"
           data-testid="filter-provider"
-          placeholder="Dr. Carter"
+          placeholder={copy.filterProviderPlaceholder}
           value={value.provider_name ?? ""}
           onChange={(e) => update("provider_name", e.target.value || undefined)}
         />
       </label>
       <label>
-        Location ID
+        {copy.filterLocationLabel}
         <input
           type="number"
           data-testid="filter-location"
           min={1}
-          placeholder="—"
+          placeholder={copy.filterLocationPlaceholder}
           value={value.location_id ?? ""}
           onChange={(e) => {
             const n = e.target.value ? parseInt(e.target.value, 10) : undefined;
@@ -829,7 +966,7 @@ function FilterBar({
       </label>
       {Object.keys(value).length > 0 && (
         <button className="filter-clear" onClick={() => onChange({})}>
-          clear
+          {copy.filterClearButton}
         </button>
       )}
     </div>
@@ -842,17 +979,19 @@ function EncounterList({
   error,
   selectedId,
   onSelect,
+  copy,
 }: {
   rows: Encounter[];
   loading: boolean;
   error: string | null;
   selectedId: number | string | null;
   onSelect: (id: number | string) => void;
+  copy: AppCopy;
 }) {
   if (loading && rows.length === 0)
     return (
       <div className="empty" data-testid="list-loading">
-        Loading…
+        {copy.encListLoading}
       </div>
     );
   if (error)
@@ -868,7 +1007,7 @@ function EncounterList({
   if (!rows.length)
     return (
       <div className="empty" data-testid="list-empty">
-        No encounters match these filters.
+        {copy.encListEmpty}
       </div>
     );
 
@@ -1193,11 +1332,13 @@ function CreateEncounterModal({
   me,
   onCancel,
   onSubmit,
+  copy,
 }: {
   identity: string;
   me: Me;
   onCancel: () => void;
   onSubmit: (input: NewEncounterInput) => Promise<void>;
+  copy: AppCopy;
 }) {
   const [patientId, setPatientId] = useState("");
   const [patientName, setPatientName] = useState("");
@@ -1272,50 +1413,50 @@ function CreateEncounterModal({
     >
       <div className="modal">
         <div className="modal__head">
-          <h2 id="create-title">New encounter</h2>
+          <h2 id="create-title">{copy.createModalTitle}</h2>
           <button
             className="btn btn--muted"
             onClick={onCancel}
             disabled={pending}
-            aria-label="Close"
+            aria-label={copy.createModalCloseAria}
           >
             ✕
           </button>
         </div>
         <form className="modal__body event-form" onSubmit={submit}>
           <label>
-            Patient ID *
+            {copy.createPatientIdLabel}
             <input
               data-testid="create-patient-id"
               value={patientId}
               onChange={(e) => setPatientId(e.target.value)}
               required
-              placeholder="PT-1234"
+              placeholder={copy.createPatientIdPlaceholder}
             />
           </label>
           <label>
-            Patient name
+            {copy.createPatientNameLabel}
             <input
               data-testid="create-patient-name"
               value={patientName}
               onChange={(e) => setPatientName(e.target.value)}
-              placeholder="Jane Doe"
+              placeholder={copy.createPatientNamePlaceholder}
             />
           </label>
           <label>
-            Provider *
+            {copy.createProviderLabel}
             <input
               data-testid="create-provider"
               value={provider}
               onChange={(e) => setProvider(e.target.value)}
               required
-              placeholder="Dr. Carter"
+              placeholder={copy.createProviderPlaceholder}
             />
           </label>
           <label>
-            Location *
+            {copy.createLocationLabel}
             {locLoading ? (
-              <span className="subtle-note">loading locations…</span>
+              <span className="subtle-note">{copy.createLocationLoading}</span>
             ) : locError ? (
               <span style={{ color: "var(--danger)" }}>{locError}</span>
             ) : (
@@ -1327,7 +1468,7 @@ function CreateEncounterModal({
                 }
                 required
               >
-                <option value="">Select a location</option>
+                <option value="">{copy.createLocationPlaceholder}</option>
                 {locations.map((l) => (
                   <option key={l.id} value={l.id}>
                     #{l.id} · {l.name}
@@ -1337,7 +1478,7 @@ function CreateEncounterModal({
             )}
           </label>
           <label>
-            Initial status
+            {copy.createStatusLabel}
             <select
               data-testid="create-status"
               value={status}
@@ -1345,8 +1486,8 @@ function CreateEncounterModal({
                 setStatus(e.target.value as "scheduled" | "in_progress")
               }
             >
-              <option value="scheduled">scheduled</option>
-              <option value="in_progress">in_progress</option>
+              <option value="scheduled">{copy.createStatusScheduled}</option>
+              <option value="in_progress">{copy.createStatusInProgress}</option>
             </select>
           </label>
           {error && (
@@ -1361,7 +1502,7 @@ function CreateEncounterModal({
               onClick={onCancel}
               disabled={pending}
             >
-              Cancel
+              {copy.createCancelButton}
             </button>
             <button
               type="submit"
@@ -1369,7 +1510,7 @@ function CreateEncounterModal({
               data-testid="create-submit"
               disabled={!canSubmit}
             >
-              {pending ? "Creating…" : "Create encounter"}
+              {pending ? copy.createSubmitPending : copy.createSubmitButton}
             </button>
           </div>
         </form>
