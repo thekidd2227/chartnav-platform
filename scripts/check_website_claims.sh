@@ -163,6 +163,25 @@ forbidden_capability_positive=(
   "better than Cora"
   "outperforms Cora"
   "Cora competitor"
+  # Vendor-readiness guard — IBM / watsonx may only be described as
+  # "planned / vendor-dependent evaluation," never as a shipped
+  # production capability. Negative phrasings stay exempt via the
+  # same negative-context regex used for the rest of the list.
+  "powered by IBM"
+  "powered by watsonx"
+  "watsonx-powered"
+  "IBM-powered"
+  "IBM watsonx-powered"
+  "Watson-powered clinical documentation"
+  "Watson-powered scribe"
+  "Watson makes ChartNav HIPAA compliant"
+  "watsonx diagnosis"
+  "watsonx-driven diagnosis"
+  "watsonx image interpretation"
+  "watsonx auto-grades"
+  "IBM-certified HIPAA"
+  "IBM certifies ChartNav"
+  "watsonx-validated clinical accuracy"
 )
 if [ -f "$LANDING_EN_COPY" ]; then
   # Phase 24A — compliance claims now use the same negative-context
