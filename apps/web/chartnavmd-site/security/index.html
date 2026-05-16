@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ChartNav Security &amp; Trust — Enterprise Review for Ophthalmology Practices</title>
+  <meta name="description" content="Enterprise security posture for ChartNav — clinical privacy, access readiness, static Vercel marketing layer, IBM Cloud readiness, deployment review, and data minimization for ophthalmology practices." />
+  <link rel="canonical" href="https://chartnavmd.com/security/" />
+  <link rel="alternate" hreflang="en" href="https://chartnavmd.com/security/" />
+  <link rel="alternate" hreflang="es" href="https://chartnavmd.com/security/?lang=es" />
+  <link rel="alternate" hreflang="x-default" href="https://chartnavmd.com/security/" />
+  <link rel="icon" href="/brand/chartnav-favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+  <script src="/reveal.js" defer></script>
+  <script src="/lang-toggle.js" defer></script>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      { "@type": "Question", "name": "Is ChartNav built for ophthalmology security reviews?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. ChartNav is designed with security-conscious architecture for ophthalmology practices, including privacy-aware workflows, deployment review, and enterprise-readiness planning. Specific compliance requirements are reviewed during implementation." } },
+      { "@type": "Question", "name": "Does ChartNav use IBM Cloud or watsonx?", "acceptedAnswer": { "@type": "Answer", "text": "ChartNav is being prepared for IBM Cloud-aligned AI, storage, and governance patterns where enterprise deployments require them. Production configuration is verified during implementation." } },
+      { "@type": "Question", "name": "Is ChartNav hosted on Vercel?", "acceptedAnswer": { "@type": "Answer", "text": "The public marketing layer is served through Vercel static hosting. Clinical data handling, backend services, and enterprise deployment requirements are reviewed separately." } }
+    ]
+  }
+  </script>
+
+  <script>
+    window.__CN_I18N__ = {
+      en: {
+        "__document_title": "ChartNav Security & Trust — Enterprise Review for Ophthalmology Practices",
+        "__meta_description": "Enterprise security posture for ChartNav — clinical privacy, access readiness, static Vercel marketing layer, IBM Cloud readiness, deployment review, and data minimization for ophthalmology practices.",
+
+        "nav.home": "Home", "nav.ehr": "EMR/EHR", "nav.platform": "Platform",
+        "nav.ophthalmology": "Ophthalmology", "nav.implementation": "Implementation",
+        "nav.ai_security": "AI Security", "nav.security": "Security & Trust",
+        "nav.menu": "Menu", "nav.menu_label": "Open menu", "nav.home_label": "ChartNav MD home",
+        "hero.cta_primary": "Request Assessment",
+
+        "hero.eyebrow": "Security & trust",
+        "hero.h1": "Built for serious ophthalmology workflows.",
+        "hero.sub_post": " fits clinical workflow, privacy review, enterprise deployment, and responsible AI expectations.",
+
+        "posture.eyebrow": "Enterprise posture",
+        "posture.h2": "Designed for security review.",
+        "posture.c1_num": "01 — PRIVACY",       "posture.c1_title": "Clinical privacy by design",    "posture.c1_body": "Built for workflows where documentation and patient context require careful handling.",
+        "posture.c2_num": "02 — ACCESS",        "posture.c2_title": "Enterprise access readiness",   "posture.c2_body": "Practice-level controls, user roles, administrative review.",
+        "posture.c3_num": "03 — INFRASTRUCTURE","posture.c3_title": "Secure static marketing layer", "posture.c3_body": "Lightweight static deployment. Clinical/backend reviewed separately.",
+        "posture.c4_num": "04 — IBM CLOUD",     "posture.c4_title": "IBM Cloud readiness",           "posture.c4_body": "Aligns with IBM Cloud AI, storage, and governance patterns.",
+        "posture.c5_num": "05 — DATA",          "posture.c5_title": "Data minimization",             "posture.c5_body": "Focused capture, controlled processing, responsible handling.",
+        "posture.c6_num": "06 — REVIEW",        "posture.c6_title": "Deployment review",             "posture.c6_body": "Security, privacy, workflow review before clinical rollout.",
+
+        "infra.eyebrow": "Built on IBM",
+        "infra.h2": "Enterprise infrastructure, by design.",
+        "infra.sub": "ChartNav is engineered around the infrastructure and governance patterns enterprise security teams expect to see during procurement review.",
+        "infra.c1_num": "IBM WATSONX", "infra.c1_title": "watsonx-aligned AI",          "infra.c1_body": "Enterprise-grade AI infrastructure designed for healthcare workloads.",
+        "infra.c2_num": "GOVERNANCE",  "infra.c2_title": "watsonx.governance metadata", "infra.c2_body": "Provider, model, request, and classification metadata recorded per AI call.",
+        "infra.c3_num": "CLOUD READY", "infra.c3_title": "IBM Cloud architecture",      "infra.c3_body": "AI, storage, and governance patterns aligned with IBM Cloud deployment.",
+        "infra.c4_num": "PHI REDACTION","infra.c4_title": "18 Safe Harbor identifiers", "infra.c4_body": "All HIPAA Safe Harbor identifiers scanned before any model call.",
+        "infra.c5_num": "AUDIT TRAIL", "infra.c5_title": "Immutable, org-scoped",       "infra.c5_body": "Append-only audit log with outbound JSONL or webhook forwarding.",
+        "infra.c6_num": "FHIR R4",     "infra.c6_title": "Standards-based exchange",    "infra.c6_body": "FHIR R4 read-through for interoperability with existing EHRs.",
+        "infra.roadmap": "Roadmap: enterprise SSO (SAML / OIDC), SCIM provisioning, SOC 2 Type II readiness — scoped at assessment.",
+
+        "faq.eyebrow": "Common questions",
+        "faq.h2": "Answers buyers ask first.",
+        "faq.q1": "Is ChartNav built for ophthalmology security reviews?",
+        "faq.a1": "Yes — privacy-aware workflows, deployment review, enterprise-readiness planning. Compliance specifics are reviewed during implementation.",
+        "faq.q2": "Does ChartNav use IBM Cloud or watsonx?",
+        "faq.a2": "Prepared for IBM Cloud-aligned AI, storage, and governance. Production configuration verified during implementation.",
+        "faq.q3": "Is ChartNav hosted on Vercel?",
+        "faq.a3": "Public marketing layer is on Vercel static hosting. Clinical and backend services are reviewed separately.",
+        "faq.q4": "How does ChartNav handle data minimization?",
+        "faq.a4": "Focused capture, controlled processing. Actual scope reviewed during implementation.",
+        "faq.primary": "Review ChartNav for Your Practice",
+        "faq.secondary": "AI security details →",
+
+        "footer.copy": "© 2026 ARCG Systems. ChartNav is a product of ARCG Systems."
+      },
+      es: {
+        "__document_title": "Seguridad y confianza de ChartNav — Revisión empresarial para clínicas oftalmológicas",
+        "__meta_description": "Postura de seguridad empresarial de ChartNav — privacidad clínica, preparación de accesos, capa estática en Vercel, preparación para IBM Cloud, revisión de despliegue y minimización de datos para clínicas oftalmológicas.",
+
+        "nav.home": "Inicio", "nav.ehr": "EMR/EHR", "nav.platform": "Plataforma",
+        "nav.ophthalmology": "Oftalmología", "nav.implementation": "Implementación",
+        "nav.ai_security": "Seguridad de IA", "nav.security": "Seguridad y confianza",
+        "nav.menu": "Menú", "nav.menu_label": "Abrir menú", "nav.home_label": "Inicio de ChartNav MD",
+        "hero.cta_primary": "Solicitar evaluación",
+
+        "hero.eyebrow": "Seguridad y confianza",
+        "hero.h1": "Construido para flujos oftalmológicos serios.",
+        "hero.sub_post": " encaja con el flujo clínico, la revisión de privacidad, el despliegue empresarial y las expectativas de IA responsable.",
+
+        "posture.eyebrow": "Postura empresarial",
+        "posture.h2": "Diseñado para revisión de seguridad.",
+        "posture.c1_num": "01 — PRIVACIDAD",      "posture.c1_title": "Privacidad clínica por diseño",       "posture.c1_body": "Construido para flujos donde la documentación y el contexto del paciente requieren manejo cuidadoso.",
+        "posture.c2_num": "02 — ACCESO",          "posture.c2_title": "Acceso empresarial preparado",        "posture.c2_body": "Controles a nivel de práctica, roles de usuario, revisión administrativa.",
+        "posture.c3_num": "03 — INFRAESTRUCTURA", "posture.c3_title": "Capa de marketing estática y segura", "posture.c3_body": "Despliegue estático liviano. Backend y aplicación clínica se revisan por separado.",
+        "posture.c4_num": "04 — IBM CLOUD",       "posture.c4_title": "Preparación para IBM Cloud",          "posture.c4_body": "Alineado con los patrones de IA, almacenamiento y gobernanza de IBM Cloud.",
+        "posture.c5_num": "05 — DATOS",           "posture.c5_title": "Minimización de datos",               "posture.c5_body": "Captura enfocada, procesamiento controlado, manejo responsable.",
+        "posture.c6_num": "06 — REVISIÓN",        "posture.c6_title": "Revisión de despliegue",              "posture.c6_body": "Revisión de seguridad, privacidad y flujo antes del despliegue clínico.",
+
+        "infra.eyebrow": "Construido sobre IBM",
+        "infra.h2": "Infraestructura empresarial, por diseño.",
+        "infra.sub": "ChartNav se construye sobre los patrones de infraestructura y gobernanza que los equipos de seguridad empresarial esperan ver durante el proceso de compra.",
+        "infra.c1_num": "IBM WATSONX", "infra.c1_title": "IA alineada con watsonx",           "infra.c1_body": "Infraestructura de IA de grado empresarial diseñada para cargas de trabajo en salud.",
+        "infra.c2_num": "GOBERNANZA",  "infra.c2_title": "Metadatos watsonx.governance",      "infra.c2_body": "Metadatos de proveedor, modelo, solicitud y clasificación registrados por llamada de IA.",
+        "infra.c3_num": "LISTO NUBE",  "infra.c3_title": "Arquitectura IBM Cloud",            "infra.c3_body": "Patrones de IA, almacenamiento y gobernanza alineados con el despliegue en IBM Cloud.",
+        "infra.c4_num": "REDACCIÓN PHI","infra.c4_title": "18 identificadores Safe Harbor",   "infra.c4_body": "Todos los identificadores HIPAA Safe Harbor se escanean antes de cualquier llamada al modelo.",
+        "infra.c5_num": "AUDITORÍA",   "infra.c5_title": "Inmutable, por organización",       "infra.c5_body": "Registro de auditoría de solo agregar con reenvío saliente en JSONL o webhook.",
+        "infra.c6_num": "FHIR R4",     "infra.c6_title": "Intercambio basado en estándares",  "infra.c6_body": "Lectura FHIR R4 para interoperabilidad con los EHR existentes.",
+        "infra.roadmap": "Hoja de ruta: SSO empresarial (SAML / OIDC), aprovisionamiento SCIM, preparación SOC 2 Tipo II — alcance definido en la evaluación.",
+
+        "faq.eyebrow": "Preguntas frecuentes",
+        "faq.h2": "Las preguntas que los compradores hacen primero.",
+        "faq.q1": "¿Está ChartNav construido para revisiones de seguridad oftalmológica?",
+        "faq.a1": "Sí — flujos conscientes de privacidad, revisión de despliegue, planeación de preparación empresarial. Los detalles de cumplimiento se revisan durante la implementación.",
+        "faq.q2": "¿ChartNav utiliza IBM Cloud o watsonx?",
+        "faq.a2": "Preparado para IA, almacenamiento y gobernanza alineados con IBM Cloud. La configuración de producción se verifica durante la implementación.",
+        "faq.q3": "¿ChartNav está alojado en Vercel?",
+        "faq.a3": "La capa pública de marketing está en hosting estático de Vercel. Los servicios clínicos y de backend se revisan por separado.",
+        "faq.q4": "¿Cómo maneja ChartNav la minimización de datos?",
+        "faq.a4": "Captura enfocada, procesamiento controlado. El alcance real se revisa durante la implementación.",
+        "faq.primary": "Revise ChartNav para su práctica",
+        "faq.secondary": "Detalles de seguridad de IA →",
+
+        "footer.copy": "© 2026 ARCG Systems. ChartNav es un producto de ARCG Systems."
+      }
+    };
+  </script>
+</head>
+<body>
+
+<header class="site-header" id="site-header">
+  <div class="site-header__inner">
+    <a href="/" class="site-header__logo" data-i18n-attr-aria-label="nav.home_label" aria-label="ChartNav MD home"><img src="/brand/chartnav-logo.svg" alt="ChartNav" /></a>
+    <ul class="site-header__nav" role="list">
+      <li><a href="/" data-i18n="nav.home">Home</a></li>
+      <li><a href="/ehr/" data-i18n="nav.ehr">EMR/EHR</a></li>
+      <li><a href="/platform/" data-i18n="nav.platform">Platform</a></li>
+      <li><a href="/ophthalmology/" data-i18n="nav.ophthalmology">Ophthalmology</a></li>
+      <li><a href="/implementation/" data-i18n="nav.implementation">Implementation</a></li>
+      <li><a href="/ai-security/" data-i18n="nav.ai_security">AI Security</a></li>
+      <li><a href="/security/" class="is-active" data-i18n="nav.security">Security &amp; Trust</a></li>
+    </ul>
+    <div class="site-header__cta"><a href="/#assessment" class="btn btn--primary" data-i18n="hero.cta_primary">Request Assessment</a></div>
+    <button class="site-header__menu-btn" data-i18n="nav.menu" data-i18n-attr-aria-label="nav.menu_label" aria-label="Open menu" onclick="document.getElementById('site-header').dataset.open=document.getElementById('site-header').dataset.open==='true'?'false':'true'">Menu</button>
+  </div>
+</header>
+
+<section class="page-intro">
+  <div class="container">
+    <p class="eyebrow" data-i18n="hero.eyebrow">Security &amp; trust</p>
+    <h1 class="page-intro__h1" data-i18n="hero.h1">Built for serious ophthalmology workflows.</h1>
+    <p class="page-intro__sub">
+      <span class="brand-text"><span class="chart">Chart</span><span class="nav">Nav</span></span><span data-i18n="hero.sub_post"> fits clinical workflow, privacy review, enterprise deployment, and responsible AI expectations.</span>
+    </p>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    <p class="eyebrow" data-i18n="posture.eyebrow">Enterprise posture</p>
+    <h2 class="section-h" data-i18n="posture.h2">Designed for security review.</h2>
+
+    <div class="card-grid" role="list">
+      <article class="card" role="listitem"><p class="card__num" data-i18n="posture.c1_num">01 — PRIVACY</p><h3 class="card__h" data-i18n="posture.c1_title">Clinical privacy by design</h3><p class="card__p" data-i18n="posture.c1_body">Built for workflows where documentation and patient context require careful handling.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="posture.c2_num">02 — ACCESS</p><h3 class="card__h" data-i18n="posture.c2_title">Enterprise access readiness</h3><p class="card__p" data-i18n="posture.c2_body">Practice-level controls, user roles, administrative review.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="posture.c3_num">03 — INFRASTRUCTURE</p><h3 class="card__h" data-i18n="posture.c3_title">Secure static marketing layer</h3><p class="card__p" data-i18n="posture.c3_body">Lightweight static deployment. Clinical/backend reviewed separately.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="posture.c4_num">04 — IBM CLOUD</p><h3 class="card__h" data-i18n="posture.c4_title">IBM Cloud readiness</h3><p class="card__p" data-i18n="posture.c4_body">Aligns with IBM Cloud AI, storage, and governance patterns.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="posture.c5_num">05 — DATA</p><h3 class="card__h" data-i18n="posture.c5_title">Data minimization</h3><p class="card__p" data-i18n="posture.c5_body">Focused capture, controlled processing, responsible handling.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="posture.c6_num">06 — REVIEW</p><h3 class="card__h" data-i18n="posture.c6_title">Deployment review</h3><p class="card__p" data-i18n="posture.c6_body">Security, privacy, workflow review before clinical rollout.</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="noclaim">
+  <div class="container">
+    <p class="eyebrow" data-i18n="infra.eyebrow">Built on IBM</p>
+    <h2 class="section-h" data-i18n="infra.h2">Enterprise infrastructure, by design.</h2>
+    <p class="section-sub" data-i18n="infra.sub">ChartNav is engineered around the infrastructure and governance patterns enterprise security teams expect to see during procurement review.</p>
+    <div class="card-grid" role="list">
+      <article class="card" role="listitem"><p class="card__num" data-i18n="infra.c1_num">IBM WATSONX</p><h3 class="card__h" data-i18n="infra.c1_title">watsonx-aligned AI</h3><p class="card__p" data-i18n="infra.c1_body">Enterprise-grade AI infrastructure designed for healthcare workloads.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="infra.c2_num">GOVERNANCE</p><h3 class="card__h" data-i18n="infra.c2_title">watsonx.governance metadata</h3><p class="card__p" data-i18n="infra.c2_body">Provider, model, request, and classification metadata recorded per AI call.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="infra.c3_num">CLOUD READY</p><h3 class="card__h" data-i18n="infra.c3_title">IBM Cloud architecture</h3><p class="card__p" data-i18n="infra.c3_body">AI, storage, and governance patterns aligned with IBM Cloud deployment.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="infra.c4_num">PHI REDACTION</p><h3 class="card__h" data-i18n="infra.c4_title">18 Safe Harbor identifiers</h3><p class="card__p" data-i18n="infra.c4_body">All HIPAA Safe Harbor identifiers scanned before any model call.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="infra.c5_num">AUDIT TRAIL</p><h3 class="card__h" data-i18n="infra.c5_title">Immutable, org-scoped</h3><p class="card__p" data-i18n="infra.c5_body">Append-only audit log with outbound JSONL or webhook forwarding.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="infra.c6_num">FHIR R4</p><h3 class="card__h" data-i18n="infra.c6_title">Standards-based exchange</h3><p class="card__p" data-i18n="infra.c6_body">FHIR R4 read-through for interoperability with existing EHRs.</p></article>
+    </div>
+    <p class="section-sub" data-i18n="infra.roadmap" style="margin-top:1.5rem;">Roadmap: enterprise SSO (SAML / OIDC), SCIM provisioning, SOC 2 Type II readiness — scoped at assessment.</p>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    <p class="eyebrow" data-i18n="faq.eyebrow">Common questions</p>
+    <h2 class="section-h" data-i18n="faq.h2">Answers buyers ask first.</h2>
+    <div class="faq-list">
+      <details><summary data-i18n="faq.q1">Is ChartNav built for ophthalmology security reviews?</summary><p data-i18n="faq.a1">Yes — privacy-aware workflows, deployment review, enterprise-readiness planning. Compliance specifics are reviewed during implementation.</p></details>
+      <details><summary data-i18n="faq.q2">Does ChartNav use IBM Cloud or watsonx?</summary><p data-i18n="faq.a2">Prepared for IBM Cloud-aligned AI, storage, and governance. Production configuration verified during implementation.</p></details>
+      <details><summary data-i18n="faq.q3">Is ChartNav hosted on Vercel?</summary><p data-i18n="faq.a3">Public marketing layer is on Vercel static hosting. Clinical and backend services are reviewed separately.</p></details>
+      <details><summary data-i18n="faq.q4">How does ChartNav handle data minimization?</summary><p data-i18n="faq.a4">Focused capture, controlled processing. Actual scope reviewed during implementation.</p></details>
+    </div>
+    <div class="hero__ctas" style="margin-top:2rem;">
+      <a href="/#assessment" class="btn btn--primary" data-i18n="faq.primary">Review ChartNav for Your Practice</a>
+      <a href="/ai-security/" class="btn btn--ghost" data-i18n="faq.secondary">AI security details →</a>
+    </div>
+  </div>
+</section>
+
+<footer class="site-footer">
+  <div class="site-footer__inner">
+    <span class="site-footer__brand"><img src="/brand/chartnav-mark.svg" alt="" aria-hidden="true" /><span class="brand-text"><span class="chart">Chart</span><span class="nav">Nav</span></span> <span style="color:var(--cn-dim);font-size:.875rem;">MD</span></span>
+    <ul class="site-footer__links" role="list">
+      <li><a href="/" data-i18n="nav.home">Home</a></li>
+      <li><a href="/platform/" data-i18n="nav.platform">Platform</a></li>
+      <li><a href="/ophthalmology/" data-i18n="nav.ophthalmology">Ophthalmology</a></li>
+      <li><a href="/implementation/" data-i18n="nav.implementation">Implementation</a></li>
+      <li><a href="/ai-security/" data-i18n="nav.ai_security">AI Security</a></li>
+    </ul>
+    <p class="site-footer__copy" data-i18n="footer.copy">© 2026 ARCG Systems. ChartNav is a product of ARCG Systems.</p>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ChartNav Implementation — Ophthalmology Workflow Rollout</title>
+  <meta name="description" content="ChartNav implementation is workflow-led. Start with an assessment, configure to your practice, run a workflow-first pilot, and review on numbers — alongside your existing intake, imaging, and billing tools." />
+  <link rel="canonical" href="https://chartnavmd.com/implementation/" />
+  <link rel="alternate" hreflang="en" href="https://chartnavmd.com/implementation/" />
+  <link rel="alternate" hreflang="es" href="https://chartnavmd.com/implementation/?lang=es" />
+  <link rel="alternate" hreflang="x-default" href="https://chartnavmd.com/implementation/" />
+  <link rel="icon" href="/brand/chartnav-favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+  <script src="/reveal.js" defer></script>
+  <script src="/lang-toggle.js" defer></script>
+
+  <script>
+    window.__CN_I18N__ = {
+      en: {
+        "__document_title": "ChartNav Implementation — Ophthalmology Workflow Rollout",
+        "__meta_description": "ChartNav implementation is workflow-led. Start with an assessment, configure to your practice, run a workflow-first pilot, and review on numbers — alongside your existing intake, imaging, and billing tools.",
+
+        "nav.home": "Home", "nav.ehr": "EMR/EHR", "nav.platform": "Platform",
+        "nav.ophthalmology": "Ophthalmology", "nav.implementation": "Implementation",
+        "nav.ai_security": "AI Security", "nav.security": "Security & Trust",
+        "nav.menu": "Menu", "nav.menu_label": "Open menu", "nav.home_label": "ChartNav MD home",
+        "hero.cta_primary": "Request Assessment",
+
+        "hero.eyebrow": "Implementation",
+        "hero.h1": "A workflow-first rollout, not a sign-up link.",
+        "hero.sub": "Workflow assessment, then configuration, then a workflow-first pilot alongside the EMR you already run. Numbers reviewed in the weeks after go-live.",
+
+        "stages.eyebrow": "How it goes",
+        "stages.h2": "Four stages. No surprises.",
+        "stages.c1_num": "01 — ASSESSMENT",   "stages.c1_title": "Map the workflow",       "stages.c1_body": "Transcript capture, draft review, provider sign, reviewer loop — mapped.",
+        "stages.c2_num": "02 — CONFIGURATION","stages.c2_title": "Shape to your practice", "stages.c2_body": "Templates, roles, providers, locations. FHIR R4 read-through where available.",
+        "stages.c3_num": "03 — PILOT",        "stages.c3_title": "Workflow-first, staged", "stages.c3_body": "Goes live in stages alongside current systems. Nothing else changes during pilot.",
+        "stages.c4_num": "04 — REVIEW",       "stages.c4_title": "Review on numbers",      "stages.c4_body": "Time-to-signed-note, missing-data, revision rate — reviewed on cadence.",
+
+        "fit.eyebrow": "How it fits with what you have",
+        "fit.h2": "Works with your stack today. Grows into your EHR.",
+        "fit.left_h": "ChartNav covers today",
+        "fit.left_1": "Workflow capture with role-based views",
+        "fit.left_2": "Audit trail with outbound forwarding",
+        "fit.left_3": "Session timeouts + admin revocation",
+        "fit.left_4": "Per-provider KPI scorecard",
+        "fit.left_5": "FHIR R4 read-through · SBOM per release",
+        "fit.right_h": "Connects to your existing systems",
+        "fit.right_1": "Your patient intake and messaging",
+        "fit.right_2": "Your imaging capture and routing",
+        "fit.right_3": "Your medical billing system (recommendations handed off for review)",
+        "fit.right_4": "Your identity provider",
+        "fit.roadmap": "As you grow: enterprise SSO (SAML / OIDC), SCIM, native imaging + billing, and named-EHR adapters — scoped at assessment.",
+
+        "billing.eyebrow": "Billing workflow",
+        "billing.h2": "Connect recommendations to your billing workflow.",
+        "billing.sub": "During implementation, practices define how ChartNav's billing-aware outputs are reviewed, exported, or handed off to the billing workflow. Final coding, billing, and payer submission stay inside the practice's approved billing process.",
+        "billing.c1_num": "CAPTURE",  "billing.c1_title": "Clinical context, captured", "billing.c1_body": "Exam, imaging, and procedure context tied to the encounter.",
+        "billing.c2_num": "SUGGEST",  "billing.c2_title": "Coding suggestions",         "billing.c2_body": "Structured recommendations for coder and provider review.",
+        "billing.c3_num": "EXPORT",   "billing.c3_title": "Integration-ready",          "billing.c3_body": "Routes to your medical billing system where integration is configured.",
+
+        "after.eyebrow": "After go-live",
+        "after.h2": "A cleaner clinic day, measured.",
+        "after.c1_num": "REVIEW",       "after.c1_title": "Week-over-week visibility", "after.c1_body": "Per-provider KPIs as the day runs — not at month-end.",
+        "after.c2_num": "REFINEMENT",   "after.c2_title": "Tune to the data",          "after.c2_body": "Templates and review thresholds adjusted from real-clinic use.",
+        "after.c3_num": "SAFE ROLLOUT", "after.c3_title": "Staged and reversible",     "after.c3_body": "Existing intake, imaging, billing untouched during pilot.",
+        "after.primary": "Request Assessment",
+        "after.secondary": "AI security details →",
+
+        "footer.copy": "© 2026 ARCG Systems. ChartNav is a product of ARCG Systems."
+      },
+      es: {
+        "__document_title": "Implementación de ChartNav — Despliegue del flujo oftalmológico",
+        "__meta_description": "La implementación de ChartNav es guiada por flujo de trabajo. Comience con una evaluación, configure a su práctica, realice un piloto centrado en el flujo y revise los resultados con métricas — junto a su admisión, imágenes y herramientas de facturación existentes.",
+
+        "nav.home": "Inicio", "nav.ehr": "EMR/EHR", "nav.platform": "Plataforma",
+        "nav.ophthalmology": "Oftalmología", "nav.implementation": "Implementación",
+        "nav.ai_security": "Seguridad de IA", "nav.security": "Seguridad y confianza",
+        "nav.menu": "Menú", "nav.menu_label": "Abrir menú", "nav.home_label": "Inicio de ChartNav MD",
+        "hero.cta_primary": "Solicitar evaluación",
+
+        "hero.eyebrow": "Implementación",
+        "hero.h1": "Un despliegue guiado por flujo, no un enlace de registro.",
+        "hero.sub": "Evaluación de flujo, luego configuración, luego un piloto centrado en el flujo junto al EMR que ya utiliza. Las métricas se revisan en las semanas posteriores al go-live.",
+
+        "stages.eyebrow": "Cómo se desarrolla",
+        "stages.h2": "Cuatro etapas. Sin sorpresas.",
+        "stages.c1_num": "01 — EVALUACIÓN",  "stages.c1_title": "Mapeo del flujo de trabajo",       "stages.c1_body": "Captura de transcripción, revisión de borrador, firma del proveedor, ciclo del revisor — mapeados.",
+        "stages.c2_num": "02 — CONFIGURACIÓN","stages.c2_title": "Adaptación a su práctica",         "stages.c2_body": "Plantillas, roles, proveedores, ubicaciones. Lectura FHIR R4 donde esté disponible.",
+        "stages.c3_num": "03 — PILOTO",      "stages.c3_title": "Centrado en flujo, por etapas",    "stages.c3_body": "Va a producción por etapas junto a los sistemas actuales. Nada más cambia durante el piloto.",
+        "stages.c4_num": "04 — REVISIÓN",    "stages.c4_title": "Revisión con métricas",            "stages.c4_body": "Tiempo hasta nota firmada, datos faltantes, tasa de revisión — revisados con cadencia.",
+
+        "fit.eyebrow": "Cómo encaja con lo que ya tiene",
+        "fit.h2": "Funciona con su stack hoy. Crece hacia su EHR.",
+        "fit.left_h": "ChartNav cubre hoy",
+        "fit.left_1": "Captura del flujo con vistas por rol",
+        "fit.left_2": "Registro de auditoría con reenvío externo",
+        "fit.left_3": "Tiempos de sesión + revocación por administrador",
+        "fit.left_4": "Tablero de KPI por proveedor",
+        "fit.left_5": "Lectura FHIR R4 · SBOM por versión",
+        "fit.right_h": "Se conecta a sus sistemas existentes",
+        "fit.right_1": "Su admisión de pacientes y mensajería",
+        "fit.right_2": "Su captura y enrutamiento de imágenes",
+        "fit.right_3": "Su sistema de facturación médica (recomendaciones entregadas para revisión)",
+        "fit.right_4": "Su proveedor de identidad",
+        "fit.roadmap": "A medida que crece: SSO empresarial (SAML / OIDC), SCIM, imágenes y facturación nativas, y adaptadores para EHR específicos — alcance definido en la evaluación.",
+
+        "billing.eyebrow": "Flujo de facturación",
+        "billing.h2": "Conecte las recomendaciones a su flujo de facturación.",
+        "billing.sub": "Durante la implementación, las prácticas definen cómo las salidas con contexto de facturación de ChartNav se revisan, exportan o entregan al flujo de facturación. La codificación, facturación y presentación al pagador permanecen dentro del proceso de facturación aprobado por la práctica.",
+        "billing.c1_num": "CAPTURA",  "billing.c1_title": "Contexto clínico, capturado", "billing.c1_body": "Examen, imágenes y contexto de procedimiento ligados a la visita.",
+        "billing.c2_num": "SUGERIR",  "billing.c2_title": "Sugerencias de codificación", "billing.c2_body": "Recomendaciones estructuradas para revisión por codificador y proveedor.",
+        "billing.c3_num": "EXPORTAR", "billing.c3_title": "Lista para integración",      "billing.c3_body": "Se enruta a su sistema de facturación médica donde la integración esté configurada.",
+
+        "after.eyebrow": "Después del go-live",
+        "after.h2": "Un día de clínica más limpio, medido.",
+        "after.c1_num": "REVISIÓN",        "after.c1_title": "Visibilidad semana a semana", "after.c1_body": "KPI por proveedor a medida que transcurre el día — no a fin de mes.",
+        "after.c2_num": "AJUSTE",          "after.c2_title": "Afinar con los datos",        "after.c2_body": "Plantillas y umbrales de revisión ajustados según el uso real en la clínica.",
+        "after.c3_num": "DESPLIEGUE SEGURO","after.c3_title": "Por etapas y reversible",    "after.c3_body": "Admisión, imágenes y facturación existentes no se tocan durante el piloto.",
+        "after.primary": "Solicitar evaluación",
+        "after.secondary": "Detalles de seguridad de IA →",
+
+        "footer.copy": "© 2026 ARCG Systems. ChartNav es un producto de ARCG Systems."
+      }
+    };
+  </script>
+</head>
+<body>
+
+<header class="site-header" id="site-header">
+  <div class="site-header__inner">
+    <a href="/" class="site-header__logo" data-i18n-attr-aria-label="nav.home_label" aria-label="ChartNav MD home"><img src="/brand/chartnav-logo.svg" alt="ChartNav" /></a>
+    <ul class="site-header__nav" role="list">
+      <li><a href="/" data-i18n="nav.home">Home</a></li>
+      <li><a href="/ehr/" data-i18n="nav.ehr">EMR/EHR</a></li>
+      <li><a href="/platform/" data-i18n="nav.platform">Platform</a></li>
+      <li><a href="/ophthalmology/" data-i18n="nav.ophthalmology">Ophthalmology</a></li>
+      <li><a href="/implementation/" class="is-active" data-i18n="nav.implementation">Implementation</a></li>
+      <li><a href="/ai-security/" data-i18n="nav.ai_security">AI Security</a></li>
+      <li><a href="/security/" data-i18n="nav.security">Security &amp; Trust</a></li>
+    </ul>
+    <div class="site-header__cta"><a href="/#assessment" class="btn btn--primary" data-i18n="hero.cta_primary">Request Assessment</a></div>
+    <button class="site-header__menu-btn" data-i18n="nav.menu" data-i18n-attr-aria-label="nav.menu_label" aria-label="Open menu" onclick="document.getElementById('site-header').dataset.open=document.getElementById('site-header').dataset.open==='true'?'false':'true'">Menu</button>
+  </div>
+</header>
+
+<section class="page-intro">
+  <div class="container">
+    <p class="eyebrow" data-i18n="hero.eyebrow">Implementation</p>
+    <h1 class="page-intro__h1" data-i18n="hero.h1">A workflow-first rollout, not a sign-up link.</h1>
+    <p class="page-intro__sub" data-i18n="hero.sub">
+      Workflow assessment, then configuration, then a workflow-first pilot alongside the EMR you already run. Numbers reviewed in the weeks after go-live.
+    </p>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    <p class="eyebrow" data-i18n="stages.eyebrow">How it goes</p>
+    <h2 class="section-h" data-i18n="stages.h2">Four stages. No surprises.</h2>
+
+    <div class="card-grid" role="list">
+      <article class="card" role="listitem"><p class="card__num" data-i18n="stages.c1_num">01 — ASSESSMENT</p><h3 class="card__h" data-i18n="stages.c1_title">Map the workflow</h3><p class="card__p" data-i18n="stages.c1_body">Transcript capture, draft review, provider sign, reviewer loop — mapped.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="stages.c2_num">02 — CONFIGURATION</p><h3 class="card__h" data-i18n="stages.c2_title">Shape to your practice</h3><p class="card__p" data-i18n="stages.c2_body">Templates, roles, providers, locations. FHIR R4 read-through where available.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="stages.c3_num">03 — PILOT</p><h3 class="card__h" data-i18n="stages.c3_title">Workflow-first, staged</h3><p class="card__p" data-i18n="stages.c3_body">Goes live in stages alongside current systems. Nothing else changes during pilot.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="stages.c4_num">04 — REVIEW</p><h3 class="card__h" data-i18n="stages.c4_title">Review on numbers</h3><p class="card__p" data-i18n="stages.c4_body">Time-to-signed-note, missing-data, revision rate — reviewed on cadence.</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="ba">
+  <div class="container">
+    <p class="eyebrow" data-i18n="fit.eyebrow">How it fits with what you have</p>
+    <h2 class="section-h" data-i18n="fit.h2">Works with your stack today. Grows into your EHR.</h2>
+    <div class="ba-grid">
+      <div class="ba-col ba-col--after">
+        <p class="ba-col__h" data-i18n="fit.left_h">ChartNav covers today</p>
+        <ul>
+          <li data-i18n="fit.left_1">Workflow capture with role-based views</li>
+          <li data-i18n="fit.left_2">Audit trail with outbound forwarding</li>
+          <li data-i18n="fit.left_3">Session timeouts + admin revocation</li>
+          <li data-i18n="fit.left_4">Per-provider KPI scorecard</li>
+          <li data-i18n="fit.left_5">FHIR R4 read-through · SBOM per release</li>
+        </ul>
+      </div>
+      <div class="ba-col ba-col--after">
+        <p class="ba-col__h" data-i18n="fit.right_h">Connects to your existing systems</p>
+        <ul>
+          <li data-i18n="fit.right_1">Your patient intake and messaging</li>
+          <li data-i18n="fit.right_2">Your imaging capture and routing</li>
+          <li data-i18n="fit.right_3">Your medical billing system (recommendations handed off for review)</li>
+          <li data-i18n="fit.right_4">Your identity provider</li>
+        </ul>
+      </div>
+    </div>
+    <p class="section-sub" data-i18n="fit.roadmap" style="margin-top:2rem;">As you grow: enterprise SSO (SAML / OIDC), SCIM, native imaging + billing, and named-EHR adapters — scoped at assessment.</p>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    <p class="eyebrow" data-i18n="billing.eyebrow">Billing workflow</p>
+    <h2 class="section-h" data-i18n="billing.h2">Connect recommendations to your billing workflow.</h2>
+    <p class="section-sub" data-i18n="billing.sub">During implementation, practices define how ChartNav's billing-aware outputs are reviewed, exported, or handed off to the billing workflow. Final coding, billing, and payer submission stay inside the practice's approved billing process.</p>
+    <div class="card-grid" role="list">
+      <article class="card" role="listitem"><p class="card__num" data-i18n="billing.c1_num">CAPTURE</p><h3 class="card__h" data-i18n="billing.c1_title">Clinical context, captured</h3><p class="card__p" data-i18n="billing.c1_body">Exam, imaging, and procedure context tied to the encounter.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="billing.c2_num">SUGGEST</p><h3 class="card__h" data-i18n="billing.c2_title">Coding suggestions</h3><p class="card__p" data-i18n="billing.c2_body">Structured recommendations for coder and provider review.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="billing.c3_num">EXPORT</p><h3 class="card__h" data-i18n="billing.c3_title">Integration-ready</h3><p class="card__p" data-i18n="billing.c3_body">Routes to your medical billing system where integration is configured.</p></article>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    <p class="eyebrow" data-i18n="after.eyebrow">After go-live</p>
+    <h2 class="section-h" data-i18n="after.h2">A cleaner clinic day, measured.</h2>
+
+    <div class="card-grid" role="list">
+      <article class="card" role="listitem"><p class="card__num" data-i18n="after.c1_num">REVIEW</p><h3 class="card__h" data-i18n="after.c1_title">Week-over-week visibility</h3><p class="card__p" data-i18n="after.c1_body">Per-provider KPIs as the day runs — not at month-end.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="after.c2_num">REFINEMENT</p><h3 class="card__h" data-i18n="after.c2_title">Tune to the data</h3><p class="card__p" data-i18n="after.c2_body">Templates and review thresholds adjusted from real-clinic use.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="after.c3_num">SAFE ROLLOUT</p><h3 class="card__h" data-i18n="after.c3_title">Staged and reversible</h3><p class="card__p" data-i18n="after.c3_body">Existing intake, imaging, billing untouched during pilot.</p></article>
+    </div>
+
+    <div class="hero__ctas" style="margin-top:2.5rem;">
+      <a href="/#assessment" class="btn btn--primary" data-i18n="after.primary">Request Assessment</a>
+      <a href="/ai-security/" class="btn btn--ghost" data-i18n="after.secondary">AI security details →</a>
+    </div>
+  </div>
+</section>
+
+<footer class="site-footer">
+  <div class="site-footer__inner">
+    <span class="site-footer__brand"><img src="/brand/chartnav-mark.svg" alt="" aria-hidden="true" /><span class="brand-text"><span class="chart">Chart</span><span class="nav">Nav</span></span> <span style="color:var(--cn-dim);font-size:.875rem;">MD</span></span>
+    <ul class="site-footer__links" role="list">
+      <li><a href="/" data-i18n="nav.home">Home</a></li>
+      <li><a href="/platform/" data-i18n="nav.platform">Platform</a></li>
+      <li><a href="/ophthalmology/" data-i18n="nav.ophthalmology">Ophthalmology</a></li>
+      <li><a href="/ai-security/" data-i18n="nav.ai_security">AI Security</a></li>
+      <li><a href="/security/" data-i18n="nav.security">Security &amp; Trust</a></li>
+    </ul>
+    <p class="site-footer__copy" data-i18n="footer.copy">© 2026 ARCG Systems. ChartNav is a product of ARCG Systems.</p>
+  </div>
+</footer>
+
+</body>
+</html>

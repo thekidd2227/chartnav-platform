@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="ChartNav">
+  <title>ChartNav</title>
+  <!-- Canonical ChartNav symbol (from chartnav-platform/apps/web/public/brand/chartnav-mark.svg).
+       Compact medical pulse mark: two small teal tick rects flanking a tall red center line. -->
+  <rect x="6"  y="21" width="10" height="6"  rx="1"   fill="#0B6E79"/>
+  <rect x="32" y="21" width="10" height="6"  rx="1"   fill="#0B6E79"/>
+  <rect x="22" y="6"  width="4"  height="36" rx="1.5" fill="#DC2626"/>
+</svg>

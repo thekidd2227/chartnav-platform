@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ChartNav AI Security — Responsible AI for Ophthalmology Documentation</title>
+  <meta name="description" content="Auditable AI for ophthalmology workflow capture. PHI redaction before every model call, prompt-injection detection, provider review gate, and immutable audit log — designed to support enterprise AI risk review." />
+  <link rel="canonical" href="https://chartnavmd.com/ai-security/" />
+  <link rel="alternate" hreflang="en" href="https://chartnavmd.com/ai-security/" />
+  <link rel="alternate" hreflang="es" href="https://chartnavmd.com/ai-security/?lang=es" />
+  <link rel="alternate" hreflang="x-default" href="https://chartnavmd.com/ai-security/" />
+  <link rel="icon" href="/brand/chartnav-favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+  <script src="/reveal.js" defer></script>
+  <script src="/lang-toggle.js" defer></script>
+
+  <script>
+    window.__CN_I18N__ = {
+      en: {
+        "__document_title": "ChartNav AI Security — Responsible AI for Ophthalmology Documentation",
+        "__meta_description": "Auditable AI for ophthalmology workflow capture. PHI redaction before every model call, prompt-injection detection, provider review gate, and immutable audit log — designed to support enterprise AI risk review.",
+
+        "nav.home": "Home", "nav.ehr": "EMR/EHR", "nav.platform": "Platform",
+        "nav.ophthalmology": "Ophthalmology", "nav.implementation": "Implementation",
+        "nav.ai_security": "AI Security", "nav.security": "Security & Trust",
+        "nav.menu": "Menu", "nav.menu_label": "Open menu", "nav.home_label": "ChartNav MD home",
+        "hero.cta_primary": "Request Assessment",
+
+        "hero.eyebrow": "AI security",
+        "hero.h1": "Auditable AI. Provider review every time.",
+        "hero.sub": "No model call without PHI redaction, governance metadata, and qualified provider review. Baseline, not a premium tier.",
+
+        "risk.eyebrow": "Responsible AI posture",
+        "risk.h2": "Built for AI risk review.",
+        "risk.c1_num": "01 — REDACTION",        "risk.c1_title": "PHI redaction first",         "risk.c1_body": "All 18 Safe Harbor identifiers scanned before any call. Unredactable PHI blocks it.",
+        "risk.c2_num": "02 — REVIEW GATE",      "risk.c2_title": "Provider review required",    "risk.c2_body": "No AI output is final without qualified provider approval.",
+        "risk.c3_num": "03 — AUDIT LOG",        "risk.c3_title": "Immutable AI audit",          "risk.c3_body": "Prompt hash, output hash, model ID, redaction status — append-only.",
+        "risk.c4_num": "04 — PROVENANCE",       "risk.c4_title": "Model + provider trace",      "risk.c4_body": "Provider, model ID, request ID, classification — recorded per call.",
+        "risk.c5_num": "05 — INJECTION DEFENSE","risk.c5_title": "Prompt-injection block",      "risk.c5_body": "Hard block on token-boundary, jailbreak, review-bypass patterns.",
+        "risk.c6_num": "06 — RETENTION TAGS",   "risk.c6_title": "Classification + retention", "risk.c6_body": "Tags map AI outputs to your data-handling policy.",
+
+        "trail.eyebrow": "Governance metadata",
+        "trail.h2": "Every AI call leaves a paper trail.",
+        "trail.left_h": "Recorded per call",
+        "trail.left_1": "Provider identity and role",
+        "trail.left_2": "Model ID and version",
+        "trail.left_3": "Request ID for trace",
+        "trail.left_4": "PHI redaction status",
+        "trail.left_5": "Classification + retention tags",
+        "trail.right_h": "Available to reviewers",
+        "trail.right_1": "Append-only audit, org-scoped",
+        "trail.right_2": "Outbound JSONL or webhook",
+        "trail.right_3": "Per-org retention controls",
+        "trail.right_4": "Sign attestations + immutability",
+
+        "wx.eyebrow": "Enterprise-ready AI",
+        "wx.h2": "Powered by IBM watsonx, built for ophthalmology.",
+        "wx.sub": "ChartNav is engineered around enterprise-grade AI infrastructure that security and IT teams expect — and that ophthalmology practices can actually deploy.",
+        "wx.c1_num": "IBM WATSONX","wx.c1_title": "watsonx-aligned AI",         "wx.c1_body": "Enterprise-grade AI infrastructure designed for healthcare workloads.",
+        "wx.c2_num": "GOVERNANCE", "wx.c2_title": "watsonx.governance patterns","wx.c2_body": "Provider, model, and request metadata recorded per call.",
+        "wx.c3_num": "CLOUD READY","wx.c3_title": "IBM Cloud architecture",     "wx.c3_body": "AI, storage, and governance patterns aligned with IBM Cloud deployment.",
+        "wx.c4_num": "FHIR R4",    "wx.c4_title": "Standards-based exchange",   "wx.c4_body": "FHIR R4 read-through for interoperability with existing EHR systems.",
+        "wx.c5_num": "SBOM",       "wx.c5_title": "Software bill of materials","wx.c5_body": "SBOM published per release for procurement and vulnerability review.",
+        "wx.c6_num": "ROADMAP",    "wx.c6_title": "SSO & SCIM ready",          "wx.c6_body": "Enterprise SSO (SAML / OIDC) and SCIM provisioning on the roadmap.",
+        "wx.primary": "Request Assessment",
+        "wx.secondary": "Enterprise security & trust →",
+
+        "footer.copy": "© 2026 ARCG Systems. ChartNav is a product of ARCG Systems."
+      },
+      es: {
+        "__document_title": "Seguridad de IA en ChartNav — IA responsable para documentación oftalmológica",
+        "__meta_description": "IA auditable para la captura del flujo oftalmológico. Redacción de PHI antes de cada llamada al modelo, detección de inyección de prompts, revisión del proveedor clínico y registro de auditoría inmutable — diseñado para apoyar la revisión empresarial de riesgos de IA.",
+
+        "nav.home": "Inicio", "nav.ehr": "EMR/EHR", "nav.platform": "Plataforma",
+        "nav.ophthalmology": "Oftalmología", "nav.implementation": "Implementación",
+        "nav.ai_security": "Seguridad de IA", "nav.security": "Seguridad y confianza",
+        "nav.menu": "Menú", "nav.menu_label": "Abrir menú", "nav.home_label": "Inicio de ChartNav MD",
+        "hero.cta_primary": "Solicitar evaluación",
+
+        "hero.eyebrow": "Seguridad de IA",
+        "hero.h1": "IA auditable. Revisión del proveedor en cada llamada.",
+        "hero.sub": "Ninguna llamada al modelo sin redacción de PHI, metadatos de gobernanza y revisión calificada del proveedor clínico. Es la base, no un nivel premium.",
+
+        "risk.eyebrow": "Postura de IA responsable",
+        "risk.h2": "Construido para revisión de riesgos de IA.",
+        "risk.c1_num": "01 — REDACCIÓN",          "risk.c1_title": "Redacción de PHI primero",           "risk.c1_body": "Los 18 identificadores Safe Harbor se escanean antes de cualquier llamada. La PHI no redactable la bloquea.",
+        "risk.c2_num": "02 — REVISIÓN",           "risk.c2_title": "Revisión del proveedor requerida",   "risk.c2_body": "Ninguna salida de IA queda definitiva sin aprobación calificada del proveedor clínico.",
+        "risk.c3_num": "03 — REGISTRO",           "risk.c3_title": "Auditoría de IA inmutable",          "risk.c3_body": "Hash del prompt, hash de la salida, ID del modelo, estado de redacción — solo agregar.",
+        "risk.c4_num": "04 — PROCEDENCIA",        "risk.c4_title": "Trazabilidad de modelo + proveedor", "risk.c4_body": "Proveedor, ID de modelo, ID de solicitud, clasificación — registrados por llamada.",
+        "risk.c5_num": "05 — DEFENSA DE INYECCIÓN","risk.c5_title": "Bloqueo de inyección de prompts",   "risk.c5_body": "Bloqueo estricto de patrones de frontera de tokens, jailbreak y evasión de revisión.",
+        "risk.c6_num": "06 — ETIQUETAS",          "risk.c6_title": "Clasificación + retención",         "risk.c6_body": "Las etiquetas asignan las salidas de IA a su política de manejo de datos.",
+
+        "trail.eyebrow": "Metadatos de gobernanza",
+        "trail.h2": "Cada llamada de IA deja rastro documental.",
+        "trail.left_h": "Registrado por llamada",
+        "trail.left_1": "Identidad y rol del proveedor",
+        "trail.left_2": "ID y versión del modelo",
+        "trail.left_3": "ID de solicitud para trazabilidad",
+        "trail.left_4": "Estado de redacción de PHI",
+        "trail.left_5": "Etiquetas de clasificación y retención",
+        "trail.right_h": "Disponible para revisores",
+        "trail.right_1": "Auditoría de solo agregar, con alcance por organización",
+        "trail.right_2": "Salida saliente en JSONL o webhook",
+        "trail.right_3": "Controles de retención por organización",
+        "trail.right_4": "Atestaciones de firma + inmutabilidad",
+
+        "wx.eyebrow": "IA lista para empresa",
+        "wx.h2": "Impulsado por IBM watsonx, construido para oftalmología.",
+        "wx.sub": "ChartNav está construido sobre infraestructura de IA de grado empresarial que los equipos de seguridad y TI esperan ver — y que las prácticas oftalmológicas pueden desplegar en la realidad.",
+        "wx.c1_num": "IBM WATSONX","wx.c1_title": "IA alineada con watsonx",       "wx.c1_body": "Infraestructura de IA de grado empresarial diseñada para cargas de trabajo en salud.",
+        "wx.c2_num": "GOBERNANZA", "wx.c2_title": "Patrones de watsonx.governance","wx.c2_body": "Metadatos de proveedor, modelo y solicitud registrados por llamada.",
+        "wx.c3_num": "LISTO NUBE", "wx.c3_title": "Arquitectura IBM Cloud",        "wx.c3_body": "Patrones de IA, almacenamiento y gobernanza alineados con el despliegue en IBM Cloud.",
+        "wx.c4_num": "FHIR R4",    "wx.c4_title": "Intercambio basado en estándares","wx.c4_body": "Lectura FHIR R4 para interoperabilidad con los sistemas EHR existentes.",
+        "wx.c5_num": "SBOM",       "wx.c5_title": "Lista de materiales de software","wx.c5_body": "SBOM publicado por versión para compras y revisión de vulnerabilidades.",
+        "wx.c6_num": "HOJA DE RUTA","wx.c6_title": "Listo para SSO y SCIM",        "wx.c6_body": "SSO empresarial (SAML / OIDC) y aprovisionamiento SCIM en la hoja de ruta.",
+        "wx.primary": "Solicitar evaluación",
+        "wx.secondary": "Seguridad empresarial y confianza →",
+
+        "footer.copy": "© 2026 ARCG Systems. ChartNav es un producto de ARCG Systems."
+      }
+    };
+  </script>
+</head>
+<body>
+
+<header class="site-header" id="site-header">
+  <div class="site-header__inner">
+    <a href="/" class="site-header__logo" data-i18n-attr-aria-label="nav.home_label" aria-label="ChartNav MD home"><img src="/brand/chartnav-logo.svg" alt="ChartNav" /></a>
+    <ul class="site-header__nav" role="list">
+      <li><a href="/" data-i18n="nav.home">Home</a></li>
+      <li><a href="/ehr/" data-i18n="nav.ehr">EMR/EHR</a></li>
+      <li><a href="/platform/" data-i18n="nav.platform">Platform</a></li>
+      <li><a href="/ophthalmology/" data-i18n="nav.ophthalmology">Ophthalmology</a></li>
+      <li><a href="/implementation/" data-i18n="nav.implementation">Implementation</a></li>
+      <li><a href="/ai-security/" class="is-active" data-i18n="nav.ai_security">AI Security</a></li>
+      <li><a href="/security/" data-i18n="nav.security">Security &amp; Trust</a></li>
+    </ul>
+    <div class="site-header__cta"><a href="/#assessment" class="btn btn--primary" data-i18n="hero.cta_primary">Request Assessment</a></div>
+    <button class="site-header__menu-btn" data-i18n="nav.menu" data-i18n-attr-aria-label="nav.menu_label" aria-label="Open menu" onclick="document.getElementById('site-header').dataset.open=document.getElementById('site-header').dataset.open==='true'?'false':'true'">Menu</button>
+  </div>
+</header>
+
+<section class="page-intro">
+  <div class="container">
+    <p class="eyebrow" data-i18n="hero.eyebrow">AI security</p>
+    <h1 class="page-intro__h1" data-i18n="hero.h1">Auditable AI. Provider review every time.</h1>
+    <p class="page-intro__sub" data-i18n="hero.sub">
+      No model call without PHI redaction, governance metadata, and qualified provider review. Baseline, not a premium tier.
+    </p>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    <p class="eyebrow" data-i18n="risk.eyebrow">Responsible AI posture</p>
+    <h2 class="section-h" data-i18n="risk.h2">Built for AI risk review.</h2>
+
+    <div class="card-grid" role="list">
+      <article class="card" role="listitem"><p class="card__num" data-i18n="risk.c1_num">01 — REDACTION</p><h3 class="card__h" data-i18n="risk.c1_title">PHI redaction first</h3><p class="card__p" data-i18n="risk.c1_body">All 18 Safe Harbor identifiers scanned before any call. Unredactable PHI blocks it.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="risk.c2_num">02 — REVIEW GATE</p><h3 class="card__h" data-i18n="risk.c2_title">Provider review required</h3><p class="card__p" data-i18n="risk.c2_body">No AI output is final without qualified provider approval.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="risk.c3_num">03 — AUDIT LOG</p><h3 class="card__h" data-i18n="risk.c3_title">Immutable AI audit</h3><p class="card__p" data-i18n="risk.c3_body">Prompt hash, output hash, model ID, redaction status — append-only.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="risk.c4_num">04 — PROVENANCE</p><h3 class="card__h" data-i18n="risk.c4_title">Model + provider trace</h3><p class="card__p" data-i18n="risk.c4_body">Provider, model ID, request ID, classification — recorded per call.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="risk.c5_num">05 — INJECTION DEFENSE</p><h3 class="card__h" data-i18n="risk.c5_title">Prompt-injection block</h3><p class="card__p" data-i18n="risk.c5_body">Hard block on token-boundary, jailbreak, review-bypass patterns.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="risk.c6_num">06 — RETENTION TAGS</p><h3 class="card__h" data-i18n="risk.c6_title">Classification + retention</h3><p class="card__p" data-i18n="risk.c6_body">Tags map AI outputs to your data-handling policy.</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="ba">
+  <div class="container">
+    <p class="eyebrow" data-i18n="trail.eyebrow">Governance metadata</p>
+    <h2 class="section-h" data-i18n="trail.h2">Every AI call leaves a paper trail.</h2>
+
+    <div class="ba-grid">
+      <div class="ba-col ba-col--after">
+        <p class="ba-col__h" data-i18n="trail.left_h">Recorded per call</p>
+        <ul>
+          <li data-i18n="trail.left_1">Provider identity and role</li>
+          <li data-i18n="trail.left_2">Model ID and version</li>
+          <li data-i18n="trail.left_3">Request ID for trace</li>
+          <li data-i18n="trail.left_4">PHI redaction status</li>
+          <li data-i18n="trail.left_5">Classification + retention tags</li>
+        </ul>
+      </div>
+      <div class="ba-col ba-col--after">
+        <p class="ba-col__h" data-i18n="trail.right_h">Available to reviewers</p>
+        <ul>
+          <li data-i18n="trail.right_1">Append-only audit, org-scoped</li>
+          <li data-i18n="trail.right_2">Outbound JSONL or webhook</li>
+          <li data-i18n="trail.right_3">Per-org retention controls</li>
+          <li data-i18n="trail.right_4">Sign attestations + immutability</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    <p class="eyebrow" data-i18n="wx.eyebrow">Enterprise-ready AI</p>
+    <h2 class="section-h" data-i18n="wx.h2">Powered by IBM watsonx, built for ophthalmology.</h2>
+    <p class="section-sub" data-i18n="wx.sub">ChartNav is engineered around enterprise-grade AI infrastructure that security and IT teams expect — and that ophthalmology practices can actually deploy.</p>
+    <div class="card-grid" role="list">
+      <article class="card" role="listitem"><p class="card__num" data-i18n="wx.c1_num">IBM WATSONX</p><h3 class="card__h" data-i18n="wx.c1_title">watsonx-aligned AI</h3><p class="card__p" data-i18n="wx.c1_body">Enterprise-grade AI infrastructure designed for healthcare workloads.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="wx.c2_num">GOVERNANCE</p><h3 class="card__h" data-i18n="wx.c2_title">watsonx.governance patterns</h3><p class="card__p" data-i18n="wx.c2_body">Provider, model, and request metadata recorded per call.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="wx.c3_num">CLOUD READY</p><h3 class="card__h" data-i18n="wx.c3_title">IBM Cloud architecture</h3><p class="card__p" data-i18n="wx.c3_body">AI, storage, and governance patterns aligned with IBM Cloud deployment.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="wx.c4_num">FHIR R4</p><h3 class="card__h" data-i18n="wx.c4_title">Standards-based exchange</h3><p class="card__p" data-i18n="wx.c4_body">FHIR R4 read-through for interoperability with existing EHR systems.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="wx.c5_num">SBOM</p><h3 class="card__h" data-i18n="wx.c5_title">Software bill of materials</h3><p class="card__p" data-i18n="wx.c5_body">SBOM published per release for procurement and vulnerability review.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="wx.c6_num">ROADMAP</p><h3 class="card__h" data-i18n="wx.c6_title">SSO &amp; SCIM ready</h3><p class="card__p" data-i18n="wx.c6_body">Enterprise SSO (SAML / OIDC) and SCIM provisioning on the roadmap.</p></article>
+    </div>
+    <div class="hero__ctas" style="margin-top:2.5rem;">
+      <a href="/#assessment" class="btn btn--primary" data-i18n="wx.primary">Request Assessment</a>
+      <a href="/security/" class="btn btn--ghost" data-i18n="wx.secondary">Enterprise security &amp; trust →</a>
+    </div>
+  </div>
+</section>
+
+<footer class="site-footer">
+  <div class="site-footer__inner">
+    <span class="site-footer__brand"><img src="/brand/chartnav-mark.svg" alt="" aria-hidden="true" /><span class="brand-text"><span class="chart">Chart</span><span class="nav">Nav</span></span> <span style="color:var(--cn-dim);font-size:.875rem;">MD</span></span>
+    <ul class="site-footer__links" role="list">
+      <li><a href="/" data-i18n="nav.home">Home</a></li>
+      <li><a href="/platform/" data-i18n="nav.platform">Platform</a></li>
+      <li><a href="/ophthalmology/" data-i18n="nav.ophthalmology">Ophthalmology</a></li>
+      <li><a href="/implementation/" data-i18n="nav.implementation">Implementation</a></li>
+      <li><a href="/security/" data-i18n="nav.security">Security &amp; Trust</a></li>
+    </ul>
+    <p class="site-footer__copy" data-i18n="footer.copy">© 2026 ARCG Systems. ChartNav is a product of ARCG Systems.</p>
+  </div>
+</footer>
+
+</body>
+</html>

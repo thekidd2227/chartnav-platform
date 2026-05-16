@@ -3,16 +3,19 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ChartNav MD — Hands-Free Ophthalmology Scribing Software</title>
+  <title>ChartNav MD — Ophthalmology Workflow + Provider-Reviewed Documentation</title>
   <meta name="description"
-    content="ChartNav MD is hands-free scribing software for ophthalmology practices. Capture exam findings during the visit, sign cleaner notes, and reduce documentation drag — with PHI redaction, human review, and audit logging by default." />
+    content="ChartNav is an ophthalmology clinic workflow layer for provider-reviewed documentation, imaging metadata review, role-based dashboards, retina and glaucoma workflow support, internal coordination, and controlled pilot readiness." />
   <link rel="canonical" href="https://chartnavmd.com/" />
+  <link rel="alternate" hreflang="en" href="https://chartnavmd.com/" />
+  <link rel="alternate" hreflang="es" href="https://chartnavmd.com/?lang=es" />
+  <link rel="alternate" hreflang="x-default" href="https://chartnavmd.com/" />
   <link rel="icon" href="/brand/chartnav-favicon.svg" type="image/svg+xml" />
 
   <meta property="og:type"        content="website" />
   <meta property="og:url"         content="https://chartnavmd.com/" />
-  <meta property="og:title"       content="ChartNav MD — Hands-Free Ophthalmology Scribing" />
-  <meta property="og:description" content="Hands-free scribing built for ophthalmology. Capture findings during the visit, sign cleaner notes, and keep providers focused on the patient." />
+  <meta property="og:title"       content="ChartNav MD — Ophthalmology Workflow + Provider-Reviewed Documentation" />
+  <meta property="og:description" content="Ophthalmology clinic workflow layer. Provider-reviewed documentation, imaging metadata review, retina and glaucoma workflow support." />
   <meta property="og:image"       content="https://chartnavmd.com/og.jpg" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -20,6 +23,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css" />
   <script src="/reveal.js" defer></script>
+  <script src="/lang-toggle.js" defer></script>
 
   <script type="application/ld+json">
   {
@@ -31,90 +35,373 @@
         "@type": "MedicalApplication",
         "name": "ChartNav MD",
         "applicationCategory": "MedicalApplication",
-        "applicationSubCategory": "Hands-Free Scribing for Ophthalmology",
+        "applicationSubCategory": "Ophthalmology clinic workflow layer",
         "operatingSystem": "Web (modern browsers)",
         "url": "https://chartnavmd.com/",
         "publisher": { "@type": "Organization", "name": "ARCG Systems" },
-        "description": "Hands-free ophthalmology scribing software. Capture findings during the exam, sign structured notes, and reduce after-hours charting in eye-care practices.",
+        "description": "Ophthalmology clinic workflow layer for provider-reviewed documentation, imaging metadata review, role-based dashboards, and retina and glaucoma workflow support.",
         "featureList": [
-          "Hands-free exam scribing for ophthalmology",
-          "Structured encounter templates per subspecialty",
-          "Imaging surfaced inside the encounter (OCT, fundus, VF, anterior segment)",
-          "PHI redaction on every AI call",
-          "Clinician review gate before any AI output is final",
-          "Immutable AI audit log with role-based access"
+          "Ophthalmology clinic workflow layer",
+          "Role-based dashboards",
+          "Provider-reviewed documentation",
+          "Imaging metadata review",
+          "Retina and glaucoma workflow support",
+          "Internal coordination + multi-clinic visibility"
         ],
         "audience": { "@type": "MedicalAudience", "audienceType": "Ophthalmology practices" }
       }
     ]
   }
   </script>
+
+  <!-- Phase 19K — page-local i18n map. Consumed by /lang-toggle.js
+       (English/Español toggle in footer) and by the inline video
+       showcase script below for caption rotation. -->
+  <script>
+    window.__CN_I18N__ = {
+      en: {
+        "__document_title": "ChartNav MD — Ophthalmology Workflow + Provider-Reviewed Documentation",
+        "__meta_description": "ChartNav is an ophthalmology clinic workflow layer for provider-reviewed documentation, imaging metadata review, role-based dashboards, retina and glaucoma workflow support, internal coordination, and controlled pilot readiness.",
+
+        "nav.home": "Home",
+        "nav.ehr": "EMR/EHR",
+        "nav.platform": "Platform",
+        "nav.ophthalmology": "Ophthalmology",
+        "nav.implementation": "Implementation",
+        "nav.ai_security": "AI Security",
+        "nav.security": "Security & Trust",
+        "nav.menu": "Menu",
+        "nav.menu_label": "Open menu",
+        "nav.home_label": "ChartNav MD home",
+
+        "hero.eyebrow": "Ophthalmology clinic workflow layer",
+        "hero.h1": "Ophthalmology workflow that respects how the visit actually runs.",
+        "hero.sub_pre": "",
+        "hero.sub_post": " is the clinic workflow layer for ophthalmology — provider-reviewed documentation, imaging metadata review, role-based dashboards, and retina and glaucoma workflow support. The visit gets coordinated. The chart gets reviewed.",
+        "hero.cta_primary": "Request Assessment",
+        "hero.cta_secondary": "See the EMR/EHR →",
+        "hero.chips_label": "Platform attributes",
+        "hero.chip_workflow": "Workflow-first",
+        "hero.chip_watsonx": "IBM watsonx-aligned",
+        "hero.chip_review": "Provider review required",
+        "hero.chip_audit": "Audit logging",
+        "hero.chip_emr": "EMR-ready",
+
+        "savings.eyebrow": "What a documentation hire costs your practice",
+        "savings.h2": "Stop paying someone else to type the visit.",
+        "savings.sub": "Most ophthalmology clinics carry a payroll line — in-room or remote — just to keep up with documentation. ChartNav captures the visit context once and surfaces it for provider review. The note is drafted from real visit context, the chart fills with structured findings, and that role stops being a line item.",
+        "savings.card1_num": "PAYROLL",
+        "savings.card1_title": "No additional hire",
+        "savings.card1_body": "No in-room helper. No remote vendor invoice. Documentation workflow runs on the platform you already pay for.",
+        "savings.card2_num": "CAPACITY",
+        "savings.card2_title": "Provider time, returned",
+        "savings.card2_body": "No oversight of a second person typing your visit. The provider stays with the patient.",
+        "savings.card3_num": "QUALITY",
+        "savings.card3_title": "Built for the lane",
+        "savings.card3_body": "Ophthalmology-shaped workflow — not a generalist working from second-hand notes.",
+
+        "strip.lead": "Auditable AI by default —",
+        "strip.body": "PHI redaction, provider review, and an immutable audit log on every call.",
+        "strip.link": "AI security details →",
+
+        "vshow.eyebrow": "See a visit, end to end",
+        "vshow.h2": "Watch a real ophthalmology visit run on ChartNav.",
+        "vshow.prev": "Previous clip",
+        "vshow.next": "Next clip",
+
+        "ba.eyebrow": "What changes",
+        "ba.h2": "Cleaner visits. Calmer notes.",
+        "ba.before_h": "Without ChartNav",
+        "ba.before_1": "Typing during the exam",
+        "ba.before_2": "Notes finished after hours",
+        "ba.before_3": "Conversation interrupted",
+        "ba.after_h": "With ChartNav",
+        "ba.after_1": "Hands stay on the patient during capture",
+        "ba.after_2": "Drafts ready by end of day for provider review",
+        "ba.after_3": "Provider stays with the patient",
+
+        "layers.eyebrow": "Built around the visit",
+        "layers.h2": "Six layers. One workflow.",
+        "layers.l1_num": "01 — SCRIBING",
+        "layers.l1_title": "Workflow capture",
+        "layers.l2_num": "02 — IMAGING",
+        "layers.l2_title": "Imaging in context",
+        "layers.l3_num": "03 — INTAKE",
+        "layers.l3_title": "Pre-visit ready",
+        "layers.l4_num": "04 — SCHEDULING",
+        "layers.l4_title": "Lane-aware",
+        "layers.l5_num": "05 — FRONT OFFICE",
+        "layers.l5_title": "One desk view",
+        "layers.l6_num": "06 — BILLING",
+        "layers.l6_title": "Billing visibility",
+
+        "non_goals.eyebrow": "Honest scope",
+        "non_goals.h2": "What ChartNav does not do",
+        "non_goals.b1": "Does not diagnose.",
+        "non_goals.b2": "Does not autonomously interpret images.",
+        "non_goals.b3": "Does not place orders.",
+        "non_goals.b4": "Does not send referrals.",
+        "non_goals.b5": "Does not send automated messages to patients.",
+        "non_goals.b6": "Does not submit claims.",
+        "non_goals.b7": "Does not automate billing or coding.",
+        "non_goals.b8": "Does not replace a certified EHR.",
+        "non_goals.b9": "Does not process real PHI by default.",
+        "non_goals.b10": "A controlled real-PHI pilot requires BAA execution, practice security review, production authentication, approved hosting, backups, monitoring, incident contacts, and written practice approval.",
+
+        "assess.eyebrow": "Request assessment",
+        "assess.h2": "Start with a workflow assessment.",
+        "assess.sub": "An advisor maps your charting workflow and shows where ChartNav fits — before any commitment.",
+        "assess.success_h": "Request received.",
+        "assess.success_p": "A ChartNav advisor will be in touch within one business day.",
+        "assess.label_website": "Website",
+        "assess.label_first": "First name *",
+        "assess.label_last": "Last name *",
+        "assess.label_email": "Work email *",
+        "assess.label_org": "Organization name *",
+        "assess.label_org_type": "Organization type",
+        "assess.label_providers": "Provider count",
+        "assess.label_role": "Your role *",
+        "assess.opt_select_type": "Select type",
+        "assess.opt_private": "Private Practice",
+        "assess.opt_hospital": "Hospital / Health System",
+        "assess.opt_enterprise": "Enterprise Organization",
+        "assess.opt_government": "Government / Contractor",
+        "assess.opt_other": "Other",
+        "assess.opt_select_range": "Select range",
+        "assess.opt_select_role": "Select role",
+        "assess.opt_practice_admin": "Practice Administrator",
+        "assess.opt_medical_director": "Medical Director",
+        "assess.opt_physician_owner": "Physician Owner",
+        "assess.opt_it_security": "IT / Security",
+        "assess.opt_operations": "Operations",
+        "assess.opt_procurement": "Procurement",
+        "assess.cta": "Request Assessment",
+        "assess.notice": "ChartNav advisors respond within one business day. No automated sales sequences.",
+
+        "footer.copy": "© 2026 ARCG Systems. ChartNav is a product of ARCG Systems."
+      },
+
+      es: {
+        "__document_title": "ChartNav MD — Flujo clínico oftalmológico y documentación revisada por proveedores",
+        "__meta_description": "ChartNav es una capa de flujo operativo para clínicas oftalmológicas: preparación administrativa, evaluación técnica inicial, revisión de metadatos de imágenes, seguimiento de retina y glaucoma, documentación revisada por el proveedor clínico, coordinación interna y preparación para piloto controlado.",
+
+        "nav.home": "Inicio",
+        "nav.ehr": "EMR/EHR",
+        "nav.platform": "Plataforma",
+        "nav.ophthalmology": "Oftalmología",
+        "nav.implementation": "Implementación",
+        "nav.ai_security": "Seguridad de IA",
+        "nav.security": "Seguridad y confianza",
+        "nav.menu": "Menú",
+        "nav.menu_label": "Abrir menú",
+        "nav.home_label": "Inicio de ChartNav MD",
+
+        "hero.eyebrow": "Capa de flujo operativo para clínicas oftalmológicas",
+        "hero.h1": "Flujo oftalmológico que respeta cómo realmente transcurre la visita.",
+        "hero.sub_pre": "",
+        "hero.sub_post": " es la capa de flujo operativo para oftalmología: documentación revisada por el proveedor clínico, revisión de metadatos de imágenes, paneles por rol y soporte de flujo para retina y glaucoma. La visita se coordina. La historia clínica queda lista para revisión.",
+        "hero.cta_primary": "Solicitar evaluación",
+        "hero.cta_secondary": "Ver el EMR/EHR →",
+        "hero.chips_label": "Atributos de la plataforma",
+        "hero.chip_workflow": "Flujo primero",
+        "hero.chip_watsonx": "Alineado con IBM watsonx",
+        "hero.chip_review": "Revisión del proveedor requerida",
+        "hero.chip_audit": "Registro de auditoría",
+        "hero.chip_emr": "Listo para EMR",
+
+        "savings.eyebrow": "Lo que cuesta a su clínica una contratación dedicada a documentación",
+        "savings.h2": "Deje de pagar a alguien más para que escriba la visita.",
+        "savings.sub": "La mayoría de las clínicas oftalmológicas mantienen una línea de nómina — presencial o remota — solo para mantenerse al día con la documentación. ChartNav captura el contexto de la visita una sola vez y lo presenta para revisión del proveedor clínico. La nota se borrador desde el contexto real de la visita, la historia clínica se completa con hallazgos estructurados y ese rol deja de ser una partida fija.",
+        "savings.card1_num": "NÓMINA",
+        "savings.card1_title": "Sin contratación adicional",
+        "savings.card1_body": "Sin asistente presencial. Sin factura de proveedor remoto. El flujo de documentación corre sobre la plataforma que su clínica ya paga.",
+        "savings.card2_num": "CAPACIDAD",
+        "savings.card2_title": "Tiempo del proveedor, devuelto",
+        "savings.card2_body": "Sin supervisar a una segunda persona escribiendo su visita. El proveedor permanece con el paciente.",
+        "savings.card3_num": "CALIDAD",
+        "savings.card3_title": "Construido para la consulta",
+        "savings.card3_body": "Flujo diseñado para oftalmología — no un generalista trabajando con notas de segunda mano.",
+
+        "strip.lead": "IA auditable por defecto —",
+        "strip.body": "Redacción de PHI, revisión del proveedor clínico y un registro de auditoría inmutable en cada llamada.",
+        "strip.link": "Detalles de seguridad de IA →",
+
+        "vshow.eyebrow": "Una visita, de principio a fin",
+        "vshow.h2": "Vea una visita oftalmológica real en ChartNav.",
+        "vshow.prev": "Clip anterior",
+        "vshow.next": "Clip siguiente",
+
+        "ba.eyebrow": "Qué cambia",
+        "ba.h2": "Visitas más limpias. Notas más tranquilas.",
+        "ba.before_h": "Sin ChartNav",
+        "ba.before_1": "Escribir durante el examen",
+        "ba.before_2": "Notas terminadas fuera de horario",
+        "ba.before_3": "Conversación interrumpida",
+        "ba.after_h": "Con ChartNav",
+        "ba.after_1": "Las manos quedan con el paciente durante la captura",
+        "ba.after_2": "Borradores listos al final del día para revisión del proveedor",
+        "ba.after_3": "El proveedor permanece con el paciente",
+
+        "layers.eyebrow": "Construido en torno a la visita",
+        "layers.h2": "Seis capas. Un solo flujo.",
+        "layers.l1_num": "01 — DOCUMENTACIÓN",
+        "layers.l1_title": "Captura del flujo de trabajo",
+        "layers.l2_num": "02 — IMÁGENES",
+        "layers.l2_title": "Imágenes en contexto",
+        "layers.l3_num": "03 — ADMISIÓN",
+        "layers.l3_title": "Lista antes de la visita",
+        "layers.l4_num": "04 — AGENDA",
+        "layers.l4_title": "Consciente de la consulta",
+        "layers.l5_num": "05 — RECEPCIÓN",
+        "layers.l5_title": "Una sola vista para recepción",
+        "layers.l6_num": "06 — FACTURACIÓN",
+        "layers.l6_title": "Visibilidad para facturación",
+
+        "non_goals.eyebrow": "Alcance honesto",
+        "non_goals.h2": "Lo que ChartNav no hace",
+        "non_goals.b1": "No diagnostica.",
+        "non_goals.b2": "No interpreta imágenes de forma autónoma.",
+        "non_goals.b3": "No coloca órdenes.",
+        "non_goals.b4": "No envía referencias.",
+        "non_goals.b5": "No envía mensajes automáticos a pacientes.",
+        "non_goals.b6": "No presenta reclamaciones.",
+        "non_goals.b7": "No automatiza facturación ni codificación.",
+        "non_goals.b8": "No reemplaza un EHR certificado.",
+        "non_goals.b9": "No procesa PHI real por defecto.",
+        "non_goals.b10": "Un piloto con PHI real requiere BAA, revisión de seguridad de la práctica, autenticación de producción, hosting aprobado, monitoreo, respaldos, contactos de incidente y aprobación escrita de la práctica.",
+
+        "assess.eyebrow": "Solicitar evaluación",
+        "assess.h2": "Comience con una evaluación de flujo de trabajo.",
+        "assess.sub": "Un asesor mapea su flujo de documentación y muestra dónde encaja ChartNav — antes de cualquier compromiso.",
+        "assess.success_h": "Solicitud recibida.",
+        "assess.success_p": "Un asesor de ChartNav se pondrá en contacto en un día hábil.",
+        "assess.label_website": "Sitio web",
+        "assess.label_first": "Nombre *",
+        "assess.label_last": "Apellido *",
+        "assess.label_email": "Correo de trabajo *",
+        "assess.label_org": "Nombre de la organización *",
+        "assess.label_org_type": "Tipo de organización",
+        "assess.label_providers": "Cantidad de proveedores",
+        "assess.label_role": "Su rol *",
+        "assess.opt_select_type": "Seleccione tipo",
+        "assess.opt_private": "Consultorio privado",
+        "assess.opt_hospital": "Hospital / Sistema de salud",
+        "assess.opt_enterprise": "Organización empresarial",
+        "assess.opt_government": "Gobierno / Contratista",
+        "assess.opt_other": "Otro",
+        "assess.opt_select_range": "Seleccione rango",
+        "assess.opt_select_role": "Seleccione rol",
+        "assess.opt_practice_admin": "Administrador/a de práctica",
+        "assess.opt_medical_director": "Director/a médico/a",
+        "assess.opt_physician_owner": "Médico/a propietario/a",
+        "assess.opt_it_security": "TI / Seguridad",
+        "assess.opt_operations": "Operaciones",
+        "assess.opt_procurement": "Compras",
+        "assess.cta": "Solicitar evaluación",
+        "assess.notice": "Los asesores de ChartNav responden en un día hábil. Sin secuencias automáticas de ventas.",
+
+        "footer.copy": "© 2026 ARCG Systems. ChartNav es un producto de ARCG Systems."
+      }
+    };
+
+    // Showcase clip captions — kept in a separate per-language array
+    // because the showcase rotator updates captions dynamically as the
+    // active clip changes. The inline rotator script below reads from
+    // this array via `window.__CN_I18N__[lang].__vshow_manifest`.
+    window.__CN_I18N__.en.__vshow_manifest = [
+      { tag: "Workspace tour",      title: "The new ChartNav workspace, end to end",       desc: "A short tour of the redesigned clinical workspace — Overview, Clinical, Documentation, Imaging, and the internal-staff Chat selector.", overlay: "ChartNav workspace → new design",          seconds: 23 },
+      { tag: "Intake",              title: "Encounter list to ready chart",                desc: "Pick a patient from the encounter rail. Overview opens with the chart already shaped — Patient Snapshot, Visit Summary, Clinical Alerts, Favorites.", overlay: "Encounter list → ready chart",        seconds: 9 },
+      { tag: "Clinical Workflow",   title: "Workup flows into Overview",                   desc: "Row-1 cards on Overview carry the technician's prep into the exam before the provider opens the chart.",                                            overlay: "Workup → ready on Overview",      seconds: 8 },
+      { tag: "Imaging",             title: "Imaging tab in the new workspace",             desc: "Upload, OCT, Fundus, Attachments, Imaging Notes, Selected Image Viewer cards on the Imaging tab. OD/OS retinal workbench sits below.",            overlay: "Imaging → in encounter",                   seconds: 10 },
+      { tag: "Documentation",       title: "Documentation tab — stepper + workbench",      desc: "Documentation opens with the Transcript → Extracted Facts → AI Draft → Final Note stepper above the embedded NoteWorkspace.",                                  overlay: "Provider stays with the patient",          seconds: 10 },
+      { tag: "Referrals",           title: "From signed note to consult letter",           desc: "Documentation stepper carries notes from draft to Final Note. Documents tab indexes consult letters, referral PDFs, and reports.",                              overlay: "Letter → generated from the note",         seconds: 11 },
+      { tag: "Admin",               title: "Admin sidebar group + visit status",           desc: "Admin sidebar surfaces Reports + Settings; Overview's Visit Summary card carries the encounter status pill leadership scans.",                                       overlay: "Admin → status visible",                   seconds: 9 },
+      { tag: "Calendar",            title: "Calendar tab — read-only schedule",            desc: "Calendar tab shows scheduled / started / completed timestamps + provider + location for the active encounter.",                                                      overlay: "Calendar → in context",                    seconds: 9 },
+      { tag: "Final Sign-Off",      title: "Documentation stepper — Draft to Final",       desc: "The AI Draft and Final Note steps anchor the provider review path. Workbench below carries the signed-note attestation.",                                            overlay: "Provider review → signed + audited",       seconds: 10 },
+      { tag: "Reminders",           title: "Tasks card + Communications handoff",          desc: "Tasks card on Overview surfaces follow-up work. Communications tab carries the internal staff handoff thread.",                                                       overlay: "Reminders → handed off",                   seconds: 10 },
+      { tag: "Patient Handoff",     title: "Care Team + Chat recipient selector",          desc: "Care Team card on Overview names the provider on record. Chat tab's recipient selector scopes the internal handoff thread.",                                          overlay: "Handoff → routed internally",              seconds: 10 }
+    ];
+
+    window.__CN_I18N__.es.__vshow_manifest = [
+      { tag: "Recorrido del entorno",  title: "El nuevo entorno de ChartNav, de principio a fin",      desc: "Un breve recorrido del entorno clínico rediseñado — Resumen, Clínica, Documentación, Imágenes y el selector de Chat interno del personal.", overlay: "Entorno ChartNav → nuevo diseño",                          seconds: 23 },
+      { tag: "Admisión",               title: "De la lista de visitas a la historia clínica lista",    desc: "Seleccione un paciente del listado. La pestaña Resumen abre con la historia clínica ya estructurada — datos del paciente, resumen de la visita, alertas clínicas y favoritos.", overlay: "Lista de visitas → historia clínica lista",        seconds: 9 },
+      { tag: "Flujo clínico",          title: "La evaluación técnica fluye al Resumen",                desc: "Las tarjetas de la primera fila en Resumen llevan la preparación del técnico al examen antes de que el proveedor abra la historia clínica.",                                          overlay: "Evaluación técnica → lista en Resumen",           seconds: 8 },
+      { tag: "Imágenes",               title: "Pestaña de Imágenes en el nuevo entorno",               desc: "Tarjetas de Carga, OCT, Fundus, Adjuntos, Notas de imágenes y Visor de imagen seleccionada en la pestaña Imágenes. El espacio de retina OD/OS aparece debajo.",                       overlay: "Imágenes → en la visita",                                   seconds: 10 },
+      { tag: "Documentación",          title: "Pestaña Documentación — flujo paso a paso",             desc: "Documentación abre con los pasos Transcripción → Hallazgos extraídos → Borrador de IA → Nota final, encima del espacio de trabajo de notas.",                                       overlay: "El proveedor permanece con el paciente",                   seconds: 10 },
+      { tag: "Referencias",            title: "De la nota firmada a la carta de interconsulta",        desc: "Los pasos de Documentación llevan las notas del borrador a Nota final. La pestaña Documentos indexa cartas de interconsulta, referencias en PDF e informes.",                       overlay: "Carta → generada desde la nota",                            seconds: 11 },
+      { tag: "Administración",         title: "Grupo Administración en la barra lateral + estado",     desc: "La barra lateral de Administración muestra Reportes y Configuración; la tarjeta Resumen de la visita en Resumen indica el estado de la visita para el liderazgo.",                       overlay: "Administración → estado visible",                          seconds: 9 },
+      { tag: "Agenda",                 title: "Pestaña Agenda — agenda de solo lectura",               desc: "La pestaña Agenda muestra las marcas de tiempo programada / iniciada / completada, además del proveedor y la ubicación para la visita activa.",                                    overlay: "Agenda → en contexto",                                      seconds: 9 },
+      { tag: "Firma final",            title: "Pasos de Documentación — del borrador a Nota final",    desc: "Los pasos Borrador de IA y Nota final anclan la ruta de revisión del proveedor clínico. El espacio de trabajo abajo registra la firma de la nota.",                                    overlay: "Revisión del proveedor → firmada y auditada",              seconds: 10 },
+      { tag: "Recordatorios",          title: "Tarjeta Tareas + Coordinación interna",                 desc: "La tarjeta Tareas en Resumen muestra trabajo de seguimiento. La pestaña Comunicaciones lleva el hilo de coordinación interna del personal.",                                          overlay: "Recordatorios → coordinados",                              seconds: 10 },
+      { tag: "Entrega del paciente",   title: "Equipo de atención + selector de Chat",                  desc: "La tarjeta Equipo de atención en Resumen nombra al proveedor responsable. El selector de la pestaña Chat orienta el hilo de coordinación interna.",                                  overlay: "Entrega → coordinada internamente",                        seconds: 10 }
+    ];
+  </script>
 </head>
 <body>
 
 <header class="site-header" id="site-header">
   <div class="site-header__inner">
-    <a href="/" class="site-header__logo" aria-label="ChartNav MD home">
+    <a href="/" class="site-header__logo" data-i18n-attr-aria-label="nav.home_label" aria-label="ChartNav MD home">
       <img src="/brand/chartnav-logo.svg" alt="ChartNav" />
     </a>
     <ul class="site-header__nav" role="list">
-      <li><a href="/" class="is-active">Home</a></li>
-      <li><a href="/ehr/">EMR/EHR</a></li>
-      <li><a href="/platform/">Platform</a></li>
-      <li><a href="/ophthalmology/">Ophthalmology</a></li>
-      <li><a href="/implementation/">Implementation</a></li>
-      <li><a href="/ai-security/">AI Security</a></li>
-      <li><a href="/security/">Security &amp; Trust</a></li>
+      <li><a href="/" class="is-active" data-i18n="nav.home">Home</a></li>
+      <li><a href="/ehr/" data-i18n="nav.ehr">EMR/EHR</a></li>
+      <li><a href="/platform/" data-i18n="nav.platform">Platform</a></li>
+      <li><a href="/ophthalmology/" data-i18n="nav.ophthalmology">Ophthalmology</a></li>
+      <li><a href="/implementation/" data-i18n="nav.implementation">Implementation</a></li>
+      <li><a href="/ai-security/" data-i18n="nav.ai_security">AI Security</a></li>
+      <li><a href="/security/" data-i18n="nav.security">Security &amp; Trust</a></li>
     </ul>
     <div class="site-header__cta">
-      <a href="#assessment" class="btn btn--primary">Request Assessment</a>
+      <a href="#assessment" class="btn btn--primary" data-i18n="hero.cta_primary">Request Assessment</a>
     </div>
-    <button class="site-header__menu-btn" aria-label="Open menu" onclick="document.getElementById('site-header').dataset.open=document.getElementById('site-header').dataset.open==='true'?'false':'true'">Menu</button>
+    <button class="site-header__menu-btn" data-i18n="nav.menu" data-i18n-attr-aria-label="nav.menu_label" aria-label="Open menu" onclick="document.getElementById('site-header').dataset.open=document.getElementById('site-header').dataset.open==='true'?'false':'true'">Menu</button>
   </div>
 </header>
 
 <section class="hero">
   <div class="container">
-    <p class="eyebrow">The ophthalmology EMR / EHR, built around the visit</p>
-    <h1 class="hero__h1">Hands-free scribing. Built for the eye.</h1>
+    <p class="eyebrow" data-i18n="hero.eyebrow">Ophthalmology clinic workflow layer</p>
+    <h1 class="hero__h1" data-i18n="hero.h1">Ophthalmology workflow that respects how the visit actually runs.</h1>
     <p class="hero__sub">
-      <span class="brand-text"><span class="chart">Chart</span><span class="nav">Nav</span></span> works alongside the EMR or EHR you already run today — and is built to replace it as your practice grows. The visit gets captured. The chart fills itself.
+      <span class="brand-text"><span class="chart">Chart</span><span class="nav">Nav</span></span><span data-i18n="hero.sub_post"> is the clinic workflow layer for ophthalmology — provider-reviewed documentation, imaging metadata review, role-based dashboards, and retina and glaucoma workflow support. The visit gets coordinated. The chart gets reviewed.</span>
     </p>
     <div class="hero__ctas">
-      <a href="#assessment" class="btn btn--primary">Request Assessment</a>
-      <a href="/ehr/" class="btn btn--ghost">See the EMR/EHR →</a>
+      <a href="#assessment" class="btn btn--primary" data-i18n="hero.cta_primary">Request Assessment</a>
+      <a href="/ehr/" class="btn btn--ghost" data-i18n="hero.cta_secondary">See the EMR/EHR →</a>
     </div>
-    <div class="hero__chips" aria-label="Platform attributes">
-      <span class="chip">Hands-free capture</span>
-      <span class="chip">IBM watsonx-powered</span>
-      <span class="chip">Provider review required</span>
-      <span class="chip">Audit logging</span>
-      <span class="chip">EMR-ready</span>
+    <div class="hero__chips" data-i18n-attr-aria-label="hero.chips_label" aria-label="Platform attributes">
+      <span class="chip" data-i18n="hero.chip_workflow">Workflow-first</span>
+      <span class="chip" data-i18n="hero.chip_watsonx">IBM watsonx-aligned</span>
+      <span class="chip" data-i18n="hero.chip_review">Provider review required</span>
+      <span class="chip" data-i18n="hero.chip_audit">Audit logging</span>
+      <span class="chip" data-i18n="hero.chip_emr">EMR-ready</span>
     </div>
   </div>
 </section>
 
 <section class="savings">
   <div class="container">
-    <p class="eyebrow">What a documentation hire costs your practice</p>
-    <h2 class="section-h">Stop paying someone else to type the visit.</h2>
-    <p class="section-sub">Most ophthalmology clinics carry a payroll line — in-room or remote — just to keep up with documentation. ChartNav captures the visit instead. The note writes itself, the chart fills itself, and that role stops being a line item.</p>
+    <p class="eyebrow" data-i18n="savings.eyebrow">What a documentation hire costs your practice</p>
+    <h2 class="section-h" data-i18n="savings.h2">Stop paying someone else to type the visit.</h2>
+    <p class="section-sub" data-i18n="savings.sub">Most ophthalmology clinics carry a payroll line — in-room or remote — just to keep up with documentation. ChartNav captures the visit context once and surfaces it for provider review. The note is drafted from real visit context, the chart fills with structured findings, and that role stops being a line item.</p>
 
     <div class="card-grid" role="list">
       <article class="card" role="listitem">
-        <p class="card__num">PAYROLL</p>
-        <h3 class="card__h">No additional hire</h3>
-        <p class="card__p">No in-room helper. No remote vendor invoice. Documentation runs on the platform you already pay for.</p>
+        <p class="card__num" data-i18n="savings.card1_num">PAYROLL</p>
+        <h3 class="card__h" data-i18n="savings.card1_title">No additional hire</h3>
+        <p class="card__p" data-i18n="savings.card1_body">No in-room helper. No remote vendor invoice. Documentation workflow runs on the platform you already pay for.</p>
       </article>
       <article class="card" role="listitem">
-        <p class="card__num">CAPACITY</p>
-        <h3 class="card__h">Provider time, returned</h3>
-        <p class="card__p">No oversight of a second person typing your visit. The provider stays with the patient.</p>
+        <p class="card__num" data-i18n="savings.card2_num">CAPACITY</p>
+        <h3 class="card__h" data-i18n="savings.card2_title">Provider time, returned</h3>
+        <p class="card__p" data-i18n="savings.card2_body">No oversight of a second person typing your visit. The provider stays with the patient.</p>
       </article>
       <article class="card" role="listitem">
-        <p class="card__num">QUALITY</p>
-        <h3 class="card__h">Built for the lane</h3>
-        <p class="card__p">Ophthalmology-shaped output — not a generalist working from second-hand notes.</p>
+        <p class="card__num" data-i18n="savings.card3_num">QUALITY</p>
+        <h3 class="card__h" data-i18n="savings.card3_title">Built for the lane</h3>
+        <p class="card__p" data-i18n="savings.card3_body">Ophthalmology-shaped workflow — not a generalist working from second-hand notes.</p>
       </article>
     </div>
   </div>
@@ -123,16 +410,16 @@
 <div class="strip" role="complementary" aria-label="Security overview">
   <div class="strip__inner">
     <p class="strip__copy">
-      <strong>Auditable AI by default —</strong> PHI redaction, human review, and an immutable audit log on every call.
+      <strong data-i18n="strip.lead">Auditable AI by default —</strong> <span data-i18n="strip.body">PHI redaction, provider review, and an immutable audit log on every call.</span>
     </p>
-    <a href="/ai-security/" class="strip__link">AI security details →</a>
+    <a href="/ai-security/" class="strip__link" data-i18n="strip.link">AI security details →</a>
   </div>
 </div>
 
 <section class="vshow" aria-labelledby="vshow-h2">
   <div class="container">
-    <p class="eyebrow">See a visit, end to end</p>
-    <h2 class="section-h" id="vshow-h2">Watch a real ophthalmology visit run on ChartNav.</h2>
+    <p class="eyebrow" data-i18n="vshow.eyebrow">See a visit, end to end</p>
+    <h2 class="section-h" id="vshow-h2" data-i18n="vshow.h2">Watch a real ophthalmology visit run on ChartNav.</h2>
 
     <div class="vshow__layout">
       <div class="vshow__copy">
@@ -145,15 +432,15 @@
         <video class="vshow__video"           data-i="1" src="/videos/intake-ready-chart.mp4"                      muted playsinline preload="metadata" controls aria-label="Digital intake becomes a ready chart"></video>
         <video class="vshow__video"           data-i="2" src="/videos/workup-ready-chart.mp4"                      muted playsinline preload="metadata" controls aria-label="Technician workup carries into the exam"></video>
         <video class="vshow__video"           data-i="3" src="/videos/imaging-in-chart.mp4"                        muted playsinline preload="metadata" controls aria-label="Imaging lands inside the encounter"></video>
-        <video class="vshow__video"           data-i="4" src="/videos/hands-free-scribing.mp4"                     muted playsinline preload="metadata" controls aria-label="Hands-free scribing during the exam"></video>
+        <video class="vshow__video"           data-i="4" src="/videos/hands-free-scribing.mp4"                     muted playsinline preload="metadata" controls aria-label="Documentation tab — stepper + workbench"></video>
         <video class="vshow__video"           data-i="5" src="/videos/consult-letter.mp4"                          muted playsinline preload="metadata" controls aria-label="Consult letters from the signed note"></video>
         <video class="vshow__video"           data-i="6" src="/videos/admin-dashboard.mp4"                         muted playsinline preload="metadata" controls aria-label="Operational metrics dashboard"></video>
         <video class="vshow__video"           data-i="7" src="/chartnav/videos/chartnav-calendar-workflow.mp4"     muted playsinline preload="metadata" controls aria-label="Calendar workflow"></video>
         <video class="vshow__video"           data-i="8" src="/chartnav/videos/chartnav-doctor-final-signoff.mp4"  muted playsinline preload="metadata" controls aria-label="Doctor final sign-off"></video>
         <video class="vshow__video"           data-i="9" src="/chartnav/videos/chartnav-reminders-workflow.mp4"    muted playsinline preload="metadata" controls aria-label="Reminders and follow-up"></video>
         <video class="vshow__video"           data-i="10" src="/chartnav/videos/chartnav-patient-handoff-workflow.mp4" muted playsinline preload="metadata" controls aria-label="Patient handoff"></video>
-        <button class="vshow__nav vshow__nav--prev" type="button" aria-label="Previous clip" id="vshow-prev">&lsaquo;</button>
-        <button class="vshow__nav vshow__nav--next" type="button" aria-label="Next clip"     id="vshow-next">&rsaquo;</button>
+        <button class="vshow__nav vshow__nav--prev" type="button" data-i18n-attr-aria-label="vshow.prev" aria-label="Previous clip" id="vshow-prev">&lsaquo;</button>
+        <button class="vshow__nav vshow__nav--next" type="button" data-i18n-attr-aria-label="vshow.next" aria-label="Next clip"     id="vshow-next">&rsaquo;</button>
         <div class="vshow__overlay" id="vshow-overlay">ChartNav workspace → new design</div>
       </div>
     </div>
@@ -162,23 +449,23 @@
 
 <section class="ba">
   <div class="container">
-    <p class="eyebrow">What changes</p>
-    <h2 class="section-h">Cleaner visits. Calmer notes.</h2>
+    <p class="eyebrow" data-i18n="ba.eyebrow">What changes</p>
+    <h2 class="section-h" data-i18n="ba.h2">Cleaner visits. Calmer notes.</h2>
     <div class="ba-grid" role="list">
       <div class="ba-col ba-col--before" role="listitem">
-        <p class="ba-col__h">Without ChartNav</p>
+        <p class="ba-col__h" data-i18n="ba.before_h">Without ChartNav</p>
         <ul>
-          <li>Typing during the exam</li>
-          <li>Notes finished after hours</li>
-          <li>Conversation interrupted</li>
+          <li data-i18n="ba.before_1">Typing during the exam</li>
+          <li data-i18n="ba.before_2">Notes finished after hours</li>
+          <li data-i18n="ba.before_3">Conversation interrupted</li>
         </ul>
       </div>
       <div class="ba-col ba-col--after" role="listitem">
-        <p class="ba-col__h">With ChartNav</p>
+        <p class="ba-col__h" data-i18n="ba.after_h">With ChartNav</p>
         <ul>
-          <li>Hands-free capture</li>
-          <li>Drafts ready by end of day</li>
-          <li>Provider stays with the patient</li>
+          <li data-i18n="ba.after_1">Hands stay on the patient during capture</li>
+          <li data-i18n="ba.after_2">Drafts ready by end of day for provider review</li>
+          <li data-i18n="ba.after_3">Provider stays with the patient</li>
         </ul>
       </div>
     </div>
@@ -187,55 +474,74 @@
 
 <section>
   <div class="container">
-    <p class="eyebrow">Built around the visit</p>
-    <h2 class="section-h">Six layers. One workflow.</h2>
+    <p class="eyebrow" data-i18n="layers.eyebrow">Built around the visit</p>
+    <h2 class="section-h" data-i18n="layers.h2">Six workflow layers. One cleaner visit.</h2>
     <div class="card-grid" role="list">
-      <article class="card" role="listitem"><p class="card__num">01 — SCRIBING</p><h3 class="card__h">Hands-free charting</h3></article>
-      <article class="card" role="listitem"><p class="card__num">02 — IMAGING</p><h3 class="card__h">Imaging in context</h3></article>
-      <article class="card" role="listitem"><p class="card__num">03 — INTAKE</p><h3 class="card__h">Pre-visit ready</h3></article>
-      <article class="card" role="listitem"><p class="card__num">04 — SCHEDULING</p><h3 class="card__h">Lane-aware</h3></article>
-      <article class="card" role="listitem"><p class="card__num">05 — FRONT OFFICE</p><h3 class="card__h">One desk view</h3></article>
-      <article class="card" role="listitem"><p class="card__num">06 — BILLING</p><h3 class="card__h">Billing visibility</h3></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="layers.l1_num">01 — SCRIBING</p><h3 class="card__h" data-i18n="layers.l1_title">Workflow capture</h3></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="layers.l2_num">02 — IMAGING</p><h3 class="card__h" data-i18n="layers.l2_title">Imaging in context</h3></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="layers.l3_num">03 — INTAKE</p><h3 class="card__h" data-i18n="layers.l3_title">Pre-visit ready</h3></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="layers.l4_num">04 — SCHEDULING</p><h3 class="card__h" data-i18n="layers.l4_title">Lane-aware</h3></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="layers.l5_num">05 — FRONT OFFICE</p><h3 class="card__h" data-i18n="layers.l5_title">One desk view</h3></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="layers.l6_num">06 — BILLING</p><h3 class="card__h" data-i18n="layers.l6_title">Billing visibility</h3></article>
     </div>
+  </div>
+</section>
+
+<section class="non-goals" aria-labelledby="non-goals-h2">
+  <div class="container">
+    <p class="eyebrow" data-i18n="non_goals.eyebrow">Honest scope</p>
+    <h2 class="section-h" id="non-goals-h2" data-i18n="non_goals.h2">What ChartNav does not do</h2>
+    <ul class="non-goals__list" role="list">
+      <li data-i18n="non_goals.b1">Does not diagnose.</li>
+      <li data-i18n="non_goals.b2">Does not autonomously interpret images.</li>
+      <li data-i18n="non_goals.b3">Does not place orders.</li>
+      <li data-i18n="non_goals.b4">Does not send referrals.</li>
+      <li data-i18n="non_goals.b5">Does not send automated messages to patients.</li>
+      <li data-i18n="non_goals.b6">Does not submit claims.</li>
+      <li data-i18n="non_goals.b7">Does not automate billing or coding.</li>
+      <li data-i18n="non_goals.b8">Does not replace a certified EHR.</li>
+      <li data-i18n="non_goals.b9">Does not process real PHI by default.</li>
+      <li data-i18n="non_goals.b10">A controlled real-PHI pilot requires BAA execution, practice security review, production authentication, approved hosting, backups, monitoring, incident contacts, and written practice approval.</li>
+    </ul>
   </div>
 </section>
 
 <section id="assessment" class="assess">
   <div class="container container--xs" style="text-align:center;">
-    <p class="eyebrow">Request assessment</p>
-    <h2 class="section-h" style="max-width: 22ch; margin-left:auto; margin-right:auto;">Start with a workflow assessment.</h2>
-    <p class="section-sub" style="margin-left:auto; margin-right:auto;">An advisor maps your charting workflow and shows where ChartNav fits — before any commitment.</p>
+    <p class="eyebrow" data-i18n="assess.eyebrow">Request assessment</p>
+    <h2 class="section-h" data-i18n="assess.h2" style="max-width: 22ch; margin-left:auto; margin-right:auto;">Start with a workflow assessment.</h2>
+    <p class="section-sub" data-i18n="assess.sub" style="margin-left:auto; margin-right:auto;">An advisor maps your charting workflow and shows where ChartNav fits — before any commitment.</p>
 
     <div id="form-success" role="status" aria-live="polite">
-      <h3>Request received.</h3>
-      <p>A ChartNav advisor will be in touch within one business day.</p>
+      <h3 data-i18n="assess.success_h">Request received.</h3>
+      <p data-i18n="assess.success_p">A ChartNav advisor will be in touch within one business day.</p>
     </div>
 
     <form id="assess-form" class="assess__form" novalidate onsubmit="handleSubmit(event)">
       <div class="ohnohoney" aria-hidden="true">
-        <label for="company_website">Website</label>
+        <label for="company_website" data-i18n="assess.label_website">Website</label>
         <input type="text" id="company_website" name="company_website" tabindex="-1" autocomplete="off" />
       </div>
       <div class="form-row">
-        <div class="field"><label for="first_name">First name *</label><input type="text" id="first_name" name="first_name" required autocomplete="given-name" /></div>
-        <div class="field"><label for="last_name">Last name *</label><input type="text" id="last_name" name="last_name" required autocomplete="family-name" /></div>
+        <div class="field"><label for="first_name" data-i18n="assess.label_first">First name *</label><input type="text" id="first_name" name="first_name" required autocomplete="given-name" /></div>
+        <div class="field"><label for="last_name" data-i18n="assess.label_last">Last name *</label><input type="text" id="last_name" name="last_name" required autocomplete="family-name" /></div>
       </div>
-      <div class="field"><label for="work_email">Work email *</label><input type="email" id="work_email" name="work_email" required autocomplete="email" /></div>
-      <div class="field"><label for="org_name">Organization name *</label><input type="text" id="org_name" name="org_name" required /></div>
+      <div class="field"><label for="work_email" data-i18n="assess.label_email">Work email *</label><input type="email" id="work_email" name="work_email" required autocomplete="email" /></div>
+      <div class="field"><label for="org_name" data-i18n="assess.label_org">Organization name *</label><input type="text" id="org_name" name="org_name" required /></div>
       <div class="form-row">
-        <div class="field"><label for="org_type">Organization type</label>
+        <div class="field"><label for="org_type" data-i18n="assess.label_org_type">Organization type</label>
           <select id="org_type" name="org_type">
-            <option value="">Select type</option>
-            <option value="private_practice">Private Practice</option>
-            <option value="hospital_health_system">Hospital / Health System</option>
-            <option value="enterprise">Enterprise Organization</option>
-            <option value="government">Government / Contractor</option>
-            <option value="other">Other</option>
+            <option value=""                       data-i18n="assess.opt_select_type">Select type</option>
+            <option value="private_practice"       data-i18n="assess.opt_private">Private Practice</option>
+            <option value="hospital_health_system" data-i18n="assess.opt_hospital">Hospital / Health System</option>
+            <option value="enterprise"             data-i18n="assess.opt_enterprise">Enterprise Organization</option>
+            <option value="government"             data-i18n="assess.opt_government">Government / Contractor</option>
+            <option value="other"                  data-i18n="assess.opt_other">Other</option>
           </select>
         </div>
-        <div class="field"><label for="providers">Provider count</label>
+        <div class="field"><label for="providers" data-i18n="assess.label_providers">Provider count</label>
           <select id="providers" name="providers">
-            <option value="">Select range</option>
+            <option value=""      data-i18n="assess.opt_select_range">Select range</option>
             <option value="1-3">1–3</option>
             <option value="4-10">4–10</option>
             <option value="11-25">11–25</option>
@@ -243,20 +549,20 @@
           </select>
         </div>
       </div>
-      <div class="field"><label for="role">Your role *</label>
+      <div class="field"><label for="role" data-i18n="assess.label_role">Your role *</label>
         <select id="role" name="role" required>
-          <option value="">Select role</option>
-          <option value="practice_admin">Practice Administrator</option>
-          <option value="medical_director">Medical Director</option>
-          <option value="physician_owner">Physician Owner</option>
-          <option value="it_security">IT / Security</option>
-          <option value="operations">Operations</option>
-          <option value="procurement">Procurement</option>
-          <option value="other">Other</option>
+          <option value=""                  data-i18n="assess.opt_select_role">Select role</option>
+          <option value="practice_admin"    data-i18n="assess.opt_practice_admin">Practice Administrator</option>
+          <option value="medical_director"  data-i18n="assess.opt_medical_director">Medical Director</option>
+          <option value="physician_owner"   data-i18n="assess.opt_physician_owner">Physician Owner</option>
+          <option value="it_security"       data-i18n="assess.opt_it_security">IT / Security</option>
+          <option value="operations"        data-i18n="assess.opt_operations">Operations</option>
+          <option value="procurement"       data-i18n="assess.opt_procurement">Procurement</option>
+          <option value="other"             data-i18n="assess.opt_other">Other</option>
         </select>
       </div>
-      <button type="submit" class="btn btn--primary" style="width:100%; justify-content:center; margin-top:.25rem;">Request Assessment</button>
-      <p class="form__notice">ChartNav advisors respond within one business day. No automated sales sequences.</p>
+      <button type="submit" class="btn btn--primary" data-i18n="assess.cta" style="width:100%; justify-content:center; margin-top:.25rem;">Request Assessment</button>
+      <p class="form__notice" data-i18n="assess.notice">ChartNav advisors respond within one business day. No automated sales sequences.</p>
     </form>
   </div>
 </section>
@@ -265,33 +571,30 @@
   <div class="site-footer__inner">
     <span class="site-footer__brand"><img src="/brand/chartnav-mark.svg" alt="" aria-hidden="true" /><span class="brand-text"><span class="chart">Chart</span><span class="nav">Nav</span></span> <span style="color:var(--cn-dim);font-size:.875rem;">MD</span></span>
     <ul class="site-footer__links" role="list">
-      <li><a href="/platform/">Platform</a></li>
-      <li><a href="/ophthalmology/">Ophthalmology</a></li>
-      <li><a href="/implementation/">Implementation</a></li>
-      <li><a href="/ai-security/">AI Security</a></li>
-      <li><a href="/security/">Security &amp; Trust</a></li>
+      <li><a href="/platform/" data-i18n="nav.platform">Platform</a></li>
+      <li><a href="/ophthalmology/" data-i18n="nav.ophthalmology">Ophthalmology</a></li>
+      <li><a href="/implementation/" data-i18n="nav.implementation">Implementation</a></li>
+      <li><a href="/ai-security/" data-i18n="nav.ai_security">AI Security</a></li>
+      <li><a href="/security/" data-i18n="nav.security">Security &amp; Trust</a></li>
     </ul>
-    <p class="site-footer__copy">© 2026 ARCG Systems. ChartNav is a product of ARCG Systems.</p>
+    <p class="site-footer__copy" data-i18n="footer.copy">© 2026 ARCG Systems. ChartNav is a product of ARCG Systems.</p>
   </div>
 </footer>
 
 <script>
   // Video showcase — auto-rotate, click thumbs to jump.
-  // Captions match /videos/manifest.json one-to-one.
+  // Phase 19K — pulls captions from window.__CN_I18N__[lang].__vshow_manifest
+  // so the rotator stays in lockstep with the footer language toggle. Falls
+  // back to the English manifest if a translation is missing.
   (function () {
-    var manifest = [
-      { tag: "Workspace tour",      title: "The new ChartNav workspace, end to end",       desc: "A short tour of the redesigned clinical workspace — Overview, Clinical, Documentation, Imaging, and the internal-staff Chat selector.", overlay: "ChartNav workspace → new design",          seconds: 23 },
-      { tag: "Intake",              title: "Encounter list to ready chart",                desc: "Pick a patient from the encounter rail. The Overview tab opens with the chart already shaped — Patient Snapshot, Visit Summary, Clinical Alerts, Favorites.", overlay: "Encounter list → ready chart",        seconds: 9 },
-      { tag: "Clinical Workflow",   title: "Workup flows into Overview",                   desc: "Row-1 cards on Overview carry the technician's prep into the exam — Patient Snapshot, Visit Summary, Clinical Alerts, and pinned Favorites — before the provider opens the chart.", overlay: "Workup → ready on Overview",      seconds: 8 },
-      { tag: "Imaging",             title: "Imaging tab in the new workspace",             desc: "Upload, OCT, Fundus, Attachments, Imaging Notes, and Selected Image Viewer cards land on the Imaging tab. The OD/OS retinal workbench sits below.",            overlay: "Imaging → in encounter",                   seconds: 10 },
-      { tag: "Hands-Free Scribing", title: "Documentation tab — stepper + workbench",      desc: "Documentation opens with the Transcript → Extracted Facts → AI Draft → Final Note stepper above the embedded NoteWorkspace.",                                  overlay: "Hands stay on the patient",                seconds: 10 },
-      { tag: "Referrals",           title: "From signed note to consult letter",           desc: "The Documentation stepper carries notes from draft to Final Note. Documents tab indexes consult letters, referral PDFs, and reports.",                              overlay: "Letter → generated from the note",         seconds: 11 },
-      { tag: "Admin",               title: "Admin sidebar group + visit status",           desc: "Admin sidebar surfaces Reports + Settings; Overview's Visit Summary card carries the encounter status pill leadership scans.",                                       overlay: "Admin → status visible",                   seconds: 9 },
-      { tag: "Calendar",            title: "Calendar tab — read-only schedule",            desc: "Calendar tab shows scheduled / started / completed timestamps + provider + location for the active encounter.",                                                      overlay: "Calendar → in context",                    seconds: 9 },
-      { tag: "Final Sign-Off",      title: "Documentation stepper — Draft to Final",       desc: "The AI Draft and Final Note steps anchor the provider review path. Workbench below carries the signed-note attestation.",                                            overlay: "Provider review → signed + audited",       seconds: 10 },
-      { tag: "Reminders",           title: "Tasks card + Communications handoff",          desc: "Tasks card on Overview surfaces follow-up work. Communications tab carries the internal staff handoff thread.",                                                       overlay: "Reminders → handed off",                   seconds: 10 },
-      { tag: "Patient Handoff",     title: "Care Team + Chat recipient selector",          desc: "Care Team card on Overview names the provider on record. Chat tab's recipient selector scopes the internal handoff thread.",                                          overlay: "Handoff → routed internally",              seconds: 10 }
-    ];
+    function currentManifest() {
+      var lang = (document.documentElement.getAttribute("lang") || "en").toLowerCase();
+      var pool = window.__CN_I18N__ || {};
+      return (pool[lang] && pool[lang].__vshow_manifest)
+          || (pool.en && pool.en.__vshow_manifest)
+          || [];
+    }
+    var manifest = currentManifest();
     var videos = document.querySelectorAll(".vshow__video");
     if (!videos.length) return;
     var tag     = document.getElementById("vshow-tag");
@@ -304,6 +607,15 @@
     var timer   = null;
     var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+    function paintCaption(i) {
+      var m = manifest[i];
+      if (!m) return;
+      if (tag)     tag.textContent     = m.tag;
+      if (title)   title.textContent   = m.title;
+      if (desc)    desc.textContent    = m.desc;
+      if (overlay) overlay.textContent = m.overlay;
+    }
+
     function show(i) {
       for (var idx = 0; idx < videos.length; idx++) {
         var v = videos[idx];
@@ -315,13 +627,7 @@
           try { v.pause(); } catch (e) {}
         }
       }
-      var m = manifest[i];
-      if (m) {
-        if (tag)     tag.textContent     = m.tag;
-        if (title)   title.textContent   = m.title;
-        if (desc)    desc.textContent    = m.desc;
-        if (overlay) overlay.textContent = m.overlay;
-      }
+      paintCaption(i);
       current = i;
     }
     function next() { show((current + 1) % videos.length); }
@@ -339,10 +645,17 @@
     }
     show(0);
     schedule();
+
+    // Phase 19K — re-paint the active caption when the footer toggle
+    // flips language. The lang-toggle script dispatches this event after
+    // it swaps document.documentElement.lang.
+    window.addEventListener("chartnav:languagechange", function () {
+      manifest = currentManifest();
+      paintCaption(current);
+    });
   })();
 
-  // Subtle scroll-linked parallax for the video frame.
-  // Drives --cn-parallax (px). Reduced-motion users get nothing.
+  // Subtle scroll-linked parallax for the video frame. Unchanged.
   (function () {
     if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     var frame = document.querySelector(".vshow__frame");
@@ -381,6 +694,7 @@
       role:       f.role.value,
       source:     'chartnavmd.com',
       form_type:  'assessment',
+      lang:       document.documentElement.getAttribute('lang') || 'en',
     };
     const WEBHOOK = '%%WEBHOOK_URL%%';
     try {

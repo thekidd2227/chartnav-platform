@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ChartNav Platform — Ophthalmology Workflow Software</title>
+  <meta name="description" content="ChartNav is the ophthalmology clinic workflow layer — provider-reviewed documentation, imaging in context, role-based dashboards, retina and glaucoma workflow support, and coding recommendations for review. Designed to sit alongside the EMR or EHR you already run." />
+  <link rel="canonical" href="https://chartnavmd.com/platform/" />
+  <link rel="alternate" hreflang="en" href="https://chartnavmd.com/platform/" />
+  <link rel="alternate" hreflang="es" href="https://chartnavmd.com/platform/?lang=es" />
+  <link rel="alternate" hreflang="x-default" href="https://chartnavmd.com/platform/" />
+  <link rel="icon" href="/brand/chartnav-favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+  <script src="/reveal.js" defer></script>
+  <script src="/lang-toggle.js" defer></script>
+
+  <script>
+    window.__CN_I18N__ = {
+      en: {
+        "__document_title": "ChartNav Platform — Ophthalmology Workflow Software",
+        "__meta_description": "ChartNav is the ophthalmology clinic workflow layer — provider-reviewed documentation, imaging in context, role-based dashboards, retina and glaucoma workflow support, and coding recommendations for review. Designed to sit alongside the EMR or EHR you already run.",
+
+        "nav.home": "Home", "nav.ehr": "EMR/EHR", "nav.platform": "Platform",
+        "nav.ophthalmology": "Ophthalmology", "nav.implementation": "Implementation",
+        "nav.ai_security": "AI Security", "nav.security": "Security & Trust",
+        "nav.menu": "Menu", "nav.menu_label": "Open menu", "nav.home_label": "ChartNav MD home",
+
+        "hero.eyebrow": "The ophthalmology clinic workflow layer",
+        "hero.h1": "Sit alongside your EMR or EHR — or replace it as you grow.",
+        "hero.sub_post": " works with the EMR or EHR you already run today. As your practice grows, it scales into a full ophthalmology EMR/EHR — at your pace, on your terms.",
+        "hero.cta_primary": "Request Assessment",
+
+        "savings.eyebrow": "What a documentation hire costs your practice",
+        "savings.h2": "The note writes itself after provider review. No extra payroll.",
+        "savings.sub": "In-room or remote, documentation help is a recurring line item — plus oversight, plus turnover. ChartNav captures the visit on the platform you already pay for. That role stops being a budget item, and the provider stops splitting attention with someone else's typing.",
+        "savings.c1_num": "PAYROLL",     "savings.c1_title": "No additional hire",          "savings.c1_body": "No in-room helper, no remote vendor invoice.",
+        "savings.c2_num": "CAPACITY",    "savings.c2_title": "Provider attention, returned","savings.c2_body": "No second seat to oversee mid-exam.",
+        "savings.c3_num": "CONSISTENCY", "savings.c3_title": "No turnover risk",            "savings.c3_body": "The platform doesn't quit, retrain, or call out.",
+
+        "fits.eyebrow": "How it fits",
+        "fits.h2": "A documentation layer that respects the visit.",
+        "fits.c1_num": "01 — SCRIBING",   "fits.c1_title": "Workflow capture",       "fits.c1_body": "Capture the visit. The transcript becomes a draft prepared for provider review.",
+        "fits.c2_num": "02 — IMAGING",    "fits.c2_title": "Imaging in context",     "fits.c2_body": "OCT, fundus, VF, anterior segment — surfaced inside the encounter.",
+        "fits.c3_num": "03 — INTAKE",     "fits.c3_title": "Pre-visit ready",        "fits.c3_body": "History and consents done before the lane.",
+        "fits.c4_num": "04 — SCHEDULING", "fits.c4_title": "Lane-aware",             "fits.c4_body": "Multi-provider, multi-location, lane assignment built in.",
+        "fits.c5_num": "05 — FRONT OFFICE","fits.c5_title": "One desk view",         "fits.c5_body": "Check-in, eligibility, co-pay — one screen.",
+        "fits.c6_num": "06 — BILLING",    "fits.c6_title": "Billing visibility",     "fits.c6_body": "Charge capture context and claim status — visible, not buried.",
+
+        "ba.eyebrow": "Built around handoffs",
+        "ba.h2": "Workflow over feature buckets.",
+        "ba.before_h": "Without ChartNav",
+        "ba.before_1": "Provider rebuilds the visit at every handoff",
+        "ba.before_2": "Imaging lives outside the chart",
+        "ba.before_3": "Notes finished after hours",
+        "ba.before_4": "Billing finds gaps days later",
+        "ba.after_h": "With ChartNav",
+        "ba.after_1": "One thread: workup → exam → provider review → sign-off",
+        "ba.after_2": "Imaging routed into the encounter",
+        "ba.after_3": "Time-to-signed-note, per provider",
+        "ba.after_4": "Documentation quality, same-week",
+
+        "coding.eyebrow": "Billing-aware",
+        "coding.h2": "Coding recommendations, ready for review.",
+        "coding.sub": "ChartNav prepares structured coding suggestions from the documented ophthalmology encounter. Recommendations are designed for review and handoff into the practice's existing medical billing system where integration is configured. Final coding, billing, and payer submission stay inside your approved billing workflow.",
+        "coding.c1_num": "CAPTURE",  "coding.c1_title": "Documented context",          "coding.c1_body": "Exam, imaging, modifiers, procedure context — captured at sign-off.",
+        "coding.c2_num": "SUGGEST",  "coding.c2_title": "Coding recommendations",      "coding.c2_body": "Structured suggestions based on what was documented.",
+        "coding.c3_num": "REVIEW",   "coding.c3_title": "Coder & provider review",     "coding.c3_body": "Recommendations reviewed by the appropriate billing personnel.",
+        "coding.c4_num": "HANDOFF",  "coding.c4_title": "Integration-ready outputs",   "coding.c4_body": "Export or hand off to your existing medical billing system where configured.",
+
+        "cta.eyebrow": "Two paths",
+        "cta.h2": "Start as a layer. Scale into the EMR/EHR.",
+        "cta.sub": "Pilot ChartNav as a documentation layer alongside your current EMR. When you're ready, extend it into a full ophthalmology EHR — same vendor, same workflow, same provider experience.",
+        "cta.primary": "Request Assessment",
+        "cta.secondary": "See the EHR →",
+
+        "footer.copy": "© 2026 ARCG Systems. ChartNav is a product of ARCG Systems."
+      },
+      es: {
+        "__document_title": "Plataforma ChartNav — Software de flujo oftalmológico",
+        "__meta_description": "ChartNav es la capa de flujo operativo para clínicas oftalmológicas — documentación revisada por el proveedor clínico, imágenes en contexto, paneles por rol, soporte para flujo de retina y glaucoma y recomendaciones de codificación para revisión. Diseñado para acompañar al EMR o EHR que ya utiliza.",
+
+        "nav.home": "Inicio", "nav.ehr": "EMR/EHR", "nav.platform": "Plataforma",
+        "nav.ophthalmology": "Oftalmología", "nav.implementation": "Implementación",
+        "nav.ai_security": "Seguridad de IA", "nav.security": "Seguridad y confianza",
+        "nav.menu": "Menú", "nav.menu_label": "Abrir menú", "nav.home_label": "Inicio de ChartNav MD",
+
+        "hero.eyebrow": "La capa de flujo operativo para clínicas oftalmológicas",
+        "hero.h1": "Acompañe a su EMR o EHR — o reemplácelo a medida que su práctica crezca.",
+        "hero.sub_post": " funciona con el EMR o EHR que ya utiliza hoy. A medida que su práctica crece, escala a un EMR/EHR oftalmológico completo — a su ritmo, en sus términos.",
+        "hero.cta_primary": "Solicitar evaluación",
+
+        "savings.eyebrow": "Lo que cuesta a su clínica una contratación dedicada a documentación",
+        "savings.h2": "La nota queda lista después de la revisión del proveedor. Sin nómina adicional.",
+        "savings.sub": "Presencial o remoto, el apoyo en documentación es una partida recurrente — más supervisión, más rotación. ChartNav captura el contexto de la visita sobre la plataforma que su clínica ya paga. Ese rol deja de ser un costo fijo, y el proveedor deja de dividir su atención entre el paciente y alguien más escribiendo.",
+        "savings.c1_num": "NÓMINA",       "savings.c1_title": "Sin contratación adicional",       "savings.c1_body": "Sin asistente presencial, sin factura de proveedor remoto.",
+        "savings.c2_num": "CAPACIDAD",    "savings.c2_title": "Atención del proveedor, devuelta", "savings.c2_body": "Sin un segundo puesto que haya que supervisar durante el examen.",
+        "savings.c3_num": "CONSISTENCIA", "savings.c3_title": "Sin riesgo de rotación",           "savings.c3_body": "La plataforma no renuncia, no se reentrena ni falta al trabajo.",
+
+        "fits.eyebrow": "Cómo encaja",
+        "fits.h2": "Una capa de documentación que respeta la visita.",
+        "fits.c1_num": "01 — DOCUMENTACIÓN", "fits.c1_title": "Captura del flujo de trabajo",  "fits.c1_body": "Capture la visita. La transcripción se convierte en un borrador preparado para revisión del proveedor clínico.",
+        "fits.c2_num": "02 — IMÁGENES",      "fits.c2_title": "Imágenes en contexto",          "fits.c2_body": "OCT, fundus, campo visual, segmento anterior — aparecen dentro de la visita.",
+        "fits.c3_num": "03 — ADMISIÓN",      "fits.c3_title": "Lista antes de la visita",      "fits.c3_body": "Historia y consentimientos completos antes de la consulta.",
+        "fits.c4_num": "04 — AGENDA",        "fits.c4_title": "Consciente de la consulta",     "fits.c4_body": "Múltiples proveedores, múltiples ubicaciones, asignación de consulta integrada.",
+        "fits.c5_num": "05 — RECEPCIÓN",     "fits.c5_title": "Una sola vista para recepción", "fits.c5_body": "Registro, elegibilidad, copago — en una sola pantalla.",
+        "fits.c6_num": "06 — FACTURACIÓN",   "fits.c6_title": "Visibilidad para facturación",  "fits.c6_body": "Contexto de captura de cargos y estado del reclamo — visibles, no escondidos.",
+
+        "ba.eyebrow": "Construido en torno a las transiciones",
+        "ba.h2": "Flujo, no cajones de funciones.",
+        "ba.before_h": "Sin ChartNav",
+        "ba.before_1": "El proveedor reconstruye la visita en cada transición",
+        "ba.before_2": "Las imágenes viven fuera de la historia clínica",
+        "ba.before_3": "Las notas terminan fuera de horario",
+        "ba.before_4": "Facturación encuentra vacíos días después",
+        "ba.after_h": "Con ChartNav",
+        "ba.after_1": "Un solo hilo: evaluación técnica → examen → revisión del proveedor → firma",
+        "ba.after_2": "Las imágenes se enrutan dentro de la visita",
+        "ba.after_3": "Tiempo hasta nota firmada, por proveedor",
+        "ba.after_4": "Calidad de documentación, en la misma semana",
+
+        "coding.eyebrow": "Consciente de facturación",
+        "coding.h2": "Recomendaciones de codificación, listas para revisión.",
+        "coding.sub": "ChartNav prepara sugerencias estructuradas de codificación a partir de la visita oftalmológica documentada. Las recomendaciones están diseñadas para revisión y entrega al sistema de facturación médica existente de la práctica donde la integración esté configurada. La codificación, facturación y presentación al pagador permanecen dentro del flujo de facturación aprobado por la práctica.",
+        "coding.c1_num": "CAPTURA",  "coding.c1_title": "Contexto documentado",         "coding.c1_body": "Examen, imágenes, modificadores y contexto de procedimiento — capturados al firmar.",
+        "coding.c2_num": "SUGERIR",  "coding.c2_title": "Recomendaciones de codificación", "coding.c2_body": "Sugerencias estructuradas basadas en lo documentado.",
+        "coding.c3_num": "REVISIÓN", "coding.c3_title": "Revisión por codificador y proveedor", "coding.c3_body": "Las recomendaciones son revisadas por el personal de facturación apropiado.",
+        "coding.c4_num": "ENTREGA",  "coding.c4_title": "Salidas listas para integración", "coding.c4_body": "Exporte o entregue al sistema de facturación médica existente donde esté configurado.",
+
+        "cta.eyebrow": "Dos caminos",
+        "cta.h2": "Comience como capa. Escale al EMR/EHR.",
+        "cta.sub": "Realice un piloto de ChartNav como capa de documentación junto a su EMR actual. Cuando esté listo, extiéndalo a un EHR oftalmológico completo — mismo proveedor, mismo flujo, misma experiencia clínica.",
+        "cta.primary": "Solicitar evaluación",
+        "cta.secondary": "Ver el EHR →",
+
+        "footer.copy": "© 2026 ARCG Systems. ChartNav es un producto de ARCG Systems."
+      }
+    };
+  </script>
+</head>
+<body>
+
+<header class="site-header" id="site-header">
+  <div class="site-header__inner">
+    <a href="/" class="site-header__logo" data-i18n-attr-aria-label="nav.home_label" aria-label="ChartNav MD home"><img src="/brand/chartnav-logo.svg" alt="ChartNav" /></a>
+    <ul class="site-header__nav" role="list">
+      <li><a href="/" data-i18n="nav.home">Home</a></li>
+      <li><a href="/ehr/" data-i18n="nav.ehr">EMR/EHR</a></li>
+      <li><a href="/platform/" class="is-active" data-i18n="nav.platform">Platform</a></li>
+      <li><a href="/ophthalmology/" data-i18n="nav.ophthalmology">Ophthalmology</a></li>
+      <li><a href="/implementation/" data-i18n="nav.implementation">Implementation</a></li>
+      <li><a href="/ai-security/" data-i18n="nav.ai_security">AI Security</a></li>
+      <li><a href="/security/" data-i18n="nav.security">Security &amp; Trust</a></li>
+    </ul>
+    <div class="site-header__cta"><a href="/#assessment" class="btn btn--primary" data-i18n="hero.cta_primary">Request Assessment</a></div>
+    <button class="site-header__menu-btn" data-i18n="nav.menu" data-i18n-attr-aria-label="nav.menu_label" aria-label="Open menu" onclick="document.getElementById('site-header').dataset.open=document.getElementById('site-header').dataset.open==='true'?'false':'true'">Menu</button>
+  </div>
+</header>
+
+<section class="page-intro">
+  <div class="container">
+    <p class="eyebrow" data-i18n="hero.eyebrow">The ophthalmology clinic workflow layer</p>
+    <h1 class="page-intro__h1" data-i18n="hero.h1">Sit alongside your EMR or EHR — or replace it as you grow.</h1>
+    <p class="page-intro__sub">
+      <span class="brand-text"><span class="chart">Chart</span><span class="nav">Nav</span></span><span data-i18n="hero.sub_post"> works with the EMR or EHR you already run today. As your practice grows, it scales into a full ophthalmology EMR/EHR — at your pace, on your terms.</span>
+    </p>
+  </div>
+</section>
+
+<section class="savings">
+  <div class="container">
+    <p class="eyebrow" data-i18n="savings.eyebrow">What a documentation hire costs your practice</p>
+    <h2 class="section-h" data-i18n="savings.h2">The note writes itself after provider review. No extra payroll.</h2>
+    <p class="section-sub" data-i18n="savings.sub">In-room or remote, documentation help is a recurring line item — plus oversight, plus turnover. ChartNav captures the visit on the platform you already pay for. That role stops being a budget item, and the provider stops splitting attention with someone else's typing.</p>
+    <div class="card-grid" role="list">
+      <article class="card" role="listitem"><p class="card__num" data-i18n="savings.c1_num">PAYROLL</p><h3 class="card__h" data-i18n="savings.c1_title">No additional hire</h3><p class="card__p" data-i18n="savings.c1_body">No in-room helper, no remote vendor invoice.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="savings.c2_num">CAPACITY</p><h3 class="card__h" data-i18n="savings.c2_title">Provider attention, returned</h3><p class="card__p" data-i18n="savings.c2_body">No second seat to oversee mid-exam.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="savings.c3_num">CONSISTENCY</p><h3 class="card__h" data-i18n="savings.c3_title">No turnover risk</h3><p class="card__p" data-i18n="savings.c3_body">The platform doesn't quit, retrain, or call out.</p></article>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    <p class="eyebrow" data-i18n="fits.eyebrow">How it fits</p>
+    <h2 class="section-h" data-i18n="fits.h2">A documentation layer that respects the visit.</h2>
+
+    <div class="card-grid" role="list">
+      <article class="card" role="listitem"><p class="card__num" data-i18n="fits.c1_num">01 — SCRIBING</p><h3 class="card__h" data-i18n="fits.c1_title">Workflow capture</h3><p class="card__p" data-i18n="fits.c1_body">Capture the visit. The transcript becomes a draft prepared for provider review.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="fits.c2_num">02 — IMAGING</p><h3 class="card__h" data-i18n="fits.c2_title">Imaging in context</h3><p class="card__p" data-i18n="fits.c2_body">OCT, fundus, VF, anterior segment — surfaced inside the encounter.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="fits.c3_num">03 — INTAKE</p><h3 class="card__h" data-i18n="fits.c3_title">Pre-visit ready</h3><p class="card__p" data-i18n="fits.c3_body">History and consents done before the lane.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="fits.c4_num">04 — SCHEDULING</p><h3 class="card__h" data-i18n="fits.c4_title">Lane-aware</h3><p class="card__p" data-i18n="fits.c4_body">Multi-provider, multi-location, lane assignment built in.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="fits.c5_num">05 — FRONT OFFICE</p><h3 class="card__h" data-i18n="fits.c5_title">One desk view</h3><p class="card__p" data-i18n="fits.c5_body">Check-in, eligibility, co-pay — one screen.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="fits.c6_num">06 — BILLING</p><h3 class="card__h" data-i18n="fits.c6_title">Billing visibility</h3><p class="card__p" data-i18n="fits.c6_body">Charge capture context and claim status — visible, not buried.</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="ba">
+  <div class="container">
+    <p class="eyebrow" data-i18n="ba.eyebrow">Built around handoffs</p>
+    <h2 class="section-h" data-i18n="ba.h2">Workflow over feature buckets.</h2>
+
+    <div class="ba-grid">
+      <div class="ba-col ba-col--before">
+        <p class="ba-col__h" data-i18n="ba.before_h">Without ChartNav</p>
+        <ul>
+          <li data-i18n="ba.before_1">Provider rebuilds the visit at every handoff</li>
+          <li data-i18n="ba.before_2">Imaging lives outside the chart</li>
+          <li data-i18n="ba.before_3">Notes finished after hours</li>
+          <li data-i18n="ba.before_4">Billing finds gaps days later</li>
+        </ul>
+      </div>
+      <div class="ba-col ba-col--after">
+        <p class="ba-col__h" data-i18n="ba.after_h">With ChartNav</p>
+        <ul>
+          <li data-i18n="ba.after_1">One thread: workup → exam → provider review → sign-off</li>
+          <li data-i18n="ba.after_2">Imaging routed into the encounter</li>
+          <li data-i18n="ba.after_3">Time-to-signed-note, per provider</li>
+          <li data-i18n="ba.after_4">Documentation quality, same-week</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    <p class="eyebrow" data-i18n="coding.eyebrow">Billing-aware</p>
+    <h2 class="section-h" data-i18n="coding.h2">Coding recommendations, ready for review.</h2>
+    <p class="section-sub" data-i18n="coding.sub">ChartNav prepares structured coding suggestions from the documented ophthalmology encounter. Recommendations are designed for review and handoff into the practice's existing medical billing system where integration is configured. Final coding, billing, and payer submission stay inside your approved billing workflow.</p>
+    <div class="card-grid" role="list">
+      <article class="card" role="listitem"><p class="card__num" data-i18n="coding.c1_num">CAPTURE</p><h3 class="card__h" data-i18n="coding.c1_title">Documented context</h3><p class="card__p" data-i18n="coding.c1_body">Exam, imaging, modifiers, procedure context — captured at sign-off.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="coding.c2_num">SUGGEST</p><h3 class="card__h" data-i18n="coding.c2_title">Coding recommendations</h3><p class="card__p" data-i18n="coding.c2_body">Structured suggestions based on what was documented.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="coding.c3_num">REVIEW</p><h3 class="card__h" data-i18n="coding.c3_title">Coder &amp; provider review</h3><p class="card__p" data-i18n="coding.c3_body">Recommendations reviewed by the appropriate billing personnel.</p></article>
+      <article class="card" role="listitem"><p class="card__num" data-i18n="coding.c4_num">HANDOFF</p><h3 class="card__h" data-i18n="coding.c4_title">Integration-ready outputs</h3><p class="card__p" data-i18n="coding.c4_body">Export or hand off to your existing medical billing system where configured.</p></article>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    <p class="eyebrow" data-i18n="cta.eyebrow">Two paths</p>
+    <h2 class="section-h" data-i18n="cta.h2">Start as a layer. Scale into the EMR/EHR.</h2>
+    <p class="section-sub" data-i18n="cta.sub">Pilot ChartNav as a documentation layer alongside your current EMR. When you're ready, extend it into a full ophthalmology EHR — same vendor, same workflow, same provider experience.</p>
+    <div class="hero__ctas">
+      <a href="/#assessment" class="btn btn--primary" data-i18n="cta.primary">Request Assessment</a>
+      <a href="/ehr/" class="btn btn--ghost" data-i18n="cta.secondary">See the EHR →</a>
+    </div>
+  </div>
+</section>
+
+<footer class="site-footer">
+  <div class="site-footer__inner">
+    <span class="site-footer__brand"><img src="/brand/chartnav-mark.svg" alt="" aria-hidden="true" /><span class="brand-text"><span class="chart">Chart</span><span class="nav">Nav</span></span> <span style="color:var(--cn-dim);font-size:.875rem;">MD</span></span>
+    <ul class="site-footer__links" role="list">
+      <li><a href="/" data-i18n="nav.home">Home</a></li>
+      <li><a href="/ophthalmology/" data-i18n="nav.ophthalmology">Ophthalmology</a></li>
+      <li><a href="/implementation/" data-i18n="nav.implementation">Implementation</a></li>
+      <li><a href="/ai-security/" data-i18n="nav.ai_security">AI Security</a></li>
+      <li><a href="/security/" data-i18n="nav.security">Security &amp; Trust</a></li>
+    </ul>
+    <p class="site-footer__copy" data-i18n="footer.copy">© 2026 ARCG Systems. ChartNav is a product of ARCG Systems.</p>
+  </div>
+</footer>
+
+</body>
+</html>
