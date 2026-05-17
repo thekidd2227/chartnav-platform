@@ -221,6 +221,33 @@ FORBIDDEN_CAPABILITY=(
   "IBM-certified HIPAA"
   "IBM certifies ChartNav"
   "watsonx-validated clinical accuracy"
+  # LLM-vendor-evaluation guard — OpenAI / Anthropic / watsonx may
+  # only be described as candidate vendors under evaluation, never
+  # as a shipped LLM capability. Negative phrasings ("ChartNav is
+  # not Claude-powered", "OpenAI does not make ChartNav HIPAA
+  # compliant") stay exempt via the negative-context check.
+  "OpenAI-powered clinical documentation"
+  "OpenAI-powered scribe"
+  "GPT-powered clinical documentation"
+  "GPT-powered scribe"
+  "ChatGPT clinical documentation"
+  "OpenAI makes ChartNav HIPAA compliant"
+  "OpenAI diagnosis"
+  "GPT diagnosis"
+  "Anthropic-powered clinical documentation"
+  "Anthropic-powered scribe"
+  "Claude-powered clinical documentation"
+  "Claude-powered scribe"
+  "Anthropic makes ChartNav HIPAA compliant"
+  "Claude diagnosis"
+  "LLM-powered diagnosis"
+  "LLM-powered clinical documentation"
+  "automatic note writing"
+  "autonomous documentation"
+  "autonomous clinical reasoning"
+  "vendor-approved for PHI"
+  "BAA-ready by default"
+  "vendor makes ChartNav HIPAA compliant"
   "billing-aware coding"
   "coding recommendations"
   "AI diagnosis"

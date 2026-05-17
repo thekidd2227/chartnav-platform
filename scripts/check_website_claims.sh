@@ -209,6 +209,33 @@ forbidden_capability_positive=(
   "IBM-certified HIPAA"
   "IBM certifies ChartNav"
   "watsonx-validated clinical accuracy"
+  # LLM-vendor-evaluation guard — OpenAI / Anthropic / watsonx LLM
+  # may only be described as candidate vendors under evaluation,
+  # never as a shipped capability. Negative phrasings stay exempt
+  # via the same negative-context regex used for the rest of the
+  # list.
+  "OpenAI-powered clinical documentation"
+  "OpenAI-powered scribe"
+  "GPT-powered clinical documentation"
+  "GPT-powered scribe"
+  "ChatGPT clinical documentation"
+  "OpenAI makes ChartNav HIPAA compliant"
+  "OpenAI diagnosis"
+  "GPT diagnosis"
+  "Anthropic-powered clinical documentation"
+  "Anthropic-powered scribe"
+  "Claude-powered clinical documentation"
+  "Claude-powered scribe"
+  "Anthropic makes ChartNav HIPAA compliant"
+  "Claude diagnosis"
+  "LLM-powered diagnosis"
+  "LLM-powered clinical documentation"
+  "automatic note writing"
+  "autonomous documentation"
+  "autonomous clinical reasoning"
+  "vendor-approved for PHI"
+  "BAA-ready by default"
+  "vendor makes ChartNav HIPAA compliant"
 )
 if [ -f "$LANDING_EN_COPY" ]; then
   # Phase 24A — compliance claims now use the same negative-context
