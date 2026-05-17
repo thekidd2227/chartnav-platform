@@ -121,6 +121,38 @@ inside a forbidden-phrase enumeration like this list itself.
 - ❌ "hands-free charting"
 - ❌ "hands-off documentation"
 
+### Vendor / IBM / watsonx
+
+ChartNav has no IBM or watsonx integration in the shipped
+product today. Any future use is gated by
+`docs/security/chartnav-ibm-watsonx-vendor-readiness.md`. Until
+that gate closes, IBM and watsonx may only be described as
+**"planned / vendor-dependent evaluation,"** never as a shipped
+production capability.
+
+- ❌ "powered by IBM"
+- ❌ "powered by watsonx"
+- ❌ "IBM-powered"
+- ❌ "watsonx-powered"
+- ❌ "IBM watsonx-powered"
+- ❌ "Watson-powered clinical documentation"
+- ❌ "Watson-powered scribe"
+- ❌ "Watson makes ChartNav HIPAA compliant"
+- ❌ "watsonx diagnosis"
+- ❌ "watsonx-driven diagnosis"
+- ❌ "watsonx image interpretation"
+- ❌ "watsonx auto-grades"
+- ❌ "IBM-certified HIPAA"
+- ❌ "IBM certifies ChartNav"
+- ❌ "watsonx-validated clinical accuracy"
+
+Safe replacements:
+
+- ✅ "ChartNav has no IBM or watsonx integration in the shipped product today."
+- ✅ "IBM watsonx is a candidate vendor under evaluation; any use would require a BAA, a security review, and the ChartNav real-PHI go-live gate to close."
+- ✅ "External LLM providers, including IBM watsonx and OpenAI Whisper, are gated and disabled by default."
+- ✅ "Planned / vendor-dependent evaluation only — not a shipped production capability."
+
 ---
 
 ## Caution claims (case-by-case)
@@ -161,6 +193,11 @@ Always replace forbidden phrasing with approved phrasing.
 | "automatic charting" | "draft documentation the provider reviews" |
 | "hands-free diagnosis" | "provider-in-the-loop documentation" |
 | "guaranteed documentation accuracy" | "provider-reviewed; provider corrects" |
+| "powered by IBM" / "watsonx-powered" | "planned / vendor-dependent evaluation only" |
+| "Watson-powered clinical documentation" | "deterministic generators today; external LLMs gated and disabled by default" |
+| "Watson makes ChartNav HIPAA compliant" | "ChartNav is not HIPAA-certified; no vendor confers compliance" |
+| "watsonx diagnosis" / "watsonx image interpretation" | "ChartNav does not diagnose or interpret images" |
+| "IBM-certified HIPAA" | "BAA-ready; certification is operational, not vendor-conferred" |
 
 ---
 

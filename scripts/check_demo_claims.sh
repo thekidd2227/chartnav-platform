@@ -111,6 +111,22 @@ FORBIDDEN = [
     r"powered by watsonx",
     r"watsonx[- ]powered",
     r"IBM[- ]powered",
+    # Vendor-readiness guard — IBM / watsonx may only be described
+    # as "planned / vendor-dependent evaluation," never as a shipped
+    # production capability. Negative phrasings stay exempt via the
+    # same negative / catalog context guards used for the rest of
+    # the list.
+    r"IBM watsonx[- ]powered",
+    r"Watson[- ]powered clinical documentation",
+    r"Watson[- ]powered scribe",
+    r"Watson makes ChartNav HIPAA compliant",
+    r"watsonx diagnosis",
+    r"watsonx[- ]driven diagnosis",
+    r"watsonx image interpretation",
+    r"watsonx auto[- ]grades?",
+    r"IBM[- ]certified HIPAA",
+    r"IBM certifies ChartNav",
+    r"watsonx[- ]validated clinical accuracy",
     r"real device integration",
     r"DICOM ingestion",
     r"binary image storage",

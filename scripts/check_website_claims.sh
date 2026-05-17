@@ -32,6 +32,10 @@ cd "$REPO_ROOT"
 
 LANDING="apps/web/src/LandingPage.tsx"
 ROUTER="apps/web/src/main.tsx"
+# PR #46 moved the /landing + ?intro=1 routing logic out of main.tsx
+# into a pure resolver module so vitest can import it without
+# triggering main.tsx's bootstrap side effects.
+ROUTER_RESOLVER="apps/web/src/resolveRootView.ts"
 LANDING_EN_COPY="apps/web/src/i18n/landing.en.ts"
 LANDING_ES_COPY="apps/web/src/i18n/landing.es.ts"
 I18N_INDEX="apps/web/src/i18n/index.ts"
@@ -47,6 +51,7 @@ echo "1. Required files"
 for f in \
   "$LANDING" \
   "$ROUTER" \
+  "$ROUTER_RESOLVER" \
   "$LANDING_EN_COPY" \
   "$LANDING_ES_COPY" \
   "$I18N_INDEX" \
@@ -60,15 +65,37 @@ for f in \
 done
 echo
 
-# 2. main.tsx routes /landing + ?intro=1 to LandingPage.
+# 2. Router gate (post-PR #46 structure).
+#
+# After PR #46 the /landing + ?intro=1 gating moved out of main.tsx
+# into a pure resolver (`apps/web/src/resolveRootView.ts`) so vitest
+# can pin the routing table without main.tsx's bootstrap side effects.
+# Both pieces must remain wired:
+#   * main.tsx must call resolveRootView() and render <LandingPage />
+#     when the resolver returns "landing".
+#   * resolveRootView.ts must keep the /landing + ?intro=1 + marketing-
+#     host gating patterns intact.
 echo "2. Router gate"
-if [ -f "$ROUTER" ]; then
-  if grep -Eq '\.endsWith\("/landing"\)' "$ROUTER" \
-     && grep -Eq 'params\.get\("intro"\)' "$ROUTER" \
-     && grep -Eq 'LandingPage' "$ROUTER"; then
-    echo "   ok — /landing + ?intro=1 → LandingPage"
+if [ -f "$ROUTER_RESOLVER" ]; then
+  if grep -Eq '\.endsWith\("/landing"\)' "$ROUTER_RESOLVER" \
+     && grep -Eq 'params\.get\("intro"\)' "$ROUTER_RESOLVER" \
+     && grep -Eq '"landing"' "$ROUTER_RESOLVER"; then
+    echo "   ok — resolveRootView.ts gates /landing + ?intro=1 → 'landing'"
   else
-    echo "   FAIL — main.tsx does not gate /landing or ?intro=1 to LandingPage"
+    echo "   FAIL — resolveRootView.ts does not gate /landing or ?intro=1"
+    fail_count=$((fail_count + 1))
+  fi
+else
+  echo "   FAIL — resolveRootView.ts missing; routing helper required by PR #46"
+  fail_count=$((fail_count + 1))
+fi
+if [ -f "$ROUTER" ]; then
+  if grep -Eq 'resolveRootView' "$ROUTER" \
+     && grep -Eq 'LandingPage' "$ROUTER" \
+     && grep -Eq '"landing"' "$ROUTER"; then
+    echo "   ok — main.tsx wires resolveRootView and renders LandingPage on 'landing'"
+  else
+    echo "   FAIL — main.tsx does not wire resolveRootView → LandingPage"
     fail_count=$((fail_count + 1))
   fi
 fi
@@ -163,6 +190,25 @@ forbidden_capability_positive=(
   "better than Cora"
   "outperforms Cora"
   "Cora competitor"
+  # Vendor-readiness guard — IBM / watsonx may only be described as
+  # "planned / vendor-dependent evaluation," never as a shipped
+  # production capability. Negative phrasings stay exempt via the
+  # same negative-context regex used for the rest of the list.
+  "powered by IBM"
+  "powered by watsonx"
+  "watsonx-powered"
+  "IBM-powered"
+  "IBM watsonx-powered"
+  "Watson-powered clinical documentation"
+  "Watson-powered scribe"
+  "Watson makes ChartNav HIPAA compliant"
+  "watsonx diagnosis"
+  "watsonx-driven diagnosis"
+  "watsonx image interpretation"
+  "watsonx auto-grades"
+  "IBM-certified HIPAA"
+  "IBM certifies ChartNav"
+  "watsonx-validated clinical accuracy"
 )
 if [ -f "$LANDING_EN_COPY" ]; then
   # Phase 24A — compliance claims now use the same negative-context

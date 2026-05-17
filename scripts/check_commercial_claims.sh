@@ -205,6 +205,22 @@ FORBIDDEN_CAPABILITY=(
   "powered by watsonx"
   "watsonx-powered"
   "IBM-powered"
+  # Vendor-readiness guard — IBM / watsonx may only be described as
+  # "planned / vendor-dependent evaluation," never as a shipped
+  # production capability. Negative phrasings ("ChartNav is not
+  # powered by IBM", "Watson does not make ChartNav HIPAA compliant")
+  # are exempted by the negative-context check below.
+  "IBM watsonx-powered"
+  "Watson-powered clinical documentation"
+  "Watson-powered scribe"
+  "Watson makes ChartNav HIPAA compliant"
+  "watsonx diagnosis"
+  "watsonx-driven diagnosis"
+  "watsonx image interpretation"
+  "watsonx auto-grades"
+  "IBM-certified HIPAA"
+  "IBM certifies ChartNav"
+  "watsonx-validated clinical accuracy"
   "billing-aware coding"
   "coding recommendations"
   "AI diagnosis"
