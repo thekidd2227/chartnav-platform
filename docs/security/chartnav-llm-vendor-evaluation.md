@@ -451,6 +451,26 @@ synthetic; no real PHI. Local one-shot runs (not in CI).
 | Anthropic | `claude-haiku-4-5` | **PASS** | F1 happy-path; JSON parsed (prefill-`{` pattern); all v2 safety checks passed. **Notable extra:** model proactively populated `safety_flags` with substantive review prompts ("Provider review required before finalization", "OCT macula comparison to prior imaging recommended", "Visual acuity decline OD warrants clinical correlation"). Useful for a reviewing clinician; both vendors satisfy the safety contract. |
 | IBM watsonx | `ibm/granite-3-8b-instruct` (intended) | **BLOCKED BEFORE INFERENCE** | IAM token exchange succeeded; inference call to `us-south.ml.cloud.ibm.com/ml/v1/text/generation` rejected with `container_not_found` / `Failed to find project_id c0bd6320-1b19-4538-a467-b948de3d8474`. Local script classification: `project_id`. **Not** a model-quality result; the model never ran. |
 
+### Phase 52 — scaffold + IBM blocked
+
+The fake-data scaffold for OpenAI and Anthropic is now in tree
+(`apps/api/app/services/llm_provider.py`) behind hard guardrails.
+Neither adapter runs unless every one of
+`CHARTNAV_LLM_ENABLED=1`, `CHARTNAV_LLM_REAL_PHI_APPROVED=0`,
+`CHARTNAV_PILOT_ALLOW_LLM_<VENDOR>=1`, and the vendor's API key
+is satisfied. The default selector still returns the
+deterministic stub. Missing any guardrail produces a loud
+`ProviderDisabledError` — there is no silent fallback.
+
+`ibm_watsonx` is now in `_BLOCKED_PROVIDERS` (not just "not yet
+implemented"). Selecting it raises `NotImplementedError` with a
+message pointing at the open IBM Support case. The blocker:
+the watsonx.ai project cannot bind a pm-20 / watsonx.ai Runtime
+instance in `us-south` despite active instances existing in the
+account, and the UI cannot complete the association. **Do not
+retry watsonx inference until IBM Support responds.** See
+`chartnav-llm-provider-decision-memo.md` for the full diagnosis.
+
 Important framing rules:
 
 - IBM watsonx is **not** marked as a failed model. The inference
