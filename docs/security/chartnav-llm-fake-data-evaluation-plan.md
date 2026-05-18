@@ -35,6 +35,31 @@ recommendation is not a marketing exercise.
 
 ---
 
+## Phase 52 — adapter scaffold + status
+
+Phase 52 added in-tree fake-data-only adapter scaffolds for
+OpenAI and Anthropic in `apps/api/app/services/llm_provider.py`:
+
+| Vendor | Adapter | F1 result | Phase 52 status |
+|---|---|---|---|
+| OpenAI | `OpenAIChatProvider` | PASS | Scaffold in tree, disabled by default, gated by 4 env flags + per-request `fake_data_context=True` |
+| Anthropic | `AnthropicMessagesProvider` | PASS | Same shape; prefill-`{` JSON coercion |
+| IBM watsonx | n/a | BLOCKED BEFORE INFERENCE | In `_BLOCKED_PROVIDERS`; raises `NotImplementedError` pointing at the open IBM Support case |
+
+The scaffolds use urllib over HTTPS (no vendor SDK imported,
+regression-locked). Live vendor calls run only when the operator
+flips every guardrail; the default selector remains the
+deterministic stub. See
+`chartnav-llm-provider-decision-memo.md` for the full Phase 52
+brief and the IBM blocker diagnosis.
+
+F2–F8 fixtures below remain pending; the existing dev scripts
+(out-of-tree) can exercise them against the scaffold's transport
+seam by passing a mocked transport, or against the real vendor
+by setting all guardrail env vars.
+
+---
+
 ## Fake fixture set
 
 Each fixture is a synthetic input + an expected-output rubric.
