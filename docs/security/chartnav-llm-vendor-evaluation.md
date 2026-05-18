@@ -438,6 +438,59 @@ fixture set + scoring rubric. Summary:
 
 ---
 
+## 14a. Current fake-data eval status (F1)
+
+First-round fake-data F1 eval results against the live vendor
+endpoints, using the synthetic retina-dictation fixture in
+`chartnav-llm-fake-data-evaluation-plan.md`. All fixtures
+synthetic; no real PHI. Local one-shot runs (not in CI).
+
+| Vendor | Model | Status | Notes |
+|---|---|---|---|
+| OpenAI | `gpt-4o-mini` | **PASS** | F1 happy-path; JSON parsed; all v2 safety checks passed; `forbidden_actions` all `false`; provider review preserved; no compliance overclaim. |
+| Anthropic | `claude-haiku-4-5` | **PASS** | F1 happy-path; JSON parsed (prefill-`{` pattern); all v2 safety checks passed. **Notable extra:** model proactively populated `safety_flags` with substantive review prompts ("Provider review required before finalization", "OCT macula comparison to prior imaging recommended", "Visual acuity decline OD warrants clinical correlation"). Useful for a reviewing clinician; both vendors satisfy the safety contract. |
+| IBM watsonx | `ibm/granite-3-8b-instruct` (intended) | **BLOCKED BEFORE INFERENCE** | IAM token exchange succeeded; inference call to `us-south.ml.cloud.ibm.com/ml/v1/text/generation` rejected with `container_not_found` / `Failed to find project_id c0bd6320-1b19-4538-a467-b948de3d8474`. Local script classification: `project_id`. **Not** a model-quality result; the model never ran. |
+
+Important framing rules:
+
+- IBM watsonx is **not** marked as a failed model. The inference
+  never ran. Marking IBM as "fail" would be a category error —
+  the F1 rubric scores model output, not infrastructure
+  reachability.
+- IBM watsonx is **not** marked as passed. No data exists.
+- ChartNav is **not** wired to OpenAI or Anthropic on the
+  strength of these passes. The vendor go/no-go table in
+  Section 15 has additional gates (BAA, SOC 2, retention,
+  region, etc.) that remain open for every vendor. The
+  deterministic stub remains the default.
+
+### Unresolved IBM checks before another inference attempt
+
+These must be answered manually in the IBM Cloud / watsonx
+Console before any further live IBM watsonx eval is run. See
+also `docs/integrations/ibm-cloud-projects-git-integration.md`
+section 11.
+
+1. Confirm whether the UUID used
+   (`c0bd6320-1b19-4538-a467-b948de3d8474`) is an **IBM Cloud
+   Projects** project ID — which is not valid for watsonx.ai
+   inference — vs. a **watsonx.ai project** ID — which is what
+   the inference endpoint expects. These are different ID
+   spaces in different IBM services.
+2. Confirm the watsonx.ai project has an associated **runtime**
+   container.
+3. Confirm the watsonx.ai project is bound to a **Watson
+   Machine Learning** service instance in the same region as
+   the inference endpoint (`us-south`).
+4. Confirm the API-key identity (the user/serviceID that issued
+   `CHARTNAV_WATSONX_API_KEY`) is a **collaborator** on the
+   watsonx.ai project.
+5. Confirm `ibm/granite-3-8b-instruct` is available in the
+   project's region + plan; if not, pick an available model from
+   the project's Foundation Models page.
+
+---
+
 ## 15. Go / no-go decision table
 
 A vendor is selected for **production** use only when every

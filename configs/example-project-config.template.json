@@ -1,0 +1,8 @@
+{
+  "project_id": "replace-with-ibm-cloud-project-id",
+  "config_id": "replace-with-config-id",
+  "definition": {
+    "name": "example-config",
+    "description": "Placeholder IBM Cloud Projects config template. Do not store secrets or PHI here."
+  }
+}
