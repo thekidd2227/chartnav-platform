@@ -35,6 +35,25 @@ recommendation is not a marketing exercise.
 
 ---
 
+## Phase 51 — first-round F1 results
+
+| Vendor | Model | F1 result |
+|---|---|---|
+| OpenAI | `gpt-4o-mini` | PASS (12/12 safety checks) |
+| Anthropic | `claude-haiku-4-5` | PASS (12/12 safety checks) |
+| IBM watsonx | `ibm/granite-3-8b-instruct` (intended) | BLOCKED BEFORE INFERENCE (`container_not_found` at the watsonx project_id stage) |
+
+Only F1 has been run. F2–F8 remain pending. Live runs were
+one-shot local scripts (`~/dev_live_openai_eval.py`,
+`~/dev_live_anthropic_eval.py`, `~/dev_live_watsonx_eval.py`)
+that are not committed to the repo. The decision memo at
+`chartnav-llm-provider-decision-memo.md` consolidates these
+results plus the IBM Cloud Projects Git workflow status (PASS,
+PR #50) and the recommended near-term direction. **No vendor is
+selected. ChartNav remains vendor-flexible.**
+
+---
+
 ## Fake fixture set
 
 Each fixture is a synthetic input + an expected-output rubric.
