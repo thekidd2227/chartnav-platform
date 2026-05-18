@@ -464,6 +464,32 @@ Important framing rules:
   region, etc.) that remain open for every vendor. The
   deterministic stub remains the default.
 
+### Phase 51 — decision-prep result
+
+A separate decision memo at
+`chartnav-llm-provider-decision-memo.md` consolidates the F1
+results, the IBM Cloud Projects Git workflow status (PASS, PR
+#50), and the recommended near-term direction. The memo's
+position:
+
+- **Stay on `deterministic_stub`** in product code. No vendor
+  adapter wired today.
+- If a vendor adapter is approved later, ship it fake-data-only,
+  default OFF, behind every gate listed in Section 12.
+- **OpenAI** is the lowest-friction first-adapter candidate
+  (STT + LLM both passed; credential already validated).
+- **Anthropic** is a strong second-adapter candidate; notable
+  proactive `safety_flags` posture on F1.
+- **IBM watsonx** remains on hold pending the 5 unresolved
+  checks in Section 14a.
+
+Also documented: the IBM Cloud Projects Git workflow (PR #50)
+**passing** does NOT mean watsonx model inference works, and
+does NOT make ChartNav "IBM-powered." Two different IBM
+services; different "project" concepts. See
+`docs/integrations/ibm-cloud-projects-git-integration.md`
+section 10.
+
 ### Unresolved IBM checks before another inference attempt
 
 These must be answered manually in the IBM Cloud / watsonx
