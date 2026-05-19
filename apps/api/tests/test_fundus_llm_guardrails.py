@@ -171,6 +171,7 @@ def test_assist_refuses_without_llm_enabled(monkeypatch):
     monkeypatch.setenv("CHARTNAV_LLM_PROVIDER", "openai")
     monkeypatch.delenv("CHARTNAV_LLM_ENABLED", raising=False)
     monkeypatch.delenv("CHARTNAV_PILOT_ALLOW_LLM_OPENAI", raising=False)
+    monkeypatch.delenv("CHARTNAV_LLM_REAL_PHI_APPROVED", raising=False)
     monkeypatch.setenv("CHARTNAV_OPENAI_API_KEY", "sk-fake")
     with pytest.raises(ProviderDisabledError) as exc:
         generate_chart("Anything, demo.")
@@ -196,6 +197,7 @@ def test_assist_refuses_when_pilot_allow_is_one(monkeypatch):
     monkeypatch.setenv("CHARTNAV_FUNDUS_DRAFTING_ASSIST", "openai")
     monkeypatch.setenv("CHARTNAV_LLM_PROVIDER", "openai")
     monkeypatch.setenv("CHARTNAV_LLM_ENABLED", "1")
+    monkeypatch.delenv("CHARTNAV_LLM_REAL_PHI_APPROVED", raising=False)
     monkeypatch.setenv("CHARTNAV_PILOT_ALLOW_LLM_OPENAI", "1")
     monkeypatch.setenv("CHARTNAV_OPENAI_API_KEY", "sk-fake")
     with pytest.raises(ProviderDisabledError) as exc:

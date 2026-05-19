@@ -51,6 +51,11 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
+from app.services.llm_provider import (
+    LLMRequest,
+    assert_live_provider_safe_to_use,
+)
+
 
 log = logging.getLogger("chartnav.fundus.ai")
 
@@ -389,13 +394,6 @@ def generate_chart_via_llm_assist(
     `_fundus_assist_requested()` (returns False by default), so
     the production default never reaches this function.
     """
-    # Defer the import to avoid coupling the rule-based default
-    # path to llm_provider's import tree.
-    from app.services.llm_provider import (
-        LLMRequest,
-        assert_live_provider_safe_to_use,
-    )
-
     # Build the LLMRequest the Phase 52B contract expects. Both
     # contractual markers are True so the guardrail wrapper
     # accepts the request. If the operator wants this disabled,
