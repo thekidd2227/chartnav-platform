@@ -102,13 +102,13 @@ def upgrade() -> None:
             "allergies_reviewed",
             sa.Boolean(),
             nullable=False,
-            server_default=sa.text("0"),
+            server_default=sa.text("false"),
         ),
         sa.Column(
             "medications_reviewed",
             sa.Boolean(),
             nullable=False,
-            server_default=sa.text("0"),
+            server_default=sa.text("false"),
         ),
         # Free-text
         sa.Column("technician_notes", sa.Text(), nullable=True),
