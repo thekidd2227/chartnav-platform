@@ -58,11 +58,17 @@ REQUEST = LLMRequest(
 
 @pytest.fixture
 def all_guardrails_on(monkeypatch):
-    """Set every env var needed to make a live adapter dispatch."""
+    """Set every env var to the SAFE state a live adapter requires.
+
+    Phase 52B semantic flip: pilot-allow flags must be `0`/unset
+    for the fake-data adapter to activate. `=1` would claim
+    pilot/production approval ChartNav does not have, and the
+    adapter refuses.
+    """
     monkeypatch.setenv("CHARTNAV_LLM_ENABLED", "1")
     monkeypatch.delenv("CHARTNAV_LLM_REAL_PHI_APPROVED", raising=False)
-    monkeypatch.setenv("CHARTNAV_PILOT_ALLOW_LLM_OPENAI", "1")
-    monkeypatch.setenv("CHARTNAV_PILOT_ALLOW_LLM_ANTHROPIC", "1")
+    monkeypatch.delenv("CHARTNAV_PILOT_ALLOW_LLM_OPENAI", raising=False)
+    monkeypatch.delenv("CHARTNAV_PILOT_ALLOW_LLM_ANTHROPIC", raising=False)
     monkeypatch.setenv("CHARTNAV_OPENAI_API_KEY", "sk-fake-test-openai")
     monkeypatch.setenv(
         "CHARTNAV_ANTHROPIC_API_KEY", "sk-ant-fake-test-anthropic"
@@ -167,7 +173,7 @@ def test_stub_detect_prompt_injection_always_reports_no_injection():
 def test_openai_blocked_without_llm_enabled(monkeypatch):
     monkeypatch.setenv("CHARTNAV_LLM_PROVIDER", "openai")
     monkeypatch.delenv("CHARTNAV_LLM_ENABLED", raising=False)
-    monkeypatch.setenv("CHARTNAV_PILOT_ALLOW_LLM_OPENAI", "1")
+    monkeypatch.delenv("CHARTNAV_PILOT_ALLOW_LLM_OPENAI", raising=False)
     monkeypatch.setenv("CHARTNAV_OPENAI_API_KEY", "sk-fake")
     with pytest.raises(ProviderDisabledError) as exc:
         select_default_provider()
@@ -178,7 +184,7 @@ def test_openai_blocked_when_real_phi_approved(monkeypatch):
     monkeypatch.setenv("CHARTNAV_LLM_PROVIDER", "openai")
     monkeypatch.setenv("CHARTNAV_LLM_ENABLED", "1")
     monkeypatch.setenv("CHARTNAV_LLM_REAL_PHI_APPROVED", "1")
-    monkeypatch.setenv("CHARTNAV_PILOT_ALLOW_LLM_OPENAI", "1")
+    monkeypatch.delenv("CHARTNAV_PILOT_ALLOW_LLM_OPENAI", raising=False)
     monkeypatch.setenv("CHARTNAV_OPENAI_API_KEY", "sk-fake")
     with pytest.raises(ProviderDisabledError) as exc:
         select_default_provider()
@@ -186,20 +192,28 @@ def test_openai_blocked_when_real_phi_approved(monkeypatch):
     assert "FAKE-DATA-ONLY" in str(exc.value)
 
 
-def test_openai_blocked_without_pilot_allow(monkeypatch):
+def test_openai_blocked_when_pilot_allow_is_one(monkeypatch):
+    """Phase 52B semantic flip: pilot-allow=1 must REFUSE.
+
+    Setting CHARTNAV_PILOT_ALLOW_LLM_OPENAI=1 would semantically
+    claim pilot/production approval ChartNav does not have. The
+    fake-data adapter REFUSES rather than honor that claim. A
+    future pilot path will live in a separate module.
+    """
     monkeypatch.setenv("CHARTNAV_LLM_PROVIDER", "openai")
     monkeypatch.setenv("CHARTNAV_LLM_ENABLED", "1")
-    monkeypatch.delenv("CHARTNAV_PILOT_ALLOW_LLM_OPENAI", raising=False)
+    monkeypatch.setenv("CHARTNAV_PILOT_ALLOW_LLM_OPENAI", "1")
     monkeypatch.setenv("CHARTNAV_OPENAI_API_KEY", "sk-fake")
     with pytest.raises(ProviderDisabledError) as exc:
         select_default_provider()
     assert "CHARTNAV_PILOT_ALLOW_LLM_OPENAI" in str(exc.value)
+    assert "pilot" in str(exc.value).lower()
 
 
 def test_openai_blocked_without_api_key(monkeypatch):
     monkeypatch.setenv("CHARTNAV_LLM_PROVIDER", "openai")
     monkeypatch.setenv("CHARTNAV_LLM_ENABLED", "1")
-    monkeypatch.setenv("CHARTNAV_PILOT_ALLOW_LLM_OPENAI", "1")
+    monkeypatch.delenv("CHARTNAV_PILOT_ALLOW_LLM_OPENAI", raising=False)
     monkeypatch.delenv("CHARTNAV_OPENAI_API_KEY", raising=False)
     with pytest.raises(ProviderDisabledError) as exc:
         select_default_provider()
@@ -223,7 +237,7 @@ def test_openai_selector_unblocked_when_all_guardrails_set(
 def test_anthropic_blocked_without_llm_enabled(monkeypatch):
     monkeypatch.setenv("CHARTNAV_LLM_PROVIDER", "anthropic")
     monkeypatch.delenv("CHARTNAV_LLM_ENABLED", raising=False)
-    monkeypatch.setenv("CHARTNAV_PILOT_ALLOW_LLM_ANTHROPIC", "1")
+    monkeypatch.delenv("CHARTNAV_PILOT_ALLOW_LLM_ANTHROPIC", raising=False)
     monkeypatch.setenv("CHARTNAV_ANTHROPIC_API_KEY", "sk-ant-fake")
     with pytest.raises(ProviderDisabledError) as exc:
         select_default_provider()
@@ -234,27 +248,31 @@ def test_anthropic_blocked_when_real_phi_approved(monkeypatch):
     monkeypatch.setenv("CHARTNAV_LLM_PROVIDER", "anthropic")
     monkeypatch.setenv("CHARTNAV_LLM_ENABLED", "1")
     monkeypatch.setenv("CHARTNAV_LLM_REAL_PHI_APPROVED", "1")
-    monkeypatch.setenv("CHARTNAV_PILOT_ALLOW_LLM_ANTHROPIC", "1")
+    monkeypatch.delenv("CHARTNAV_PILOT_ALLOW_LLM_ANTHROPIC", raising=False)
     monkeypatch.setenv("CHARTNAV_ANTHROPIC_API_KEY", "sk-ant-fake")
     with pytest.raises(ProviderDisabledError) as exc:
         select_default_provider()
     assert "FAKE-DATA-ONLY" in str(exc.value)
 
 
-def test_anthropic_blocked_without_pilot_allow(monkeypatch):
+def test_anthropic_blocked_when_pilot_allow_is_one(monkeypatch):
+    """Same Phase 52B semantic flip as the OpenAI test: pilot-allow=1
+    must REFUSE because it would claim pilot/production approval
+    ChartNav does not have."""
     monkeypatch.setenv("CHARTNAV_LLM_PROVIDER", "anthropic")
     monkeypatch.setenv("CHARTNAV_LLM_ENABLED", "1")
-    monkeypatch.delenv("CHARTNAV_PILOT_ALLOW_LLM_ANTHROPIC", raising=False)
+    monkeypatch.setenv("CHARTNAV_PILOT_ALLOW_LLM_ANTHROPIC", "1")
     monkeypatch.setenv("CHARTNAV_ANTHROPIC_API_KEY", "sk-ant-fake")
     with pytest.raises(ProviderDisabledError) as exc:
         select_default_provider()
     assert "CHARTNAV_PILOT_ALLOW_LLM_ANTHROPIC" in str(exc.value)
+    assert "pilot" in str(exc.value).lower()
 
 
 def test_anthropic_blocked_without_api_key(monkeypatch):
     monkeypatch.setenv("CHARTNAV_LLM_PROVIDER", "anthropic")
     monkeypatch.setenv("CHARTNAV_LLM_ENABLED", "1")
-    monkeypatch.setenv("CHARTNAV_PILOT_ALLOW_LLM_ANTHROPIC", "1")
+    monkeypatch.delenv("CHARTNAV_PILOT_ALLOW_LLM_ANTHROPIC", raising=False)
     monkeypatch.delenv("CHARTNAV_ANTHROPIC_API_KEY", raising=False)
     with pytest.raises(ProviderDisabledError) as exc:
         select_default_provider()
@@ -293,6 +311,48 @@ def test_request_default_fake_data_context_is_true():
         use_case="x", payload={}, org_id=1,
     )
     assert req.fake_data_context is True
+
+
+def test_live_adapter_refuses_request_without_requires_provider_review():
+    """Phase 52B per-request check: the caller MUST declare that
+    any output will pass through clinician review. Setting
+    requires_provider_review=False signals the caller wants an
+    autonomous output, which the fake-data adapter refuses."""
+    p = OpenAIChatProvider(
+        api_key="sk-fake", transport=lambda *a, **k: (200, b"{}")
+    )
+    bad_req = LLMRequest(
+        use_case="clinical_charting",
+        payload={"transcript": "x", "chart_context": {}},
+        org_id=1,
+        fake_data_context=True,
+        requires_provider_review=False,  # autonomous-output ask
+    )
+    with pytest.raises(ProviderDisabledError) as exc:
+        p.draft_provider_review_note(bad_req)
+    assert "requires_provider_review" in str(exc.value)
+    assert "autonomous" in str(exc.value).lower()
+
+
+def test_request_default_requires_provider_review_is_true():
+    req = LLMRequest(use_case="x", payload={}, org_id=1)
+    assert req.requires_provider_review is True
+
+
+def test_anthropic_adapter_refuses_request_without_requires_provider_review():
+    """Same per-request contract on the Anthropic adapter."""
+    p = AnthropicMessagesProvider(
+        api_key="sk-ant-fake", transport=lambda *a, **k: (200, b"{}")
+    )
+    bad_req = LLMRequest(
+        use_case="clinical_charting",
+        payload={"transcript": "x", "chart_context": {}},
+        org_id=1,
+        requires_provider_review=False,
+    )
+    with pytest.raises(ProviderDisabledError) as exc:
+        p.draft_provider_review_note(bad_req)
+    assert "requires_provider_review" in str(exc.value)
 
 
 # ---------------------------------------------------------------------

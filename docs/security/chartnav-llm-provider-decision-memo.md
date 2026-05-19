@@ -135,7 +135,7 @@ with the offending flag named.
 | `CHARTNAV_LLM_PROVIDER` | `openai` or `anthropic` | Selects the live adapter |
 | `CHARTNAV_LLM_ENABLED` | `1` | Operator-intent confirmation |
 | `CHARTNAV_LLM_REAL_PHI_APPROVED` | `0` (or unset) | **MUST be 0.** Live adapters are fake-data-only. A real-PHI deployment must use a vetted path that does not exist yet. |
-| `CHARTNAV_PILOT_ALLOW_LLM_<VENDOR>` | `1` | Per-vendor practice-approval gate |
+| `CHARTNAV_PILOT_ALLOW_LLM_<VENDOR>` | unset or `0` | **Phase 52B semantic flip:** must be unset or `0` for the fake-data adapter to activate. `=1` is REFUSED — it would semantically claim pilot / production approval ChartNav does not have. See `chartnav-openai-fake-data-adapter.md` § 4. |
 | `CHARTNAV_<VENDOR>_API_KEY` | present | Vendor credential (presence-only check; value never logged) |
 
 Per-request enforcement:
@@ -143,6 +143,7 @@ Per-request enforcement:
 | Field | Required | Reason |
 |---|---|---|
 | `LLMRequest.fake_data_context` | `True` (default) | The caller declares the payload is synthetic. Setting it to `False` causes the live adapter to refuse. |
+| `LLMRequest.requires_provider_review` | `True` (default) | **Phase 52B:** the caller declares that any output of this request will pass through clinician review before being treated as final. Setting it to `False` (= autonomous-output ask) causes the live adapter to refuse. |
 
 IBM watsonx has no guardrail path today. The key is in
 `_BLOCKED_PROVIDERS`; selection raises `NotImplementedError`
