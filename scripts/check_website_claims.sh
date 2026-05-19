@@ -183,6 +183,12 @@ forbidden_capability_positive=(
   "autonomous fundus interpretation"
   "fundus diagnosis"
   "AI[- ]generated fundus diagnosis"
+  "OpenAI fundus interpretation"
+  "OpenAI-powered fundus charting"
+  "production LLM fundus workflow"
+  "autonomous retinal charting"
+  "AI detects retinal disease"
+  "real PHI ready"
   # Phase 25A / GH-012 — Cora-comparison claims are off-limits on
   # the public site. Negative phrasings stay exempt via the same
   # negative-context regex used for the rest of the list.

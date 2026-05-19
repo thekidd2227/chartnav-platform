@@ -453,3 +453,91 @@ describe("FundusChart UI — claim safety", () => {
     expect(lower).not.toMatch(/auto-signed/);
   });
 });
+
+// ---------------------------------------------------------------
+// Phase 56 — failure-mode hardening
+// ---------------------------------------------------------------
+
+describe("FundusChartPanel — failure modes", () => {
+  it("list failure surfaces the error message and does not crash the panel", async () => {
+    vi.mocked(listFundusCharts).mockRejectedValueOnce(
+      new Error("HTTP 503 service unavailable"),
+    );
+    render(<FundusChartPanel encounterId={7} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("fundus-error")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("fundus-error").textContent).toMatch(
+      /HTTP 503/,
+    );
+    // The findings form must still be reachable so the operator can
+    // recover or try again.
+    expect(screen.getByTestId("fundus-findings-text")).toBeInTheDocument();
+    expect(screen.getByTestId("fundus-generate-btn")).toBeInTheDocument();
+  });
+
+  it("generate failure preserves the clinician-entered findings text", async () => {
+    vi.mocked(listFundusCharts).mockResolvedValueOnce([]);
+    vi.mocked(generateFundusChart).mockRejectedValueOnce(
+      new Error("HTTP 500 upstream blew up"),
+    );
+    render(<FundusChartPanel encounterId={7} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("fundus-generate-btn")).toBeInTheDocument(),
+    );
+
+    const userText = "horseshoe tear at 10:30 OD — typed by clinician";
+    await userEvent.type(
+      screen.getByTestId("fundus-findings-text"),
+      userText,
+    );
+    await userEvent.click(screen.getByTestId("fundus-generate-btn"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("fundus-error")).toBeInTheDocument(),
+    );
+    // Critical: the clinician's typed findings must NOT be cleared
+    // on failure — they may need to amend + retry.
+    expect(
+      (screen.getByTestId("fundus-findings-text") as HTMLTextAreaElement).value,
+    ).toBe(userText);
+    expect(screen.getByTestId("fundus-error").textContent).toMatch(
+      /HTTP 500/,
+    );
+  });
+
+  it("generate failure leaves the panel in a state where the user can retry", async () => {
+    vi.mocked(listFundusCharts).mockResolvedValueOnce([]);
+    vi.mocked(generateFundusChart)
+      .mockRejectedValueOnce(new Error("HTTP 500"))
+      .mockResolvedValueOnce({
+        chart_id: 99,
+        laterality: "OD",
+        warnings: [],
+        drawing_json: { version: 1, elements: [] },
+        ai_model_name: "rule_based_v1",
+        status: "draft",
+      });
+    vi.mocked(getFundusChart).mockResolvedValueOnce(baseChart({ id: 99 }));
+
+    render(<FundusChartPanel encounterId={7} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("fundus-generate-btn")).toBeInTheDocument(),
+    );
+    await userEvent.type(
+      screen.getByTestId("fundus-findings-text"),
+      "horseshoe tear at 10:30 OD",
+    );
+    // First attempt — fails.
+    await userEvent.click(screen.getByTestId("fundus-generate-btn"));
+    await waitFor(() =>
+      expect(screen.getByTestId("fundus-error")).toBeInTheDocument(),
+    );
+    // Second attempt — succeeds.
+    await userEvent.click(screen.getByTestId("fundus-generate-btn"));
+    await waitFor(() =>
+      expect(screen.getByTestId("fundus-chart-editor")).toBeInTheDocument(),
+    );
+    expect(generateFundusChart).toHaveBeenCalledTimes(2);
+  });
+});

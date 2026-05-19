@@ -176,6 +176,22 @@ def generate_chart_from_findings(
             "Please confirm OD (right eye) or OS (left eye) before signing."
         )
         detected_lat = "OD"
+    elif (
+        laterality_hint
+        and laterality_hint.upper() in ("OD", "OS")
+        and detected_lat in ("OD", "OS")
+        and laterality_hint.upper() != detected_lat
+    ):
+        # Phase 56: surface a warning when the operator-selected
+        # laterality in the request conflicts with the laterality the
+        # parser found in the findings text. The findings text is the
+        # source of truth (we keep `detected_lat`), but the clinician
+        # must confirm before signing.
+        warnings.append(
+            f"Laterality mismatch: request specified {laterality_hint.upper()} "
+            f"but findings text says {detected_lat}. Findings text wins; "
+            "please confirm before signing."
+        )
 
     for sentence in _sentences(findings_text):
         lat = _parse_laterality(sentence) or detected_lat
