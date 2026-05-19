@@ -17,6 +17,10 @@ CI links:
 | Frontend typecheck | pending |  |  |
 | Frontend tests | pending |  |  |
 | Frontend build | pending |  |  |
+| Structured vitals backend tests, if relevant | pending |  | `cd apps/api && .venv/bin/python -m pytest tests/test_vitals_workups.py -q` |
+| Structured vitals frontend tests, if relevant | pending |  | `cd apps/web && npx vitest run src/test/VitalsWorkupPanel.test.tsx` |
+| Structured vitals audit minimization, if relevant | pending |  | Confirm audit detail excludes vitals values, VA/IOP, and notes |
+| Structured vitals no diagnosis/treatment language, if relevant | pending |  | Confirm no diagnosis, treatment, orders, messages, billing, coding, device, or RPM claims |
 | Docker build/smoke | pending |  |  |
 | E2E tests | pending |  |  |
 | Docs regeneration | pending |  |  |
@@ -38,6 +42,8 @@ CI links:
 - No autonomous diagnosis added:
 - No image interpretation added:
 - No orders/referrals/patient messaging/billing/coding automation added:
+- No treatment recommendation added:
+- No device integration or remote patient monitoring claim added:
 - No deployment performed:
 
 ## Known Risks

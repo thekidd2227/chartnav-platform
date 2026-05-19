@@ -21,6 +21,7 @@ from app.api.routes import router
 from app.api.scribe_sessions import router as scribe_sessions_router
 from app.api.specialty_tracking import router as specialty_tracking_router
 from app.api.structured_data import router as structured_data_router
+from app.api.vitals_workups import router as vitals_workups_router
 from app.audit import record as audit_record, should_audit
 from app.config import settings
 from app.logging_config import configure_logging
@@ -114,6 +115,7 @@ app.include_router(patient_summaries_router)
 app.include_router(pre_visit_briefs_router)
 app.include_router(provider_action_items_router)
 app.include_router(structured_data_router)
+app.include_router(vitals_workups_router)
 app.include_router(role_dashboards_router)
 app.include_router(specialty_tracking_router)
 app.include_router(imaging_pipeline_router)

@@ -92,7 +92,7 @@ def test_select_default_provider_none_returns_none(monkeypatch):
     assert select_default_provider() is None
 
 
-def test_ibm_watsonx_remains_blocked_pending_support(monkeypatch):
+def test_ibm_watsonx_remains_blocked_for_runtime_use(monkeypatch):
     monkeypatch.setenv("CHARTNAV_LLM_PROVIDER", "ibm_watsonx")
     with pytest.raises(NotImplementedError) as exc:
         select_default_provider()
@@ -101,8 +101,9 @@ def test_ibm_watsonx_remains_blocked_pending_support(monkeypatch):
     # implemented") and pointed at the diagnosis doc.
     assert "ibm_watsonx" in msg
     assert "blocked" in msg.lower()
-    assert "support" in msg.lower()
-    assert "chartnav-llm-provider-decision-memo.md" in msg
+    assert "real-PHI" in msg
+    assert "production" in msg.lower()
+    assert "chartnav-llm-vendor-evaluation.md" in msg
     assert "deterministic_stub" in msg
 
 

@@ -5,3 +5,7 @@ Forbidden phrase catalog: "ChartNav is HIPAA compliant" is banned.
 Forbidden phrase catalog: "Fundus image interpretation" is banned.
 Forbidden phrase catalog: "Guaranteed ROI" is banned.
 Forbidden phrase catalog: "Better than Cora" is banned.
+Forbidden phrase catalog: "AI vitals diagnosis" is banned.
+Forbidden phrase catalog: "Treatment recommendation" is banned.
+Forbidden phrase catalog: "Device integration" is banned.
+Forbidden phrase catalog: "Remote patient monitoring" is banned.

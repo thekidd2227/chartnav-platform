@@ -6,3 +6,10 @@ ChartNav does not provide OpenAI-powered clinical documentation.
 ChartNav does not provide a production LLM fundus workflow.
 ChartNav does not guarantee ROI.
 ChartNav is not better than Cora and is not positioned as a Cora replacement.
+Structured vitals intake does not diagnose.
+ChartNav does not recommend treatment.
+ChartNav does not automatically order follow-up tests.
+ChartNav does not send patient message.
+ChartNav does not provide billing code support.
+ChartNav does not provide device integration.
+ChartNav does not claim remote patient monitoring.

@@ -5,7 +5,7 @@ LLM workflow (draft generation, summarization, structured
 extraction, prompt-injection classification). Phase 52 extends
 the original scaffold (PR #49) with **fake-data-only** adapter
 scaffolds for OpenAI and Anthropic, behind hard guardrails. IBM
-watsonx remains explicitly blocked pending IBM Support.
+watsonx remains explicitly blocked for ChartNav runtime use.
 
 What this module ships today
 ----------------------------
@@ -43,9 +43,9 @@ Hard rules
   wrong code path for real PHI; a future phase will introduce a
   vetted real-PHI path with its own controls.
 - **IBM watsonx stays blocked.** Selecting `ibm_watsonx` raises
-  `NotImplementedError` pointing at the open IBM Support case
-  (project-runtime association issue documented in
-  `docs/security/chartnav-llm-provider-decision-memo.md`).
+  `NotImplementedError`. A Phase 59 manual fake-data smoke test
+  passed, but pilot, real-PHI, and production runtime use remain
+  unapproved.
 - **No vendor SDKs are imported.** Live adapters use urllib over
   HTTPS. A regression test pins this at the source level so a
   future PR cannot accidentally couple the scaffold to a vendor
@@ -60,7 +60,7 @@ Env contract
 | `CHARTNAV_LLM_REAL_PHI_APPROVED` | Per-LLM real-PHI gate | must be `0` or unset | must be `0` or unset |
 | `CHARTNAV_PILOT_ALLOW_LLM_OPENAI` | Per-vendor pilot-promotion gate. **MUST be `0` or unset.** `=1` causes the adapter to REFUSE — that flag would semantically claim pilot/production approval ChartNav does not have. | required `0`/unset | n/a |
 | `CHARTNAV_PILOT_ALLOW_LLM_ANTHROPIC` | Same semantic as OpenAI's pilot flag. | n/a | required `0`/unset |
-| `CHARTNAV_PILOT_ALLOW_LLM_WATSONX` | Same semantic; reserved for the day IBM watsonx unblocks. | n/a — `ibm_watsonx` remains blocked | n/a |
+| `CHARTNAV_PILOT_ALLOW_LLM_WATSONX` | Same semantic; reserved for a future explicit approval path. | n/a — `ibm_watsonx` remains blocked | n/a |
 | `CHARTNAV_OPENAI_API_KEY` | OpenAI credential | required (presence-only check) | n/a |
 | `CHARTNAV_OPENAI_LLM_MODEL` | OpenAI model id | optional (default `gpt-4o-mini`) | n/a |
 | `CHARTNAV_ANTHROPIC_API_KEY` | Anthropic credential | n/a | required |
@@ -763,19 +763,15 @@ def _build_user_prompt(payload: dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 
 
-# Reserved keys that remain explicitly blocked. The error message
-# names the open IBM Support case so the operator can correlate.
+# Reserved keys that remain explicitly blocked.
 _BLOCKED_PROVIDERS: dict[str, str] = {
     "ibm_watsonx": (
-        "CHARTNAV_LLM_PROVIDER='ibm_watsonx' is blocked pending IBM "
-        "Support resolution of the project-runtime association "
-        "issue (no_associated_service_instance_error / "
-        "container_not_found on /ml/v1/text/generation). The "
-        "watsonx.ai project cannot bind a pm-20 / watsonx.ai "
-        "Runtime instance in us-south despite active instances "
-        "existing in the account. See "
-        "docs/security/chartnav-llm-provider-decision-memo.md "
-        "for the full diagnosis. Until IBM Support responds, "
+        "CHARTNAV_LLM_PROVIDER='ibm_watsonx' is blocked for ChartNav "
+        "runtime use. A manual fake-data smoke test exists and passed, "
+        "but real-PHI, pilot, and production LLM use remain unapproved; "
+        "live watsonx calls must stay manual-only and out of CI. See "
+        "docs/security/chartnav-llm-vendor-evaluation.md "
+        "for the current posture. Until an explicit approved path exists, "
         "select CHARTNAV_LLM_PROVIDER=deterministic_stub "
         "(default) or =none."
     ),

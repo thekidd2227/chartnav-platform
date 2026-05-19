@@ -238,7 +238,7 @@ See `docs/workflow/fundus-charting.md` for the full workflow doc.
 | Deterministic stub | **Production default** | Unchanged. No code path in `apps/api/` invokes the OpenAI adapter today. |
 | OpenAI `gpt-4o-mini` | **Fake-data / demo only behind guardrails** | Phase 52B. CONDITIONAL PASS per Option A. Allowed only in the SAFE env state of § 3. |
 | Anthropic `claude-haiku-4-5` | **Held for retest** | Phase 52 scaffold is in tree behind the same guardrails. ROUND FAIL per Option A (F2 laterality delta, F4 check false-positive). Not preferred for the next phase pending prompt + harness sharpening. |
-| IBM watsonx | **BLOCKED pending IBM Support** | `_BLOCKED_PROVIDERS["ibm_watsonx"]` raises `NotImplementedError`. `no_associated_service_instance_error` on inference; UI cannot bind a Runtime instance. No retry. |
+| IBM watsonx | **Fake-data live eval PASS; still production-blocked** | `scripts/dev_live_watsonx_eval.py` is a manual-only smoke test. Latest fake-data run reached IAM + inference successfully, Granite 3 8B returned valid JSON, and 12/12 safety checks passed. Runtime selection still raises for `ibm_watsonx`; real-PHI, pilot, and production use remain not approved. No CI live calls. |
 
 ## 10. What may **not** appear in public material
 

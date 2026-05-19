@@ -75,6 +75,16 @@ vi.mock("../features/ambient/ambientApi", () => ({
   finalizeScribeSession: vi.fn(),
 }));
 
+// Phase 60 — Documentation tab mounts structured vitals/workup.
+vi.mock("../features/vitals/vitalsApi", () => ({
+  listVitalsWorkups: vi.fn().mockResolvedValue([]),
+  createVitalsWorkup: vi.fn(),
+  getVitalsWorkup: vi.fn(),
+  updateVitalsWorkup: vi.fn(),
+  reviewVitalsWorkup: vi.fn(),
+  signVitalsWorkup: vi.fn(),
+}));
+
 import * as api from "../api";
 import { ClinicalTabbedWorkspace } from "../ClinicalTabbedWorkspace";
 

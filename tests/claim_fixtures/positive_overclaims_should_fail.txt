@@ -8,3 +8,13 @@ Production LLM fundus workflow.
 Real PHI ready.
 Guaranteed ROI.
 Better than Cora.
+AI vitals diagnosis.
+Automatic vitals diagnosis.
+Vital-sign diagnosis.
+Treatment recommendation.
+Automatic treatment recommendation.
+ChartNav automatically orders follow-up tests.
+ChartNav sends patient message.
+Billing code.
+Device integration.
+Remote patient monitoring.

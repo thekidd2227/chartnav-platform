@@ -76,6 +76,8 @@ FILES=(
   "docs/demo/phase-57-ambient-documentation-demo-runbook.md"
   # Phase 59 — ambient documentation demo QA lockdown checklist.
   "docs/demo/phase-59-ambient-demo-qa-checklist.md"
+  # Phase 60 — structured vitals/workup demo runbook.
+  "docs/demo/phase-60-vitals-workup-demo-runbook.md"
 )
 
 for f in "${FILES[@]}"; do
@@ -224,14 +226,22 @@ FORBIDDEN = [
     r"automatic billing",
     r"automatically bills?",
     r"billing[- ]aware coding",
+    r"billing code",
     r"coding recommendations",
+    r"AI vitals diagnosis",
+    r"automatic vitals diagnosis",
+    r"vital-sign diagnosis",
     r"treatment recommendation",
+    r"automatic treatment recommendation",
     r"disease grading",
     r"OCT interpretation",
     # Patient-side overclaims
     r"patient messaging",
     r"send patient message",
+    r"sends patient message",
     r"send to patient",
+    r"device integration",
+    r"remote patient monitoring",
     r"submits? (a )?claims?",
     r"claims? submission",
     r"insurance handling",
