@@ -78,6 +78,11 @@ FILES=(
   "docs/demo/phase-59-ambient-demo-qa-checklist.md"
   # Phase 60 — structured vitals & technician workup demo runbook.
   "docs/demo/phase-60-vitals-workup-demo-runbook.md"
+  # Phase 61 — controlled buyer demo package.
+  "docs/demo/phase-61-controlled-buyer-demo-runbook.md"
+  "docs/demo/phase-61-buyer-demo-checklist.md"
+  "docs/demo/phase-61-buyer-qa-safe-answers.md"
+  "docs/demo/phase-61-demo-storyboard.md"
 )
 
 for f in "${FILES[@]}"; do
