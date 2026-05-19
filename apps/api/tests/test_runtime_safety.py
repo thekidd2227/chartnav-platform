@@ -53,6 +53,88 @@ def test_openai_fundus_assist_outside_demo_fails():
     assert "FUNDUS_OPENAI_NOT_DEMO" in codes
 
 
+def test_openai_ambient_assist_in_production_fails():
+    """Phase 57 — production must never enable demo-only ambient assist."""
+    codes = codes_for({
+        "CHARTNAV_ENV": "production",
+        "CHARTNAV_AMBIENT_DOCUMENTATION_ASSIST": "openai",
+    })
+    assert "AMBIENT_OPENAI_PRODUCTION" in codes
+    assert "AMBIENT_OPENAI_NOT_DEMO" in codes
+    assert "PRODUCTION_AMBIENT_OPENAI" in codes
+
+
+def test_openai_ambient_assist_outside_demo_fails():
+    """Phase 57 — opting into the ambient OpenAI assist in a
+    controlled-pilot environment (non fake/demo) fails."""
+    codes = codes_for({
+        "CHARTNAV_ENV": "controlled-pilot",
+        "CHARTNAV_AMBIENT_DOCUMENTATION_ASSIST": "openai",
+    })
+    assert "AMBIENT_OPENAI_NOT_DEMO" in codes
+
+
+def test_openai_ambient_assist_in_local_demo_passes_ambient_gates():
+    """Phase 57 — demo / local with no other unsafe combinations is
+    the only environment where the ambient OpenAI assist is allowed.
+    AMBIENT_OPENAI_* codes must not fire here."""
+    codes = codes_for({
+        "CHARTNAV_ENV": "demo",
+        "CHARTNAV_AMBIENT_DOCUMENTATION_ASSIST": "openai",
+    })
+    assert "AMBIENT_OPENAI_NOT_DEMO" not in codes
+    assert "AMBIENT_OPENAI_PRODUCTION" not in codes
+    assert "AMBIENT_OPENAI_REAL_PHI_APPROVED" not in codes
+    assert "REAL_PHI_WITH_AMBIENT_OPENAI" not in codes
+    assert "PRODUCTION_AMBIENT_OPENAI" not in codes
+
+
+def test_openai_ambient_assist_with_real_phi_approved_fails():
+    """Phase 57 — flipping the LLM real-PHI gate while the ambient
+    assist is opted in must fail."""
+    codes = codes_for({
+        "CHARTNAV_ENV": "demo",
+        "CHARTNAV_AMBIENT_DOCUMENTATION_ASSIST": "openai",
+        "CHARTNAV_LLM_REAL_PHI_APPROVED": "1",
+    })
+    assert "AMBIENT_OPENAI_REAL_PHI_APPROVED" in codes
+
+
+def test_real_phi_enabled_with_ambient_openai_fails():
+    """Phase 57 — operator-side real-PHI flag combined with the
+    ambient OpenAI assist must fail."""
+    codes = codes_for({
+        "CHARTNAV_ENV": "controlled-pilot",
+        "CHARTNAV_REAL_PHI_ENABLED": "1",
+        "CHARTNAV_AMBIENT_DOCUMENTATION_ASSIST": "openai",
+    })
+    assert "REAL_PHI_WITH_AMBIENT_OPENAI" in codes
+
+
+def test_ambient_assist_unset_is_safe():
+    """Phase 57 — the deterministic ambient path is the production
+    default. With no env var set, no AMBIENT_* finding fires."""
+    codes = codes_for({"CHARTNAV_ENV": "local"})
+    assert not any(c.startswith("AMBIENT_") for c in codes)
+    assert "PRODUCTION_AMBIENT_OPENAI" not in codes
+    assert "REAL_PHI_WITH_AMBIENT_OPENAI" not in codes
+
+
+def test_ambient_assist_literal_non_openai_is_ignored():
+    """Phase 57 — only the literal value `openai` triggers the
+    ambient checks; `1`/`true`/`anthropic`/etc. are ignored at the
+    runtime-safety layer (mirroring the service's behaviour)."""
+    for val in ("1", "true", "yes", "on", "anthropic", "ibm"):
+        codes = codes_for({
+            "CHARTNAV_ENV": "production",
+            "CHARTNAV_AMBIENT_DOCUMENTATION_ASSIST": val,
+        })
+        assert "AMBIENT_OPENAI_PRODUCTION" not in codes, (
+            f"value {val!r} should not trigger AMBIENT_OPENAI_PRODUCTION"
+        )
+        assert "AMBIENT_OPENAI_NOT_DEMO" not in codes
+
+
 def test_anthropic_provider_fails_as_blocked():
     codes = codes_for({"CHARTNAV_ENV": "local", "CHARTNAV_LLM_PROVIDER": "anthropic"})
     assert "LLM_PROVIDER_BLOCKED" in codes

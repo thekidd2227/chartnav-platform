@@ -94,6 +94,7 @@ def validate_env(env: Mapping[str, str]) -> list[Finding]:
     llm_real_phi = _is_truthy(env, "CHARTNAV_LLM_REAL_PHI_APPROVED")
     pilot_allow_openai = _is_truthy(env, "CHARTNAV_PILOT_ALLOW_LLM_OPENAI")
     fundus_assist = _lower(env, "CHARTNAV_FUNDUS_DRAFTING_ASSIST")
+    ambient_assist = _lower(env, "CHARTNAV_AMBIENT_DOCUMENTATION_ASSIST")
     real_phi_enabled = _is_truthy(env, "CHARTNAV_REAL_PHI_ENABLED")
 
     # LLM safety.
@@ -116,6 +117,21 @@ def validate_env(env: Mapping[str, str]) -> list[Finding]:
         findings.append(Finding(
             "FUNDUS_OPENAI_NOT_DEMO",
             "CHARTNAV_FUNDUS_DRAFTING_ASSIST=openai is allowed only in fake-data/demo environments.",
+        ))
+    if ambient_assist == "openai" and is_production:
+        findings.append(Finding(
+            "AMBIENT_OPENAI_PRODUCTION",
+            "CHARTNAV_AMBIENT_DOCUMENTATION_ASSIST=openai is fake-data/demo-only and is not approved for CHARTNAV_ENV=production.",
+        ))
+    if ambient_assist == "openai" and not is_fake_demo:
+        findings.append(Finding(
+            "AMBIENT_OPENAI_NOT_DEMO",
+            "CHARTNAV_AMBIENT_DOCUMENTATION_ASSIST=openai is allowed only in fake-data/demo environments.",
+        ))
+    if ambient_assist == "openai" and llm_real_phi:
+        findings.append(Finding(
+            "AMBIENT_OPENAI_REAL_PHI_APPROVED",
+            "CHARTNAV_AMBIENT_DOCUMENTATION_ASSIST=openai cannot be combined with CHARTNAV_LLM_REAL_PHI_APPROVED=1.",
         ))
     if pilot_allow_openai:
         findings.append(Finding(
@@ -141,6 +157,11 @@ def validate_env(env: Mapping[str, str]) -> list[Finding]:
         findings.append(Finding(
             "REAL_PHI_WITH_FUNDUS_OPENAI",
             "CHARTNAV_REAL_PHI_ENABLED=1 cannot be combined with CHARTNAV_FUNDUS_DRAFTING_ASSIST=openai.",
+        ))
+    if real_phi_enabled and ambient_assist == "openai":
+        findings.append(Finding(
+            "REAL_PHI_WITH_AMBIENT_OPENAI",
+            "CHARTNAV_REAL_PHI_ENABLED=1 cannot be combined with CHARTNAV_AMBIENT_DOCUMENTATION_ASSIST=openai.",
         ))
 
     # STT/audio safety.
@@ -192,6 +213,11 @@ def validate_env(env: Mapping[str, str]) -> list[Finding]:
         findings.append(Finding(
             "PRODUCTION_FUNDUS_OPENAI",
             "Production cannot enable demo-only OpenAI fundus assist.",
+        ))
+    if is_production and ambient_assist == "openai":
+        findings.append(Finding(
+            "PRODUCTION_AMBIENT_OPENAI",
+            "Production cannot enable demo-only OpenAI ambient documentation assist.",
         ))
 
     return findings

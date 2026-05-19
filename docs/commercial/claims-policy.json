@@ -39,6 +39,35 @@
       "scanner_fragments": ["autonomous documentation"]
     },
     {
+      "phrase_or_regex": "hands[- ]free scribing|ambient scribe parity|note writes itself|chart fills itself|AI writes the note|production LLM documentation|OpenAI[- ]powered scribe",
+      "category": "ambient_documentation_overclaims",
+      "severity": "critical",
+      "allowed_contexts": ["negative_assertion", "forbidden_phrase_catalog", "internal_security_doc", "scanner_fixture"],
+      "examples_fail": [
+        "Hands-free scribing.",
+        "Ambient scribe parity with the leading vendor.",
+        "The note writes itself.",
+        "The chart fills itself.",
+        "AI writes the note.",
+        "Production LLM documentation.",
+        "OpenAI-powered scribe."
+      ],
+      "examples_pass": [
+        "ChartNav does not provide hands-free scribing.",
+        "Not autonomous documentation.",
+        "Ambient documentation assist is provider-reviewed transcript-to-draft support only."
+      ],
+      "sync_required": true,
+      "scanner_fragments": [
+        "free scribing",
+        "ambient scribe parity",
+        "note writes itself",
+        "chart fills itself",
+        "AI writes the note",
+        "production LLM documentation"
+      ]
+    },
+    {
       "phrase_or_regex": "autonomous diagnosis|automatic diagnosis|AI diagnoses|AI diagnosis|LLM[- ]powered diagnosis|diagnostico autonomo|IA diagnostica",
       "category": "autonomous_diagnosis",
       "severity": "critical",
