@@ -23,6 +23,9 @@
 #   7. confirms the Desktop folder paths are listed in .gitignore
 #      so the generated package is never committed.
 #
+# This scanner is synchronized with the canonical policy manifest at
+# docs/commercial/claims-policy.json. Run
+# scripts/check_claim_policy_sync.py when adding high-risk phrases.
 # The vitest suite at apps/web/src/test/CommercialDeckClaims.test.tsx
 # is authoritative; this script is a lightweight pre-merge sanity
 # check.
@@ -176,6 +179,8 @@ FORBIDDEN_CAPABILITY=(
   "automatic diagnosis"
   "guaranteed accuracy"
   "guaranteed documentation accuracy"
+  "guaranteed ROI"
+  "ROI guarantee"
   "automatic orders"
   "auto-orders"
   "submit referral"
@@ -253,6 +258,8 @@ FORBIDDEN_CAPABILITY=(
   "vendor makes ChartNav HIPAA compliant"
   "billing-aware coding"
   "coding recommendations"
+  "automatic billing"
+  "OCT interpretation"
   "AI diagnosis"
   "automatic charting"
   "hands-free diagnosis"

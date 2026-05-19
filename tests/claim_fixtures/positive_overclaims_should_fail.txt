@@ -1,0 +1,10 @@
+ChartNav is HIPAA compliant.
+ChartNav replaces your EHR.
+OpenAI-powered clinical documentation.
+AI diagnoses retinal disease.
+Fundus image interpretation.
+Autonomous retinal charting.
+Production LLM fundus workflow.
+Real PHI ready.
+Guaranteed ROI.
+Better than Cora.
