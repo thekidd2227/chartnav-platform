@@ -344,11 +344,15 @@ only if **all** are true.
 - `CHARTNAV_LLM_REAL_PHI_APPROVED=1` — per-LLM real-PHI gate;
   separate from the existing `CHARTNAV_REAL_PHI_APPROVED` global
   gate so the operator can flip STT and LLM independently.
-- `CHARTNAV_PILOT_ALLOW_LLM_OPENAI=1` /
-  `CHARTNAV_PILOT_ALLOW_LLM_ANTHROPIC=1` /
-  `CHARTNAV_PILOT_ALLOW_LLM_WATSONX=1` — per-vendor practice-
-  approval gate enforced by
-  `scripts/validate_controlled_pilot_env.sh` (future extension).
+- `CHARTNAV_PILOT_ALLOW_LLM_OPENAI` /
+  `CHARTNAV_PILOT_ALLOW_LLM_ANTHROPIC` /
+  `CHARTNAV_PILOT_ALLOW_LLM_WATSONX` — per-vendor pilot-promotion
+  gate. **Phase 52B:** must be unset or `0` for the fake-data
+  adapter to activate. Setting `=1` causes refusal — it would
+  semantically claim pilot / production approval ChartNav does
+  not have. A future pilot path will live in a separate module
+  with its own gates. See
+  `chartnav-openai-fake-data-adapter.md`.
 - Per-vendor credential + region + model env vars all present
   (see section 13).
 - `scripts/validate_controlled_pilot_env.sh` extended to assert
@@ -457,8 +461,10 @@ The fake-data scaffold for OpenAI and Anthropic is now in tree
 (`apps/api/app/services/llm_provider.py`) behind hard guardrails.
 Neither adapter runs unless every one of
 `CHARTNAV_LLM_ENABLED=1`, `CHARTNAV_LLM_REAL_PHI_APPROVED=0`,
-`CHARTNAV_PILOT_ALLOW_LLM_<VENDOR>=1`, and the vendor's API key
-is satisfied. The default selector still returns the
+`CHARTNAV_PILOT_ALLOW_LLM_<VENDOR>` unset or `0`
+(**Phase 52B flip** — see
+`chartnav-openai-fake-data-adapter.md`), and the vendor's API
+key is satisfied. The default selector still returns the
 deterministic stub. Missing any guardrail produces a loud
 `ProviderDisabledError` — there is no silent fallback.
 

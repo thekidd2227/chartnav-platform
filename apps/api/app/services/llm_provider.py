@@ -58,9 +58,9 @@ Env contract
 | `CHARTNAV_LLM_PROVIDER` | Provider selector | `=openai` | `=anthropic` |
 | `CHARTNAV_LLM_ENABLED` | Master kill switch | `=1` | `=1` |
 | `CHARTNAV_LLM_REAL_PHI_APPROVED` | Per-LLM real-PHI gate | must be `0` or unset | must be `0` or unset |
-| `CHARTNAV_PILOT_ALLOW_LLM_OPENAI` | Per-vendor allow flag | `=1` | n/a |
-| `CHARTNAV_PILOT_ALLOW_LLM_ANTHROPIC` | Per-vendor allow flag | n/a | `=1` |
-| `CHARTNAV_PILOT_ALLOW_LLM_WATSONX` | Per-vendor allow flag | n/a — `ibm_watsonx` remains blocked | n/a |
+| `CHARTNAV_PILOT_ALLOW_LLM_OPENAI` | Per-vendor pilot-promotion gate. **MUST be `0` or unset.** `=1` causes the adapter to REFUSE — that flag would semantically claim pilot/production approval ChartNav does not have. | required `0`/unset | n/a |
+| `CHARTNAV_PILOT_ALLOW_LLM_ANTHROPIC` | Same semantic as OpenAI's pilot flag. | n/a | required `0`/unset |
+| `CHARTNAV_PILOT_ALLOW_LLM_WATSONX` | Same semantic; reserved for the day IBM watsonx unblocks. | n/a — `ibm_watsonx` remains blocked | n/a |
 | `CHARTNAV_OPENAI_API_KEY` | OpenAI credential | required (presence-only check) | n/a |
 | `CHARTNAV_OPENAI_LLM_MODEL` | OpenAI model id | optional (default `gpt-4o-mini`) | n/a |
 | `CHARTNAV_ANTHROPIC_API_KEY` | Anthropic credential | n/a | required |
@@ -114,6 +114,14 @@ class LLMRequest:
     only. **Live adapters refuse to dispatch when this is
     False.** Defaults to True because Phase 52's adapters are
     fake-data-only by design.
+
+    `requires_provider_review` is the caller's explicit
+    declaration that any output of this request will be passed
+    through clinician review before being treated as final.
+    Live adapters refuse a request whose
+    `requires_provider_review=False`. Defaults to True — every
+    in-tree caller must opt OUT of provider review to set it to
+    False, which the adapter then refuses.
     """
     use_case: str
     payload: dict[str, Any]
@@ -121,6 +129,7 @@ class LLMRequest:
     request_id: Optional[str] = None
     extra: dict[str, Any] = field(default_factory=dict)
     fake_data_context: bool = True
+    requires_provider_review: bool = True
 
 
 @dataclass(frozen=True)
@@ -245,13 +254,20 @@ _PILOT_ALLOW_FLAG: dict[str, str] = {
 
 
 def _check_fake_data_guardrails(provider_key: str) -> None:
-    """Raise `ProviderDisabledError` if the operator has not flipped
-    every guardrail required for a fake-data-only live adapter.
+    """Raise `ProviderDisabledError` if the env state is not the
+    SAFE state a fake-data-only live adapter requires.
 
     Hard rules (every one must hold):
-    - `CHARTNAV_LLM_ENABLED=1`
-    - `CHARTNAV_LLM_REAL_PHI_APPROVED` unset or `0`
-    - per-vendor `CHARTNAV_PILOT_ALLOW_LLM_<VENDOR>=1`
+    - `CHARTNAV_LLM_ENABLED=1` — explicit operator intent.
+    - `CHARTNAV_LLM_REAL_PHI_APPROVED` unset or `0` — real-PHI
+      gate is OFF. Live adapters are fake-data-only by design;
+      flipping the real-PHI gate must NOT enable this code path.
+    - per-vendor `CHARTNAV_PILOT_ALLOW_LLM_<VENDOR>` unset or `0`
+      — pilot promotion gate is OFF. **Phase 52B semantic flip:**
+      `=1` would semantically claim pilot/production approval
+      that ChartNav does not have; flipping it must NOT enable
+      this fake-data code path. A future pilot path will live in
+      a separate module.
     """
     enabled = (os.environ.get("CHARTNAV_LLM_ENABLED") or "").strip()
     if enabled != "1":
@@ -278,25 +294,46 @@ def _check_fake_data_guardrails(provider_key: str) -> None:
         raise ProviderDisabledError(
             f"{provider_key!r} has no pilot-allow flag registered"
         )
-    allow_val = (os.environ.get(allow_var) or "").strip()
-    if allow_val != "1":
+    allow_val = (os.environ.get(allow_var) or "0").strip()
+    if allow_val != "0":
         raise ProviderDisabledError(
-            f"{provider_key!r} adapter requires {allow_var}=1 "
-            "(per-vendor practice-approval gate). The vendor "
-            "evaluation memo enumerates what {allow_var}=1 means."
+            f"{provider_key!r} adapter refuses to run when "
+            f"{allow_var}={allow_val!r}. This adapter is "
+            "FAKE-DATA-ONLY. Setting "
+            f"{allow_var}=1 would semantically claim pilot / "
+            "production approval that ChartNav does not have. "
+            "A future pilot-tier code path will live in a "
+            "separate module with its own gates."
         )
 
 
 def _check_per_request(request: LLMRequest, provider_key: str) -> None:
-    """Per-call check: refuse if the request is not flagged as
-    fake-data. This is the runtime contractual marker; the env
-    flags above are the operator-intent marker."""
+    """Per-call check: refuse if the request is not the SAFE shape.
+
+    Two contractual markers the caller must declare on every
+    request to a live adapter:
+
+    - `fake_data_context=True` — the payload is synthetic.
+    - `requires_provider_review=True` — any output of this call
+      will be passed through clinician review before being
+      treated as final.
+
+    Both default True. The adapter refuses if either is False.
+    """
     if not request.fake_data_context:
         raise ProviderDisabledError(
             f"{provider_key!r} adapter is fake-data-only. The "
             "LLMRequest must carry fake_data_context=True. A "
             "real-PHI request must use a vetted code path that "
             "does not exist yet."
+        )
+    if not request.requires_provider_review:
+        raise ProviderDisabledError(
+            f"{provider_key!r} adapter refuses to run when "
+            "LLMRequest.requires_provider_review is False. Every "
+            "draft from this adapter must pass through clinician "
+            "review before being treated as final. Autonomous "
+            "outputs are not supported."
         )
 
 

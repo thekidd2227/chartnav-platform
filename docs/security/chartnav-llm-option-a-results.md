@@ -147,12 +147,14 @@ Aligned with the user's stated direction.
    This document does not change that.
 
 2. **OpenAI is allowed only in fake-data / demo mode**, behind
-   the existing Phase 52 guardrails:
+   the existing Phase 52 guardrails (post-Phase-52B semantic flip):
    - `CHARTNAV_LLM_ENABLED=1` AND
    - `CHARTNAV_LLM_REAL_PHI_APPROVED=0` AND
-   - `CHARTNAV_PILOT_ALLOW_LLM_OPENAI=1` AND
+   - `CHARTNAV_PILOT_ALLOW_LLM_OPENAI` **unset or `0`** (Phase
+     52B flip — see `chartnav-openai-fake-data-adapter.md`) AND
    - `CHARTNAV_OPENAI_API_KEY` present AND
-   - `LLMRequest.fake_data_context=True` (per-request).
+   - `LLMRequest.fake_data_context=True` AND
+   - `LLMRequest.requires_provider_review=True` (per-request).
    Real-PHI use remains forbidden by the adapter's own refusal
    logic.
 
