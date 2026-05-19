@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import pytest
 
+from tests.conftest import ADMIN1, CLIN1, CLIN2  # noqa: F401
+
 
 # ---------------------------------------------------------------------------
 # Unit — AI service
@@ -103,16 +105,22 @@ def test_renderer_arc_finding():
 
 @pytest.fixture()
 def enc_id(seeded_ids):
-    return next(iter(seeded_ids["encs"].values()))
+    # seeded_ids["encs"] → {patient_identifier: (id, org_id, status)}
+    # Return the first encounter that belongs to org-1 (demo-eye-clinic)
+    org1_id = seeded_ids["orgs"]["demo-eye-clinic"]
+    for _pid, (eid, oid, _) in seeded_ids["encs"].items():
+        if oid == org1_id:
+            return eid
+    pytest.fail("No org-1 encounters in seeded_ids")
 
 
-def test_list_fundus_charts_empty(client, enc_id, CLIN1):
+def test_list_fundus_charts_empty(client, enc_id):
     r = client.get(f"/api/v1/encounters/{enc_id}/fundus-charts", headers=CLIN1)
     assert r.status_code == 200
     assert r.json() == []
 
 
-def test_generate_fundus_chart(client, enc_id, CLIN1):
+def test_generate_fundus_chart(client, enc_id):
     r = client.post(
         f"/api/v1/encounters/{enc_id}/fundus-charts/generate",
         json={"findings_text": "horseshoe tear at 10:30 OD"},
@@ -125,7 +133,7 @@ def test_generate_fundus_chart(client, enc_id, CLIN1):
     assert body["status"] == "draft"
 
 
-def test_generate_then_retrieve(client, enc_id, CLIN1):
+def test_generate_then_retrieve(client, enc_id):
     r = client.post(
         f"/api/v1/encounters/{enc_id}/fundus-charts/generate",
         json={"findings_text": "lattice from 5 to 7 OS near ora"},
@@ -137,7 +145,7 @@ def test_generate_then_retrieve(client, enc_id, CLIN1):
     assert r2.json()["laterality"] == "OS"
 
 
-def test_create_manual_chart(client, enc_id, CLIN1):
+def test_create_manual_chart(client, enc_id):
     r = client.post(
         f"/api/v1/encounters/{enc_id}/fundus-charts",
         json={"laterality": "OD", "drawing_json": {}, "source_type": "manual"},
@@ -147,7 +155,7 @@ def test_create_manual_chart(client, enc_id, CLIN1):
     assert r.json()["status"] == "draft"
 
 
-def test_update_chart(client, enc_id, CLIN1):
+def test_update_chart(client, enc_id):
     r = client.post(
         f"/api/v1/encounters/{enc_id}/fundus-charts",
         json={"laterality": "OD", "drawing_json": {}},
@@ -163,7 +171,7 @@ def test_update_chart(client, enc_id, CLIN1):
     assert r2.json()["laterality"] == "OS"
 
 
-def test_render_chart(client, enc_id, CLIN1):
+def test_render_chart(client, enc_id):
     r = client.post(
         f"/api/v1/encounters/{enc_id}/fundus-charts/generate",
         json={"findings_text": "horseshoe tear at 10:30 OD"},
@@ -175,7 +183,7 @@ def test_render_chart(client, enc_id, CLIN1):
     assert "<svg" in r2.json()["rendered_svg"]
 
 
-def test_review_chart(client, enc_id, CLIN1):
+def test_review_chart(client, enc_id):
     r = client.post(
         f"/api/v1/encounters/{enc_id}/fundus-charts/generate",
         json={"findings_text": "horseshoe tear at 10:30 OD"},
@@ -187,7 +195,7 @@ def test_review_chart(client, enc_id, CLIN1):
     assert r2.json()["status"] == "reviewed"
 
 
-def test_sign_chart_requires_attestation(client, enc_id, CLIN1):
+def test_sign_chart_requires_attestation(client, enc_id):
     r = client.post(
         f"/api/v1/encounters/{enc_id}/fundus-charts/generate",
         json={"findings_text": "horseshoe tear at 10:30 OD"},
@@ -202,7 +210,7 @@ def test_sign_chart_requires_attestation(client, enc_id, CLIN1):
     assert r2.status_code == 422
 
 
-def test_sign_chart(client, enc_id, CLIN1):
+def test_sign_chart(client, enc_id):
     r = client.post(
         f"/api/v1/encounters/{enc_id}/fundus-charts/generate",
         json={"findings_text": "horseshoe tear at 10:30 OD"},
@@ -218,7 +226,7 @@ def test_sign_chart(client, enc_id, CLIN1):
     assert r2.json()["status"] == "signed"
 
 
-def test_update_signed_chart_blocked(client, enc_id, CLIN1):
+def test_update_signed_chart_blocked(client, enc_id):
     r = client.post(
         f"/api/v1/encounters/{enc_id}/fundus-charts/generate",
         json={"findings_text": "horseshoe tear at 10:30 OD"},
@@ -238,7 +246,7 @@ def test_update_signed_chart_blocked(client, enc_id, CLIN1):
     assert r2.status_code == 409
 
 
-def test_cross_org_encounter_blocked(client, enc_id, CLIN2):
+def test_cross_org_encounter_blocked(client, enc_id):
     """Org-2 clinician cannot access org-1 encounters."""
     r = client.get(f"/api/v1/encounters/{enc_id}/fundus-charts", headers=CLIN2)
     assert r.status_code == 404

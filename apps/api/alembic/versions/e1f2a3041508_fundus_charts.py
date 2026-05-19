@@ -23,7 +23,7 @@ def upgrade() -> None:
             updated_at          DATETIME     NOT NULL DEFAULT (datetime('now')),
             organization_id     INTEGER      NOT NULL REFERENCES organizations(id),
             encounter_id        INTEGER      NOT NULL REFERENCES encounters(id),
-            patient_id          INTEGER      NOT NULL,
+            patient_id          INTEGER,
             note_version_id     INTEGER,
             laterality          VARCHAR(8)   NOT NULL DEFAULT 'OD',
             status              VARCHAR(32)  NOT NULL DEFAULT 'draft',

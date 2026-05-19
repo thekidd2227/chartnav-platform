@@ -15,13 +15,13 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
-from app.auth import require_caller, Caller
 from app.audit import record as audit_record
-from app.db import engine
+from app.auth import Caller, require_caller
+from app.db import engine, insert_returning_id, transaction
 
 router = APIRouter(prefix="/api/v1", tags=["fundus-charts"])
 
@@ -68,13 +68,11 @@ def _now_utc() -> str:
 
 
 def _resolve_encounter(encounter_id: int, org_id: int, conn: Any) -> dict[str, Any]:
+    """Verify encounter belongs to org and return {id, patient_id}."""
     row = conn.execute(
         text(
-            "SELECT e.id, e.patient_id FROM encounters e "
-            "WHERE e.id = :eid "
-            "AND e.location_id IN ("
-            "  SELECT id FROM locations WHERE organization_id = :oid"
-            ")"
+            "SELECT id, patient_id FROM encounters "
+            "WHERE id = :eid AND organization_id = :oid"
         ),
         {"eid": encounter_id, "oid": org_id},
     ).fetchone()
@@ -119,7 +117,10 @@ def _require_unsigned(chart: dict[str, Any]) -> None:
     if chart["signed_at"] is not None:
         raise HTTPException(
             status_code=409,
-            detail={"error_code": "chart_already_signed", "reason": "Signed charts cannot be modified"},
+            detail={
+                "error_code": "chart_already_signed",
+                "reason": "Signed charts cannot be modified",
+            },
         )
 
 
@@ -134,6 +135,10 @@ def _deserialize(chart: dict[str, Any]) -> dict[str, Any]:
     return chart
 
 
+def _request_id(request: Request) -> str | None:
+    return getattr(request.state, "request_id", None)
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -141,6 +146,7 @@ def _deserialize(chart: dict[str, Any]) -> dict[str, Any]:
 @router.get("/encounters/{encounter_id}/fundus-charts")
 def list_fundus_charts(
     encounter_id: int,
+    request: Request,
     caller: Caller = Depends(require_caller),
 ) -> Any:
     with engine.connect() as conn:
@@ -155,8 +161,10 @@ def list_fundus_charts(
             ),
             {"eid": encounter_id, "oid": caller.organization_id},
         ).fetchall()
-    cols = ["id", "laterality", "status", "source_type",
-            "reviewed_at", "signed_at", "created_at", "updated_at"]
+    cols = [
+        "id", "laterality", "status", "source_type",
+        "reviewed_at", "signed_at", "created_at", "updated_at",
+    ]
     return [dict(zip(cols, r)) for r in rows]
 
 
@@ -164,6 +172,7 @@ def list_fundus_charts(
 def generate_fundus_chart(
     encounter_id: int,
     body: FundusChartGenerateRequest,
+    request: Request,
     caller: Caller = Depends(require_caller),
 ) -> Any:
     _require_write_role(caller)
@@ -179,47 +188,39 @@ def generate_fundus_chart(
     warnings_json_str = json.dumps(result.warnings)
     confidence_json_str = json.dumps(result.confidence)
 
-    with engine.begin() as conn:
+    with transaction() as conn:
         enc = _resolve_encounter(encounter_id, caller.organization_id, conn)
-        row = conn.execute(
-            text(
-                "INSERT INTO fundus_charts "
-                "(created_at, updated_at, organization_id, encounter_id, patient_id, "
-                "note_version_id, laterality, status, source_type, findings_json, "
-                "drawing_json, ai_model_name, ai_confidence_json, warnings_json, created_by_user_id) "
-                "VALUES (:created_at, :updated_at, :org_id, :enc_id, :pat_id, "
-                ":nvid, :lat, 'draft', 'ai_generated', :findings_json, "
-                ":drawing_json, :model, :confidence, :warnings, :creator) "
-                "RETURNING id"
-            ),
+        chart_id = insert_returning_id(
+            conn,
+            "fundus_charts",
             {
                 "created_at": now,
                 "updated_at": now,
-                "org_id": caller.organization_id,
-                "enc_id": encounter_id,
-                "pat_id": enc["patient_id"],
-                "nvid": body.note_version_id,
-                "lat": result.laterality,
+                "organization_id": caller.organization_id,
+                "encounter_id": encounter_id,
+                "patient_id": enc["patient_id"],
+                "note_version_id": body.note_version_id,
+                "laterality": result.laterality,
+                "status": "draft",
+                "source_type": "ai_generated",
                 "findings_json": findings_json_str,
                 "drawing_json": drawing_json_str,
-                "model": result.ai_model_name,
-                "confidence": confidence_json_str,
-                "warnings": warnings_json_str,
-                "creator": caller.user_id,
+                "ai_model_name": result.ai_model_name,
+                "ai_confidence_json": confidence_json_str,
+                "warnings_json": warnings_json_str,
+                "created_by_user_id": caller.user_id,
             },
-        ).fetchone()
-        chart_id = row[0]
+        )
 
     audit_record(
         event_type="fundus_chart_generated",
+        request_id=_request_id(request),
         actor_user_id=caller.user_id,
         actor_email=caller.email,
         organization_id=caller.organization_id,
-        metadata={
-            "chart_id": chart_id,
-            "laterality": result.laterality,
-            "warning_count": len(result.warnings),
-        },
+        path=request.url.path,
+        method=request.method,
+        detail=f"chart_id={chart_id} laterality={result.laterality} warnings={len(result.warnings)}",
     )
 
     return {
@@ -236,6 +237,7 @@ def generate_fundus_chart(
 def create_fundus_chart(
     encounter_id: int,
     body: FundusChartCreate,
+    request: Request,
     caller: Caller = Depends(require_caller),
 ) -> Any:
     _require_write_role(caller)
@@ -243,40 +245,36 @@ def create_fundus_chart(
     drawing_json_str = json.dumps(body.drawing_json)
     findings_json_str = json.dumps(body.findings_json) if body.findings_json else None
 
-    with engine.begin() as conn:
+    with transaction() as conn:
         enc = _resolve_encounter(encounter_id, caller.organization_id, conn)
-        row = conn.execute(
-            text(
-                "INSERT INTO fundus_charts "
-                "(created_at, updated_at, organization_id, encounter_id, patient_id, "
-                "note_version_id, laterality, status, source_type, findings_json, "
-                "drawing_json, created_by_user_id) "
-                "VALUES (:created_at, :updated_at, :org_id, :enc_id, :pat_id, "
-                ":nvid, :lat, 'draft', :src, :findings_json, :drawing_json, :creator) "
-                "RETURNING id"
-            ),
+        chart_id = insert_returning_id(
+            conn,
+            "fundus_charts",
             {
                 "created_at": now,
                 "updated_at": now,
-                "org_id": caller.organization_id,
-                "enc_id": encounter_id,
-                "pat_id": enc["patient_id"],
-                "nvid": body.note_version_id,
-                "lat": body.laterality,
-                "src": body.source_type,
+                "organization_id": caller.organization_id,
+                "encounter_id": encounter_id,
+                "patient_id": enc["patient_id"],
+                "note_version_id": body.note_version_id,
+                "laterality": body.laterality,
+                "status": "draft",
+                "source_type": body.source_type,
                 "findings_json": findings_json_str,
                 "drawing_json": drawing_json_str,
-                "creator": caller.user_id,
+                "created_by_user_id": caller.user_id,
             },
-        ).fetchone()
-        chart_id = row[0]
+        )
 
     audit_record(
         event_type="fundus_chart_created",
+        request_id=_request_id(request),
         actor_user_id=caller.user_id,
         actor_email=caller.email,
         organization_id=caller.organization_id,
-        metadata={"chart_id": chart_id, "laterality": body.laterality},
+        path=request.url.path,
+        method=request.method,
+        detail=f"chart_id={chart_id} laterality={body.laterality}",
     )
     return {"chart_id": chart_id, "status": "draft"}
 
@@ -284,6 +282,7 @@ def create_fundus_chart(
 @router.get("/fundus-charts/{chart_id}")
 def get_fundus_chart(
     chart_id: int,
+    request: Request,
     caller: Caller = Depends(require_caller),
 ) -> Any:
     with engine.connect() as conn:
@@ -295,10 +294,11 @@ def get_fundus_chart(
 def update_fundus_chart(
     chart_id: int,
     body: FundusChartUpdate,
+    request: Request,
     caller: Caller = Depends(require_caller),
 ) -> Any:
     _require_write_role(caller)
-    with engine.begin() as conn:
+    with transaction() as conn:
         chart = _get_chart(chart_id, caller.organization_id, conn)
         _require_unsigned(chart)
         updates: dict[str, Any] = {
@@ -328,10 +328,13 @@ def update_fundus_chart(
         )
     audit_record(
         event_type="fundus_chart_updated",
+        request_id=_request_id(request),
         actor_user_id=caller.user_id,
         actor_email=caller.email,
         organization_id=caller.organization_id,
-        metadata={"chart_id": chart_id},
+        path=request.url.path,
+        method=request.method,
+        detail=f"chart_id={chart_id}",
     )
     with engine.connect() as conn:
         return _deserialize(_get_chart(chart_id, caller.organization_id, conn))
@@ -340,6 +343,7 @@ def update_fundus_chart(
 @router.post("/fundus-charts/{chart_id}/render")
 def render_fundus_chart(
     chart_id: int,
+    request: Request,
     caller: Caller = Depends(require_caller),
 ) -> Any:
     _require_write_role(caller)
@@ -351,7 +355,7 @@ def render_fundus_chart(
     drawing = chart.get("drawing_json") or {}
     svg = render_fundus_svg(drawing, laterality=chart["laterality"])
 
-    with engine.begin() as conn:
+    with transaction() as conn:
         conn.execute(
             text(
                 "UPDATE fundus_charts SET rendered_svg = :svg, updated_at = :now "
@@ -366,11 +370,12 @@ def render_fundus_chart(
 def review_fundus_chart(
     chart_id: int,
     body: FundusChartReviewRequest,
+    request: Request,
     caller: Caller = Depends(require_caller),
 ) -> Any:
     _require_write_role(caller)
     now = _now_utc()
-    with engine.begin() as conn:
+    with transaction() as conn:
         chart = _get_chart(chart_id, caller.organization_id, conn)
         _require_unsigned(chart)
         conn.execute(
@@ -384,10 +389,13 @@ def review_fundus_chart(
         )
     audit_record(
         event_type="fundus_chart_reviewed",
+        request_id=_request_id(request),
         actor_user_id=caller.user_id,
         actor_email=caller.email,
         organization_id=caller.organization_id,
-        metadata={"chart_id": chart_id},
+        path=request.url.path,
+        method=request.method,
+        detail=f"chart_id={chart_id}",
     )
     return {"chart_id": chart_id, "status": "reviewed", "reviewed_at": now}
 
@@ -396,6 +404,7 @@ def review_fundus_chart(
 def sign_fundus_chart(
     chart_id: int,
     body: FundusChartSignRequest,
+    request: Request,
     caller: Caller = Depends(require_caller),
 ) -> Any:
     _require_write_role(caller)
@@ -405,7 +414,7 @@ def sign_fundus_chart(
             detail={"error_code": "attestation_required", "reason": "attested must be true to sign"},
         )
     now = _now_utc()
-    with engine.begin() as conn:
+    with transaction() as conn:
         chart = _get_chart(chart_id, caller.organization_id, conn)
         if chart["signed_at"] is not None:
             raise HTTPException(status_code=409, detail={"error_code": "already_signed"})
@@ -420,9 +429,12 @@ def sign_fundus_chart(
         )
     audit_record(
         event_type="fundus_chart_signed",
+        request_id=_request_id(request),
         actor_user_id=caller.user_id,
         actor_email=caller.email,
         organization_id=caller.organization_id,
-        metadata={"chart_id": chart_id, "laterality": chart["laterality"]},
+        path=request.url.path,
+        method=request.method,
+        detail=f"chart_id={chart_id} laterality={chart['laterality']}",
     )
     return {"chart_id": chart_id, "status": "signed", "signed_at": now}
