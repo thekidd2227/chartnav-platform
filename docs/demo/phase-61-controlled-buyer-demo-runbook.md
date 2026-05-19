@@ -395,8 +395,8 @@ read that sheet end-to-end before the demo.
   must complete the pre-demo checklist by hand before every demo.
 - The Phase 61 runbook does not replace the per-feature runbooks —
   it links to them.
-- The demo scanner's FILES list is hand-curated. Phase 61's three
-  new docs (this runbook, the checklist, the Q&A safe-answers, the
+- The demo scanner's FILES list is hand-curated. Phase 61's four new
+  demo docs (this runbook, the checklist, the Q&A safe-answers, the
   storyboard) are added to the FILES list as part of this PR.
 - Phase 61 ships **no product code changes**. Any UI gap surfaced
   during the demo is a separate phase.
