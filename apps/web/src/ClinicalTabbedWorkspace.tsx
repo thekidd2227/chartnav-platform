@@ -59,6 +59,7 @@ import { NoteWorkspace } from "./NoteWorkspace";
 import { EyeDiagramPanel } from "./EyeDiagramPanel";
 import { ImagingPipelinePanel } from "./ImagingPipelinePanel";
 import { SpecialtyTrackingPanel } from "./SpecialtyTrackingPanel";
+import { FundusChartPanel } from "./features/fundus/FundusChartPanel";
 
 // Local fmt — same shape as App.tsx::fmt. Inlined to avoid a
 // shared-utility refactor that would balloon Phase 19's diff.
@@ -981,6 +982,16 @@ function ImagingTab({
           <EmptyState>
             Retinal diagram is available once the encounter is bridged
             into ChartNav with a native patient row.
+          </EmptyState>
+        )}
+      </Card>
+      <Card title="Fundus charts" wide>
+        {encounterId !== null ? (
+          <FundusChartPanel encounterId={encounterId} />
+        ) : (
+          <EmptyState>
+            Fundus charting is available once the encounter is bridged
+            into ChartNav with a native encounter row.
           </EmptyState>
         )}
       </Card>
