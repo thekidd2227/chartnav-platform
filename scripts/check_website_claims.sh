@@ -176,6 +176,13 @@ forbidden_capability_positive=(
   "submit referral"
   "send patient message"
   "replaces a doctor"
+  "fundus image interpretation"
+  "fundus photo interpretation"
+  "retinal image interpretation"
+  "AI[- ]interprets fundus"
+  "autonomous fundus interpretation"
+  "fundus diagnosis"
+  "AI[- ]generated fundus diagnosis"
   # Phase 25A / GH-012 — Cora-comparison claims are off-limits on
   # the public site. Negative phrasings stay exempt via the same
   # negative-context regex used for the rest of the list.
@@ -290,6 +297,10 @@ forbidden_capability_positive_es=(
   "diagnóstico automático"
   "interpretación autónoma de imágenes"
   "interpretación automática de imágenes"
+  "interpretación de imágenes de fondo de ojo"
+  "interpretación autónoma de fondo de ojo"
+  "diagnóstico de fondo de ojo"
+  "diagnóstico retiniano automático"
   "interpretación automática de OCT"
   "calificación automática de retinopatía"
   "recomendaciones de tratamiento"
