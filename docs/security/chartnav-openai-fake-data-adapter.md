@@ -190,6 +190,47 @@ never concatenated into the system prompt.
   HTTPS only. A future PR cannot accidentally couple the
   scaffold to a vendor library.
 
+## 8b. Phase 54 — Fundus Charting integration seam
+
+Phase 54 adds a narrow opt-in integration seam between Fundus
+Charting V1 and this fake-data adapter. The seam lives in
+`apps/api/app/services/fundus_chart_ai.py` and is governed by a
+dedicated env var so the default fundus path remains byte-identical:
+
+| Env var | Required value | Effect |
+|---|---|---|
+| `CHARTNAV_FUNDUS_DRAFTING_ASSIST` | unset | **Default.** `generate_chart()` routes to `rule_based_v1`. No OpenAI call. |
+| `CHARTNAV_FUNDUS_DRAFTING_ASSIST` | exactly `openai` | Opt-in. `generate_chart()` routes to `generate_chart_via_llm_assist()` **only if every Phase 52B gate in § 3 is also SAFE**. |
+| `CHARTNAV_FUNDUS_DRAFTING_ASSIST` | any other value (`1`, `true`, `yes`, `on`, `anthropic`, …) | Ignored — treated as unset. Anthropic and IBM watsonx remain unwired in the fundus path. |
+
+When opted in but any Phase 52B gate fails, the assist raises
+`ProviderDisabledError` naming the failing gate. There is no
+silent fallback under opt-in — refusal is loud.
+
+The assist function:
+
+- Uses an injected `transport: FundusAssistTransport` callable so
+  CI tests run without network access.
+- Calls `assert_live_provider_safe_to_use("openai", request)`
+  (new public wrapper around `_check_fake_data_guardrails` +
+  `_check_per_request`) before any HTTP work.
+- Pins `requires_provider_review=True` in the returned
+  `FundusChartGenerationResult.confidence`.
+- Discards malformed elements rather than fabricating defaults.
+- Sanitises `CHARTNAV_OPENAI_API_KEY` out of every error message
+  and log line; the regression test
+  `test_assist_api_key_never_logged_on_failure_path` pins this
+  with a canary value.
+- Sets `ai_model_name="openai_fundus_assist_v1"` so audit and
+  observability can distinguish the two paths.
+
+Phase 54 does NOT modify the existing fundus API surface
+(`apps/api/app/api/fundus_charts.py`) and does NOT enable any
+auto-sign / auto-review behaviour. Doctor review + `attested:true`
+sign-off remain required.
+
+See `docs/workflow/fundus-charting.md` for the full workflow doc.
+
 ## 9. Current vendor status
 
 | Vendor | Status | Notes |
