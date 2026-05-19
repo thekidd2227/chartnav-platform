@@ -72,6 +72,10 @@ FILES=(
   "docs/pilot/phase-24d-pilot-objection-cheat-sheet.md"
   "docs/pilot/phase-24d-pilot-tracker-template.md"
   "docs/pilot/README.md"
+  # Phase 57 — ambient documentation assist demo runbook.
+  "docs/demo/phase-57-ambient-documentation-demo-runbook.md"
+  # Phase 59 — ambient documentation demo QA lockdown checklist.
+  "docs/demo/phase-59-ambient-demo-qa-checklist.md"
 )
 
 for f in "${FILES[@]}"; do

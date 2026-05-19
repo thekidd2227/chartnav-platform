@@ -464,3 +464,131 @@ describe("AmbientDocumentationPanel — claim safety sweep", () => {
     expect(body).not.toMatch(/auto-signed/);
   });
 });
+
+// ---------------------------------------------------------------
+// Phase 59 — explicit safety-copy assertions
+// ---------------------------------------------------------------
+
+describe("AmbientDocumentationPanel — Phase 59 safety copy", () => {
+  it("renders every required safety-banner clause as an explicit substring", async () => {
+    vi.mocked(listScribeSessions).mockResolvedValueOnce([]);
+    render(<AmbientDocumentationPanel patientId={42} encounterId={9} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("ambient-safety-banner")).toBeInTheDocument(),
+    );
+    const banner = screen.getByTestId("ambient-safety-banner").textContent ?? "";
+    // Each clause is asserted individually so a future copy edit that
+    // drops one fails an obvious test.
+    expect(banner).toMatch(/Provider review required/i);
+    expect(banner).toMatch(/Not for real PHI/i);
+    expect(banner).toMatch(/Does not diagnose/i);
+    expect(banner).toMatch(/Does not place orders/i);
+    expect(banner).toMatch(/Does not send referrals or patient messages/i);
+    expect(banner).toMatch(/Does not bill or code/i);
+  });
+
+  it("'What ChartNav did NOT do' card lists every forbidden action with (false)", async () => {
+    vi.mocked(listScribeSessions).mockResolvedValueOnce([baseSession()]);
+    vi.mocked(getScribeSession).mockResolvedValueOnce(baseSessionWithDraft());
+    render(<AmbientDocumentationPanel patientId={42} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("ambient-list")).toBeInTheDocument(),
+    );
+    await userEvent.click(screen.getByTestId("ambient-list-item-7"));
+    await waitFor(() =>
+      expect(screen.getByTestId("ambient-actions-summary")).toBeInTheDocument(),
+    );
+    const card = screen.getByTestId("ambient-actions-summary").textContent ?? "";
+    // The literal "(false)" appears for every key so the demo
+    // narrator can read it aloud.
+    const required = [
+      "diagnosis",
+      "orders",
+      "referrals",
+      "patient messages",
+      "billing or coding",
+      "auto-sign",
+      "image interpretation",
+    ];
+    for (const action of required) {
+      expect(card.toLowerCase()).toContain(action);
+    }
+    // Each forbidden-actions list item carries "(false)".
+    const falseCount = (card.match(/\(false\)/gi) ?? []).length;
+    expect(falseCount).toBe(7);
+  });
+
+  it("Review button is labelled distinctly from Sign and not the final signature", async () => {
+    vi.mocked(listScribeSessions).mockResolvedValueOnce([baseSession()]);
+    vi.mocked(getScribeSession).mockResolvedValueOnce(
+      baseSessionWithDraft({ status: "ready_for_review" }),
+    );
+    render(<AmbientDocumentationPanel patientId={42} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("ambient-list")).toBeInTheDocument(),
+    );
+    await userEvent.click(screen.getByTestId("ambient-list-item-7"));
+    await waitFor(() =>
+      expect(screen.getByTestId("ambient-review-btn")).toBeInTheDocument(),
+    );
+    const reviewLabel = screen.getByTestId("ambient-review-btn").textContent ?? "";
+    expect(reviewLabel).toMatch(/Mark Reviewed/i);
+    expect(reviewLabel).not.toMatch(/Sign/i);
+    // Sign button is not visible until the reviewed state is reached.
+    expect(screen.queryByTestId("ambient-sign-btn")).toBeNull();
+  });
+
+  it("attestation block text contains 'attest' and references immutability", async () => {
+    vi.mocked(listScribeSessions).mockResolvedValueOnce([baseSession()]);
+    vi.mocked(getScribeSession).mockResolvedValueOnce(
+      baseSessionWithDraft({ status: "reviewed" }),
+    );
+    render(<AmbientDocumentationPanel patientId={42} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("ambient-list")).toBeInTheDocument(),
+    );
+    await userEvent.click(screen.getByTestId("ambient-list-item-7"));
+    await waitFor(() =>
+      expect(screen.getByTestId("ambient-attestation-block")).toBeInTheDocument(),
+    );
+    const block = screen.getByTestId("ambient-attestation-block").textContent ?? "";
+    expect(block).toMatch(/attest/i);
+    expect(block).toMatch(/signing will lock the draft/i);
+    expect(block).toMatch(/immutable/i);
+    expect(block).toMatch(/fake \/ demo transcript/i);
+  });
+
+  it("Phase 59 — forbidden positive phrasings (extended) are absent everywhere in the rendered UI", async () => {
+    vi.mocked(listScribeSessions).mockResolvedValueOnce([baseSession()]);
+    vi.mocked(getScribeSession).mockResolvedValueOnce(
+      baseSessionWithDraft({
+        status: "ready_for_review",
+      }),
+    );
+    render(<AmbientDocumentationPanel patientId={42} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("ambient-list")).toBeInTheDocument(),
+    );
+    await userEvent.click(screen.getByTestId("ambient-list-item-7"));
+    await waitFor(() =>
+      expect(screen.getByTestId("ambient-draft-editor")).toBeInTheDocument(),
+    );
+    const body = (document.body.textContent ?? "").toLowerCase();
+    // Phase 59 brief-listed forbidden positive phrasings.
+    for (const forbidden of [
+      "hands-free scribing",
+      "autonomous documentation",
+      "ai writes the note",
+      "note writes itself",
+      "chart fills itself",
+      "openai-powered clinical documentation",
+      "production llm documentation",
+      "real phi ready",
+      "ambient scribe parity",
+    ]) {
+      expect(body, `forbidden phrase appeared: ${forbidden}`).not.toMatch(
+        new RegExp(forbidden.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+      );
+    }
+  });
+});
