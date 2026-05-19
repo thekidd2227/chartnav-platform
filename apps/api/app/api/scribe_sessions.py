@@ -41,6 +41,7 @@ from app.services.scribe_sessions import (
     PatientEncounterMismatch,
     ScribeSession,
     ScribeSessionNotFound,
+    ScribeStatus,
     create_session,
     discard_session,
     finalize_session,
@@ -318,6 +319,137 @@ def process_scribe_session(
         sess=next_sess,
     )
     return next_sess.to_response()
+
+
+class AmbientDraftRequest(BaseModel):
+    fake_data_context: bool = Field(
+        default=True,
+        description=(
+            "Phase 57 — caller declares the transcript is fake / demo data. "
+            "Setting False causes the route to refuse."
+        ),
+    )
+
+
+@router.post(
+    "/patients/{patient_id}/scribe-sessions/{session_id}/draft-ambient",
+)
+def draft_ambient_scribe_session(
+    patient_id: int,
+    session_id: int,
+    body: AmbientDraftRequest,
+    request: Request,
+    caller: Caller = Depends(require_caller),
+) -> dict[str, Any]:
+    """Phase 57 — Provider-Reviewed Ambient Documentation Assist.
+
+    Runs the ambient drafting pipeline (deterministic by default, or
+    Phase 52B OpenAI fake-data adapter under explicit operator opt-in)
+    against the transcript already attached to the scribe session, then
+    advances the row to `ready_for_review`. The session row stores the
+    enriched structured facts (including safety_flags and
+    missing_information) in `structured_note_json`; the audit detail
+    remains metadata-only.
+
+    Refuses with 422 when `fake_data_context=False` so the route can
+    never be used as a real-PHI promotion path.
+    """
+    if not body.fake_data_context:
+        raise _err(
+            "fake_data_context_required",
+            "ambient documentation assist is fake-data / demo only; "
+            "set fake_data_context=true",
+            422,
+        )
+    _require_write_role(caller)
+    pid = _resolve_patient_in_org(patient_id, caller)
+    sess = _get_or_404(session_id, caller=caller, patient_id=pid)
+
+    if sess.status != ScribeStatus.DRAFT:
+        if sess.is_terminal:
+            raise _err(
+                "scribe_session_immutable",
+                f"session is {sess.status} and cannot be modified",
+                409,
+            )
+        raise _err(
+            "invalid_scribe_transition",
+            f"draft-ambient requires status=draft (current: {sess.status})",
+            409,
+        )
+
+    transcript_text = (sess.transcript_text or sess.source_text or "").strip()
+    if not transcript_text:
+        raise _err(
+            "transcript_missing",
+            "scribe session has no transcript_text or source_text to draft from",
+            422,
+        )
+
+    from app.services.ambient_documentation import generate_draft
+
+    result = generate_draft(transcript_text)
+
+    # Persist the ambient result onto the existing scribe_sessions row.
+    # Body fields (draft_note_text, structured_note_json) — DO NOT log
+    # in audit detail.
+    from datetime import datetime, timezone
+    import json as _json
+
+    from sqlalchemy import text as _text
+
+    from app.db import transaction as _transaction
+
+    structured_payload = {
+        "structured_facts": result.structured_facts,
+        "safety_flags": result.safety_flags,
+        "missing_information": result.missing_information,
+        "requires_provider_review": result.requires_provider_review,
+        "forbidden_actions": result.forbidden_actions,
+        "ai_model_name": result.ai_model_name,
+        "confidence": result.confidence,
+    }
+    now_iso = datetime.now(timezone.utc).isoformat()
+    with _transaction() as conn:
+        conn.execute(
+            _text(
+                "UPDATE scribe_sessions SET "
+                "status = :status, "
+                "draft_note_text = :draft, "
+                "structured_note_json = :structured, "
+                "updated_at = :now "
+                "WHERE id = :id AND organization_id = :org"
+            ),
+            {
+                "status": ScribeStatus.READY_FOR_REVIEW,
+                "draft": result.draft_note,
+                "structured": _json.dumps(structured_payload),
+                "now": now_iso,
+                "id": sess.id,
+                "org": sess.organization_id,
+            },
+        )
+
+    refreshed = get_session(
+        sess.id,
+        organization_id=sess.organization_id,
+        patient_id=sess.patient_id,
+    )
+    assert refreshed is not None
+
+    _audit(
+        request=request,
+        caller=caller,
+        event_type="scribe_session_drafted_ambient",
+        sess=refreshed,
+    )
+
+    response = refreshed.to_response()
+    # Surface the ambient-specific shape alongside the session so the
+    # frontend renders safety_flags / missing_information / etc. without
+    # a second fetch.
+    response["ambient_draft"] = result.to_dict()
+    return response
 
 
 @router.post(

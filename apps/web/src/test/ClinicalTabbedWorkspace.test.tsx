@@ -64,6 +64,17 @@ vi.mock("../features/fundus/fundusApi", () => ({
   signFundusChart: vi.fn(),
 }));
 
+// Phase 57 — the Documentation tab mounts AmbientDocumentationPanel,
+// which calls listScribeSessions on mount. Same pattern.
+vi.mock("../features/ambient/ambientApi", () => ({
+  listScribeSessions: vi.fn().mockResolvedValue([]),
+  createScribeSession: vi.fn(),
+  getScribeSession: vi.fn(),
+  draftAmbientSession: vi.fn(),
+  reviewScribeSession: vi.fn(),
+  finalizeScribeSession: vi.fn(),
+}));
+
 import * as api from "../api";
 import { ClinicalTabbedWorkspace } from "../ClinicalTabbedWorkspace";
 
@@ -932,5 +943,37 @@ describe("Phase 56 — Fundus charts card reachability", () => {
     expect(banner.textContent).toMatch(/Provider review required/i);
     expect(banner.textContent).toMatch(/Not image interpretation/i);
     expect(banner.textContent).toMatch(/Does not diagnose/i);
+  });
+});
+
+// ---------------------------------------------------------------
+// Phase 57 — Ambient Documentation Assist mounts in Documentation tab
+// ---------------------------------------------------------------
+
+describe("Phase 57 — Ambient Documentation Assist mount", () => {
+  it("Ambient documentation card mounts the AmbientDocumentationPanel in the Documentation tab", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(screen.getByTestId("ctw-tab-documentation"));
+
+    const card = screen.getByTestId("ctw-card-ambient-documentation");
+    expect(card).toBeInTheDocument();
+    expect(
+      within(card).getByTestId("ambient-documentation-panel"),
+    ).toBeInTheDocument();
+    expect(
+      within(card).getByTestId("ambient-safety-banner"),
+    ).toBeInTheDocument();
+  });
+
+  it("safety banner names every required disclaimer", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(screen.getByTestId("ctw-tab-documentation"));
+    const banner = screen.getByTestId("ambient-safety-banner");
+    expect(banner.textContent).toMatch(/Provider review required/i);
+    expect(banner.textContent).toMatch(/Does not diagnose/i);
+    expect(banner.textContent).toMatch(/Does not place orders/i);
+    expect(banner.textContent).toMatch(/Not for real PHI/i);
   });
 });

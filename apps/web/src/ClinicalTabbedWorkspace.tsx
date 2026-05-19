@@ -60,6 +60,7 @@ import { EyeDiagramPanel } from "./EyeDiagramPanel";
 import { ImagingPipelinePanel } from "./ImagingPipelinePanel";
 import { SpecialtyTrackingPanel } from "./SpecialtyTrackingPanel";
 import { FundusChartPanel } from "./features/fundus/FundusChartPanel";
+import { AmbientDocumentationPanel } from "./features/ambient/AmbientDocumentationPanel";
 
 // Local fmt — same shape as App.tsx::fmt. Inlined to avoid a
 // shared-utility refactor that would balloon Phase 19's diff.
@@ -888,6 +889,30 @@ function DocumentationTab({
           providerDisplay={encounter.provider_name}
         />
       </div>
+      <section
+        className="ctw-card ctw-card--wide"
+        data-testid="ctw-card-ambient-documentation"
+      >
+        <h3 className="ctw-card__title">
+          Provider-Reviewed Ambient Documentation Assist
+        </h3>
+        <div className="ctw-card__body">
+          {typeof encounter.patient_id === "number" ? (
+            <AmbientDocumentationPanel
+              patientId={encounter.patient_id}
+              encounterId={
+                typeof encounter.id === "number" ? encounter.id : undefined
+              }
+            />
+          ) : (
+            <div className="ctw-empty">
+              Ambient documentation drafting is available once the
+              encounter is bridged into ChartNav with a native patient
+              row.
+            </div>
+          )}
+        </div>
+      </section>
     </div>
   );
 }
