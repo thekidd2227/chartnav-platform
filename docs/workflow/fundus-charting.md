@@ -8,8 +8,68 @@ ChartNav's AI-assisted fundus charting feature generates standardised retinal dr
 2. **Generate chart** — `POST /api/v1/encounters/{id}/fundus-charts/generate` parses findings, returns `drawing_json` with clock-hour mapped elements and any warnings.
 3. **Review warnings** — AI emits warnings for missing laterality, missing clock hour, or unrecognised findings. No clinical detail is ever invented.
 4. **Render SVG** — `POST /api/v1/fundus-charts/{id}/render` produces a 200×200-unit SVG with concentric rings, clock-hour labels, and colour-coded finding overlays.
-5. **Review** — Clinician (or admin) calls `POST /api/v1/fundus-charts/{id}/review`. Status → `reviewed`.
+5. **Review** — Clinician (or admin) calls `POST /api/v1/fundus-charts/{id}/review`. Status → `reviewed`. This is **not** the final signature.
 6. **Sign** — Clinician sends `{"attested": true}` to `POST /api/v1/fundus-charts/{id}/sign`. Status → `signed`. Signed charts are immutable.
+
+## UI workflow (Phase 55 polish)
+
+The Fundus Charts panel lives in the Imaging tab of the clinical workspace (`ClinicalTabbedWorkspace` → "Fundus charts" card). The layout is two-column:
+
+**Left column — findings entry**
+- Safety banner at the top: "Draft from clinician-entered findings. Provider review required. Not image interpretation. Does not diagnose."
+- Laterality selector (OD / OS / OU) as a radio button group with explicit "Right / Left / Both" labels.
+- Findings textarea with placeholder text.
+- Demo sample chips for one-click population (fake-data examples only — see below).
+- Generate button — disabled until the textarea is non-empty.
+- Saved-charts list with status + creation date.
+
+**Right column — preview + workflow**
+- Status timeline pills: **Draft → Reviewed → Signed**. The current state is colour-coded; previous states stay highlighted.
+- Laterality and chart-id badge. If the chart was AI-drafted, a "AI-drafted from clinician findings · provider review required" tag appears.
+- Warnings panel — always visible. Empty state still reads "No warnings. Provider must still review before signing." Warnings refresh when a different chart is selected (Phase 55 bug fix).
+- SVG preview with clock-hour labels + a legend strip beneath it.
+- **Action bar** (only when not yet signed):
+  - `Render SVG` — re-renders the chart from the current `drawing_json`.
+  - `Mark Reviewed` — marks the chart `reviewed`. The button label and tooltip make clear this is **not** the final signature.
+  - **Attestation block** (purple) — checkbox the clinician must tick before `Sign & Lock Chart` becomes clickable. The attestation text reads "I attest that I have reviewed this fundus chart and it accurately reflects my clinical findings. Signing will lock the chart — signed charts are immutable." Inline (not a modal) so the demo narrator can show what the clinician is attesting to before they sign.
+- **Signed state** — replaces the action bar with a green "Chart signed · locked" banner showing timestamp + signer ID. All edit controls are removed from the DOM; signed charts are immutable in the API too (PATCH returns 409).
+
+## Demo-safe sample findings
+
+The panel exposes a "Demo samples (fake data)" chip strip with four examples. Selecting a chip populates the textarea and aligns the laterality selector. The examples are **fake / demo only** and contain no real PHI:
+
+- `horseshoe tear at 10:30 OD`
+- `lattice from 5 to 7 OS near ora`
+- `superotemporal detachment OD`
+- `laser scars temporal OS`
+
+Demo narrators may use these chips during retina-clinic walkthroughs. They are **not** clinical content — no patient names, no MRNs, no dates of birth, no treatment recommendations, no diagnosis claims.
+
+## Warning meanings
+
+| Warning text | Meaning |
+|---|---|
+| `Laterality not stated …` | Findings text did not contain `OD` / `OS` / `OU` keywords. The clinician should confirm which eye. |
+| `No clock-hour specified …` | Findings text did not include a clock-position like `10:30` or `5 to 7`. The lesion is drawn at a default position with reduced opacity. |
+| `Unrecognized finding type …` | The rule-based parser did not match a known finding (horseshoe tear, lattice, detachment, etc.). The clinician should clarify. |
+| `Laterality mismatch …` | The clinician's selected eye disagrees with the eye named in the findings text. |
+
+## Review vs Sign
+
+| Action | Endpoint | What it does | Locks chart? |
+|---|---|---|---|
+| **Mark Reviewed** | `POST /api/v1/fundus-charts/{id}/review` | Sets `status=reviewed`, records `reviewed_by_user_id` + `reviewed_at`. | No — chart can still be edited. |
+| **Sign & Lock** | `POST /api/v1/fundus-charts/{id}/sign` with `{"attested": true}` | Sets `status=signed`, records `signed_by_user_id` + `signed_at`. | Yes — chart is immutable; PATCH returns 409 after this. |
+
+Signing requires explicit attestation: the API rejects sign requests without `"attested": true`, and the UI disables the sign button until the attestation checkbox is ticked.
+
+## What the AI does *not* do
+
+- It does not diagnose. It draws what the clinician dictated.
+- It does not interpret images. There is no OCT / fundus-photo computer-vision pipeline.
+- It does not auto-sign. Every chart requires explicit `{"attested": true}` from a clinician.
+- It does not invent findings. Missing detail surfaces as warnings; vague locations are drawn with reduced opacity.
+- It does not order, refer, message patients, code, or bill.
 
 ## Security and privacy
 
