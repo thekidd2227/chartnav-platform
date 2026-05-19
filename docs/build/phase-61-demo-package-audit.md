@@ -76,7 +76,7 @@ The Phase 61 master runbook prescribes a single canonical order that matches the
 4. **Fundus Charting** (Imaging tab) — click a sample chip; Generate; point at the OD/OS clarity, the warnings panel, and the AI-drafted tag.
 5. **Provider Review and Sign-off** — return to each artifact (vitals, ambient draft, fundus chart). Mark each Reviewed, then read the attestation aloud, tick the box, click Sign & Lock. Show the signed-lock banner on each surface.
 6. **Audit + Release Posture** — run `python3 scripts/check_runtime_safety.py` in a side terminal; point at PASS. Open `docs/release/release-evidence-checklist.md` to show the operator artefact the demo would produce in a real release.
-7. **Closing** — point at the "What ChartNav did NOT do" cards across the three signed artifacts. Re-state the safety frame.
+7. **Closing** — point at the "What ChartNav did NOT do" cards on the Vitals and Ambient signed artifacts (Fundus Charting V1 does not currently render this card or expose a `forbidden_actions` response object — its safety posture is enforced through product boundaries, claim scanners, warnings, provider-review/sign workflow, and signed-lock state instead). Re-state the safety frame.
 
 ## 6. Recommended operator flow
 
@@ -92,7 +92,7 @@ The Phase 61 master runbook prescribes a single canonical order that matches the
 - The buyer Q&A sheet aligns with `docs/build/current-product-truth.md` at the time of writing. If the product truth row for a feature changes, the Q&A must be re-aligned in the same PR.
 - Phase 61 does not add a video shot list; the existing `docs/demo/chartnav-video-clip-shot-list.md` covers that gap for the Phase 19/24 era. A Phase 61 video shot list is a separate phase.
 - The Phase 61 docs cite the per-feature runbooks as the authoritative click paths. If a buyer asks for the deepest possible drill-down on (e.g.) fundus warnings, the operator pivots to `docs/demo/phase-56-fundus-demo-runbook.md`.
-- Demo scanner's FILES list will be expanded to include the three new Phase 61 docs.
+- Demo scanner's FILES list will be expanded to include the four new Phase 61 demo docs (runbook + checklist + Q&A safe-answers + storyboard).
 
 ## Related documents
 

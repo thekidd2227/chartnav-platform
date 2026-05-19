@@ -93,18 +93,22 @@ Reference for the deep click path: `docs/demo/phase-56-fundus-demo-runbook.md`.
 
 ## Closing narrative (30 sec)
 
-> "Every signed artefact in ChartNav carries an explicit
-> 'What ChartNav did NOT do' panel listing the actions ChartNav
-> did **not** perform — diagnosis, treatment recommendation,
-> orders, referrals, patient messages, billing, coding, device
-> integration, remote patient monitoring, auto-sign. That posture
-> is enforced by code, by tests, by the runtime safety validator,
-> by the claim policy manifest, and by the operator runbook —
-> not just by narration. ChartNav is a provider-reviewed workflow
-> layer. Not a certified EHR. Not HIPAA-certified out of the box.
-> Not an autonomous agent. Provider review and sign-off are
-> mandatory at every step. Happy to take questions — and we have a
-> safe-answers sheet for the most common ones we'd expect."
+> "Vitals and Ambient signed artefacts in ChartNav each carry an
+> explicit 'What ChartNav did NOT do' panel listing the actions
+> ChartNav did **not** perform — diagnosis, treatment
+> recommendation, orders, referrals, patient messages, billing,
+> coding, device integration, remote patient monitoring,
+> auto-sign. Fundus Charting V1 enforces the same posture through
+> warnings, the provider review/sign attestation flow, the signed-
+> lock state, and the claim scanners — without a per-response
+> forbidden-actions object today. Across all three surfaces, the
+> posture is enforced by code, by tests, by the runtime safety
+> validator, by the claim policy manifest, and by the operator
+> runbook — not just by narration. ChartNav is a provider-reviewed
+> workflow layer. Not a certified EHR. Not HIPAA-certified out of
+> the box. Not an autonomous agent. Provider review and sign-off
+> are mandatory at every step. Happy to take questions — and we
+> have a safe-answers sheet for the most common ones we'd expect."
 
 > *(Pivot to Q&A using `docs/demo/phase-61-buyer-qa-safe-answers.md`.)*
 

@@ -96,8 +96,11 @@
       never demonstrated as a one-click action.
 - [ ] **Signed-lock banner** + "Signed artefacts are immutable"
       narrated on each surface.
-- [ ] "What ChartNav did NOT do" card read aloud on at least one
-      surface, listing at least three of the `(false)` entries.
+- [ ] "What ChartNav did NOT do" card read aloud on the Vitals or
+      Ambient surface (Fundus Charting V1 does not render this card —
+      its safety posture is enforced through warnings, provider
+      review/sign, signed-lock state, and the claim scanners),
+      listing at least three of the `(false)` entries.
 - [ ] Runtime safety validator demonstrated live (Scene 6).
 - [ ] **No forbidden claim** from § 9 of the runbook appears in
       narration or in any UI surface during the demo.

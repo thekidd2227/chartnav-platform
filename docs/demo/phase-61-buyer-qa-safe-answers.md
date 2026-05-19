@@ -79,61 +79,83 @@ canonical product-truth posture. Operators must not embellish.
 
 - **What to say:** "No. ChartNav drafts structured artefacts from
   what the clinician entered. Out-of-range vital signs surface as
-  review prompts, never as diagnostic conclusions. Every signed
-  artefact carries a 'What ChartNav did NOT do' panel that lists
-  diagnosis as `(false)`."
+  review prompts, never as diagnostic conclusions. The Vitals and
+  Ambient signed artefacts each carry a 'What ChartNav did NOT do'
+  panel that lists diagnosis as `(false)`; Fundus Charting V1
+  enforces the same posture through warnings, provider review/sign,
+  signed-lock state, and the claim scanners — without a per-response
+  forbidden-actions object today."
 - **Why:** Claim scanners block "autonomous diagnosis" /
   "AI diagnoses" / "vital-sign diagnosis". Server-side
-  `forbidden_actions.diagnosis=false` on every fundus, ambient, and
-  vitals response.
+  `forbidden_actions.diagnosis=false` on every ambient and vitals
+  response. Fundus does not expose a `forbidden_actions` field in
+  V1; the "no diagnosis" guarantee comes from the surrounding
+  product boundaries (no diagnostic language in warnings; provider
+  review + sign + signed-lock; claim-scanner-blocked vocabulary).
 
 ## 8. "Does it interpret fundus photos or OCT?"
 
 - **What to say:** "No. ChartNav drafts a structured retinal
   diagram from the clinician's typed findings — not from a photo.
   There is no computer vision step, no OCT auto-interpretation, no
-  fundus-photo grading. The forbidden-action panel says image
-  interpretation is `(false)`."
+  fundus-photo grading. Fundus warnings ask the clinician to
+  confirm missing detail; they're review prompts, not findings."
 - **Why:** Claim scanners block "fundus image interpretation" /
-  "OCT interpretation" / "AI interprets fundus".
+  "OCT interpretation" / "AI interprets fundus". Fundus V1 does
+  not expose a `forbidden_actions` map; the image-interpretation
+  guarantee comes from the deterministic `rule_based_v1` parser
+  (no image input at all), the warnings panel, the provider
+  review/sign flow, and the claim-scanner vocabulary block.
 
 ## 9. "Does it recommend treatment?"
 
 - **What to say:** "No. ChartNav does not recommend treatment.
   Plan-as-stated in the ambient draft is exactly what the clinician
-  said in the transcript; ChartNav does not extend it. The
-  forbidden-action panel says treatment recommendation is `(false)`."
+  said in the transcript; ChartNav does not extend it. The Ambient
+  and Vitals 'What ChartNav did NOT do' panels list treatment
+  recommendation as `(false)`."
 - **Why:** Claim scanners block "treatment recommendation" /
   "AI prescribes". `forbidden_actions.treatment_recommendation`
-  pinned `false` server-side.
+  is pinned `false` server-side on the ambient and vitals
+  responses. Fundus V1 does not return a `forbidden_actions`
+  object; the no-treatment-recommendation posture is enforced via
+  the deterministic parser (the fundus output contains drawing
+  data only — no recommendation field exists in the schema) and
+  the claim scanners.
 
 ## 10. "Does it place orders?"
 
 - **What to say:** "No. ChartNav does not place orders. The
-  signed-artefact panel shows orders as `(false)`. If a clinician's
-  transcript mentions an order, it surfaces as a safety flag — not
-  as an executed order."
+  Ambient and Vitals signed-artefact panels show orders as
+  `(false)`. If a clinician's transcript mentions an order, the
+  Ambient surface flags it as a safety prompt — not as an
+  executed order."
 - **Why:** Claim scanners block "automatic orders".
-  `forbidden_actions.orders=false`.
+  `forbidden_actions.orders=false` on the ambient and vitals
+  responses. The fundus surface stores drawing data only; there
+  is no orders field in any fundus response schema.
 
 ## 11. "Does it send referrals or patient messages?"
 
 - **What to say:** "No. ChartNav does not send referrals and
-  does not message patients. The signed-artefact panel shows
-  referrals and patient messages as `(false)`. Referrals and
-  messaging stay in your existing EHR / patient-portal workflows."
+  does not message patients. The Ambient and Vitals signed-artefact
+  panels show referrals and patient messages as `(false)`.
+  Referrals and messaging stay in your existing EHR / patient-portal
+  workflows."
 - **Why:** Claim scanners block "automatic referrals" /
-  "patient messaging" / "send patient message".
+  "patient messaging" / "send patient message". Fundus V1 has no
+  referral or messaging field in any response schema.
 
 ## 12. "Does it bill or code?"
 
 - **What to say:** "No. ChartNav does not bill or code. We do
   not generate CPT or ICD-10 codes, we do not suggest billing
-  codes, and we do not submit claims. The signed-artefact panel
-  shows billing-or-coding as `(false)`."
+  codes, and we do not submit claims. The Ambient and Vitals
+  signed-artefact panels show billing-or-coding as `(false)`."
 - **Why:** Claim scanners block "automatic billing" /
   "automatic coding" / "billing-aware coding" /
-  "coding recommendations" / "claims submission".
+  "coding recommendations" / "claims submission". Fundus V1 has
+  no billing or coding field in any response schema.
 
 ## 13. "Is OpenAI used?"
 

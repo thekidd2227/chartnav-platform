@@ -161,7 +161,11 @@ Reference: `docs/demo/phase-60-vitals-workup-demo-runbook.md` § 4.
 5. Demonstrate a warning: clear the systolic field, click **Save**;
    the warnings panel surfaces "Blood pressure diastolic captured
    but systolic missing; please add systolic before signing."
-6. Restore the sample. Demonstrate the **"What ChartNav did NOT do"**
+6. Manually re-enter the missing systolic value on the same selected
+   workup, then click **Save** again to clear the warning. (Or, if
+   the workup has already advanced past `draft`, click "New workup"
+   and **Load fake demo vitals** to start a clean workup for the
+   review/sign step.) Demonstrate the **"What ChartNav did NOT do"**
    card: read three forbidden actions aloud with their `(false)`
    markers (diagnosis, orders, billing or coding).
 
@@ -284,18 +288,27 @@ the live run, **halt the demo immediately**.
 ### Scene 7 — Closing (30 sec)
 
 **Operator action:**
-- Return to one of the signed artefacts.
-- Point at its **"What ChartNav did NOT do"** card.
+- Return to either the Vitals or Ambient signed artefact (these
+  surfaces render the "What ChartNav did NOT do" card; Fundus
+  Charting V1 does not — its safety posture is enforced through
+  warnings, provider review/sign, signed-lock state, and the claim
+  scanners instead).
+- Point at the **"What ChartNav did NOT do"** card on the Vitals or
+  Ambient artefact.
 
 **Safe narration:**
-> "Every signed artefact in ChartNav comes with an explicit list of
-> the actions ChartNav did **not** perform: diagnosis, treatment
-> recommendation, orders, referrals, patient messages, billing,
-> coding, device integration, remote patient monitoring, auto-sign.
-> ChartNav is a provider-reviewed workflow layer — not an autonomous
-> agent, not an EHR replacement, not HIPAA-certified, not a billing
-> engine. Provider review and sign-off are mandatory at every step.
-> Happy to take questions."
+> "The Vitals and Ambient signed artefacts in ChartNav come with an
+> explicit 'What ChartNav did NOT do' panel listing the actions
+> ChartNav did **not** perform: diagnosis, treatment recommendation,
+> orders, referrals, patient messages, billing, coding, device
+> integration, remote patient monitoring, auto-sign. Fundus
+> Charting V1 enforces the same posture through warnings, provider
+> review/sign, signed-lock state, and the claim scanners — without
+> a per-response forbidden-actions object today. Across all three
+> surfaces, ChartNav is a provider-reviewed workflow layer — not an
+> autonomous agent, not an EHR replacement, not HIPAA-certified,
+> not a billing engine. Provider review and sign-off are mandatory
+> at every step. Happy to take questions."
 
 ## 8. What to say (approved framing)
 
@@ -352,7 +365,7 @@ Halt immediately and reset the screen-share if any of the following are observed
 
 | Module | Symptom | Fallback |
 |---|---|---|
-| Vitals | API 500 / 404 / 403 on draft-ambient or similar | Skip Scene 2. State: "Vitals capture is a structured intake; the per-feature runbook covers it in detail." Move directly to Scene 3. |
+| Vitals | API 500 / 404 / 403 on the vitals-workups create / update / review / sign endpoints | Skip Scene 2. State: "Vitals capture is a structured intake; the per-feature runbook covers it in detail." Move directly to Scene 3. |
 | Ambient | Generate fails / textarea stuck disabled | Skip Scene 3. State: "Ambient documentation is the transcript-to-draft surface; the per-feature runbook walks through it. Today we'll move directly to fundus charting." Move to Scene 4. |
 | Fundus | Generate fails | Skip Scene 4. State the same kind of fallback. Move to Scene 5 using the existing vitals + ambient artefacts. |
 | Runtime safety validator | `FAIL` mid-demo | **Halt.** Do not continue the demo on a failing safety gate. |
@@ -382,8 +395,8 @@ read that sheet end-to-end before the demo.
   must complete the pre-demo checklist by hand before every demo.
 - The Phase 61 runbook does not replace the per-feature runbooks —
   it links to them.
-- The demo scanner's FILES list is hand-curated. Phase 61's three
-  new docs (this runbook, the checklist, the Q&A safe-answers, the
+- The demo scanner's FILES list is hand-curated. Phase 61's four new
+  demo docs (this runbook, the checklist, the Q&A safe-answers, the
   storyboard) are added to the FILES list as part of this PR.
 - Phase 61 ships **no product code changes**. Any UI gap surfaced
   during the demo is a separate phase.
