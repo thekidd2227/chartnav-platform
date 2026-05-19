@@ -10,6 +10,7 @@ from starlette.responses import JSONResponse
 from app.api.admin_security import router as admin_security_router
 from app.api.consent import router as consent_router
 from app.api.eye_diagrams import router as eye_diagrams_router
+from app.api.fundus_charts import router as fundus_charts_router
 from app.api.imaging_pipeline import router as imaging_pipeline_router
 from app.api.multi_clinic import router as multi_clinic_router
 from app.api.patient_summaries import router as patient_summaries_router
@@ -30,15 +31,6 @@ from app.middleware import (
 )
 from app.services.stt_provider import install_default as _install_stt_provider
 
-# Phase 33 → Phase 35 — wire the configured STT provider at import
-# time. `CHARTNAV_STT_PROVIDER` picks between:
-#   "stub"           (default; deterministic placeholder for dev/test)
-#   "openai_whisper" (real OpenAI Whisper; requires
-#                     CHARTNAV_OPENAI_API_KEY)
-#   "none"           (explicitly no STT; audio uploads fail honestly)
-# A vendor-specific adapter can still overwrite the registration via
-# `app.services.ingestion.set_transcriber(...)` or
-# `app.services.stt_provider.install_provider(...)` after this line.
 _install_stt_provider()
 
 configure_logging()
@@ -46,9 +38,6 @@ log = logging.getLogger("chartnav")
 
 app = FastAPI(title="ChartNav Platform API", version="0.1.0")
 
-# --- CORS ----------------------------------------------------------------
-# `allow_origins=["*"]` is intentionally NOT used. CORS is driven by
-# `CHARTNAV_CORS_ALLOW_ORIGINS` (see docs/build/12-runtime-config.md).
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(settings.cors_allow_origins),
@@ -58,16 +47,10 @@ app.add_middleware(
     expose_headers=["X-Request-ID"],
 )
 
-# --- Operational middleware ---------------------------------------------
-# Order: rate limit is innermost (shortcut before access log / routing),
-# access log wraps the route, request id is outermost so downstream sees
-# the id even if something below throws.
 app.add_middleware(RateLimitMiddleware, per_minute=settings.rate_limit_per_minute)
 app.add_middleware(AccessLogMiddleware)
 app.add_middleware(RequestIdMiddleware)
 
-
-# --- HTTP exception handler — audits denied/suspicious traffic ----------
 
 @app.exception_handler(HTTPException)
 async def _http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
@@ -79,7 +62,6 @@ async def _http_exception_handler(request: Request, exc: HTTPException) -> JSONR
         reason = detail.get("reason")
 
     if should_audit(exc.status_code, error_code):
-        # Observe metric (fails-closed — wrapped in try inside metrics module).
         try:
             from app.metrics import metrics as _metrics
             _metrics.observe_auth_denial(error_code or f"http_{exc.status_code}")
@@ -126,6 +108,7 @@ app.include_router(router)
 app.include_router(admin_security_router)
 app.include_router(consent_router)
 app.include_router(eye_diagrams_router)
+app.include_router(fundus_charts_router)
 app.include_router(scribe_sessions_router)
 app.include_router(patient_summaries_router)
 app.include_router(pre_visit_briefs_router)
