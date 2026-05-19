@@ -1,0 +1,181 @@
+{
+  "version": "2026-05-19",
+  "purpose": "Canonical claim-safety policy for ChartNav commercial, website, demo, and release checks.",
+  "allowed_contexts": [
+    "negative_assertion",
+    "forbidden_phrase_catalog",
+    "internal_security_doc",
+    "scanner_fixture"
+  ],
+  "entries": [
+    {
+      "phrase_or_regex": "HIPAA[- ]compliant|HIPAA[- ]certified|cuenta con certificacion HIPAA|certificacion HIPAA",
+      "category": "hipaa_overclaims",
+      "severity": "critical",
+      "allowed_contexts": ["negative_assertion", "forbidden_phrase_catalog", "internal_security_doc", "scanner_fixture"],
+      "examples_fail": ["ChartNav is HIPAA compliant.", "ChartNav cuenta con certificacion HIPAA."],
+      "examples_pass": ["ChartNav is not HIPAA compliant by default."],
+      "sync_required": true,
+      "scanner_fragments": ["HIPAA[- ]compliant"]
+    },
+    {
+      "phrase_or_regex": "replaces? (your |an? )?(EHR|EMR|electronic health record|electronic medical record)|EHR replacement|EMR replacement|reemplaza su EHR",
+      "category": "ehr_replacement",
+      "severity": "critical",
+      "allowed_contexts": ["negative_assertion", "forbidden_phrase_catalog", "scanner_fixture"],
+      "examples_fail": ["ChartNav replaces your EHR.", "ChartNav reemplaza su EHR."],
+      "examples_pass": ["ChartNav does not replace a certified EHR."],
+      "sync_required": true,
+      "scanner_fragments": ["EHR replacement"]
+    },
+    {
+      "phrase_or_regex": "autonomous documentation|autonomous clinical reasoning|automatic note writing",
+      "category": "autonomous_documentation",
+      "severity": "critical",
+      "allowed_contexts": ["negative_assertion", "forbidden_phrase_catalog", "internal_security_doc", "scanner_fixture"],
+      "examples_fail": ["ChartNav provides autonomous documentation."],
+      "examples_pass": ["ChartNav does not provide autonomous documentation."],
+      "sync_required": true,
+      "scanner_fragments": ["autonomous documentation"]
+    },
+    {
+      "phrase_or_regex": "hands[- ]free scribing|ambient scribe parity|note writes itself|chart fills itself|AI writes the note|production LLM documentation|OpenAI[- ]powered scribe",
+      "category": "ambient_documentation_overclaims",
+      "severity": "critical",
+      "allowed_contexts": ["negative_assertion", "forbidden_phrase_catalog", "internal_security_doc", "scanner_fixture"],
+      "examples_fail": [
+        "Hands-free scribing.",
+        "Ambient scribe parity with the leading vendor.",
+        "The note writes itself.",
+        "The chart fills itself.",
+        "AI writes the note.",
+        "Production LLM documentation.",
+        "OpenAI-powered scribe."
+      ],
+      "examples_pass": [
+        "ChartNav does not provide hands-free scribing.",
+        "Not autonomous documentation.",
+        "Ambient documentation assist is provider-reviewed transcript-to-draft support only."
+      ],
+      "sync_required": true,
+      "scanner_fragments": [
+        "free scribing",
+        "ambient scribe parity",
+        "note writes itself",
+        "chart fills itself",
+        "AI writes the note",
+        "production LLM documentation"
+      ]
+    },
+    {
+      "phrase_or_regex": "autonomous diagnosis|automatic diagnosis|AI diagnoses|AI diagnosis|LLM[- ]powered diagnosis|diagnostico autonomo|IA diagnostica",
+      "category": "autonomous_diagnosis",
+      "severity": "critical",
+      "allowed_contexts": ["negative_assertion", "forbidden_phrase_catalog", "internal_security_doc", "scanner_fixture"],
+      "examples_fail": ["AI diagnoses retinal disease.", "Diagnostico autonomo."],
+      "examples_pass": ["Not autonomous diagnosis."],
+      "sync_required": true,
+      "scanner_fragments": ["autonomous diagnosis"]
+    },
+    {
+      "phrase_or_regex": "image interpretation|retinal image interpretation|autonomous interpretation|interpretacion de imagenes",
+      "category": "image_interpretation",
+      "severity": "critical",
+      "allowed_contexts": ["negative_assertion", "forbidden_phrase_catalog", "internal_security_doc", "scanner_fixture"],
+      "examples_fail": ["Retinal image interpretation."],
+      "examples_pass": ["Not image interpretation."],
+      "sync_required": true,
+      "scanner_fragments": ["retinal image interpretation"]
+    },
+    {
+      "phrase_or_regex": "fundus image interpretation|fundus photo interpretation|AI[- ]interprets? fundus|autonomous fundus interpretation|fundus diagnosis|OpenAI[- ]powered fundus charting|production LLM fundus workflow|autonomous retinal charting|Interpretacion de imagenes de fondo de ojo",
+      "category": "fundus_overclaims",
+      "severity": "critical",
+      "allowed_contexts": ["negative_assertion", "forbidden_phrase_catalog", "internal_security_doc", "scanner_fixture"],
+      "examples_fail": ["Fundus image interpretation.", "Autonomous retinal charting."],
+      "examples_pass": ["Fundus charting is not image interpretation."],
+      "sync_required": true,
+      "scanner_fragments": ["fundus image interpretation", "production LLM fundus workflow"]
+    },
+    {
+      "phrase_or_regex": "OCT interpretation|auto[- ]interprets? OCT|auto[- ]grades? DR|auto[- ]determines? cup[- ]to[- ]disc",
+      "category": "oct_overclaims",
+      "severity": "high",
+      "allowed_contexts": ["negative_assertion", "forbidden_phrase_catalog", "internal_security_doc", "scanner_fixture"],
+      "examples_fail": ["ChartNav provides OCT interpretation."],
+      "examples_pass": ["ChartNav does not interpret OCT."],
+      "sync_required": true,
+      "scanner_fragments": ["OCT interpretation"]
+    },
+    {
+      "phrase_or_regex": "OpenAI[- ]powered clinical documentation|OpenAI[- ]powered scribe|GPT[- ]powered clinical documentation|Claude[- ]powered clinical documentation|Anthropic[- ]powered clinical documentation|LLM[- ]powered clinical documentation",
+      "category": "llm_vendor_powered_claims",
+      "severity": "critical",
+      "allowed_contexts": ["negative_assertion", "forbidden_phrase_catalog", "internal_security_doc", "scanner_fixture"],
+      "examples_fail": ["OpenAI-powered clinical documentation."],
+      "examples_pass": ["ChartNav does not provide OpenAI-powered clinical documentation."],
+      "sync_required": true,
+      "scanner_fragments": ["OpenAI-powered clinical documentation"]
+    },
+    {
+      "phrase_or_regex": "automatic billing|automatically bills?|automatic coding|automatically codes?|billing[- ]aware coding|coding recommendations|claims? submission",
+      "category": "billing_coding_claims",
+      "severity": "high",
+      "allowed_contexts": ["negative_assertion", "forbidden_phrase_catalog", "scanner_fixture"],
+      "examples_fail": ["ChartNav provides automatic billing."],
+      "examples_pass": ["ChartNav does not bill or code automatically."],
+      "sync_required": true,
+      "scanner_fragments": ["automatic billing"]
+    },
+    {
+      "phrase_or_regex": "automatic orders|automatically orders?|automatic referrals|automatically refers?|send patient message|patient messaging|send to patient",
+      "category": "orders_referrals_patient_messaging",
+      "severity": "critical",
+      "allowed_contexts": ["negative_assertion", "forbidden_phrase_catalog", "scanner_fixture"],
+      "examples_fail": ["ChartNav sends patient messages."],
+      "examples_pass": ["ChartNav does not create orders, send referrals, bill, or message patients."],
+      "sync_required": true,
+      "scanner_fragments": ["send patient message"]
+    },
+    {
+      "phrase_or_regex": "beats Cora|beat Cora|Cora[- ]killer|Cora replacement|alternative to Cora|better than Cora|outperforms Cora|Cora competitor",
+      "category": "competitor_superiority",
+      "severity": "high",
+      "allowed_contexts": ["negative_assertion", "forbidden_phrase_catalog", "scanner_fixture"],
+      "examples_fail": ["Better than Cora."],
+      "examples_pass": ["ChartNav is not better than Cora and is not positioned as a Cora replacement."],
+      "sync_required": true,
+      "scanner_fragments": ["better than Cora"]
+    },
+    {
+      "phrase_or_regex": "guaranteed ROI|ROI guarantee|ROI garantizado|guaranteed return",
+      "category": "roi_guarantees",
+      "severity": "high",
+      "allowed_contexts": ["negative_assertion", "forbidden_phrase_catalog", "scanner_fixture"],
+      "examples_fail": ["Guaranteed ROI.", "ROI garantizado."],
+      "examples_pass": ["ChartNav does not guarantee ROI."],
+      "sync_required": true,
+      "scanner_fragments": ["guaranteed ROI"]
+    },
+    {
+      "phrase_or_regex": "real PHI ready|real patient data ready|production[- ]ready for PHI|vendor[- ]approved for PHI|BAA[- ]ready by default",
+      "category": "real_phi_ready_claims",
+      "severity": "critical",
+      "allowed_contexts": ["negative_assertion", "forbidden_phrase_catalog", "internal_security_doc", "scanner_fixture"],
+      "examples_fail": ["Real PHI ready."],
+      "examples_pass": ["Real PHI requires BAA and go-live gates."],
+      "sync_required": true,
+      "scanner_fragments": ["real PHI ready"]
+    },
+    {
+      "phrase_or_regex": "certificacion HIPAA|diagnostico autonomo|interpretacion de imagenes|reemplaza su EHR|ROI garantizado",
+      "category": "spanish_equivalents",
+      "severity": "critical",
+      "allowed_contexts": ["negative_assertion", "forbidden_phrase_catalog", "scanner_fixture"],
+      "examples_fail": ["ROI garantizado.", "Diagnostico autonomo."],
+      "examples_pass": ["No realiza diagnostico autonomo."],
+      "sync_required": false,
+      "scanner_fragments": []
+    }
+  ]
+}

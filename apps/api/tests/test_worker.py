@@ -22,6 +22,12 @@ from __future__ import annotations
 import os
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
+# Phase 25A — audio uploads now require consent. Auto-grant for
+# seeded encounters; consent gating itself is tested in test_consent.py.
+pytestmark = pytest.mark.usefixtures("audio_consent_for_seeded")
+
 
 ADMIN1 = {"X-User-Email": "admin@chartnav.local"}
 CLIN1 = {"X-User-Email": "clin@chartnav.local"}

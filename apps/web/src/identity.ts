@@ -8,8 +8,13 @@ export const SEEDED_IDENTITIES: { email: string; label: string }[] = [
   { email: "admin@chartnav.local", label: "Org 1 · admin" },
   { email: "clin@chartnav.local", label: "Org 1 · clinician" },
   { email: "rev@chartnav.local", label: "Org 1 · reviewer" },
+  // Phase 20C — operational roles for role-based dashboards.
+  { email: "front@chartnav.local", label: "Org 1 · front desk" },
+  { email: "tech@chartnav.local", label: "Org 1 · technician" },
   { email: "admin@northside.local", label: "Org 2 · admin" },
   { email: "clin@northside.local", label: "Org 2 · clinician" },
+  { email: "front@northside.local", label: "Org 2 · front desk" },
+  { email: "tech@northside.local", label: "Org 2 · technician" },
 ];
 
 export function loadIdentity(): string {

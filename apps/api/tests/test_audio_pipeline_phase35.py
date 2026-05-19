@@ -43,6 +43,10 @@ import os
 
 import pytest
 
+# Phase 25A — auto-grant audio consent so this pre-existing pipeline
+# test stays green; consent gating itself is tested in test_consent.py.
+pytestmark = pytest.mark.usefixtures("audio_consent_for_seeded")
+
 
 ADMIN1 = {"X-User-Email": "admin@chartnav.local"}
 CLIN1 = {"X-User-Email": "clin@chartnav.local"}
@@ -209,6 +213,46 @@ def test_openai_whisper_oversize_audio_fails_before_post(tmp_path):
     with pytest.raises(IngestionError) as exc:
         p.transcribe(storage_ref=storage_ref, metadata={})
     assert exc.value.error_code == "openai_whisper_audio_too_large"
+
+
+def test_openai_whisper_api_key_never_appears_in_logs(tmp_path, caplog):
+    """Regression lock — the OpenAI API key value must not surface in
+    any log line, on success or failure paths. The provider already
+    logs only status code + response body snippet on non-2xx; this
+    test pins that behaviour so a future refactor cannot accidentally
+    add `log.debug("auth: %s", headers)` and quietly leak the key."""
+    import logging
+    from app.services.audio_storage import LocalDiskStorage
+    from app.services.ingestion import IngestionError
+    from app.services.stt_provider import OpenAIWhisperProvider
+
+    storage = LocalDiskStorage(root=tmp_path)
+    storage_ref = storage.put(
+        encounter_id=1, ext=".wav", body=MINIMAL_WAV_BYTES,
+        content_type="audio/wav",
+    )
+
+    # A distinctive, obviously-fake key that would be easy to spot
+    # in any captured log line if it ever leaks.
+    fake_key = "sk-leak-canary-DO-NOT-LOG-ME-12345"
+
+    def err_transport(url, body, headers, timeout):
+        return 500, b'{"error":{"message":"upstream blew up"}}'
+
+    caplog.set_level(logging.DEBUG, logger="chartnav.stt")
+    p = OpenAIWhisperProvider(
+        api_key=fake_key, storage=storage, transport=err_transport,
+    )
+    with pytest.raises(IngestionError):
+        p.transcribe(storage_ref=storage_ref, metadata={})
+
+    for record in caplog.records:
+        assert fake_key not in record.getMessage(), (
+            f"API key leaked into log: {record.getMessage()!r}"
+        )
+        # Also defend against accidental Authorization-header logging.
+        msg_lower = record.getMessage().lower()
+        assert "bearer " not in msg_lower or fake_key not in record.getMessage()
 
 
 # ---------------------------------------------------------------------

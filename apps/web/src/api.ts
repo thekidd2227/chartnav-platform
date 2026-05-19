@@ -22,7 +22,18 @@ export class ApiError extends Error {
   }
 }
 
-export type Role = "admin" | "clinician" | "reviewer";
+// Phase 20C — extended with `front_desk` and `technician` to mirror
+// the backend `users.role` CHECK constraint. Existing role helpers
+// (`canCreateEncounter`, `canCreateEvent`, `allowedNextStatuses`)
+// keep their current semantics — front desk and technician are not
+// granted encounter mutation rights here; they get role-based
+// dashboards via the `/dashboards/*` endpoints.
+export type Role =
+  | "admin"
+  | "clinician"
+  | "reviewer"
+  | "front_desk"
+  | "technician";
 
 export interface Me {
   user_id: number;
@@ -233,6 +244,17 @@ export interface PlatformInfo {
       document_transmit?: boolean;
     };
     source_of_truth: Record<string, SourceOfTruth>;
+  };
+  /** Phase 25A / GH-011 — demo-mode capability banner. Stays ON
+   *  whenever ChartNav is not in an explicitly operator-approved
+   *  real-PHI configuration. The frontend renders an unambiguous
+   *  strip at the workspace level. */
+  capability_banner?: {
+    demo_mode: boolean;
+    reasons: string[];
+    stt_provider: string;
+    real_phi_approved_env: boolean;
+    banner_text: string;
   };
 }
 
@@ -1553,6 +1575,60 @@ export async function uploadEncounterAudio(
   return body as EncounterInput;
 }
 
+// ---- Phase 25A — audio consent (GH-001) -----------------------
+// The clinic captures patient consent before microphone capture.
+// The upload pipeline 403s with `audio_consent_required` when this
+// is anything other than `granted` — the UI must read this state
+// to enable/disable the Record button.
+
+export type AudioConsentStatus =
+  | "granted"
+  | "declined"
+  | "revoked"
+  | "not_recorded";
+
+export type AudioConsentMethod =
+  | "verbal"
+  | "written"
+  | "demo_fake"
+  | "unknown";
+
+export interface AudioConsent {
+  encounter_id: number;
+  organization_id: number;
+  status: AudioConsentStatus;
+  method: AudioConsentMethod;
+  actor_user_id: number | null;
+  note: string | null;
+  recording_permitted: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export function fetchAudioConsent(
+  email: string,
+  encounterId: number
+): Promise<AudioConsent> {
+  return request(`/encounters/${encounterId}/audio-consent`, { email });
+}
+
+export function setAudioConsent(
+  email: string,
+  encounterId: number,
+  body: {
+    status: AudioConsentStatus;
+    method: AudioConsentMethod;
+    note?: string | null;
+  }
+): Promise<AudioConsent> {
+  return request(`/encounters/${encounterId}/audio-consent`, {
+    email,
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+
 /** Clinician edit of a completed input's transcript, in place.
  *  The server refuses if the input isn't in `processing_status=completed`
  *  so a race with the ingestion pipeline is impossible.
@@ -1567,4 +1643,2361 @@ export function patchEncounterInputTranscript(
     method: "PATCH",
     body: JSON.stringify({ transcript_text: transcriptText }),
   });
+}
+
+// ---------- Eye-diagram artifacts (persistence shell) ----------
+//
+// This is the storage and identity foundation for retinal diagram
+// artifacts. There is no drawing canvas, no AI proposal pipeline, and
+// no apply/reject workflow yet — those land in a follow-up. Callers
+// supply `drawing_json` as any JSON-shaped object; the backend stores
+// it verbatim and returns it as a parsed object (never a string).
+
+export interface EyeDiagramArtifact {
+  id: number;
+  organization_id: number;
+  patient_id: number;
+  encounter_id: number | null;
+  created_by_user_id: number;
+  artifact_type: "retinal_diagram";
+  title: string;
+  findings_text: string;
+  drawing_json: Record<string, unknown>;
+  version_number: number;
+  parent_artifact_id: number | null;
+  signed_at: string | null;
+  signed_by_user_id: number | null;
+  is_signed: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EyeDiagramListResponse {
+  items: EyeDiagramArtifact[];
+  total: number;
+}
+
+export interface EyeDiagramCreateInput {
+  title?: string;
+  findings_text?: string;
+  drawing_json?: Record<string, unknown>;
+  encounter_id?: number | null;
+}
+
+export interface EyeDiagramUpdateInput {
+  title?: string;
+  findings_text?: string;
+  drawing_json?: Record<string, unknown>;
+}
+
+export function listPatientEyeDiagrams(
+  email: string,
+  patientId: number
+): Promise<EyeDiagramListResponse> {
+  return request(`/patients/${patientId}/eye-diagrams`, { email });
+}
+
+export function getPatientEyeDiagram(
+  email: string,
+  patientId: number,
+  artifactId: number
+): Promise<EyeDiagramArtifact> {
+  return request(`/patients/${patientId}/eye-diagrams/${artifactId}`, { email });
+}
+
+export function createPatientEyeDiagram(
+  email: string,
+  patientId: number,
+  input: EyeDiagramCreateInput
+): Promise<EyeDiagramArtifact> {
+  return request(`/patients/${patientId}/eye-diagrams`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+/**
+ * Update an unsigned artifact in place. If the target is signed and
+ * `fork` is true, the backend creates a new unsigned version whose
+ * `parent_artifact_id` is the original. If signed and `fork` is false,
+ * the backend returns 409 `artifact_signed_immutable`.
+ */
+export function updatePatientEyeDiagram(
+  email: string,
+  patientId: number,
+  artifactId: number,
+  input: EyeDiagramUpdateInput,
+  options: { fork?: boolean } = {}
+): Promise<EyeDiagramArtifact> {
+  const qs = options.fork ? "?fork=true" : "";
+  return request(`/patients/${patientId}/eye-diagrams/${artifactId}${qs}`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+/**
+ * Stamp signed_at/signed_by on the artifact. Re-signing returns
+ * 409 `artifact_already_signed`.
+ */
+export function signPatientEyeDiagram(
+  email: string,
+  patientId: number,
+  artifactId: number
+): Promise<EyeDiagramArtifact> {
+  return request(`/patients/${patientId}/eye-diagrams/${artifactId}/sign`, {
+    email,
+    method: "POST",
+  });
+}
+
+// ---------- Phase 8: scribe session lifecycle ----------
+//
+// One row per AI scribe session: the unit of work between provider
+// source/transcript text and a finalized clinical artifact. The
+// frontend never persists draft / processed / structured note content
+// without going through these endpoints — there is no client-side
+// finalization shortcut.
+
+export type ScribeSessionStatus =
+  | "draft"
+  | "processing"
+  | "ready_for_review"
+  | "reviewed"
+  | "finalized"
+  | "discarded";
+
+export type ScribeSessionInputMode =
+  | "pasted_text"
+  | "transcript"
+  | "audio_placeholder";
+
+export interface ScribeSession {
+  id: number;
+  organization_id: number;
+  patient_id: number;
+  encounter_id: number | null;
+  created_by_user_id: number;
+  status: ScribeSessionStatus;
+  input_mode: ScribeSessionInputMode;
+  source_text: string | null;
+  transcript_text: string | null;
+  draft_note_text: string | null;
+  /** Engine-produced structured note. Always a real object on the wire. */
+  structured_note_json: Record<string, string>;
+  linked_artifact_id: number | null;
+  review_notes: string | null;
+  finalized_at: string | null;
+  reviewed_at: string | null;
+  reviewed_by_user_id: number | null;
+  discarded_at: string | null;
+  created_at: string;
+  updated_at: string;
+  is_terminal: boolean;
+}
+
+export interface ScribeSessionListResponse {
+  items: ScribeSession[];
+  total: number;
+}
+
+export interface ScribeSessionCreateInput {
+  encounter_id?: number | null;
+  input_mode?: ScribeSessionInputMode;
+  source_text?: string;
+  transcript_text?: string;
+  linked_artifact_id?: number | null;
+}
+
+export interface ScribeSessionUpdateInput {
+  source_text?: string;
+  transcript_text?: string;
+  review_notes?: string;
+  encounter_id?: number | null;
+  linked_artifact_id?: number | null;
+  input_mode?: ScribeSessionInputMode;
+}
+
+export interface ScribeSessionReviewInput {
+  review_notes?: string;
+}
+
+export function listPatientScribeSessions(
+  email: string,
+  patientId: number
+): Promise<ScribeSessionListResponse> {
+  return request(`/patients/${patientId}/scribe-sessions`, { email });
+}
+
+export function getPatientScribeSession(
+  email: string,
+  patientId: number,
+  sessionId: number
+): Promise<ScribeSession> {
+  return request(
+    `/patients/${patientId}/scribe-sessions/${sessionId}`,
+    { email }
+  );
+}
+
+export function createPatientScribeSession(
+  email: string,
+  patientId: number,
+  input: ScribeSessionCreateInput
+): Promise<ScribeSession> {
+  return request(`/patients/${patientId}/scribe-sessions`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updatePatientScribeSession(
+  email: string,
+  patientId: number,
+  sessionId: number,
+  input: ScribeSessionUpdateInput
+): Promise<ScribeSession> {
+  return request(
+    `/patients/${patientId}/scribe-sessions/${sessionId}`,
+    {
+      email,
+      method: "PATCH",
+      body: JSON.stringify(input),
+    }
+  );
+}
+
+export function processPatientScribeSession(
+  email: string,
+  patientId: number,
+  sessionId: number
+): Promise<ScribeSession> {
+  return request(
+    `/patients/${patientId}/scribe-sessions/${sessionId}/process`,
+    { email, method: "POST" }
+  );
+}
+
+export function reviewPatientScribeSession(
+  email: string,
+  patientId: number,
+  sessionId: number,
+  input: ScribeSessionReviewInput = {}
+): Promise<ScribeSession> {
+  return request(
+    `/patients/${patientId}/scribe-sessions/${sessionId}/review`,
+    {
+      email,
+      method: "POST",
+      body: JSON.stringify(input),
+    }
+  );
+}
+
+export function finalizePatientScribeSession(
+  email: string,
+  patientId: number,
+  sessionId: number
+): Promise<ScribeSession> {
+  return request(
+    `/patients/${patientId}/scribe-sessions/${sessionId}/finalize`,
+    { email, method: "POST" }
+  );
+}
+
+export function discardPatientScribeSession(
+  email: string,
+  patientId: number,
+  sessionId: number
+): Promise<ScribeSession> {
+  return request(
+    `/patients/${patientId}/scribe-sessions/${sessionId}/discard`,
+    { email, method: "POST" }
+  );
+}
+// ---------- Phase 6: findings → diagram proposals ----------
+//
+// The proposal endpoint is read-only on the data side — calling it
+// never writes to chart_artifacts. Proposals only become stored
+// annotations after the provider explicitly applies them in the UI.
+
+export interface RetinalProposalResponse {
+  clinical_text: string;
+  ignored_chatter: string[];
+  uncertain_phrases: string[];
+  proposed_annotations: Array<{
+    proposal_id: string;
+    kind: "symbol" | "text";
+    symbol_type: string;
+    eye: "OD" | "OS";
+    x: number;
+    y: number;
+    zone: string | null;
+    text: string;
+    color: string;
+    confidence: number;
+    confidence_band: "high" | "medium" | "low";
+    source_phrase: string;
+    source_start: number;
+    source_end: number;
+    reason: string;
+    missing_flags: string[];
+    source: "ai_proposed";
+  }>;
+  confidence_summary: {
+    high: number;
+    medium: number;
+    low: number;
+    needs_review: boolean;
+  };
+  missing_flags: Array<{
+    code: string;
+    detail: string;
+    source_phrase: string;
+    source_start: number;
+    source_end: number;
+  }>;
+}
+
+export function proposeRetinalFromFindings(
+  email: string,
+  patientId: number,
+  findings_text: string,
+  drawing_json?: Record<string, unknown>
+): Promise<RetinalProposalResponse> {
+  return request(`/patients/${patientId}/eye-diagrams/propose-from-findings`, {
+    email,
+    method: "POST",
+    body: JSON.stringify({ findings_text, drawing_json }),
+  });
+}
+
+// ---------- Phase 9: provider-reviewed patient-friendly summaries ----------
+//
+// One row per draft summary. The frontend never sends anything to a
+// patient — that's deferred. Status flows draft → reviewed →
+// finalized; or draft|reviewed → discarded. finalized and discarded
+// are immutable.
+
+export type PatientSummaryStatus =
+  | "draft"
+  | "reviewed"
+  | "finalized"
+  | "discarded";
+
+export interface PatientSummary {
+  id: number;
+  organization_id: number;
+  patient_id: number;
+  encounter_id: number | null;
+  scribe_session_id: number | null;
+  created_by_user_id: number;
+  reviewed_by_user_id: number | null;
+  status: PatientSummaryStatus;
+  plain_language_summary: string;
+  /** Real arrays on the wire — backend normalizes from JSON-encoded TEXT. */
+  key_findings: string[];
+  next_steps: string[];
+  questions: string[];
+  limitations_notice: string;
+  review_notes: string | null;
+  finalized_at: string | null;
+  reviewed_at: string | null;
+  discarded_at: string | null;
+  created_at: string;
+  updated_at: string;
+  is_terminal: boolean;
+}
+
+export interface PatientSummaryListResponse {
+  items: PatientSummary[];
+  total: number;
+}
+
+export interface PatientSummaryCreateInput {
+  encounter_id?: number | null;
+  scribe_session_id?: number | null;
+  provider_instructions?: string;
+}
+
+export interface PatientSummaryUpdateInput {
+  plain_language_summary?: string;
+  key_findings?: string[];
+  next_steps?: string[];
+  questions?: string[];
+  limitations_notice?: string;
+  review_notes?: string;
+}
+
+export interface PatientSummaryReviewInput {
+  review_notes?: string;
+}
+
+export function listPatientSummaries(
+  email: string,
+  patientId: number
+): Promise<PatientSummaryListResponse> {
+  return request(`/patients/${patientId}/patient-summaries`, { email });
+}
+
+export function getPatientSummary(
+  email: string,
+  patientId: number,
+  summaryId: number
+): Promise<PatientSummary> {
+  return request(
+    `/patients/${patientId}/patient-summaries/${summaryId}`,
+    { email }
+  );
+}
+
+export function createPatientSummary(
+  email: string,
+  patientId: number,
+  input: PatientSummaryCreateInput
+): Promise<PatientSummary> {
+  return request(`/patients/${patientId}/patient-summaries`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updatePatientSummary(
+  email: string,
+  patientId: number,
+  summaryId: number,
+  input: PatientSummaryUpdateInput
+): Promise<PatientSummary> {
+  return request(
+    `/patients/${patientId}/patient-summaries/${summaryId}`,
+    {
+      email,
+      method: "PATCH",
+      body: JSON.stringify(input),
+    }
+  );
+}
+
+export function reviewPatientSummary(
+  email: string,
+  patientId: number,
+  summaryId: number,
+  input: PatientSummaryReviewInput = {}
+): Promise<PatientSummary> {
+  return request(
+    `/patients/${patientId}/patient-summaries/${summaryId}/review`,
+    {
+      email,
+      method: "POST",
+      body: JSON.stringify(input),
+    }
+  );
+}
+
+export function finalizePatientSummary(
+  email: string,
+  patientId: number,
+  summaryId: number
+): Promise<PatientSummary> {
+  return request(
+    `/patients/${patientId}/patient-summaries/${summaryId}/finalize`,
+    { email, method: "POST" }
+  );
+}
+
+export function discardPatientSummary(
+  email: string,
+  patientId: number,
+  summaryId: number
+): Promise<PatientSummary> {
+  return request(
+    `/patients/${patientId}/patient-summaries/${summaryId}/discard`,
+    { email, method: "POST" }
+  );
+}
+
+// ---------- Phase 10: provider-facing pre-visit clinical brief ----------
+//
+// On-demand, deterministic. The brief is a derived view over existing
+// chart records (encounters, scribe sessions, retinal artifacts,
+// patient summaries, workflow events). It is never persisted, never
+// sent to a patient, never an order/coding tool, and never a clinical
+// decision. POST /generate is the audited explicit-action route; GET
+// is a read-only convenience (no audit emitted).
+
+export interface PreVisitBriefRetinalSummary {
+  total: number;
+  signed_count: number;
+  unsigned_count: number;
+  has_unsigned_drafts: boolean;
+  latest_signed: {
+    id: number;
+    title: string | null;
+    signed_at: string | null;
+    version_number: number | null;
+    encounter_id: number | null;
+  } | null;
+}
+
+export interface PreVisitBriefScribeSummary {
+  session_id: number | null;
+  status: string;
+  updated_at?: string | null;
+  finalized_at?: string | null;
+  reviewed_at?: string | null;
+  encounter_id?: number | null;
+  chief_complaint_excerpt?: string | null;
+  plan_excerpt?: string | null;
+}
+
+export interface PreVisitBriefSummaryContext {
+  summary_id: number | null;
+  status: string;
+  source_kind?: string;
+  finalized_at?: string | null;
+  reviewed_at?: string | null;
+  encounter_id?: number | null;
+  scribe_session_id?: number | null;
+  plain_language_excerpt?: string | null;
+  key_findings_count?: number;
+  next_steps_count?: number;
+}
+
+export interface PreVisitBriefPendingItem {
+  kind: "encounter" | "scribe_session" | "patient_summary";
+  id: number;
+  status: string;
+  encounter_id?: number | null;
+  provider_name?: string | null;
+  scheduled_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface PreVisitBriefSuggestedItem {
+  kind: "scribe_session" | "patient_summary";
+  id: number;
+  reason: string;
+  updated_at?: string | null;
+}
+
+export interface PreVisitBrief {
+  patient_id: number;
+  brief_status: string;
+  last_visit_summary: string | null;
+  active_issues: string[];
+  retinal_artifact_summary: PreVisitBriefRetinalSummary;
+  recent_scribe_session_summary: PreVisitBriefScribeSummary;
+  patient_summary_context: PreVisitBriefSummaryContext;
+  pending_items: PreVisitBriefPendingItem[];
+  suggested_review_items: PreVisitBriefSuggestedItem[];
+  data_gaps: string[];
+  source_counts: Record<string, number>;
+  generated_at: string;
+  notice: string;
+}
+
+export function generatePatientPreVisitBrief(
+  email: string,
+  patientId: number
+): Promise<PreVisitBrief> {
+  return request(
+    `/patients/${patientId}/pre-visit-briefs/generate`,
+    { email, method: "POST" }
+  );
+}
+
+export function getPatientPreVisitBrief(
+  email: string,
+  patientId: number
+): Promise<PreVisitBrief> {
+  return request(`/patients/${patientId}/pre-visit-brief`, { email });
+}
+
+// ---------- Phase 11: provider action review queue ----------------
+//
+// One row per provider-reviewable action suggestion. Status flows
+// suggested → accepted → completed; or suggested|accepted →
+// dismissed. Direct suggested → completed is rejected. dismissed and
+// completed are immutable. ChartNav never creates orders, sends
+// referrals, messages patients, or takes action automatically — every
+// item is a review task the provider explicitly resolves.
+
+export type ProviderActionStatus =
+  | "suggested"
+  | "accepted"
+  | "dismissed"
+  | "completed";
+
+export type ProviderActionPriority = "low" | "medium" | "high";
+
+export interface ProviderActionItem {
+  id: number;
+  organization_id: number;
+  patient_id: number;
+  encounter_id: number | null;
+  source_type: string | null;
+  source_id: number | null;
+  action_type: string;
+  priority: ProviderActionPriority;
+  title: string;
+  reason: string;
+  status: ProviderActionStatus;
+  created_by_system: boolean;
+  generated_batch_id: string | null;
+  accepted_by_user_id: number | null;
+  dismissed_by_user_id: number | null;
+  completed_by_user_id: number | null;
+  accepted_at: string | null;
+  dismissed_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  is_terminal: boolean;
+}
+
+export interface ProviderActionItemListResponse {
+  items: ProviderActionItem[];
+  total: number;
+}
+
+export interface ProviderActionItemGenerateResponse {
+  batch_id: string;
+  generated_count: number;
+  created_count: number;
+  reused_count: number;
+  items: ProviderActionItem[];
+}
+
+export interface ProviderActionItemListFilters {
+  status?: ProviderActionStatus;
+  priority?: ProviderActionPriority;
+  action_type?: string;
+  encounter_id?: number;
+}
+
+function _qs(filters: ProviderActionItemListFilters): string {
+  const parts: string[] = [];
+  if (filters.status) parts.push(`status=${encodeURIComponent(filters.status)}`);
+  if (filters.priority)
+    parts.push(`priority=${encodeURIComponent(filters.priority)}`);
+  if (filters.action_type)
+    parts.push(`action_type=${encodeURIComponent(filters.action_type)}`);
+  if (filters.encounter_id !== undefined)
+    parts.push(`encounter_id=${filters.encounter_id}`);
+  return parts.length ? `?${parts.join("&")}` : "";
+}
+
+export function generateProviderActionItems(
+  email: string,
+  patientId: number
+): Promise<ProviderActionItemGenerateResponse> {
+  return request(
+    `/patients/${patientId}/provider-action-items/generate`,
+    { email, method: "POST" }
+  );
+}
+
+export function listProviderActionItems(
+  email: string,
+  patientId: number,
+  filters: ProviderActionItemListFilters = {}
+): Promise<ProviderActionItemListResponse> {
+  return request(
+    `/patients/${patientId}/provider-action-items${_qs(filters)}`,
+    { email }
+  );
+}
+
+export function getProviderActionItem(
+  email: string,
+  patientId: number,
+  actionId: number
+): Promise<ProviderActionItem> {
+  return request(
+    `/patients/${patientId}/provider-action-items/${actionId}`,
+    { email }
+  );
+}
+
+export function acceptProviderActionItem(
+  email: string,
+  patientId: number,
+  actionId: number
+): Promise<ProviderActionItem> {
+  return request(
+    `/patients/${patientId}/provider-action-items/${actionId}/accept`,
+    { email, method: "POST" }
+  );
+}
+
+export function dismissProviderActionItem(
+  email: string,
+  patientId: number,
+  actionId: number
+): Promise<ProviderActionItem> {
+  return request(
+    `/patients/${patientId}/provider-action-items/${actionId}/dismiss`,
+    { email, method: "POST" }
+  );
+}
+
+export function completeProviderActionItem(
+  email: string,
+  patientId: number,
+  actionId: number
+): Promise<ProviderActionItem> {
+  return request(
+    `/patients/${patientId}/provider-action-items/${actionId}/complete`,
+    { email, method: "POST" }
+  );
+}
+
+// =============================================================
+// Phase 20B — Structured data layer
+// =============================================================
+//
+// Type definitions + thin wrapper functions for the structured-data
+// endpoints (patient_segments / patient_segment_memberships /
+// patient_tags / patient_problem_list / clinic_workflow_templates /
+// clinic_workflow_stages / work_queue_items / role_view_presets).
+//
+// No UI components ship in Phase 20B — these typings are for
+// downstream phases (20C dashboards, 21A specialty modules) to
+// consume the API contract.
+
+// ----- enums -------------------------------------------------------
+
+export type Phase20BEye = "OD" | "OS" | "OU";
+
+export type ProblemStatus = "active" | "monitoring" | "inactive" | "resolved";
+
+export type QueuePriority = "low" | "normal" | "high" | "urgent";
+
+export type QueueStatus =
+  | "open"
+  | "in_progress"
+  | "blocked"
+  | "completed"
+  | "dismissed";
+
+export type WorkflowOwnerRole =
+  | "admin"
+  | "clinician"
+  | "reviewer"
+  | "front_desk"
+  | "technician";
+
+export type ViewPresetRole = WorkflowOwnerRole;
+
+// ----- segments + memberships -------------------------------------
+
+export interface PatientSegment {
+  id: number;
+  organization_id: number;
+  name: string;
+  description: string | null;
+  segment_type: string;
+  criteria_json: Record<string, unknown> | unknown[] | null;
+  is_active: boolean;
+  created_by_user_id: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PatientSegmentMembership {
+  id: number;
+  organization_id: number;
+  patient_id: number;
+  segment_id: number;
+  source: string;
+  reason: string | null;
+  created_at: string;
+}
+
+export interface SegmentCreateBody {
+  name: string;
+  description?: string | null;
+  segment_type: string;
+  criteria_json?: Record<string, unknown> | null;
+  is_active?: boolean;
+}
+
+export interface SegmentUpdateBody {
+  name?: string;
+  description?: string | null;
+  segment_type?: string;
+  criteria_json?: Record<string, unknown> | null;
+  is_active?: boolean;
+}
+
+export function listSegments(
+  email: string,
+  opts: {
+    includeInactive?: boolean;
+    q?: string;
+    segmentType?: string;
+    limit?: number;
+    offset?: number;
+  } = {}
+): Promise<PatientSegment[]> {
+  const params = new URLSearchParams();
+  if (opts.includeInactive) params.set("include_inactive", "true");
+  if (opts.q) params.set("q", opts.q);
+  if (opts.segmentType) params.set("segment_type", opts.segmentType);
+  if (opts.limit !== undefined) params.set("limit", String(opts.limit));
+  if (opts.offset !== undefined) params.set("offset", String(opts.offset));
+  const qs = params.toString();
+  return request(`/segments${qs ? `?${qs}` : ""}`, { email });
+}
+
+export function createSegment(
+  email: string,
+  body: SegmentCreateBody
+): Promise<PatientSegment> {
+  return request("/segments", {
+    email,
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateSegment(
+  email: string,
+  segmentId: number,
+  body: SegmentUpdateBody
+): Promise<PatientSegment> {
+  return request(`/segments/${segmentId}`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export function listPatientSegments(
+  email: string,
+  patientId: number
+): Promise<PatientSegmentMembership[]> {
+  return request(`/patients/${patientId}/segments`, { email });
+}
+
+export function addPatientSegment(
+  email: string,
+  patientId: number,
+  body: { segment_id: number; source: string; reason?: string | null }
+): Promise<PatientSegmentMembership> {
+  return request(`/patients/${patientId}/segments`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function removePatientSegment(
+  email: string,
+  patientId: number,
+  segmentId: number
+): Promise<{ removed: boolean; membership_id: number }> {
+  return request(`/patients/${patientId}/segments/${segmentId}`, {
+    email,
+    method: "DELETE",
+  });
+}
+
+// ----- patient_tags ------------------------------------------------
+
+export interface PatientTag {
+  id: number;
+  organization_id: number;
+  patient_id: number;
+  tag: string;
+  color: string | null;
+  created_by_user_id: number | null;
+  created_at: string;
+}
+
+export function listPatientTags(
+  email: string,
+  patientId: number
+): Promise<PatientTag[]> {
+  return request(`/patients/${patientId}/tags`, { email });
+}
+
+export function addPatientTag(
+  email: string,
+  patientId: number,
+  body: { tag: string; color?: string | null }
+): Promise<PatientTag> {
+  return request(`/patients/${patientId}/tags`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function deletePatientTag(
+  email: string,
+  patientId: number,
+  tagId: number
+): Promise<{ removed: boolean; tag_id: number }> {
+  return request(`/patients/${patientId}/tags/${tagId}`, {
+    email,
+    method: "DELETE",
+  });
+}
+
+// ----- patient_problem_list ---------------------------------------
+
+export interface PatientProblemItem {
+  id: number;
+  organization_id: number;
+  patient_id: number;
+  condition_code: string | null;
+  condition_label: string;
+  specialty: string | null;
+  eye: Phase20BEye | null;
+  status: ProblemStatus;
+  onset_date: string | null;
+  last_reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProblemCreateBody {
+  condition_code?: string | null;
+  condition_label: string;
+  specialty?: string | null;
+  eye?: Phase20BEye | null;
+  status?: ProblemStatus;
+  onset_date?: string | null;
+  last_reviewed_at?: string | null;
+}
+
+export interface ProblemUpdateBody {
+  condition_code?: string | null;
+  condition_label?: string;
+  specialty?: string | null;
+  eye?: Phase20BEye | null;
+  status?: ProblemStatus;
+  onset_date?: string | null;
+  last_reviewed_at?: string | null;
+}
+
+export function listProblemList(
+  email: string,
+  patientId: number,
+  opts: {
+    specialty?: string;
+    status?: ProblemStatus;
+    eye?: Phase20BEye;
+  } = {}
+): Promise<PatientProblemItem[]> {
+  const params = new URLSearchParams();
+  if (opts.specialty) params.set("specialty", opts.specialty);
+  if (opts.status) params.set("status", opts.status);
+  if (opts.eye) params.set("eye", opts.eye);
+  const qs = params.toString();
+  return request(
+    `/patients/${patientId}/problem-list${qs ? `?${qs}` : ""}`,
+    { email }
+  );
+}
+
+export function addProblem(
+  email: string,
+  patientId: number,
+  body: ProblemCreateBody
+): Promise<PatientProblemItem> {
+  return request(`/patients/${patientId}/problem-list`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateProblem(
+  email: string,
+  patientId: number,
+  itemId: number,
+  body: ProblemUpdateBody
+): Promise<PatientProblemItem> {
+  return request(`/patients/${patientId}/problem-list/${itemId}`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+// ----- clinic_workflow_templates + stages -------------------------
+
+export interface ClinicWorkflowTemplate {
+  id: number;
+  organization_id: number;
+  name: string;
+  specialty: string | null;
+  role_owner: WorkflowOwnerRole;
+  description: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClinicWorkflowStage {
+  id: number;
+  organization_id: number;
+  template_id: number;
+  name: string;
+  stage_order: number;
+  role_owner: WorkflowOwnerRole;
+  sla_minutes: number | null;
+  created_at: string;
+}
+
+export function listWorkflowTemplates(
+  email: string,
+  opts: {
+    includeInactive?: boolean;
+    specialty?: string;
+    roleOwner?: WorkflowOwnerRole;
+  } = {}
+): Promise<ClinicWorkflowTemplate[]> {
+  const params = new URLSearchParams();
+  if (opts.includeInactive) params.set("include_inactive", "true");
+  if (opts.specialty) params.set("specialty", opts.specialty);
+  if (opts.roleOwner) params.set("role_owner", opts.roleOwner);
+  const qs = params.toString();
+  return request(`/workflow-templates${qs ? `?${qs}` : ""}`, { email });
+}
+
+export function createWorkflowTemplate(
+  email: string,
+  body: {
+    name: string;
+    specialty?: string | null;
+    role_owner: WorkflowOwnerRole;
+    description?: string | null;
+    is_active?: boolean;
+  }
+): Promise<ClinicWorkflowTemplate> {
+  return request("/workflow-templates", {
+    email,
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateWorkflowTemplate(
+  email: string,
+  templateId: number,
+  body: Partial<{
+    name: string;
+    specialty: string | null;
+    role_owner: WorkflowOwnerRole;
+    description: string | null;
+    is_active: boolean;
+  }>
+): Promise<ClinicWorkflowTemplate> {
+  return request(`/workflow-templates/${templateId}`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export function listWorkflowStages(
+  email: string,
+  templateId: number
+): Promise<ClinicWorkflowStage[]> {
+  return request(`/workflow-templates/${templateId}/stages`, { email });
+}
+
+export function createWorkflowStage(
+  email: string,
+  templateId: number,
+  body: {
+    name: string;
+    stage_order: number;
+    role_owner: WorkflowOwnerRole;
+    sla_minutes?: number | null;
+  }
+): Promise<ClinicWorkflowStage> {
+  return request(`/workflow-templates/${templateId}/stages`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateWorkflowStage(
+  email: string,
+  stageId: number,
+  body: Partial<{
+    name: string;
+    stage_order: number;
+    role_owner: WorkflowOwnerRole;
+    sla_minutes: number | null;
+  }>
+): Promise<ClinicWorkflowStage> {
+  return request(`/workflow-stages/${stageId}`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+// ----- work_queue_items -------------------------------------------
+
+export interface WorkQueueItem {
+  id: number;
+  organization_id: number;
+  location_id: number | null;
+  patient_id: number | null;
+  encounter_id: number | null;
+  provider_id: number | null;
+  queue_type: string;
+  priority: QueuePriority;
+  status: QueueStatus;
+  assigned_role: string | null;
+  assigned_user_id: number | null;
+  due_at: string | null;
+  source: string;
+  payload_json: Record<string, unknown> | unknown[] | null;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+}
+
+export interface WorkQueueListOpts {
+  locationId?: number;
+  patientId?: number;
+  encounterId?: number;
+  providerId?: number;
+  queueType?: string;
+  priority?: QueuePriority;
+  status?: QueueStatus;
+  assignedRole?: string;
+  assignedUserId?: number;
+  dueBefore?: string;
+  dueAfter?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export function listWorkQueue(
+  email: string,
+  opts: WorkQueueListOpts = {}
+): Promise<WorkQueueItem[]> {
+  const params = new URLSearchParams();
+  if (opts.locationId !== undefined)
+    params.set("location_id", String(opts.locationId));
+  if (opts.patientId !== undefined)
+    params.set("patient_id", String(opts.patientId));
+  if (opts.encounterId !== undefined)
+    params.set("encounter_id", String(opts.encounterId));
+  if (opts.providerId !== undefined)
+    params.set("provider_id", String(opts.providerId));
+  if (opts.queueType) params.set("queue_type", opts.queueType);
+  if (opts.priority) params.set("priority", opts.priority);
+  if (opts.status) params.set("status", opts.status);
+  if (opts.assignedRole) params.set("assigned_role", opts.assignedRole);
+  if (opts.assignedUserId !== undefined)
+    params.set("assigned_user_id", String(opts.assignedUserId));
+  if (opts.dueBefore) params.set("due_before", opts.dueBefore);
+  if (opts.dueAfter) params.set("due_after", opts.dueAfter);
+  if (opts.limit !== undefined) params.set("limit", String(opts.limit));
+  if (opts.offset !== undefined) params.set("offset", String(opts.offset));
+  const qs = params.toString();
+  return request(`/work-queues${qs ? `?${qs}` : ""}`, { email });
+}
+
+export function createWorkQueueItem(
+  email: string,
+  body: {
+    location_id?: number | null;
+    patient_id?: number | null;
+    encounter_id?: number | null;
+    provider_id?: number | null;
+    queue_type: string;
+    priority?: QueuePriority;
+    status?: QueueStatus;
+    assigned_role?: string | null;
+    assigned_user_id?: number | null;
+    due_at?: string | null;
+    source?: string;
+    payload_json?: Record<string, unknown> | unknown[] | null;
+  }
+): Promise<WorkQueueItem> {
+  return request("/work-queues", {
+    email,
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateWorkQueueItem(
+  email: string,
+  itemId: number,
+  body: Partial<{
+    priority: QueuePriority;
+    status: QueueStatus;
+    assigned_role: string | null;
+    assigned_user_id: number | null;
+    due_at: string | null;
+    payload_json: Record<string, unknown> | unknown[] | null;
+    completed_at: string | null;
+  }>
+): Promise<WorkQueueItem> {
+  return request(`/work-queues/${itemId}`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+// ----- role_view_presets ------------------------------------------
+
+export interface RoleViewPreset {
+  id: number;
+  organization_id: number;
+  role: ViewPresetRole;
+  name: string;
+  filters_json: Record<string, unknown> | unknown[] | null;
+  columns_json: Record<string, unknown> | unknown[] | null;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export function listRoleViews(
+  email: string,
+  opts: { role?: ViewPresetRole; includeNonDefault?: boolean } = {}
+): Promise<RoleViewPreset[]> {
+  const params = new URLSearchParams();
+  if (opts.role) params.set("role", opts.role);
+  if (opts.includeNonDefault === false)
+    params.set("include_non_default", "false");
+  const qs = params.toString();
+  return request(`/role-views${qs ? `?${qs}` : ""}`, { email });
+}
+
+export function createRoleView(
+  email: string,
+  body: {
+    role: ViewPresetRole;
+    name: string;
+    filters_json?: Record<string, unknown> | unknown[] | null;
+    columns_json?: Record<string, unknown> | unknown[] | null;
+    is_default?: boolean;
+  }
+): Promise<RoleViewPreset> {
+  return request("/role-views", {
+    email,
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateRoleView(
+  email: string,
+  presetId: number,
+  body: Partial<{
+    role: ViewPresetRole;
+    name: string;
+    filters_json: Record<string, unknown> | unknown[] | null;
+    columns_json: Record<string, unknown> | unknown[] | null;
+    is_default: boolean;
+  }>
+): Promise<RoleViewPreset> {
+  return request(`/role-views/${presetId}`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+// =============================================================
+// Phase 20C — Role-based clinic dashboards
+// =============================================================
+//
+// Read-only summary endpoints aggregating Phase 20B's
+// work_queue_items + a few existing tables (note_versions,
+// locations, providers, role_view_presets) into role-specific
+// cards. Five roles: front_desk, technician, clinician (doctor),
+// reviewer, admin. Each role can read its own dashboard; admin
+// can view any role's dashboard via the role= query param.
+
+export type DashboardRole =
+  | "front_desk"
+  | "technician"
+  | "clinician"
+  | "reviewer"
+  | "admin";
+
+export interface DashboardScope {
+  organization_id: number;
+  location_id?: number | null;
+  provider_id?: number | null;
+}
+
+export interface DashboardQueueItemCompact {
+  id: number;
+  queue_type: string;
+  priority: QueuePriority;
+  status: QueueStatus;
+  assigned_role: string | null;
+  assigned_user_id: number | null;
+  patient_id: number | null;
+  encounter_id: number | null;
+  provider_id: number | null;
+  location_id: number | null;
+  due_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FrontDeskDashboard {
+  role: "front_desk";
+  scope: DashboardScope;
+  counts: {
+    today_queue_count: number;
+    check_in_pending_count: number;
+    ready_for_workup_count: number;
+    checkout_pending_count: number;
+    follow_up_needed_count: number;
+  };
+  recent_or_due_items: DashboardQueueItemCompact[];
+}
+
+export interface TechnicianDashboard {
+  role: "technician";
+  scope: DashboardScope;
+  counts: {
+    workup_pending_count: number;
+    imaging_needed_count: number;
+    dilation_pending_count: number;
+    testing_pending_count: number;
+    ready_for_doctor_count: number;
+  };
+  assigned_items: DashboardQueueItemCompact[];
+}
+
+export interface DoctorDashboard {
+  role: "clinician";
+  scope: DashboardScope;
+  counts: {
+    ready_for_doctor_count: number;
+    documentation_in_progress_count: number;
+    notes_ready_for_signoff_count: number;
+    high_priority_items_count: number;
+    imaging_ready_for_review_count: number;
+  };
+  assigned_provider_items: DashboardQueueItemCompact[];
+}
+
+export interface ReviewerDashboard {
+  role: "reviewer";
+  scope: DashboardScope;
+  counts: {
+    notes_awaiting_review_count: number;
+    diagram_proposals_review_count: number;
+    ai_draft_review_count: number;
+    audit_exceptions_count: number;
+    blocked_items_count: number;
+  };
+  review_needed_items: DashboardQueueItemCompact[];
+}
+
+export interface AdminDashboard {
+  role: "admin";
+  scope: DashboardScope;
+  counts: {
+    total_open_queue_items: number;
+    overdue_queue_items: number;
+    unsigned_notes_count: number;
+  };
+  work_queue_by_status: Record<string, number>;
+  work_queue_by_priority: Record<string, number>;
+  work_queue_by_role: Record<string, number>;
+  work_queue_by_queue_type: Record<string, number>;
+  location_summary: { active_count: number };
+  provider_summary: { total_count: number };
+  role_view_presets_summary: Record<string, number>;
+}
+
+export type DashboardSummary =
+  | FrontDeskDashboard
+  | TechnicianDashboard
+  | DoctorDashboard
+  | ReviewerDashboard
+  | AdminDashboard;
+
+export interface DashboardFilters {
+  locationId?: number;
+  providerId?: number;
+  role?: DashboardRole;
+}
+
+function _dashboardQs(filters: DashboardFilters): string {
+  const params = new URLSearchParams();
+  if (filters.locationId !== undefined)
+    params.set("location_id", String(filters.locationId));
+  if (filters.providerId !== undefined)
+    params.set("provider_id", String(filters.providerId));
+  if (filters.role) params.set("role", filters.role);
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
+
+export function getMyDashboard(
+  email: string,
+  filters: DashboardFilters = {}
+): Promise<DashboardSummary> {
+  return request(`/dashboards/me${_dashboardQs(filters)}`, { email });
+}
+
+export function getFrontDeskDashboard(
+  email: string,
+  filters: DashboardFilters = {}
+): Promise<FrontDeskDashboard> {
+  return request(`/dashboards/front-desk${_dashboardQs(filters)}`, { email });
+}
+
+export function getTechnicianDashboard(
+  email: string,
+  filters: DashboardFilters = {}
+): Promise<TechnicianDashboard> {
+  return request(`/dashboards/technician${_dashboardQs(filters)}`, { email });
+}
+
+export function getDoctorDashboard(
+  email: string,
+  filters: DashboardFilters = {}
+): Promise<DoctorDashboard> {
+  return request(`/dashboards/doctor${_dashboardQs(filters)}`, { email });
+}
+
+export function getReviewerDashboard(
+  email: string,
+  filters: DashboardFilters = {}
+): Promise<ReviewerDashboard> {
+  return request(`/dashboards/reviewer${_dashboardQs(filters)}`, { email });
+}
+
+export function getAdminDashboard(
+  email: string,
+  filters: DashboardFilters = {}
+): Promise<AdminDashboard> {
+  return request(`/dashboards/admin${_dashboardQs(filters)}`, { email });
+}
+
+// =============================================================
+// Phase 21A — Retina + Glaucoma specialty tracking
+// =============================================================
+//
+// Read + provider-reviewed write surface for the five tables added
+// in `e6f7a8b9c0d1_phase_21a_specialty_tracking`. The frontend only
+// renders structured fields the backend persists — this layer does
+// no diagnosis automation, no dosing, no auto-grading.
+
+export type SpecialtyEye = "OD" | "OS" | "OU";
+export type SpecialtyEyeOdOs = "OD" | "OS";
+export type SpecialtyReviewStatus =
+  | "draft"
+  | "needs_review"
+  | "reviewed"
+  | "archived";
+
+export interface RetinaTrackingRecord {
+  id: number;
+  organization_id: number;
+  patient_id: number;
+  encounter_id: number | null;
+  eye: SpecialtyEye;
+  condition: string;
+  severity: string | null;
+  last_oct_at: string | null;
+  last_fundus_at: string | null;
+  injection_history_summary: string | null;
+  follow_up_interval: string | null;
+  provider_assessment: string | null;
+  review_status: SpecialtyReviewStatus;
+  created_by_user_id: number;
+  updated_by_user_id: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RetinaTrackingCreateInput {
+  eye: SpecialtyEye;
+  condition: string;
+  severity?: string | null;
+  last_oct_at?: string | null;
+  last_fundus_at?: string | null;
+  injection_history_summary?: string | null;
+  follow_up_interval?: string | null;
+  provider_assessment?: string | null;
+  review_status?: SpecialtyReviewStatus;
+  encounter_id?: number | null;
+}
+
+export interface RetinaTrackingUpdateInput {
+  severity?: string | null;
+  last_oct_at?: string | null;
+  last_fundus_at?: string | null;
+  injection_history_summary?: string | null;
+  follow_up_interval?: string | null;
+  provider_assessment?: string | null;
+  review_status?: SpecialtyReviewStatus;
+}
+
+export interface RetinaInjectionEvent {
+  id: number;
+  organization_id: number;
+  patient_id: number;
+  encounter_id: number | null;
+  eye: SpecialtyEye;
+  medication: string | null;
+  procedure_date: string | null;
+  laterality: string | null;
+  notes: string | null;
+  created_by_user_id: number;
+  created_at: string;
+}
+
+export interface RetinaInjectionCreateInput {
+  eye: SpecialtyEye;
+  medication?: string | null;
+  procedure_date?: string | null;
+  laterality?: string | null;
+  notes?: string | null;
+  encounter_id?: number | null;
+}
+
+export interface GlaucomaTrackingRecord {
+  id: number;
+  organization_id: number;
+  patient_id: number;
+  encounter_id: number | null;
+  eye: SpecialtyEye;
+  glaucoma_type: string | null;
+  target_iop: number | null;
+  latest_iop: number | null;
+  cup_to_disc_ratio: number | null;
+  rnfl_status: string | null;
+  visual_field_status: string | null;
+  medication_plan: string | null;
+  progression_risk_label: string | null;
+  provider_assessment: string | null;
+  review_status: SpecialtyReviewStatus;
+  created_by_user_id: number;
+  updated_by_user_id: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GlaucomaTrackingCreateInput {
+  eye: SpecialtyEye;
+  glaucoma_type?: string | null;
+  target_iop?: number | null;
+  latest_iop?: number | null;
+  cup_to_disc_ratio?: number | null;
+  rnfl_status?: string | null;
+  visual_field_status?: string | null;
+  medication_plan?: string | null;
+  progression_risk_label?: string | null;
+  provider_assessment?: string | null;
+  review_status?: SpecialtyReviewStatus;
+  encounter_id?: number | null;
+}
+
+export interface GlaucomaTrackingUpdateInput {
+  glaucoma_type?: string | null;
+  target_iop?: number | null;
+  latest_iop?: number | null;
+  cup_to_disc_ratio?: number | null;
+  rnfl_status?: string | null;
+  visual_field_status?: string | null;
+  medication_plan?: string | null;
+  progression_risk_label?: string | null;
+  provider_assessment?: string | null;
+  review_status?: SpecialtyReviewStatus;
+}
+
+export interface GlaucomaIopMeasurement {
+  id: number;
+  organization_id: number;
+  patient_id: number;
+  encounter_id: number | null;
+  eye: SpecialtyEyeOdOs;
+  iop_value: number;
+  measured_at: string | null;
+  method: string | null;
+  created_by_user_id: number;
+  created_at: string;
+}
+
+export interface GlaucomaIopCreateInput {
+  eye: SpecialtyEyeOdOs;
+  iop_value: number;
+  measured_at?: string | null;
+  method?: string | null;
+  encounter_id?: number | null;
+}
+
+export interface GlaucomaVisualFieldTest {
+  id: number;
+  organization_id: number;
+  patient_id: number;
+  encounter_id: number | null;
+  eye: SpecialtyEye;
+  test_type: string | null;
+  performed_at: string | null;
+  result_summary: string | null;
+  reliability: string | null;
+  progression_flag: string | null;
+  created_by_user_id: number;
+  created_at: string;
+}
+
+export interface GlaucomaVisualFieldCreateInput {
+  eye: SpecialtyEye;
+  test_type?: string | null;
+  performed_at?: string | null;
+  result_summary?: string | null;
+  reliability?: string | null;
+  progression_flag?: string | null;
+  encounter_id?: number | null;
+}
+
+export interface SpecialtyListResponse<T> {
+  items: T[];
+  total: number;
+}
+
+export function listPatientRetinaTracking(
+  email: string,
+  patientId: number
+): Promise<SpecialtyListResponse<RetinaTrackingRecord>> {
+  return request(`/patients/${patientId}/retina`, { email });
+}
+
+export function createPatientRetinaTracking(
+  email: string,
+  patientId: number,
+  input: RetinaTrackingCreateInput
+): Promise<RetinaTrackingRecord> {
+  return request(`/patients/${patientId}/retina`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updatePatientRetinaTracking(
+  email: string,
+  patientId: number,
+  recordId: number,
+  input: RetinaTrackingUpdateInput
+): Promise<RetinaTrackingRecord> {
+  return request(`/patients/${patientId}/retina/${recordId}`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function listPatientRetinaInjections(
+  email: string,
+  patientId: number
+): Promise<SpecialtyListResponse<RetinaInjectionEvent>> {
+  return request(`/patients/${patientId}/retina/injections`, { email });
+}
+
+export function createPatientRetinaInjection(
+  email: string,
+  patientId: number,
+  input: RetinaInjectionCreateInput
+): Promise<RetinaInjectionEvent> {
+  return request(`/patients/${patientId}/retina/injections`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function listPatientGlaucomaTracking(
+  email: string,
+  patientId: number
+): Promise<SpecialtyListResponse<GlaucomaTrackingRecord>> {
+  return request(`/patients/${patientId}/glaucoma`, { email });
+}
+
+export function createPatientGlaucomaTracking(
+  email: string,
+  patientId: number,
+  input: GlaucomaTrackingCreateInput
+): Promise<GlaucomaTrackingRecord> {
+  return request(`/patients/${patientId}/glaucoma`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updatePatientGlaucomaTracking(
+  email: string,
+  patientId: number,
+  recordId: number,
+  input: GlaucomaTrackingUpdateInput
+): Promise<GlaucomaTrackingRecord> {
+  return request(`/patients/${patientId}/glaucoma/${recordId}`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function listPatientGlaucomaIopMeasurements(
+  email: string,
+  patientId: number
+): Promise<SpecialtyListResponse<GlaucomaIopMeasurement>> {
+  return request(`/patients/${patientId}/glaucoma/iop`, { email });
+}
+
+export function createPatientGlaucomaIopMeasurement(
+  email: string,
+  patientId: number,
+  input: GlaucomaIopCreateInput
+): Promise<GlaucomaIopMeasurement> {
+  return request(`/patients/${patientId}/glaucoma/iop`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function listPatientGlaucomaVisualFields(
+  email: string,
+  patientId: number
+): Promise<SpecialtyListResponse<GlaucomaVisualFieldTest>> {
+  return request(`/patients/${patientId}/glaucoma/visual-fields`, { email });
+}
+
+export function createPatientGlaucomaVisualField(
+  email: string,
+  patientId: number,
+  input: GlaucomaVisualFieldCreateInput
+): Promise<GlaucomaVisualFieldTest> {
+  return request(`/patients/${patientId}/glaucoma/visual-fields`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+// =============================================================
+// Phase 21B — Ophthalmology imaging pipeline (metadata only)
+// =============================================================
+//
+// Read + provider-reviewed write surface for `imaging_studies`,
+// `imaging_files`, and `imaging_measurements`. METADATA ONLY —
+// no binary file content is sent through this layer. Modality
+// labels are generic; ChartNav does not claim integrations with
+// any specific device or vendor.
+
+export type ImagingModality =
+  | "oct_macula"
+  | "oct_rnfl"
+  | "fundus_photo"
+  | "widefield_fundus"
+  | "visual_field_24_2"
+  | "visual_field_10_2"
+  | "biometry_packet"
+  | "external_pdf"
+  | "other";
+
+export type ImagingEye = "OD" | "OS" | "OU" | "NA";
+
+export type ImagingStudyStatus =
+  | "pending_upload"
+  | "uploaded"
+  | "ready_for_review"
+  | "reviewed"
+  | "archived";
+
+export type ImagingFileKind = "image" | "report_pdf" | "raw_export";
+
+export type ImagingMeasurementSource =
+  | "manual"
+  | "demo"
+  | "imported_metadata";
+
+export interface ImagingStudy {
+  id: number;
+  organization_id: number;
+  patient_id: number;
+  encounter_id: number | null;
+  modality: ImagingModality;
+  eye: ImagingEye;
+  status: ImagingStudyStatus;
+  captured_at: string | null;
+  reviewed_by_user_id: number | null;
+  reviewed_at: string | null;
+  notes: string | null;
+  created_by_user_id: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ImagingStudyCreateInput {
+  modality: ImagingModality;
+  eye: ImagingEye;
+  status?: ImagingStudyStatus;
+  captured_at?: string | null;
+  notes?: string | null;
+  encounter_id?: number | null;
+}
+
+export interface ImagingStudyUpdateInput {
+  status?: ImagingStudyStatus;
+  captured_at?: string | null;
+  notes?: string | null;
+}
+
+export interface ImagingStudyReviewInput {
+  notes?: string | null;
+}
+
+export interface ImagingFileMetadata {
+  id: number;
+  organization_id: number;
+  study_id: number;
+  file_kind: ImagingFileKind;
+  storage_uri: string | null;
+  file_name: string;
+  content_type: string | null;
+  size_bytes: number | null;
+  checksum_sha256: string | null;
+  created_by_user_id: number;
+  created_at: string;
+}
+
+export interface ImagingFileCreateInput {
+  file_kind: ImagingFileKind;
+  file_name: string;
+  storage_uri?: string | null;
+  content_type?: string | null;
+  size_bytes?: number | null;
+  checksum_sha256?: string | null;
+}
+
+export interface ImagingMeasurement {
+  id: number;
+  organization_id: number;
+  study_id: number;
+  measurement_type: string;
+  eye: ImagingEye;
+  value: string;
+  unit: string | null;
+  source: ImagingMeasurementSource;
+  created_by_user_id: number;
+  created_at: string;
+}
+
+export interface ImagingMeasurementCreateInput {
+  measurement_type: string;
+  eye: ImagingEye;
+  value: string;
+  unit?: string | null;
+  source?: ImagingMeasurementSource;
+}
+
+export interface ImagingListResponse<T> {
+  items: T[];
+  total: number;
+}
+
+export function listPatientImagingStudies(
+  email: string,
+  patientId: number
+): Promise<ImagingListResponse<ImagingStudy>> {
+  return request(`/patients/${patientId}/imaging-studies`, { email });
+}
+
+export function createPatientImagingStudy(
+  email: string,
+  patientId: number,
+  input: ImagingStudyCreateInput
+): Promise<ImagingStudy> {
+  return request(`/patients/${patientId}/imaging-studies`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function getImagingStudy(
+  email: string,
+  studyId: number
+): Promise<ImagingStudy> {
+  return request(`/imaging-studies/${studyId}`, { email });
+}
+
+export function updateImagingStudy(
+  email: string,
+  studyId: number,
+  input: ImagingStudyUpdateInput
+): Promise<ImagingStudy> {
+  return request(`/imaging-studies/${studyId}`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function markImagingStudyReviewed(
+  email: string,
+  studyId: number,
+  input: ImagingStudyReviewInput = {}
+): Promise<ImagingStudy> {
+  return request(`/imaging-studies/${studyId}/review`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function listImagingStudyFiles(
+  email: string,
+  studyId: number
+): Promise<ImagingListResponse<ImagingFileMetadata>> {
+  return request(`/imaging-studies/${studyId}/files`, { email });
+}
+
+export function createImagingStudyFile(
+  email: string,
+  studyId: number,
+  input: ImagingFileCreateInput
+): Promise<ImagingFileMetadata> {
+  return request(`/imaging-studies/${studyId}/files`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function listImagingStudyMeasurements(
+  email: string,
+  studyId: number
+): Promise<ImagingListResponse<ImagingMeasurement>> {
+  return request(`/imaging-studies/${studyId}/measurements`, { email });
+}
+
+export function createImagingStudyMeasurement(
+  email: string,
+  studyId: number,
+  input: ImagingMeasurementCreateInput
+): Promise<ImagingMeasurement> {
+  return request(`/imaging-studies/${studyId}/measurements`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+// =============================================================
+// Phase 22 — Multi-clinic / multi-provider scaling
+// =============================================================
+
+export type LocationRoomType =
+  | "exam"
+  | "imaging"
+  | "testing"
+  | "procedure"
+  | "admin"
+  | "other";
+
+export type ProviderScheduleBlockType =
+  | "clinic"
+  | "surgery"
+  | "injection"
+  | "testing"
+  | "admin"
+  | "unavailable"
+  | "other";
+
+export interface ProviderLocationAssignment {
+  id: number;
+  organization_id: number;
+  provider_id: number;
+  location_id: number;
+  is_primary: number | boolean;
+  is_active: number | boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProviderLocationAssignmentCreateInput {
+  provider_id: number;
+  location_id: number;
+  is_primary?: boolean;
+  is_active?: boolean;
+}
+
+export interface ProviderLocationAssignmentUpdateInput {
+  is_primary?: boolean;
+  is_active?: boolean;
+}
+
+export interface LocationRoom {
+  id: number;
+  organization_id: number;
+  location_id: number;
+  name: string;
+  room_type: LocationRoomType;
+  is_active: number | boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LocationRoomCreateInput {
+  name: string;
+  room_type: LocationRoomType;
+  is_active?: boolean;
+}
+
+export interface LocationRoomUpdateInput {
+  name?: string;
+  room_type?: LocationRoomType;
+  is_active?: boolean;
+}
+
+export interface ProviderScheduleBlock {
+  id: number;
+  organization_id: number;
+  provider_id: number;
+  location_id: number;
+  start_at: string;
+  end_at: string;
+  block_type: ProviderScheduleBlockType;
+  capacity: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProviderScheduleBlockCreateInput {
+  provider_id: number;
+  location_id: number;
+  start_at: string;
+  end_at: string;
+  block_type: ProviderScheduleBlockType;
+  capacity?: number | null;
+}
+
+export interface ProviderScheduleBlockUpdateInput {
+  start_at?: string;
+  end_at?: string;
+  block_type?: ProviderScheduleBlockType;
+  capacity?: number | null;
+}
+
+export interface ProviderScheduleBlockFilters {
+  provider_id?: number;
+  location_id?: number;
+  block_type?: ProviderScheduleBlockType;
+  start_after?: string;
+  start_before?: string;
+}
+
+export interface ClinicOperatingHours {
+  id: number;
+  organization_id: number;
+  location_id: number;
+  day_of_week: number;
+  opens_at: string | null;
+  closes_at: string | null;
+  is_closed: number | boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClinicOperatingHoursCreateInput {
+  location_id: number;
+  day_of_week: number;
+  opens_at?: string | null;
+  closes_at?: string | null;
+  is_closed?: boolean;
+}
+
+export interface ClinicOperatingHoursUpdateInput {
+  opens_at?: string | null;
+  closes_at?: string | null;
+  is_closed?: boolean;
+}
+
+export interface LocationDashboardSummary {
+  location_id: number;
+  organization_id: number;
+  counts: {
+    open_queue_items: number;
+    ready_for_workup: number;
+    imaging_needed: number;
+    ready_for_doctor: number;
+    review_needed: number;
+    provider_count: number;
+    room_count: number;
+    active_schedule_blocks_today: number;
+  };
+}
+
+export interface ProviderDashboardSummary {
+  provider_id: number;
+  organization_id: number;
+  counts: {
+    assigned_queue_items: number;
+    ready_for_doctor: number;
+    imaging_review: number;
+    signoff_needed: number;
+    review_needed: number;
+    schedule_blocks_today: number;
+    locations_today: number;
+  };
+}
+
+export interface MultiClinicSummary {
+  organization_id: number;
+  locations: Array<{
+    location_id: number;
+    open_queue_items: number;
+    ready_for_doctor: number;
+    active_rooms: number;
+    schedule_blocks_today: number;
+  }>;
+  providers: Array<{
+    provider_id: number;
+    open_queue_items: number;
+    schedule_blocks_today: number;
+  }>;
+  queue_by_status: Record<string, number>;
+  queue_by_priority: Record<string, number>;
+  queue_by_assigned_role: Record<string, number>;
+  queue_by_queue_type: Record<string, number>;
+}
+
+export interface MultiClinicListResponse<T> {
+  items: T[];
+  total: number;
+}
+
+function _multiClinicQs(filters: object): string {
+  const parts = new URLSearchParams();
+  for (const [k, v] of Object.entries(filters as Record<string, unknown>)) {
+    if (v === undefined || v === null) continue;
+    parts.set(k, String(v));
+  }
+  const qs = parts.toString();
+  return qs ? `?${qs}` : "";
+}
+
+export function listProviderLocationAssignments(
+  email: string,
+  filters: { provider_id?: number; location_id?: number; is_active?: boolean } = {}
+): Promise<MultiClinicListResponse<ProviderLocationAssignment>> {
+  return request(
+    `/provider-location-assignments${_multiClinicQs(filters)}`,
+    { email }
+  );
+}
+
+export function createProviderLocationAssignment(
+  email: string,
+  input: ProviderLocationAssignmentCreateInput
+): Promise<ProviderLocationAssignment> {
+  return request(`/provider-location-assignments`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateProviderLocationAssignment(
+  email: string,
+  assignmentId: number,
+  input: ProviderLocationAssignmentUpdateInput
+): Promise<ProviderLocationAssignment> {
+  return request(`/provider-location-assignments/${assignmentId}`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function listLocationRooms(
+  email: string,
+  locationId: number,
+  filters: { is_active?: boolean } = {}
+): Promise<MultiClinicListResponse<LocationRoom>> {
+  return request(
+    `/locations/${locationId}/rooms${_multiClinicQs(filters)}`,
+    { email }
+  );
+}
+
+export function createLocationRoom(
+  email: string,
+  locationId: number,
+  input: LocationRoomCreateInput
+): Promise<LocationRoom> {
+  return request(`/locations/${locationId}/rooms`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateLocationRoom(
+  email: string,
+  roomId: number,
+  input: LocationRoomUpdateInput
+): Promise<LocationRoom> {
+  return request(`/location-rooms/${roomId}`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function listProviderScheduleBlocks(
+  email: string,
+  filters: ProviderScheduleBlockFilters = {}
+): Promise<MultiClinicListResponse<ProviderScheduleBlock>> {
+  return request(
+    `/provider-schedule-blocks${_multiClinicQs(filters)}`,
+    { email }
+  );
+}
+
+export function createProviderScheduleBlock(
+  email: string,
+  input: ProviderScheduleBlockCreateInput
+): Promise<ProviderScheduleBlock> {
+  return request(`/provider-schedule-blocks`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateProviderScheduleBlock(
+  email: string,
+  blockId: number,
+  input: ProviderScheduleBlockUpdateInput
+): Promise<ProviderScheduleBlock> {
+  return request(`/provider-schedule-blocks/${blockId}`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function listClinicOperatingHours(
+  email: string,
+  filters: { location_id?: number } = {}
+): Promise<MultiClinicListResponse<ClinicOperatingHours>> {
+  return request(
+    `/clinic-operating-hours${_multiClinicQs(filters)}`,
+    { email }
+  );
+}
+
+export function createClinicOperatingHours(
+  email: string,
+  input: ClinicOperatingHoursCreateInput
+): Promise<ClinicOperatingHours> {
+  return request(`/clinic-operating-hours`, {
+    email,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateClinicOperatingHours(
+  email: string,
+  hoursId: number,
+  input: ClinicOperatingHoursUpdateInput
+): Promise<ClinicOperatingHours> {
+  return request(`/clinic-operating-hours/${hoursId}`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function getLocationDashboard(
+  email: string,
+  locationId: number
+): Promise<LocationDashboardSummary> {
+  return request(`/locations/${locationId}/dashboard`, { email });
+}
+
+export function getProviderDashboard(
+  email: string,
+  providerId: number
+): Promise<ProviderDashboardSummary> {
+  return request(`/providers/${providerId}/dashboard`, { email });
+}
+
+export function getAdminMultiClinicSummary(
+  email: string
+): Promise<MultiClinicSummary> {
+  return request(`/admin/multi-clinic-summary`, { email });
+}
+
+// =============================================================
+// Phase 23 — HIPAA-regulated deployment readiness
+// =============================================================
+//
+// Admin-only metadata-only readiness summary. Returns status
+// labels reflecting the shape of the runtime environment against
+// the Phase 23 real-PHI go-live gate. Never returns env values,
+// secrets, or PHI.
+//
+// Passing every check does NOT make ChartNav HIPAA-compliant or
+// approved for real PHI by default — that requires BAA, security
+// review, written practice approval, and the full go-live gate.
+
+export type SecurityReadinessLabel =
+  | "configured"
+  | "missing"
+  | "required"
+  | "external_required"
+  | "disabled";
+
+export interface SecurityReadinessSummary {
+  organization_id: number;
+  auth_mode: SecurityReadinessLabel;
+  database_kind: SecurityReadinessLabel;
+  audit_retention_configured: SecurityReadinessLabel;
+  cors_explicit_configured: SecurityReadinessLabel;
+  jwt_issuer_configured: SecurityReadinessLabel;
+  jwt_audience_configured: SecurityReadinessLabel;
+  jwt_jwks_url_configured: SecurityReadinessLabel;
+  stt_provider: SecurityReadinessLabel;
+  backup_config_documented: SecurityReadinessLabel;
+  logging_config_documented: SecurityReadinessLabel;
+  monitoring_config_documented: SecurityReadinessLabel;
+  incident_contacts_documented: SecurityReadinessLabel;
+  baa_status_configured: SecurityReadinessLabel;
+  vendor_review_status_configured: SecurityReadinessLabel;
+  real_phi_go_live_gate_status: SecurityReadinessLabel;
+  compliance_attestation: string;
+}
+
+export function getSecurityReadiness(
+  email: string
+): Promise<SecurityReadinessSummary> {
+  return request(`/admin/security/readiness`, { email });
 }

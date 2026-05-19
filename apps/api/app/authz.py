@@ -30,8 +30,31 @@ from app.auth import Caller, require_caller
 ROLE_ADMIN = "admin"
 ROLE_CLINICIAN = "clinician"
 ROLE_REVIEWER = "reviewer"
+# Phase 20C — additive operational roles. They do NOT inherit
+# clinician write privileges on existing clinical surfaces (note
+# signing, scribe sessions, eye diagrams). Their write access is
+# scoped to operational queue items via Phase 20B endpoints.
+ROLE_FRONT_DESK = "front_desk"
+ROLE_TECHNICIAN = "technician"
 
-KNOWN_ROLES: set[str] = {ROLE_ADMIN, ROLE_CLINICIAN, ROLE_REVIEWER}
+KNOWN_ROLES: set[str] = {
+    ROLE_ADMIN,
+    ROLE_CLINICIAN,
+    ROLE_REVIEWER,
+    ROLE_FRONT_DESK,
+    ROLE_TECHNICIAN,
+}
+
+# Roles that have a dashboard surface (Phase 20C). admin can view
+# every role's dashboard via the ?role= query param; non-admins are
+# restricted to their own role's dashboard.
+DASHBOARD_ROLES: set[str] = {
+    ROLE_ADMIN,
+    ROLE_CLINICIAN,
+    ROLE_REVIEWER,
+    ROLE_FRONT_DESK,
+    ROLE_TECHNICIAN,
+}
 
 # -- permission surface ---------------------------------------------------
 #

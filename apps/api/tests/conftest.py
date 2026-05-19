@@ -34,12 +34,18 @@ def _reload_app_modules() -> None:
             del sys.modules[name]
 
 
-@pytest.fixture()
-def test_db(tmp_path, monkeypatch):
+def _build_test_db(tmp_path, monkeypatch, *, seed_wedge: bool):
     db_path = tmp_path / "chartnav.db"
     url = f"sqlite:///{db_path}"
     monkeypatch.setenv("DATABASE_URL", url)
     monkeypatch.setenv("CHARTNAV_AUTH_MODE", "header")
+    # Phase 24B wedge gate. Existing Phase 20B / 20C dashboard tests
+    # assert absolute lane counts and assume an empty baseline; the
+    # wedge would add 7 rows that break those assertions. The Phase
+    # 24B test file overrides `test_db` with `test_db_with_wedge`.
+    monkeypatch.setenv(
+        "CHARTNAV_SEED_PHASE_24B_WEDGE", "1" if seed_wedge else "0"
+    )
     # Any JWT env left over from the host should not bleed into tests.
     for k in ("CHARTNAV_JWT_ISSUER", "CHARTNAV_JWT_AUDIENCE", "CHARTNAV_JWT_JWKS_URL"):
         monkeypatch.delenv(k, raising=False)
@@ -65,6 +71,16 @@ def test_db(tmp_path, monkeypatch):
 
 
 @pytest.fixture()
+def test_db(tmp_path, monkeypatch):
+    return _build_test_db(tmp_path, monkeypatch, seed_wedge=False)
+
+
+@pytest.fixture()
+def test_db_with_wedge(tmp_path, monkeypatch):
+    return _build_test_db(tmp_path, monkeypatch, seed_wedge=True)
+
+
+@pytest.fixture()
 def client(test_db):
     _reload_app_modules()  # ensure app.main re-reads env
     from fastapi.testclient import TestClient
@@ -76,8 +92,32 @@ def client(test_db):
 ADMIN1 = {"X-User-Email": "admin@chartnav.local"}
 CLIN1 = {"X-User-Email": "clin@chartnav.local"}
 REV1 = {"X-User-Email": "rev@chartnav.local"}
+# Phase 20C — additive operational role identities seeded per org.
+FRONT1 = {"X-User-Email": "front@chartnav.local"}
+TECH1 = {"X-User-Email": "tech@chartnav.local"}
 ADMIN2 = {"X-User-Email": "admin@northside.local"}
 CLIN2 = {"X-User-Email": "clin@northside.local"}
+FRONT2 = {"X-User-Email": "front@northside.local"}
+TECH2 = {"X-User-Email": "tech@northside.local"}
+
+
+@pytest.fixture()
+def audio_consent_for_seeded(client):
+    """Phase 25A — grant `granted` consent on every seeded encounter
+    so existing audio-pipeline test suites stay green. Consent gating
+    itself is covered by tests/test_consent.py; this fixture is meant
+    for files that exercise the audio upload path and predate the
+    consent gate. Use as ``pytestmark = pytest.mark.usefixtures(
+    "audio_consent_for_seeded")`` at module scope."""
+    for headers in (ADMIN1, ADMIN2):
+        encs = client.get("/encounters", headers=headers).json()
+        for e in encs:
+            client.put(
+                f"/encounters/{e['id']}/audio-consent",
+                headers=headers,
+                json={"status": "granted", "method": "verbal"},
+            )
+    return None
 
 
 @pytest.fixture()

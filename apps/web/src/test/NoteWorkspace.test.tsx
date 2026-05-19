@@ -62,6 +62,11 @@ vi.mock("../api", async () => {
     // Phase 33 — audio intake + transcript review.
     uploadEncounterAudio: vi.fn(),
     patchEncounterInputTranscript: vi.fn(),
+    // Phase 25A — patient audio consent (GH-001). NoteWorkspace
+    // mounts the consent panel, which fetches the encounter's
+    // current consent state and gates the Record/Upload buttons.
+    fetchAudioConsent: vi.fn(),
+    setAudioConsent: vi.fn(),
   };
 });
 
@@ -259,6 +264,33 @@ beforeEach(() => {
     })
   );
   (api.unfavoriteClinicalShortcut as any).mockResolvedValue({ removed: 1 });
+  // Phase 25A default — pretend consent is already granted so the
+  // Record/Upload buttons enable. Tests that exercise the consent
+  // gate itself override this per-test in src/test/AudioConsentPanel.test.tsx.
+  (api.fetchAudioConsent as any).mockResolvedValue({
+    encounter_id: 1,
+    organization_id: 1,
+    status: "granted",
+    method: "verbal",
+    actor_user_id: 2,
+    note: null,
+    recording_permitted: true,
+    created_at: "2026-04-20 00:00:00",
+    updated_at: "2026-04-20 00:00:00",
+  });
+  (api.setAudioConsent as any).mockImplementation(
+    async (_email: string, encounterId: number, body: any) => ({
+      encounter_id: encounterId,
+      organization_id: 1,
+      status: body.status,
+      method: body.method,
+      actor_user_id: 2,
+      note: body.note ?? null,
+      recording_permitted: body.status === "granted",
+      created_at: "2026-04-20 00:00:00",
+      updated_at: "2026-04-20 00:00:01",
+    }),
+  );
   // Phase 33 defaults.
   (api.uploadEncounterAudio as any).mockImplementation(
     async (_email: string, _enc: number, file: File) => ({

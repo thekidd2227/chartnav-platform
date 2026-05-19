@@ -155,6 +155,37 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
   letter-spacing: -0.01em;
 }
 
+/*
+ * Phase 19 — buyer-safe identity chip. The chip carries an
+ * "Identity" eyebrow label so it reads as system info rather
+ * than a debug dump. The role/org token uses the product's
+ * regular sans-serif (not the monospace dev chip font), and
+ * the chip stays visible during a buyer demo while the API
+ * URL chip is hidden.
+ */
+.header-meta .chip--identity {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  background: var(--cn-primary-soft);
+  border-color: var(--cn-primary-tint);
+  color: var(--cn-fg);
+  font-family: inherit;
+  letter-spacing: normal;
+}
+.header-meta .chip--identity .chip__label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cn-primary);
+}
+.header-meta .chip--identity .chip__value {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--cn-fg);
+}
+
 .identity-picker { display: flex; align-items: center; gap: 6px; }
 .identity-picker select,
 .identity-picker input {
@@ -237,6 +268,103 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
 @media (max-width: 920px) {
   .layout { grid-template-columns: 1fr; height: auto; }
   .layout__list { border-right: 0; border-bottom: 1px solid var(--cn-line); max-height: 50vh; }
+}
+
+/* ============================================================
+   Phase 19B — clinical sidebar grouped navigation.
+   Shown above the encounter filter + list. Only the Encounters
+   item is currently active; other items are visually-correct
+   placeholders for future phases.
+   ============================================================ */
+.sidebar-nav {
+  /* Phase 19E — brand-red/burgundy sidebar nav. Phase 19I
+     polish: subtle vertical gradient (#7f1d1d top -> #5e1414
+     bottom) so the wall reads as depth, not a flat block.
+     Scoped to the grouped-nav block ONLY: the encounter list
+     + filters below keep their pale --cn-bg-alt background so
+     the work surface stays clean and readable. */
+  background: linear-gradient(180deg, #7f1d1d 0%, #5e1414 100%);
+  padding: 16px 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.22);
+}
+.sidebar-nav__group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  /* Phase 19I — hairline divider above each group (except the
+     first) so groups read as discrete sections, not one long
+     wall. */
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.sidebar-nav__group:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+.sidebar-nav__group-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  /* Phase 19I — bumped to a slightly brighter cream (#fed7d7)
+     so group labels pop off the gradient. ~9.4:1 on the
+     burgundy mid-tone, still well above WCAG AA. */
+  color: #fed7d7;
+  padding: 0 6px;
+  margin-bottom: 2px;
+}
+.sidebar-nav__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sidebar-nav__item {
+  background: transparent;
+  border: none;
+  text-align: left;
+  width: 100%;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 13px;
+  /* Phase 19E — white nav text on burgundy yields ~12.6:1. */
+  color: #ffffff;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s var(--cn-ease),
+              color 0.15s var(--cn-ease),
+              box-shadow 0.15s var(--cn-ease);
+}
+.sidebar-nav__item:hover:not(:disabled) {
+  /* Phase 19I — bumped from 0.10 to 0.14 for clearer hover
+     affordance without going loud. */
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+.sidebar-nav__item--active {
+  /* Phase 19E + 19I — teal active accent on burgundy. The 3px
+     inset left stripe uses --ctw-accent (#14b8a6). Phase 19I
+     deepens the active-row bg from 0.18 to 0.26 black-tint so
+     the selected row reads as a clear "pressed in" treatment
+     rather than a faint shade — and the teal stripe pops off
+     it more cleanly. */
+  background: rgba(0, 0, 0, 0.26);
+  color: #ffffff;
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 #14b8a6;
+}
+.sidebar-nav__item--disabled,
+.sidebar-nav__item:disabled {
+  /* Phase 19E — muted-white disabled state on burgundy. Disabled
+     form controls are axe color-contrast exempt; this still
+     reads as "not available" without going invisible. */
+  color: rgba(255, 255, 255, 0.55);
+  cursor: not-allowed;
 }
 
 /* ============================================================
@@ -1217,4 +1345,2234 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
   .workspace__audio-record-indicator {
     animation: none;
   }
+}
+
+
+/* ---------------------------------------------------------------- */
+/* Phase 16 — public landing / proof page (gated on /landing or ?intro=1) */
+/* ---------------------------------------------------------------- */
+
+.landing-page {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 24px 32px 96px;
+  color: #0F2A33;
+}
+.landing-page__brand {
+  margin-bottom: 24px;
+}
+.landing-page__brand-logo {
+  display: block;
+}
+.landing-page__brand-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.landing-page__brand-row .landing-page__brand {
+  margin-bottom: 0;
+}
+.landing-page__lang-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: #fff;
+  border: 1px solid rgba(11, 110, 121, 0.18);
+  border-radius: 999px;
+}
+.landing-page__lang-option {
+  appearance: none;
+  background: transparent;
+  color: #0B6E79;
+  border: 0;
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 999px;
+  cursor: pointer;
+  line-height: 1;
+}
+.landing-page__lang-option:hover,
+.landing-page__lang-option:focus-visible {
+  background: rgba(11, 110, 121, 0.1);
+  outline: none;
+}
+.landing-page__lang-option:focus-visible {
+  box-shadow: 0 0 0 2px rgba(11, 110, 121, 0.35);
+}
+.landing-page__lang-option--active {
+  background: #0B6E79;
+  color: #fff;
+}
+.landing-page__lang-option--active:hover,
+.landing-page__lang-option--active:focus-visible {
+  background: #0B6E79;
+  color: #fff;
+}
+@media (max-width: 560px) {
+  .landing-page__brand-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .landing-page__lang-switcher {
+    align-self: flex-start;
+  }
+}
+.landing-page__hero {
+  padding: 24px 0 40px;
+  border-bottom: 1px solid rgba(11, 110, 121, 0.12);
+}
+.landing-page__hero-title {
+  font-size: 30px;
+  line-height: 1.18;
+  margin: 0 0 12px;
+  max-width: 720px;
+  color: #0B6E79;
+}
+.landing-page__hero-sub {
+  font-size: 17px;
+  line-height: 1.5;
+  margin: 0 0 20px;
+  max-width: 720px;
+}
+.landing-page__safety-line {
+  font-size: 14px;
+  background: rgba(11, 110, 121, 0.06);
+  padding: 10px 14px;
+  border-left: 3px solid #0B6E79;
+  border-radius: 4px;
+  margin: 0 0 20px;
+  max-width: 720px;
+}
+.landing-page__cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 16px 0;
+}
+.landing-page__cta {
+  display: inline-block;
+  padding: 12px 18px;
+  border-radius: 6px;
+  font-weight: 600;
+  text-decoration: none;
+  font-size: 15px;
+}
+.landing-page__cta--primary {
+  background: #0B6E79;
+  color: #fff;
+}
+.landing-page__cta--primary:hover {
+  background: #0a5d66;
+}
+.landing-page__cta--secondary {
+  background: #fff;
+  color: #0B6E79;
+  border: 1px solid #0B6E79;
+}
+.landing-page__cta--secondary:hover {
+  background: rgba(11, 110, 121, 0.08);
+}
+.landing-page__section {
+  padding: 32px 0;
+  border-bottom: 1px solid rgba(11, 110, 121, 0.08);
+}
+.landing-page__section--accent {
+  background: rgba(11, 110, 121, 0.04);
+  margin: 0 -32px;
+  padding-left: 32px;
+  padding-right: 32px;
+  border-bottom: 1px solid rgba(11, 110, 121, 0.12);
+}
+.landing-page__section h2 {
+  font-size: 22px;
+  margin: 0 0 8px;
+  color: #0B6E79;
+}
+.landing-page__section h3 {
+  font-size: 16px;
+  margin: 0 0 6px;
+  color: #0B6E79;
+}
+.landing-page__lead {
+  font-size: 15px;
+  margin: 0 0 16px;
+  color: #5b7079;
+}
+.landing-page__workflow-svg,
+.landing-page__control-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 12px 0 8px;
+}
+.landing-page__workflow-list {
+  margin: 8px 0 0;
+  padding-left: 22px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.landing-page__bullet-grid {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+@media (min-width: 720px) {
+  .landing-page__bullet-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.landing-page__bullet-grid li {
+  background: #fff;
+  padding: 14px 16px;
+  border: 1px solid rgba(11, 110, 121, 0.14);
+  border-radius: 6px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.landing-page__module-grid {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+@media (min-width: 720px) {
+  .landing-page__module-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.landing-page__module-card {
+  background: #fff;
+  padding: 14px 16px;
+  border: 1px solid rgba(11, 110, 121, 0.14);
+  border-radius: 6px;
+}
+.landing-page__module-card h3 {
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+.landing-page__module-card p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.landing-page__safety-dl {
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+@media (min-width: 720px) {
+  .landing-page__safety-dl {
+    grid-template-columns: 160px 1fr;
+  }
+}
+.landing-page__safety-dl > div {
+  display: contents;
+}
+.landing-page__safety-dl dt {
+  font-weight: 600;
+  color: #0B6E79;
+}
+.landing-page__safety-dl dd {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.landing-page__before-after {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  margin: 12px 0 0;
+}
+@media (min-width: 720px) {
+  .landing-page__before-after {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.landing-page__before-after > div {
+  background: #fff;
+  padding: 14px 16px;
+  border: 1px solid rgba(11, 110, 121, 0.14);
+  border-radius: 6px;
+}
+.landing-page__before-after ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.landing-page__non-goals {
+  margin: 8px 0 16px;
+  padding-left: 22px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.landing-page__footer {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(11, 110, 121, 0.12);
+  font-size: 13px;
+  color: #5b7079;
+}
+.landing-page__footer p {
+  margin: 4px 0;
+}
+.landing-page__footer code {
+  background: rgba(11, 110, 121, 0.08);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+/* ===========================================================
+ * Phase 19 — Clinical tabbed workspace.
+ * =========================================================== */
+
+.ctw {
+  /* Phase 19B — workspace-scoped palette override.
+     The global brand stays at #0B6E79 (asserted by Phase 17D
+     theme-token sync); the clinical workspace UI uses the
+     reference-design teal locally only. */
+  --cn-primary: #0f766e;
+  --ctw-primary: #0f766e;
+  --ctw-accent: #14b8a6;
+  --ctw-danger: #dc2626;
+  --ctw-bg: #f9fafb;
+  --ctw-card: #ffffff;
+  --ctw-border: #e5e7eb;
+  --ctw-muted: #64748b;
+  --ctw-fg: #111827;
+
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Phase 19B — demographic strip below the patient/encounter
+   line, matching the clinical reference design. Phase 19D
+   polish: subtle background tint so the strip reads as a
+   contained band (not "the bottom of the header"), tighter
+   vertical rhythm, and a default muted value tone so the "—"
+   placeholders for fields not yet wired (Gender / Allergies /
+   Conditions / Medications / Next Appt — those columns aren't
+   on the Encounter type yet) look intentional rather than
+   buggy. */
+.ctw__demographics {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 14px 18px;
+  margin-top: 10px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--ctw-border);
+  border-radius: var(--cn-radius-md);
+  background: rgba(15, 23, 42, 0.025);
+}
+@media (max-width: 1100px) {
+  .ctw__demographics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (max-width: 700px) {
+  .ctw__demographics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.ctw__demo-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.ctw__demo-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ctw-muted);
+}
+.ctw__demo-value {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ctw-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Phase 19F — intentional-empty-state copy for the patient-header
+   meta line (DOB / Phone) and the demographic strip. Slightly
+   smaller, italic, --cn-dim so the absent-data labels read as
+   "intentional placeholder" rather than "missing data." */
+.ctw__meta-empty,
+.ctw__demo-value--empty {
+  color: var(--cn-dim);
+  font-style: italic;
+  font-weight: 400;
+}
+
+/* Phase 19F — Timeline card is now a wide Overview card holding
+   encounter timestamps + workflow events list + composer. */
+.ctw-timeline__stamps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 24px;
+  margin-bottom: 4px;
+}
+.ctw-timeline__heading,
+.ctw-timeline__composer-heading {
+  margin: 8px 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cn-fg);
+}
+.ctw-timeline__events {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ctw-timeline__composer {
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--cn-line);
+}
+.ctw-timeline__demo-note {
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--cn-line);
+}
+
+/* Sticky patient + encounter header */
+.ctw__patient-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--cn-surface);
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-md);
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  /* Phase 19E — 2px brand-red micro-accent at the top of the
+     patient header, layered over the existing 1px-bottom hairline
+     shadow. The inset shadow respects --cn-radius-md so the strip
+     follows the rounded top corners cleanly. */
+  box-shadow:
+    inset 0 2px 0 #dc2626,
+    0 1px 0 rgba(15, 23, 42, 0.04);
+}
+.ctw__patient-line {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.ctw__patient-name {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--cn-fg);
+}
+.ctw__patient-meta,
+.ctw__encounter-line {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--cn-muted);
+}
+.ctw__meta-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--cn-dim);
+  margin-right: 4px;
+}
+
+/* Tab bar */
+.ctw__tabbar {
+  /* Phase 19I — desktop tab row must show all 9 tabs cleanly
+     at 1440px. We keep overflow-x: auto as a narrow-viewport
+     safety net but tighten the tab metrics so the bar fits
+     edge-to-edge without horizontal scroll on a normal demo
+     monitor. Tabs flex-shrink so a long label like
+     "Documentation / EMR/EHR" won't push siblings off-screen. */
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--cn-line);
+  padding: 0 4px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.ctw__tab {
+  background: transparent;
+  border: none;
+  padding: 10px 10px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--cn-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  flex: 0 1 auto;
+  transition: color 0.15s var(--cn-ease), border-color 0.15s var(--cn-ease);
+}
+@media (min-width: 1280px) {
+  /* Roomier desktop: keep the tighter base padding but add
+     small horizontal breathing room. Bar fits 9 tabs edge-to-
+     edge at 1440px with no scroll. */
+  .ctw__tab { padding: 11px 12px; font-size: 13px; }
+}
+@media (max-width: 1100px) {
+  /* Approaching tablet: shrink padding + font slightly so the
+     bar still fits. Below this width the overflow-x scroll
+     handles the rest. */
+  .ctw__tab { padding: 9px 8px; font-size: 12px; }
+}
+.ctw__tab:hover {
+  color: var(--cn-fg);
+}
+.ctw__tab--active {
+  color: var(--cn-primary);
+  border-bottom-color: var(--cn-primary);
+  font-weight: 600;
+}
+
+.ctw__panel {
+  background: var(--cn-bg);
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-md);
+  padding: 20px;
+  min-height: 280px;
+}
+
+/* Card grid */
+.ctw-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* Phase 19D — slightly more breathing room between cards
+     so they read as discrete review surfaces, not a wall. */
+  gap: 18px;
+}
+@media (max-width: 900px) {
+  .ctw-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+  .ctw-grid { grid-template-columns: minmax(0, 1fr); }
+}
+.ctw-card {
+  background: var(--cn-surface);
+  border: 1px solid var(--cn-line);
+  /* Phase 19D — bumped from --cn-radius-md (10px) to --cn-radius-lg
+     (14px) for a softer "rounded-2xl"-style border, and added
+     --cn-shadow-sm so cards lift visibly off the panel
+     background. transition wires a subtle hover affordance. */
+  border-radius: var(--cn-radius-lg);
+  box-shadow: var(--cn-shadow-sm);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: box-shadow 0.18s var(--cn-ease),
+              border-color 0.18s var(--cn-ease);
+}
+.ctw-card:hover {
+  /* Phase 19E — subtle red-tinted hover shadow (alpha 0.10)
+     replaces the global --cn-shadow-md (teal-flavored) so cards
+     pick up the brand red accent on hover without screaming
+     "danger." Kept at 6px y-offset / 18px blur so it reads as a
+     gentle lift, not a glow. */
+  border-color: var(--cn-line-strong);
+  box-shadow:
+    0 6px 18px rgba(220, 38, 38, 0.10),
+    0 1px 3px rgba(15, 23, 42, 0.05);
+}
+.ctw-card--wide { grid-column: 1 / -1; }
+.ctw-card__title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--cn-primary);
+}
+.ctw-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--cn-fg);
+}
+
+/* Field row (label above value) */
+.ctw-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ctw-field__label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--cn-dim);
+}
+.ctw-field__value {
+  font-size: 14px;
+  color: var(--cn-fg);
+}
+
+/* Empty state */
+.ctw-empty {
+  font-size: 13px;
+  color: var(--cn-muted);
+  font-style: italic;
+  padding: 8px 0;
+  line-height: 1.5;
+}
+
+/* Footnote */
+.ctw__footnote {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  color: var(--cn-dim);
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: var(--cn-primary-soft);
+  border-left: 3px solid var(--cn-primary-tint);
+  border-radius: var(--cn-radius-sm);
+}
+
+/* Action row */
+.ctw-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+/* Clinical tab — Phase 19I restructure
+   The prior <details><summary><ul> bullet-list look was
+   replaced by a grid of Cards with pill-button shortcuts.
+   Pills are visually buttons but intentionally inert
+   (disabled) — they're pinning shortcuts the clinician would
+   drag into the Documentation draft, not actions ChartNav
+   takes on its own. Favorites is pinned first per the brief
+   and gets a subtle accent so it reads as the recommended
+   entry point. */
+.ctw-clinical { display: flex; flex-direction: column; gap: 14px; }
+.ctw-clinical__search {
+  padding: 10px 14px;
+  border: 1px solid var(--cn-line-strong);
+  border-radius: var(--cn-radius-md);
+  font: inherit;
+  font-size: 14px;
+  background: var(--cn-surface);
+}
+.ctw-clinical__grid {
+  /* Inherits .ctw-grid (3 cols / 2 / 1 responsive) — no
+     additional rules needed beyond row-spacing. */
+}
+.ctw-clinical__group--favorites {
+  /* Subtle teal accent to mark the pinned Favorites group as
+     the recommended entry point. */
+  border-color: var(--cn-primary-tint);
+  box-shadow:
+    inset 3px 0 0 var(--cn-primary),
+    var(--cn-shadow-sm);
+}
+.ctw-clinical__group--favorites .ctw-card__title {
+  color: var(--cn-primary);
+}
+.ctw-clinical__pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ctw-clinical__pill {
+  display: inline-flex;
+  align-items: center;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--cn-fg);
+  background: var(--cn-bg-alt);
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-pill);
+  padding: 4px 12px;
+  white-space: nowrap;
+  cursor: not-allowed;
+  /* The pills are visually interactive but disabled for now
+     (pinning into a draft is a Phase 19I+ wire-up). 0.85
+     opacity keeps them readable but distinguishable from a
+     fully-enabled control. */
+  opacity: 0.85;
+  transition: background 0.15s var(--cn-ease);
+}
+.ctw-clinical__pill:hover {
+  background: var(--cn-primary-soft);
+}
+
+/* Documentation tab — Phase 19I stepper + workbench frame.
+   Wraps NoteWorkspace so the buyer sees a clear Transcript ->
+   Extracted Facts -> AI Draft -> Final Note workflow header
+   above the existing scribe panel. */
+.ctw-documentation {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.ctw-doc-stepper {
+  background: var(--cn-surface);
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-lg);
+  box-shadow: var(--cn-shadow-sm);
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ctw-doc-stepper__steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  align-items: center;
+}
+.ctw-doc-stepper__step {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cn-fg);
+}
+.ctw-doc-stepper__step + .ctw-doc-stepper__step::before {
+  content: "→";
+  margin-right: 8px;
+  color: var(--cn-dim);
+  font-weight: 400;
+}
+.ctw-doc-stepper__index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--cn-radius-pill);
+  background: var(--cn-primary-soft);
+  color: var(--cn-primary);
+  font-size: 11px;
+  font-weight: 700;
+}
+.ctw-doc-stepper__label {
+  font-weight: 600;
+  color: var(--cn-fg);
+}
+.ctw-doc-stepper__caption {
+  margin: 0;
+  font-size: 12px;
+  color: var(--cn-dim);
+}
+.ctw-doc-workbench {
+  background: var(--cn-surface);
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-lg);
+  box-shadow: var(--cn-shadow-sm);
+  padding: 4px;
+  /* NoteWorkspace renders its own internal sections; this
+     wrapper just frames it with the same card chrome the rest
+     of the workspace uses. The 4px padding keeps NoteWorkspace
+     visually inset without touching its own internal layout. */
+}
+
+/* Imaging tab — Phase 19I extra polish. The tab now opens with
+   the upload/OCT/fundus/attachments/notes/viewer grid; the
+   OD/OS retinal workbench follows as its own wide card so the
+   raw canvas is no longer the first thing the buyer sees. */
+.ctw-imaging {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Narrow / tablet viewport — Phase 19I "don't look broken"
+   fallback. Below 900px the layout aside that holds the
+   sidebar nav + encounter list already stacks above the
+   workspace (existing rule); the additional rules below tighten
+   the patient header so it doesn't overflow awkwardly and let
+   the doc-stepper wrap onto multiple lines without breaking. */
+@media (max-width: 900px) {
+  .ctw__patient-line { gap: 10px; }
+  .ctw__encounter-line { gap: 8px; }
+  .ctw-doc-stepper__steps { gap: 4px 10px; }
+}
+@media (max-width: 600px) {
+  .ctw__patient-name { font-size: 16px; }
+  .ctw__demographics {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px 12px;
+    padding: 10px 12px;
+  }
+}
+
+/* Communications */
+.ctw-comms__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.ctw-comms__entry {
+  background: var(--cn-bg-alt);
+  border-radius: var(--cn-radius-sm);
+  padding: 8px 10px;
+}
+.ctw-comms__entry-head {
+  font-size: 12px;
+  margin-bottom: 4px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--cn-muted);
+}
+.ctw-comms__entry-body { font-size: 13px; color: var(--cn-fg); white-space: pre-wrap; }
+.ctw-comms__composer {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--cn-line-strong);
+  border-radius: var(--cn-radius-md);
+  font: inherit;
+  font-size: 13px;
+  background: var(--cn-surface);
+  resize: vertical;
+}
+
+/* Documents */
+.ctw-docs__list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ctw-docs__entry {
+  background: var(--cn-bg-alt);
+  border-radius: var(--cn-radius-sm);
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+/* Chat */
+.ctw-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ctw-chat__banner {
+  background: rgba(220, 38, 38, 0.08);
+  border-left: 3px solid var(--cn-pulse);
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--cn-pulse);
+  border-radius: var(--cn-radius-sm);
+}
+/* Phase 19I — recipient selector. Scopes the Chat thread to
+   one internal staff member (no patient recipients listed). */
+.ctw-chat__recipient {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: var(--cn-surface);
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-md);
+  padding: 10px 14px;
+}
+.ctw-chat__recipient-select {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 10px;
+  border: 1px solid var(--cn-line-strong);
+  border-radius: var(--cn-radius-sm);
+  background: var(--cn-surface);
+  color: var(--cn-fg);
+  min-width: 220px;
+}
+.ctw-chat__recipient-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  background: var(--cn-bg-alt);
+  border-radius: var(--cn-radius-pill);
+  font-size: 12px;
+}
+.ctw-chat__recipient-name {
+  font-weight: 600;
+  color: var(--cn-fg);
+}
+.ctw-chat__recipient-role {
+  color: var(--cn-muted);
+}
+.ctw-chat__recipient-presence {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: var(--cn-radius-pill);
+}
+.ctw-chat__recipient-presence--online {
+  background: var(--cn-success-tint);
+  color: var(--cn-success);
+}
+.ctw-chat__recipient-presence--away {
+  background: var(--cn-warning-tint);
+  color: var(--cn-warning);
+}
+.ctw-chat__recipient-presence--offline {
+  background: var(--cn-bg-alt);
+  color: var(--cn-dim);
+}
+
+.ctw-chat__participants {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+.ctw-chat__thread {
+  background: var(--cn-surface);
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-md);
+  padding: 12px;
+  max-height: 380px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ctw-chat__message {
+  background: var(--cn-bg-alt);
+  border-left: 3px solid var(--cn-primary-tint);
+  padding: 8px 10px;
+  border-radius: var(--cn-radius-sm);
+}
+.ctw-chat__message[data-participant="Clinician"] { border-left-color: var(--cn-primary); }
+.ctw-chat__message[data-participant="Reviewer"] { border-left-color: var(--cn-accent); }
+.ctw-chat__message-head {
+  font-size: 11px;
+  margin-bottom: 4px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--cn-muted);
+}
+.ctw-chat__message-body {
+  font-size: 13px;
+  color: var(--cn-fg);
+  white-space: pre-wrap;
+}
+.ctw-chat__composer {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--cn-line-strong);
+  border-radius: var(--cn-radius-md);
+  font: inherit;
+  font-size: 13px;
+  resize: vertical;
+}
+.btn--selected {
+  background: var(--cn-primary-soft);
+  color: var(--cn-primary);
+  border-color: var(--cn-primary-tint);
+}
+
+/* ============================================================
+   Phase 20C — Role-based clinic dashboards
+   Read-only summary cards rendered in the right pane when the
+   CORE > Dashboard sidebar item is active. Visual tokens reuse
+   the existing --cn-* palette so the look matches AdminPanel and
+   the encounter detail.
+   ============================================================ */
+.role-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.role-dashboard__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.role-dashboard__title {
+  margin: 0;
+  font-size: 18px;
+  color: var(--cn-fg);
+}
+.role-dashboard__subtitle {
+  margin: 4px 0 0;
+}
+.role-dashboard__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.role-dashboard__view-as {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--cn-muted);
+}
+.role-dashboard__view-as select {
+  padding: 6px 8px;
+  border: 1px solid var(--cn-line-strong);
+  border-radius: var(--cn-radius-sm);
+  background: white;
+  color: var(--cn-fg);
+  font: inherit;
+  font-size: 13px;
+}
+.role-dashboard__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+.role-dashboard__card {
+  background: white;
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-md);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 84px;
+}
+.role-dashboard__card--warn {
+  border-color: var(--cn-warning);
+  background: var(--cn-warning-tint);
+}
+.role-dashboard__card-label {
+  font-size: 12px;
+  color: var(--cn-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.role-dashboard__card-value {
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--cn-fg);
+}
+.role-dashboard__section {
+  margin: 16px 0 6px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--cn-muted);
+}
+.role-dashboard__queue {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.role-dashboard__queue-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-sm);
+  background: white;
+  font-size: 13px;
+}
+.role-dashboard__queue-type {
+  font-weight: 600;
+  color: var(--cn-fg);
+  text-transform: capitalize;
+}
+.role-dashboard__pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  text-transform: capitalize;
+  border: 1px solid var(--cn-line-strong);
+  background: var(--cn-bg-alt);
+  color: var(--cn-fg);
+}
+.role-dashboard__pill--priority-high,
+.role-dashboard__pill--priority-urgent {
+  background: var(--cn-warning-tint);
+  border-color: var(--cn-warning);
+  color: var(--cn-warning);
+}
+.role-dashboard__pill--status-blocked {
+  background: var(--cn-warning-tint);
+  border-color: var(--cn-warning);
+  color: var(--cn-warning);
+}
+.role-dashboard__due {
+  font-size: 12px;
+  color: var(--cn-muted);
+}
+.role-dashboard__ids {
+  margin-left: auto;
+}
+.role-dashboard__empty {
+  padding: 12px;
+  border: 1px dashed var(--cn-line-strong);
+  border-radius: var(--cn-radius-sm);
+  color: var(--cn-muted);
+  font-size: 13px;
+  background: white;
+}
+.role-dashboard__note {
+  margin-top: 4px;
+}
+.role-dashboard__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  background: white;
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-sm);
+  overflow: hidden;
+}
+.role-dashboard__table th,
+.role-dashboard__table td {
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--cn-line);
+}
+.role-dashboard__table th {
+  background: var(--cn-bg-alt);
+  font-weight: 600;
+  color: var(--cn-muted);
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+.role-dashboard__table tbody tr:last-child td {
+  border-bottom: none;
+}
+.role-dashboard__table td:last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
+   Phase 21A — Retina + Glaucoma specialty tracking
+   Provider-reviewed cards rendered at the top of the Clinical
+   tab. Reuses --cn-* tokens — no new design language.
+   ============================================================ */
+.specialty-tracking {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 16px;
+  background: white;
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-md);
+  margin-bottom: 16px;
+}
+.specialty-tracking--blocked {
+  background: var(--cn-bg-alt);
+}
+.specialty-tracking__header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.specialty-tracking__title {
+  margin: 0;
+  font-size: 16px;
+  color: var(--cn-fg);
+}
+.specialty-tracking__subtitle {
+  margin: 0;
+}
+.specialty-tracking__section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid var(--cn-line);
+  padding-top: 14px;
+}
+.specialty-tracking__section:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+.specialty-tracking__sec-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.specialty-tracking__sec-head--small .specialty-tracking__sec-title {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--cn-muted);
+}
+.specialty-tracking__sec-title {
+  margin: 0;
+  font-size: 14px;
+  color: var(--cn-fg);
+}
+.specialty-tracking__cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.specialty-tracking__card {
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-sm);
+  padding: 12px;
+  background: var(--cn-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.specialty-tracking__card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.specialty-tracking__card-title {
+  margin: 0;
+  font-size: 14px;
+  color: var(--cn-fg);
+  flex: 1 1 auto;
+}
+.specialty-tracking__pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 1px solid var(--cn-line-strong);
+  border-radius: 999px;
+  background: white;
+  color: var(--cn-fg);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+.specialty-tracking__status {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  text-transform: capitalize;
+  border: 1px solid var(--cn-line-strong);
+  background: var(--cn-bg-alt);
+  color: var(--cn-fg);
+}
+.specialty-tracking__status--needs_review,
+.specialty-tracking__status--draft {
+  background: var(--cn-warning-tint);
+  border-color: var(--cn-warning);
+  color: var(--cn-warning);
+}
+.specialty-tracking__status--reviewed {
+  background: var(--cn-primary-soft);
+  border-color: var(--cn-primary-tint);
+  color: var(--cn-primary);
+}
+.specialty-tracking__dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px 14px;
+  margin: 0;
+}
+.specialty-tracking__field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+}
+.specialty-tracking__field--wide {
+  grid-column: 1 / -1;
+}
+.specialty-tracking__field dt {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--cn-muted);
+  margin: 0;
+}
+.specialty-tracking__field dd {
+  margin: 0;
+  color: var(--cn-fg);
+  white-space: pre-wrap;
+}
+.specialty-tracking__card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.specialty-tracking__card-actions select {
+  padding: 4px 8px;
+  border: 1px solid var(--cn-line-strong);
+  border-radius: var(--cn-radius-sm);
+  background: white;
+  color: var(--cn-fg);
+  font: inherit;
+  font-size: 12px;
+}
+.specialty-tracking__empty {
+  padding: 10px 12px;
+  border: 1px dashed var(--cn-line-strong);
+  border-radius: var(--cn-radius-sm);
+  color: var(--cn-muted);
+  font-size: 13px;
+  background: var(--cn-bg);
+  margin: 0;
+}
+.specialty-tracking__form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-sm);
+  padding: 12px;
+  background: white;
+}
+.specialty-tracking__form--inline {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  align-items: end;
+  gap: 10px;
+}
+.specialty-tracking__field-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--cn-muted);
+}
+.specialty-tracking__field-row input,
+.specialty-tracking__field-row textarea,
+.specialty-tracking__field-row select {
+  padding: 6px 8px;
+  border: 1px solid var(--cn-line-strong);
+  border-radius: var(--cn-radius-sm);
+  font: inherit;
+  font-size: 13px;
+  color: var(--cn-fg);
+  background: white;
+}
+.specialty-tracking__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  background: white;
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-sm);
+  overflow: hidden;
+}
+.specialty-tracking__table th,
+.specialty-tracking__table td {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--cn-line);
+}
+.specialty-tracking__table th {
+  background: var(--cn-bg-alt);
+  font-weight: 600;
+  color: var(--cn-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.specialty-tracking__table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* ============================================================
+   Phase 21B — Imaging pipeline foundation
+   Metadata + review workflow panel rendered inside the Imaging
+   tab. Reuses --cn-* tokens; no new design language.
+   ============================================================ */
+.imaging-pipeline {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  background: white;
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-md);
+  margin-bottom: 16px;
+}
+.imaging-pipeline--blocked,
+.imaging-pipeline--unavailable {
+  background: var(--cn-bg-alt);
+}
+.imaging-pipeline__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.imaging-pipeline__title {
+  margin: 0;
+  font-size: 16px;
+  color: var(--cn-fg);
+}
+.imaging-pipeline__subtitle {
+  margin: 4px 0 0;
+}
+.imaging-pipeline__split {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(360px, 2fr);
+  gap: 14px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .imaging-pipeline__split { grid-template-columns: 1fr; }
+}
+.imaging-pipeline__list,
+.imaging-pipeline__detail {
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-sm);
+  padding: 12px;
+  background: var(--cn-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 120px;
+}
+.imaging-pipeline__section {
+  margin: 0;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--cn-muted);
+}
+.imaging-pipeline__study-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.imaging-pipeline__study-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-sm);
+  background: white;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  color: var(--cn-fg);
+}
+.imaging-pipeline__study-row:hover {
+  border-color: var(--cn-primary-tint);
+}
+.imaging-pipeline__study-row--active {
+  border-color: var(--cn-primary);
+  background: var(--cn-primary-soft);
+}
+.imaging-pipeline__study-modality { font-weight: 600; }
+.imaging-pipeline__study-date { font-size: 11px; }
+.imaging-pipeline__pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: white;
+  border: 1px solid var(--cn-line-strong);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+.imaging-pipeline__status {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  text-transform: capitalize;
+  border: 1px solid var(--cn-line-strong);
+  background: var(--cn-bg-alt);
+}
+.imaging-pipeline__status--pending_upload,
+.imaging-pipeline__status--uploaded {
+  background: var(--cn-bg-alt);
+  color: var(--cn-fg);
+}
+.imaging-pipeline__status--ready_for_review {
+  background: var(--cn-warning-tint);
+  border-color: var(--cn-warning);
+  color: var(--cn-warning);
+}
+.imaging-pipeline__status--reviewed {
+  background: var(--cn-primary-soft);
+  border-color: var(--cn-primary-tint);
+  color: var(--cn-primary);
+}
+.imaging-pipeline__status--archived {
+  background: var(--cn-bg-alt);
+  color: var(--cn-muted);
+}
+.imaging-pipeline__study {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.imaging-pipeline__study-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.imaging-pipeline__study-title {
+  margin: 0;
+  font-size: 14px;
+  color: var(--cn-fg);
+}
+.imaging-pipeline__reviewed-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--cn-primary-soft);
+  color: var(--cn-primary);
+  font-size: 11px;
+  border: 1px solid var(--cn-primary-tint);
+}
+.imaging-pipeline__dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px 14px;
+  margin: 0;
+}
+.imaging-pipeline__field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+}
+.imaging-pipeline__field--wide { grid-column: 1 / -1; }
+.imaging-pipeline__field dt {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--cn-muted);
+}
+.imaging-pipeline__field dd { margin: 0; color: var(--cn-fg); white-space: pre-wrap; }
+.imaging-pipeline__sec {
+  margin: 14px 0 4px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--cn-muted);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.imaging-pipeline__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  background: white;
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-sm);
+  overflow: hidden;
+}
+.imaging-pipeline__table th,
+.imaging-pipeline__table td {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--cn-line);
+}
+.imaging-pipeline__table th {
+  background: var(--cn-bg-alt);
+  font-weight: 600;
+  color: var(--cn-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.imaging-pipeline__table tbody tr:last-child td { border-bottom: none; }
+.imaging-pipeline__empty {
+  padding: 10px 12px;
+  border: 1px dashed var(--cn-line-strong);
+  border-radius: var(--cn-radius-sm);
+  color: var(--cn-muted);
+  font-size: 13px;
+  background: var(--cn-bg);
+  margin: 0;
+}
+.imaging-pipeline__form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-sm);
+  background: white;
+}
+.imaging-pipeline__form--inline {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  align-items: end;
+}
+.imaging-pipeline__field-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--cn-muted);
+}
+.imaging-pipeline__field-row input,
+.imaging-pipeline__field-row textarea,
+.imaging-pipeline__field-row select {
+  padding: 6px 8px;
+  border: 1px solid var(--cn-line-strong);
+  border-radius: var(--cn-radius-sm);
+  font: inherit;
+  font-size: 13px;
+  color: var(--cn-fg);
+  background: white;
+}
+.imaging-pipeline__review {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-sm);
+  background: var(--cn-bg);
+}
+.imaging-pipeline__open-canvas-hint {
+  margin: 6px 0 0;
+}
+
+/* ============================================================
+   Phase 22 — Multi-clinic / multi-provider scaling dashboard
+   Admin-facing operational rollup. Reuses --cn-* tokens.
+   ============================================================ */
+.multi-clinic {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  background: white;
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-md);
+}
+.multi-clinic--blocked { background: var(--cn-bg-alt); }
+.multi-clinic__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.multi-clinic__title { margin: 0; font-size: 16px; color: var(--cn-fg); }
+.multi-clinic__subtitle { margin: 4px 0 0; }
+.multi-clinic__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+.multi-clinic__card {
+  background: var(--cn-bg);
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-sm);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.multi-clinic__card-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--cn-muted);
+}
+.multi-clinic__card-value {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--cn-fg);
+}
+.multi-clinic__split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+@media (max-width: 900px) {
+  .multi-clinic__split { grid-template-columns: 1fr; }
+}
+.multi-clinic__panel {
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-sm);
+  padding: 10px;
+  background: var(--cn-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.multi-clinic__section {
+  margin: 6px 0 4px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--cn-muted);
+}
+.multi-clinic__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.multi-clinic__row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-sm);
+  background: white;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  color: var(--cn-fg);
+}
+.multi-clinic__row:hover { border-color: var(--cn-primary-tint); }
+.multi-clinic__row--active {
+  border-color: var(--cn-primary);
+  background: var(--cn-primary-soft);
+}
+.multi-clinic__row-label { font-weight: 600; }
+.multi-clinic__pill {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--cn-line-strong);
+  background: var(--cn-bg-alt);
+  font-size: 11px;
+  color: var(--cn-fg);
+}
+.multi-clinic__detail {
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-sm);
+  background: white;
+  padding: 10px;
+  margin-top: 6px;
+}
+.multi-clinic__detail-title {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--cn-fg);
+}
+.multi-clinic__dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 6px 12px;
+  margin: 0;
+}
+.multi-clinic__field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+}
+.multi-clinic__field dt {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--cn-muted);
+}
+.multi-clinic__field dd { margin: 0; color: var(--cn-fg); font-weight: 600; }
+.multi-clinic__breakdowns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+.multi-clinic__breakdown {
+  background: var(--cn-bg);
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-sm);
+  padding: 10px;
+}
+.multi-clinic__breakdown-title {
+  margin: 0 0 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--cn-muted);
+}
+.multi-clinic__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  background: white;
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-sm);
+  overflow: hidden;
+}
+.multi-clinic__table th,
+.multi-clinic__table td {
+  text-align: left;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--cn-line);
+}
+.multi-clinic__table th {
+  background: var(--cn-bg-alt);
+  font-weight: 600;
+  color: var(--cn-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.multi-clinic__table tbody tr:last-child td { border-bottom: none; }
+.multi-clinic__empty {
+  padding: 8px 10px;
+  border: 1px dashed var(--cn-line-strong);
+  border-radius: var(--cn-radius-sm);
+  color: var(--cn-muted);
+  font-size: 12px;
+  background: var(--cn-bg);
+  margin: 0;
+}
+
+/* ============================================================
+   Phase 23 — Security Readiness panel
+   Admin-only metadata-only readiness checklist.
+   ============================================================ */
+.security-readiness {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  background: white;
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-md);
+}
+.security-readiness--blocked { background: var(--cn-bg-alt); }
+.security-readiness__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.security-readiness__title { margin: 0; font-size: 16px; color: var(--cn-fg); }
+.security-readiness__subtitle { margin: 4px 0 0; }
+.security-readiness__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.security-readiness__row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  gap: 4px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-sm);
+  background: var(--cn-bg);
+}
+.security-readiness__row--ok {
+  border-color: var(--cn-primary-tint);
+  background: var(--cn-primary-soft);
+}
+.security-readiness__row--warn {
+  border-color: var(--cn-warning);
+  background: var(--cn-warning-tint);
+}
+.security-readiness__row--fail {
+  border-color: #b91c1c;
+  background: #fee2e2;
+}
+.security-readiness__row-label {
+  grid-column: 1 / 2;
+  font-weight: 600;
+  color: var(--cn-fg);
+  font-size: 13px;
+}
+.security-readiness__row-status {
+  grid-column: 2 / 3;
+  grid-row: 1 / 2;
+  text-align: right;
+}
+.security-readiness__row-description {
+  grid-column: 1 / 3;
+  font-size: 12px;
+}
+.security-readiness__pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  text-transform: capitalize;
+  border: 1px solid var(--cn-line-strong);
+}
+.security-readiness__pill--ok {
+  background: white;
+  color: var(--cn-primary);
+  border-color: var(--cn-primary);
+}
+.security-readiness__pill--warn {
+  background: white;
+  color: var(--cn-warning);
+  border-color: var(--cn-warning);
+}
+.security-readiness__pill--fail {
+  background: white;
+  color: #b91c1c;
+  border-color: #b91c1c;
+}
+.security-readiness__disclaimer {
+  margin: 6px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-sm);
+  background: var(--cn-bg-alt);
+}
+.security-readiness__empty {
+  padding: 10px 12px;
+  border: 1px dashed var(--cn-line-strong);
+  border-radius: var(--cn-radius-sm);
+  color: var(--cn-muted);
+  font-size: 13px;
+  background: var(--cn-bg);
+  margin: 0;
+}
+
+/* ===== Clinic-OS next-phase: workflow status bar, quality panel,
+   production readiness ===== */
+.encounter-workflow-bar {
+  border: 1px solid rgba(11, 110, 121, 0.18);
+  border-radius: 8px;
+  padding: 12px 16px;
+  background: #fff;
+  margin: 12px 0;
+}
+.encounter-workflow-bar__caption {
+  font-size: 13px;
+  color: #5b7079;
+  margin: 0 0 8px;
+}
+.encounter-workflow-bar__lanes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+.encounter-workflow-bar__lane {
+  border: 1px solid rgba(11, 110, 121, 0.12);
+  border-radius: 6px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  background: #fafcfc;
+}
+.encounter-workflow-bar__lane--done {
+  background: rgba(11, 110, 121, 0.08);
+  border-color: rgba(11, 110, 121, 0.4);
+}
+.encounter-workflow-bar__lane--active {
+  border-color: #0B6E79;
+  background: #fff;
+  box-shadow: 0 0 0 2px rgba(11, 110, 121, 0.15);
+}
+.encounter-workflow-bar__lane--blocked {
+  border-color: #c2410c;
+  background: rgba(194, 65, 12, 0.05);
+}
+.encounter-workflow-bar__num {
+  font-size: 11px;
+  color: #0B6E79;
+  font-weight: 700;
+}
+.encounter-workflow-bar__lane-label {
+  font-weight: 600;
+  color: #0F2A33;
+  font-size: 13px;
+}
+.encounter-workflow-bar__lane-short {
+  color: #5b7079;
+  font-size: 11px;
+}
+.encounter-workflow-bar__pill {
+  align-self: flex-start;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #e8eef0;
+  color: #0F2A33;
+}
+.encounter-workflow-bar__pill--done { background: #0B6E79; color: #fff; }
+.encounter-workflow-bar__pill--active { background: #f59e0b; color: #fff; }
+.encounter-workflow-bar__pill--blocked { background: #c2410c; color: #fff; }
+.encounter-workflow-bar__pill--pending { background: #e8eef0; color: #5b7079; }
+.encounter-workflow-bar__hint {
+  margin: 10px 0 0;
+  font-size: 12px;
+}
+@media (max-width: 880px) {
+  .encounter-workflow-bar__lanes {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.note-quality-panel {
+  border: 1px solid rgba(11, 110, 121, 0.18);
+  border-radius: 8px;
+  padding: 12px 16px;
+  background: #fff;
+  margin: 12px 0;
+}
+.note-quality-panel__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  border-bottom: 1px solid rgba(11, 110, 121, 0.12);
+  padding-bottom: 8px;
+  margin-bottom: 10px;
+}
+.note-quality-panel__title { margin: 0; color: #0B6E79; font-size: 14px; }
+.note-quality-panel__subtitle { margin: 4px 0 0; font-size: 12px; }
+.note-quality-panel__counts {
+  display: flex;
+  gap: 12px;
+  margin: 0;
+}
+.note-quality-panel__counts > div { text-align: right; }
+.note-quality-panel__counts dt {
+  font-size: 10px;
+  text-transform: uppercase;
+  color: #5b7079;
+  letter-spacing: 0.04em;
+}
+.note-quality-panel__counts dd { margin: 0; font-size: 14px; font-weight: 700; }
+.note-quality-panel__count--block { color: #c2410c; }
+.note-quality-panel__empty { font-size: 13px; color: #5b7079; }
+.note-quality-panel__flags { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.note-quality-panel__flag {
+  border: 1px solid rgba(11, 110, 121, 0.18);
+  border-radius: 6px;
+  padding: 8px 10px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  background: #fafcfc;
+}
+.note-quality-panel__flag--block {
+  border-color: #c2410c;
+  background: rgba(194, 65, 12, 0.05);
+}
+.note-quality-panel__flag--warn {
+  border-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.05);
+}
+.note-quality-panel__flag--info {
+  background: #fff;
+}
+.note-quality-panel__flag--acked {
+  opacity: 0.65;
+}
+.note-quality-panel__pill {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #e8eef0;
+  color: #0F2A33;
+}
+.note-quality-panel__pill--block { background: #c2410c; color: #fff; }
+.note-quality-panel__pill--warn { background: #f59e0b; color: #fff; }
+.note-quality-panel__pill--info { background: #0B6E79; color: #fff; }
+.note-quality-panel__message { margin: 0; font-size: 13px; }
+.note-quality-panel__action { font-size: 12px; padding: 4px 10px; }
+.note-quality-panel__acked-mark { font-size: 11px; color: #5b7079; }
+.note-quality-panel__block-hint {
+  font-size: 12px;
+  color: #c2410c;
+  margin: 10px 0 0;
+}
+
+.production-readiness {
+  padding: 16px 0;
+}
+.production-readiness__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.production-readiness__title { margin: 0; color: #0B6E79; }
+.production-readiness__subtitle { margin: 4px 0 0; font-size: 13px; }
+.production-readiness__section { margin: 20px 0; }
+.production-readiness__section-title { margin: 0 0 4px; font-size: 16px; color: #0F2A33; }
+.production-readiness__lead { margin: 0 0 12px; font-size: 13px; }
+.production-readiness__empty { color: #5b7079; font-size: 13px; }
+.production-readiness__kpi-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+}
+.production-readiness__kpi {
+  border: 1px solid rgba(11, 110, 121, 0.18);
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.production-readiness__kpi--warn { border-color: #f59e0b; background: rgba(245, 158, 11, 0.05); }
+.production-readiness__kpi--pending { background: #fafcfc; opacity: 0.85; }
+.production-readiness__kpi-label { font-size: 12px; color: #5b7079; text-transform: uppercase; letter-spacing: 0.04em; }
+.production-readiness__kpi-value { font-size: 22px; font-weight: 700; color: #0B6E79; }
+.production-readiness__kpi-hint { font-size: 12px; }
+
+.production-readiness__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.production-readiness__table th,
+.production-readiness__table td {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(11, 110, 121, 0.12);
+}
+.production-readiness__table th {
+  font-weight: 600;
+  color: #0F2A33;
+  background: rgba(11, 110, 121, 0.05);
+}
+.production-readiness__role-pill {
+  display: inline-block;
+  min-width: 22px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 999px;
+}
+.production-readiness__role-pill--ok { background: #0B6E79; color: #fff; }
+.production-readiness__role-pill--missing { background: #e8eef0; color: #c2410c; }
+.production-readiness__ready-cell--ready { color: #0B6E79; font-weight: 700; }
+.production-readiness__ready-cell--not-ready { color: #c2410c; font-weight: 700; }
+.production-readiness__specialty-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.production-readiness__specialty-card {
+  border: 1px solid rgba(11, 110, 121, 0.18);
+  border-radius: 6px;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 110px;
+  background: #fff;
+}
+.production-readiness__specialty-label { font-size: 12px; color: #5b7079; }
+.production-readiness__specialty-count { font-size: 18px; font-weight: 700; color: #0B6E79; }
+
+/* ===== Phase A — language switcher in the authenticated top bar ===== */
+.app-lang-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: #fff;
+  border: 1px solid rgba(11, 110, 121, 0.18);
+  border-radius: 999px;
+}
+.app-lang-switcher__option {
+  appearance: none;
+  background: transparent;
+  color: #0B6E79;
+  border: 0;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 999px;
+  cursor: pointer;
+  line-height: 1;
+}
+.app-lang-switcher__option:hover,
+.app-lang-switcher__option:focus-visible {
+  background: rgba(11, 110, 121, 0.1);
+  outline: none;
+}
+.app-lang-switcher__option:focus-visible {
+  box-shadow: 0 0 0 2px rgba(11, 110, 121, 0.35);
+}
+.app-lang-switcher__option--active {
+  background: #0B6E79;
+  color: #fff;
+}
+.app-lang-switcher__option--active:hover,
+.app-lang-switcher__option--active:focus-visible {
+  background: #0B6E79;
+  color: #fff;
 }

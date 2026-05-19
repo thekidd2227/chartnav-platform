@@ -1,0 +1,8 @@
+ChartNav is not HIPAA compliant by default.
+ChartNav does not replace a certified EHR.
+Not autonomous diagnosis.
+Not image interpretation.
+ChartNav does not provide OpenAI-powered clinical documentation.
+ChartNav does not provide a production LLM fundus workflow.
+ChartNav does not guarantee ROI.
+ChartNav is not better than Cora and is not positioned as a Cora replacement.

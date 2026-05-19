@@ -1,467 +1,1233 @@
-# ChartNav — patient chart foundation (Phase 2A + 2B + Phase 5 start)
+# ChartNav Patient Chart Foundation
 
-> **Productized capability — Clinical Signal Filtering.** Phase 5A.1
-> ships ChartNav's first user-facing AI feature on top of this
-> foundation: a rule-based scribe that separates clinical findings
-> from conversational chatter, surfaces uncertainty for explicit
-> review, and proposes retinal diagram annotations the provider
-> applies or rejects before anything is saved. See:
->
-> - Sales one-pager:
->   [`docs/sales/chartnav-clinical-signal-filtering-one-pager.md`](sales/chartnav-clinical-signal-filtering-one-pager.md)
-> - Demo script:
->   [`docs/sales/chartnav-clinical-signal-filtering-demo-script.md`](sales/chartnav-clinical-signal-filtering-demo-script.md)
-> - Video shot list:
->   [`docs/sales/chartnav-retinal-diagram-video-clips.md`](sales/chartnav-retinal-diagram-video-clips.md)
-> - Marketing-page copy + video placeholder spec:
->   [`docs/sales/chartnav-product-page-copy.md`](sales/chartnav-product-page-copy.md)
-> - User guide for providers:
->   [`docs/user-guides/clinical-signal-filtering.md`](user-guides/clinical-signal-filtering.md)
->
-> **Output contract** of `POST /patients/{id}/eye-diagrams/propose-from-text`
-> (see Phase 5A.1 section below for full detail):
->
-> - `clinical_text`
-> - `ignored_chatter`
-> - `uncertain_phrases`
-> - `structured_findings_json`
-> - `proposed_annotations`
-> - `proposed_findings_text`
-> - `missing_flags`
-> - `confidence_summary`
->
-> **Provider approval lifecycle:** generate → review triage →
-> apply or reject per proposal → **Save** persists through the
-> existing artifact endpoints → optional **Sign** locks the
-> diagram, with edits forking new versions server-side. Nothing
-> is saved automatically.
->
-> **Demo readiness.** The shot list above is the canonical plan
-> for recording six 20–30 second video clips of this feature for
-> the website, sales deck, follow-up emails, and social posts.
-> All clips are recordable from the live app — no mockups, no
-> simulated data.
+This doc describes the **persistence shell** for retinal diagram
+artifacts that ships with the `feature/retinal-artifact-persistence-shell`
+branch. It is intentionally narrow: storage, identity, versioning,
+signing, RBAC, and audit redaction.
 
+## Scope
 
+This is **not** the final clinical drawing tool, **not** the AI proposal
+generator, and **not** the apply/reject workflow. The goal is to land
+the smallest credible foundation that other surfaces can build on
+without re-litigating data shape later.
 
-Status: shipped on 2026-04-30. Single migration (`f7b9c1d2e301`) adds
-the schema. Single new frontend route (`#/patients/{id}`) renders the
-chart shell. Single new artifact surface (`chart_artifacts`) stores
-retinal diagrams as the first concrete instance.
+| In | Out |
+|---|---|
+| `chart_artifacts` table | OD/OS clinical drawing canvas widget |
+| `/patients/{id}/eye-diagrams` CRUD + sign | Speech / dictation filter |
+| Versioning + parent/fork on signed-edit | AI-proposed annotations |
+| Org/RBAC/audit redaction | Provider apply/reject workflow |
+| JSON drawing payload (any object) | `source=ai_approved` provenance |
+| Minimal JSON-shell UI panel | Marketing site / docs export |
 
-## What was added
+## Backend
 
-### Backend
-- **Migration `f7b9c1d2e301_patient_chart_foundation`** — extends
-  `patients` with EMR-style demographics and adds `chart_artifacts`.
-- **`apps/api/app/chart_sections.py`** — in-process registry. Single
-  declaration site for the 11 chart sections. Each entry is a
-  `ChartSection(key, label, status, description, api_path,
-  required_role, future_module)`.
-- **New API endpoints** (in `app/api/routes.py`):
-  - `GET    /patients/{id}`                — full demographics row.
-  - `PATCH  /patients/{id}`                — whitelist edit, audited.
-  - `GET    /patients/{id}/encounters`     — patient-scoped list.
-  - `GET    /patients/{id}/chart-sections` — registry payload.
-  - `GET    /patients/{id}/artifacts`      — list (filter by `artifact_type`).
-  - `POST   /patients/{id}/artifacts`      — create retinal diagram.
-  - `GET    /artifacts/{id}`               — detail.
-  - `PATCH  /artifacts/{id}`               — in-place edit while unsigned;
-                                            forks to a new version when
-                                            the prior is signed.
-  - `POST   /artifacts/{id}/sign`          — single-shot signing.
-- **Audit events** written for: `patient_viewed`, `patient_updated`,
-  `artifact_created`, `artifact_updated`, `artifact_versioned`,
-  `artifact_signed`. Detail rows carry IDs and field names — never
-  values — so PHI does not leak into the audit table.
-- **Tests**: `apps/api/tests/test_patient_chart_foundation.py` —
-  24 tests covering happy paths, RBAC, cross-org 404, audit
-  emission, invalid payloads, and the sign-then-edit fork.
+### Migration
 
-### Frontend
-- **Hash route**: `#/patients/{id}` renders the patient chart in
-  place of the workflow view. No router library added. The encounter
-  detail pane gains an inline "Open chart" link when the encounter
-  has a native `patient_id`.
-- **`apps/web/src/PatientChart.tsx`** — chart shell:
-  - Patient header (name, MRN, DOB+age, sex, status pill).
-  - Sidebar with 11 tabs; tabs with `status: placeholder` show a
-    "soon" badge so the UI is honest.
-  - Overview panel — read view + edit modal calling `PATCH`.
-  - Encounters panel — table with deep links to the encounter
-    workspace (`?encounter=...`).
-  - Eye Diagrams panel — list + open + create new.
-  - Placeholder panels render a clear "Not implemented yet" message
-    with the future-module label.
-- **`apps/web/src/RetinalDiagram.tsx`** — Phase 5 minimum:
-  - Side-by-side OD / OS SVG canvases (200x200 view box).
-  - Tools: select, pen (freehand polyline), text label, clear.
-  - Color picker (5 clinical colors) + stroke width slider.
-  - Save → `POST /patients/{id}/artifacts` (or `PATCH` on existing).
-  - Sign → `POST /artifacts/{id}/sign`. Once signed the canvas is
-    read-only; further edits create a new version (server-side fork).
-- **API client**: `Patient`, `PatientPatchBody`, `ChartSection`,
-  `ChartArtifact`, `ChartArtifactCreateBody`, `ChartArtifactPatchBody`
-  types and matching functions in `src/api.ts`.
-- **Tests**: `src/test/PatientChart.test.tsx` — 6 tests covering
-  default Overview render, tab switching, placeholder honesty,
-  retinal save flow with mocked API, RBAC hiding edit/create
-  controls for reviewer, and the demographics edit round-trip.
+`apps/api/alembic/versions/e1f2a3041507_chart_artifacts.py` creates the
+`chart_artifacts` table.
 
-## Patient schema changes (migration `f7b9c1d2e301`)
+| Column | Type | Notes |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `created_at`, `updated_at` | TIMESTAMP | server default `CURRENT_TIMESTAMP` |
+| `organization_id` | INTEGER FK | `organizations.id`; required |
+| `patient_id` | INTEGER FK | `patients.id`; required |
+| `encounter_id` | INTEGER FK | `encounters.id`; nullable |
+| `created_by_user_id` | INTEGER FK | `users.id` |
+| `artifact_type` | VARCHAR(64) | only `retinal_diagram` ships in this PR |
+| `title` | VARCHAR(255) | optional |
+| `findings_text` | TEXT | provider note; **never logged in audit** |
+| `drawing_json` | TEXT | JSON-encoded; **never logged in audit** |
+| `version_number` | INTEGER | starts at 1 |
+| `parent_artifact_id` | INTEGER FK | self-reference; set on forks |
+| `signed_at` | TIMESTAMP | nullable |
+| `signed_by_user_id` | INTEGER FK | nullable |
 
-Additive columns on `patients` (all nullable; existing rows untouched):
+Indexes on `(organization_id, patient_id)`, `(organization_id, encounter_id)`,
+`(parent_artifact_id)`, and `(organization_id, artifact_type, created_at)`.
 
-| Column                              | Type     | Notes                                             |
-| ----------------------------------- | -------- | ------------------------------------------------- |
-| `middle_name`                       | varchar  |                                                   |
-| `preferred_name`                    | varchar  |                                                   |
-| `display_name`                      | varchar  | optional override of "{first} {last}"             |
-| `pronouns`                          | varchar  |                                                   |
-| `gender_identity`                   | varchar  | separate from `sex_at_birth`                      |
-| `preferred_language`                | varchar  | ISO-ish; not enforced                             |
-| `race`                              | varchar  | free-form, no imposed vocabulary                  |
-| `ethnicity`                         | varchar  | free-form                                         |
-| `email`                             | varchar  |                                                   |
-| `phone`                             | varchar  |                                                   |
-| `address_line1` / `_line2`          | varchar  |                                                   |
-| `address_city` / `_state`           | varchar  |                                                   |
-| `address_postal_code` / `_country`  | varchar  |                                                   |
-| `emergency_contact_name`            | varchar  |                                                   |
-| `emergency_contact_phone`           | varchar  |                                                   |
-| `emergency_contact_relationship`    | varchar  |                                                   |
-| `insurance_metadata`                | text     | JSON-serialized (object or array). See note.      |
-| `updated_at`                        | datetime | populated by PATCH                                |
+`drawing_json` is a `TEXT` column with JSON content (same pattern as
+`ai_governance_log.security_events`) — portable across SQLite and
+Postgres without native-JSON dialect dependencies.
 
-**Insurance** is stored as a JSON blob on purpose. The frontend can
-evolve plan/member-id/payer fields without a migration each time.
-When the schema settles we will normalize into a real
-`patient_insurance` table.
+### Endpoints
 
-**Identity-bearing fields** (`patient_identifier`, `external_ref`,
-`organization_id`) are intentionally NOT in the PATCH whitelist —
-the generic edit endpoint cannot change a patient's MRN.
+All under `/patients/{patient_id}/eye-diagrams`. The patient is resolved
+inside the caller's organization first; cross-org access returns
+**404 `patient_not_found`** (no existence leak).
 
-## Chart-section registry
+| Method | Path | Notes |
+|---|---|---|
+| `GET` | `/` | list artifacts for patient (most recent first) |
+| `GET` | `/{artifact_id}` | fetch one |
+| `POST` | `/` | create new artifact (version 1, unsigned) |
+| `PATCH` | `/{artifact_id}` | update unsigned in place |
+| `PATCH` | `/{artifact_id}?fork=true` | edit a signed artifact → new version |
+| `POST` | `/{artifact_id}/sign` | stamp `signed_at`/`signed_by_user_id` |
 
-Defined once in `app/chart_sections.py`. Each entry has:
+### Versioning + signing rules
 
-```
-{ key, label, status, description, api_path?, required_role?, future_module? }
+- **Create**: `version_number = 1`, `parent_artifact_id = null`, unsigned.
+- **Update unsigned in place**: refreshes `updated_at`. Same id.
+- **Sign**: stamps `signed_at` and `signed_by_user_id`. Becomes immutable.
+- **Edit signed without `?fork=true`**: HTTP **409 `artifact_signed_immutable`**.
+- **Edit signed with `?fork=true`**: insert a new row whose
+  `parent_artifact_id` is the original id and `version_number =
+  parent.version_number + 1`. The fork starts unsigned. Fields not
+  supplied in the patch are inherited from the parent.
+- **Re-sign already signed**: HTTP **409 `artifact_already_signed`**.
+
+### RBAC
+
+Routes use `require_caller` and check role inside the handler — same
+pattern as `/patients`:
+
+| Action | admin | clinician | reviewer |
+|---|---|---|---|
+| List / detail | ✓ | ✓ | ✓ |
+| Create | ✓ | ✓ | ✗ `role_forbidden` |
+| Update | ✓ | ✓ | ✗ `role_forbidden` |
+| Sign | ✓ | ✓ | ✗ `role_forbidden` |
+| Cross-org any action | 404 `patient_not_found` |
+
+Reviewers are read-only on this surface. Sign authority belongs to the
+clinician who created the artifact (mirrors how clinicians sign their
+own encounter notes today).
+
+### Audit safety
+
+Every create / update / fork / sign emits a row to `security_audit_events`
+via `app.audit.record(...)`:
+
+- `event_type` ∈ {`eye_diagram_created`, `eye_diagram_updated`,
+  `eye_diagram_forked`, `eye_diagram_signed`}
+- `detail` is **metadata only**: `artifact_id=N version=N parent=N|None signed=bool`
+- **No `findings_text`. No `drawing_json`.** A regression test
+  (`TestAuditDoesNotLogClinicalContent`) asserts neither appears in
+  any audit row's `detail` after create/update/sign.
+
+## Frontend
+
+### API client (`apps/web/src/api.ts`)
+
+```ts
+listPatientEyeDiagrams(email, patientId)
+getPatientEyeDiagram(email, patientId, artifactId)
+createPatientEyeDiagram(email, patientId, input)
+updatePatientEyeDiagram(email, patientId, artifactId, input, { fork? })
+signPatientEyeDiagram(email, patientId, artifactId)
 ```
 
-Initial sections:
+Types: `EyeDiagramArtifact`, `EyeDiagramListResponse`,
+`EyeDiagramCreateInput`, `EyeDiagramUpdateInput`. `drawing_json` is
+typed as `Record<string, unknown>` so any structured payload round-trips.
 
-| Key            | Status      | Notes                                                |
-| -------------- | ----------- | ---------------------------------------------------- |
-| `overview`     | active      | demographics from `GET /patients/{id}`               |
-| `encounters`   | active      | `GET /patients/{id}/encounters`                      |
-| `allergies`    | placeholder | future module: `phase-2c-allergies`                  |
-| `medications`  | placeholder | future module: `phase-2c-medications`                |
-| `labs`         | placeholder | future module: `phase-2c-labs`                       |
-| `radiology`    | placeholder | future module: `phase-2c-radiology`                  |
-| `orders`       | placeholder | future module: `phase-2c-orders`                     |
-| `documents`    | placeholder | future module: `phase-2c-documents`                  |
-| `consults`     | placeholder | future module: `phase-2c-consults`                   |
-| `isolation`    | placeholder | future module: `phase-2c-isolation`                  |
-| `eye_diagrams` | active      | `chart_artifacts` table; retinal diagram surface     |
+### UI (`apps/web/src/EyeDiagramPanel.tsx`)
 
-The frontend renders straight from the registry — adding a new
-section is a single source change in `chart_sections.py` plus a
-panel component for the `key`. Section status (`active` /
-`placeholder` / `unavailable`) is the contract; the UI never shows
-fake data for placeholder modules.
+Embedded inside `NoteWorkspace.tsx` and gated on the encounter having a
+numeric `patient_id` (FHIR-bridged encounters with no native patient
+row hide the panel). The panel:
 
-## Patient chart UI behavior
+- Lists saved retinal diagrams for the patient
+- Loads any artifact and restores `title`, `findings`, and
+  `drawing_json` (rendered as pretty-printed JSON in a textarea)
+- Saves a new artifact, updates an unsigned one in place, or signs
+- Detects signed artifacts on load and replaces the "Save / Sign"
+  buttons with a "Save as new version" (fork) button + an inline
+  warning that explains the fork semantics
+- Surfaces version number, parent linkage, signed status, and
+  `created_at` / `updated_at` for whichever artifact is loaded
 
-- Route is `#/patients/{id}` and is deep-linkable. Clearing the hash
-  returns the user to the workflow view.
-- Identity picker, top-level header, and footer behavior are
-  preserved across both views.
-- **Edit demographics** is gated to `admin` and `clinician`.
-  Reviewers see the read-only Overview without the edit button.
-- **Encounters tab** uses the existing encounter-detail
-  query-string deep link (`?encounter={id}`) to keep the URL
-  contract consistent with the rest of the app.
-- **Placeholder panels** show a `data-section-status="placeholder"`
-  attribute and a "Not implemented yet" line — operators are not
-  asked to interpret an empty surface as "no data."
-- **Eye Diagrams** is its own list + editor. Diagrams are sorted
-  newest-first. Signed diagrams render with a "signed" badge in
-  the list and at the top of the editor.
+This is a **persistence shell**: the drawing payload is edited as raw
+JSON. The clinical drawing canvas is a follow-up.
 
-## Retinal diagram foundation (Phase 5 start)
+## Phase 5B — OD/OS retinal drawing canvas
 
-- One row per *version* in `chart_artifacts`. `parent_artifact_id`
-  links a new version to its predecessor; `version_number` is the
-  display ordinal.
-- **Editing rules**:
-  - While `signed_at` is null, `PATCH /artifacts/{id}` updates the
-    same row in place.
-  - Once `signed_at` is set, `PATCH /artifacts/{id}` is a fork:
-    the response is a new row with the prior id as
-    `parent_artifact_id` and `version_number` bumped. The signed
-    row is never mutated.
-  - `POST /artifacts/{id}/sign` is one-shot and idempotent (409
-    `artifact_already_signed`).
-- **Drawing payload** is JSON in `vector_json`:
+The persistence shell's JSON textarea is replaced by a real SVG
+drawing surface. **No backend or storage contract changes.** The
+canvas saves and loads through the same `/patients/{id}/eye-diagrams`
+routes; the new content lives entirely inside `drawing_json` under a
+versioned, structured schema.
 
-  ```ts
-  {
-    od: { kind: 'pen', color, width, points: [[x, y], ...] }[],
-    os: same shape,
-    labels: { eye: 'od' | 'os', x, y, text, color }[]
-  }
-  ```
+### `drawing_json` schema (v1)
 
-  Coordinates are in the SVG's 200x200 view-box so they round-trip
-  cleanly across renderings and DPI.
-- `rendered_snapshot` is a placeholder text column for a future
-  PNG/PDF reference. We do not generate a server-rendered snapshot
-  in this phase.
-
-## What remains for full EMR-style clinical modules (Phase 2C)
-
-Each placeholder section needs:
-
-- a real schema (one or more tables)
-- API endpoints that respect the same auth / RBAC / org-isolation /
-  audit conventions
-- a panel component
-- promotion to `status: 'active'` in the registry
-
-Initial priorities (ordered roughly by clinical leverage):
-
-1. **Allergies** — substance + reaction + severity + onset.
-2. **Medications** — active list, sig, prescriber, history.
-3. **Labs** — observation + reference range + trend view.
-4. **Orders** — order set, status (pending → resulted → cancelled).
-5. **Documents** — uploaded blobs + metadata + retention.
-6. **Consults / H&P** — narrative templates, signoff parity with notes.
-7. **Radiology** — order + study + report; image rendering deferred.
-8. **Isolation** — precaution flags + revisit policy.
-
-These are all independent and can be parallelized once the
-`chart_section` shape is stable.
-
-## Phase 5A.1 — eye-diagram alias surface + AI retinal scribe (rule-based v1)
-
-Persistence still happens through `chart_artifacts` exactly as
-described above. Phase 5A.1 added a friendlier surface and a
-non-persistent AI proposal layer on top.
-
-### Friendly aliases
-
-The five canonical eye-diagram operations are now also exposed
-under `/patients/{id}/eye-diagrams*`. These do **not** duplicate
-persistence — each handler is a thin facade that validates the
-(patient ↔ artifact ↔ retinal_diagram) axes then delegates to the
-canonical `chart_artifacts` handlers:
-
-- `GET    /patients/{id}/eye-diagrams`                      → list
-- `GET    /patients/{id}/eye-diagrams/{aid}`                → detail
-- `POST   /patients/{id}/eye-diagrams`                      → create (forces `artifact_type=retinal_diagram`)
-- `PATCH  /patients/{id}/eye-diagrams/{aid}`                → in-place when unsigned, fork-on-edit-after-sign
-- `POST   /patients/{id}/eye-diagrams/{aid}/sign`           → sign (idempotent → 409 once signed)
-
-Cross-axis mismatches (artifact belongs to another patient, or
-artifact is not a retinal_diagram) return **404** to avoid leaking
-existence across boundaries. Auth/RBAC/audit/org-isolation rules
-are unchanged — all of that lives one level down in the canonical
-artifact handlers.
-
-### AI retinal scribe (rule-based v1)
-
-```
-POST /patients/{id}/eye-diagrams/propose-from-text
-body: { "source_text": "...", "encounter_id": null }
-```
-
-This endpoint is **read-only**. It runs the deterministic filter
-in `app/services/retinal_scribe.py` over the input text and
-returns a triage with proposed annotations. **Nothing is written
-to the database.** Persistence happens only when the provider
-clicks Apply on individual proposals and saves through the
-existing alias endpoint.
-
-#### Filter v1 rules
-
-The filter is conservative and allowlist-only:
-
-- **Findings allowlist** (canonical key + synonym patterns):
-  drusen, microaneurysm, dot/blot hemorrhage, flame hemorrhage,
-  hard exudates, cotton-wool spot, neovascularization (incl.
-  NVD/NVE), IRMA, lattice degeneration, retinal tear/hole,
-  retinal detachment, laser scar / PRP, disc pallor, RPE changes.
-- **Laterality**: `OD` / right eye, `OS` / left eye, `OU` / both
-  eyes / bilateral.
-- **Zones**: macula, optic disc, superior, inferior, nasal,
-  temporal, periphery.
-- **Severity**: mild / moderate / severe.
-- **Uncertainty markers**: `possible`, `possibly`, `maybe`,
-  `questionable`, `likely`, `rule out`, `uncertain`,
-  `suspicious for`, `cannot rule out`, `?`.
-- **Chatter markers**: `okay`, `hold on`, `let me see`,
-  `can you hear me`, `next patient`, `front desk`,
-  `we'll come back to that`, `thank you`, `one moment`,
-  scheduling/appointment phrases.
-
-Decision rules per phrase (sentence-level + clause-level split on
-`.?!` and `;` / connector-comma):
-
-| Phrase contains                       | Triage                                                               |
-| ------------------------------------- | -------------------------------------------------------------------- |
-| Recognized finding                    | **clinical**. Build a structured finding + (per-eye) annotation. If uncertainty marker present, also add to `uncertain_phrases`. |
-| Chatter marker AND no finding         | **ignored_chatter** (with reason).                                   |
-| No finding AND no chatter marker      | **uncertain_phrases** (reason: `no_recognized_finding`) — never silently dropped. |
-
-If a finding has no laterality, the structured finding is still
-emitted but **no annotation is auto-placed** (we won't guess OD
-vs. OS). The response includes a `missing_flags` entry so the UI
-can prompt the provider.
-
-#### Response shape
-
-```json
+```jsonc
 {
-  "clinical_text": "OD severe drusen ...",
-  "ignored_chatter":   [{ "phrase": "Hold on",     "reason": "chatter_marker_no_finding" }],
-  "uncertain_phrases": [{ "phrase": "Possible NV", "reason": "uncertainty_marker_present" }],
-  "structured_findings_json": [{
-    "finding": "drusen", "label": "drusen",
-    "laterality": "OD", "zone": "macula",
-    "severity": "severe", "certainty": "definite",
-    "source_phrase": "OD severe drusen in the macula"
-  }],
-  "proposed_annotations": [{
-    "proposal_id": "...", "finding": "drusen", "label": "drusen",
-    "eye": "od", "x": 100, "y": 110, "color": "#DC2626",
-    "text": "drusen", "source": "ai_proposed",
-    "source_phrase": "OD severe drusen in the macula",
-    "severity": "severe", "certainty": "definite", "zone": "macula"
-  }],
-  "proposed_findings_text": "OD drusen (macula) [severe]",
-  "missing_flags": [],
-  "confidence_summary": { "findings": 1, "chatter": 0, "uncertain": 0, "annotations": 1 }
+  "schema_version": 1,
+  "canvas_type": "retinal_diagram",
+  "annotations": [
+    {
+      "id": "a_<timestamp>_<n>",
+      "kind": "symbol" | "freehand" | "text",
+      "eye": "OD" | "OS",
+      "x": 0.42,           // normalized 0..1 within the eye pane
+      "y": 0.58,
+      "color": "#c1121f",
+      "source": "manual",  // reserved; AI proposals will populate later
+      "created_at": "<iso8601>",
+
+      // kind === "symbol":
+      "symbol_type": "drusen" | "dot_blot_hemorrhage" | ...,
+      "label": "<optional>",
+
+      // kind === "freehand":
+      "points": [{ "x": 0.4, "y": 0.5 }, ...],
+
+      // kind === "text":
+      "text": "<provider label>"
+    }
+  ]
 }
 ```
 
-### Provider review lifecycle
+Coordinates are **normalized 0..1** per eye pane so resizing the SVG
+never breaks position. The `source` field is reserved — every
+annotation in this PR is `"manual"`. AI-proposed annotations will land
+later under a different `source` value without a schema bump.
 
-In the UI:
+### Symbol library v1
 
-1. Provider opens the **AI scribe** panel inside the retinal
-   diagram workspace and pastes/dictates the exam phrasing.
-2. UI calls `POST /eye-diagrams/propose-from-text`. The
-   triage and proposed annotations are rendered with apply/reject
-   controls per row, plus *Apply remaining* and *Reject remaining*.
-3. **Apply** writes the annotation into the local canvas state as
-   a label tagged `source: 'ai_approved'` and merges the
-   `proposed_findings_text` into the findings textarea.
-4. **Reject** sets the row to a rejected state and the annotation
-   is **never** written into `vector_json` or `findings_text`.
-5. Provider clicks **Save**. Persistence flows through the
-   existing alias endpoint:
-   `POST /patients/{id}/eye-diagrams` (create) or
-   `PATCH /patients/{id}/eye-diagrams/{aid}` (update / fork).
+13 ophthalmology symbols ship in this PR (see
+`apps/web/src/retinalAnnotations.ts` `SYMBOL_LIBRARY`):
 
-The proposal endpoint is not on the persistence path. The same
-diagram can be re-saved any number of times, and each save uses
-the existing version-fork-on-edit-after-sign rule.
+drusen · dot/blot hemorrhage · flame hemorrhage · microaneurysm ·
+hard exudates · cotton-wool spot · neovascularization · retinal tear ·
+retinal detachment · laser/scar · disc pallor · RPE change ·
+lattice degeneration
 
-### Audit safety for the scribe
+Severity selection (mild / moderate / severe) is **not** in this PR —
+the `severity` field stays reserved.
 
-Every call to the proposal endpoint writes one
-`scribe_proposal_generated` audit row. The detail string includes
-**only counts**:
+### Tools
 
-```
-patient_id={id} input_chars=N findings=N chatter=N uncertain=N annotations=N
-```
+- Select / freehand / text label (the three primary modes)
+- 13-button symbol palette
+- Color picker
+- Undo / redo (whole-state snapshots, capped at **50** entries)
+- Move selected annotation by dragging in select mode
+- Delete selected
+- Clear current eye / clear all
 
-The verbatim `source_text`, the `proposed_findings_text`, and the
-proposed annotation contents are **never** written to the audit
-detail. The `test_propose_endpoint_audit_excludes_phi` test pins
-this contract — a phrase with PHI-like content (e.g. an SSN)
-in the input is verified to never appear in any audit row.
+### Findings auto-summary
 
-### Limitations of v1
-
-- **Deterministic only**: regex- and keyword-based, no LLM. Phrases
-  outside the allowlist surface as uncertain rather than getting
-  recognized.
-- **No symbol drag/move**: AI annotations are placed at the zone
-  centroid; provider can use the delete tool + redraw, but cannot
-  move yet.
-- **No transcript dictation pipeline integration**: scribe takes a
-  paste/typed text block. STT integration with the existing
-  encounter input pipeline is a separate piece of work.
-- **No provenance per stroke** in the UI yet beyond
-  `source: 'manual' | 'ai_approved'` on labels. Audit captures
-  counts, not per-annotation lineage.
-
-### Future LLM-backed path (v2)
-
-The `analyze()` function is the contract boundary. A future
-LLM-backed implementation (call out, get back a structured JSON,
-post-process through the same dataclasses) slots in here without
-changing the endpoint shape, the UI, or the persistence layer.
-The deterministic v1 stays as a fallback and a regression baseline.
-
-## What remains for full Phase 5 retinal tooling (Phase 5B)
-
-The current canvas is intentionally minimal. Future work:
-
-- Structured **symbol palette**: hemorrhage, drusen, laser scars,
-  cotton-wool spots, exudates, RPE changes, etc. Each symbol carries
-  its own SVG glyph and metadata.
-- **Per-symbol layers** with toggleable visibility so providers
-  can compare visits side by side while reviewing care.
-- **Eraser** + per-stroke select + delete. Currently `clear` is
-  whole-eye only.
-- **Undo / redo** stack, scoped per editing session.
-- **Anterior-segment** template (cornea/iris view) with its own
-  symbol set.
-- **`rendered_snapshot`** generation: server-side rasterization
-  to PNG/PDF for export, transmission, and printing.
-- **Encounter linkage**: when an encounter is open, default the new
-  diagram's `encounter_id` to the active encounter so audit trails
-  tie back to the visit.
-- **Symbol provenance** in the audit row (which symbol, where,
-  by whom, at what version).
-
-## Security / compliance posture
-
-- Auth/RBAC: existing `require_caller` + role checks; reviewers are
-  read-only on patient writes and artifact writes.
-- **Org isolation**: every endpoint that loads a `patient` or
-  `artifact` validates `organization_id` matches the caller's org and
-  returns 404 on mismatch (no existence leak across orgs).
-- **Audit**: every read of a patient and every mutation of a patient
-  or artifact writes a row. Detail strings carry IDs and field
-  names, not values.
-- **PHI**: never written to standard logs by the new code; not
-  written to audit detail strings.
-- **Not certified**: this is a foundation layer, not a certified
-  EHR. ChartNav makes no certification claim today and the UI does
-  not present this surface as one.
-- **Versioning**: signed artifacts cannot be silently overwritten —
-  edits fork. This is structural, not a UI choice.
-
-## How to run
+The findings textarea is updated automatically as the canvas changes,
+but **only inside a fenced block**:
 
 ```
-make migrate          # applies f7b9c1d2e301 forward
-make seed             # idempotent
-make test             # full pytest suite — 346 passing
-make web-test         # vitest — 149 passing
-make verify           # full backend gate
-make web-verify       # full frontend gate (typecheck + vitest + build)
+<!-- retinal-auto-summary:start -->
+Retinal diagram auto-summary:
+OD: drusen near macula
+OS: flame hemorrhage superior
+<!-- retinal-auto-summary:end -->
 ```
 
-Open the chart shell in dev:
+Provider text **outside** these markers is never modified. If the
+fence is missing, a fresh block is appended. If present, only the
+content between the markers is replaced. The summary respects rough
+zone names (superior / inferior / nasal / temporal / near macula)
+based on the normalized coordinates, and merges duplicates with `×N`
+counts.
+
+### Signed / fork behavior
+
+- A signed artifact loads in **read-only** mode: the toolbar is
+  hidden, pointer events on the canvas are ignored, and an inline
+  note explains how to amend.
+- The button strip below the canvas swaps to **"Save as new version"**.
+- Saving issues `PATCH /patients/{id}/eye-diagrams/{id}?fork=true`,
+  which the existing backend turns into a new unsigned row whose
+  `parent_artifact_id` is the original. No backend behavior change.
+
+### Legacy payload handling
+
+When a Phase-5A persistence-shell artifact (any non-`schema_version: 1`
+shape) is loaded, the canvas mounts empty and surfaces a small inline
+note: *"This artifact was saved before the drawing canvas existed."*
+The original `drawing_json` is preserved on the server until the user
+saves new canvas content. This keeps the rollout safe; we never
+silently destroy a legacy payload.
+
+### What's still deferred
+
+- AI-proposed annotations (consumer of the same `drawing_json`)
+- Provider apply/reject workflow + `source: "ai_approved"`
+- Clinical speech / signal filter
+- Rendered snapshot or PDF export of the signed diagram
+- Symbol library expansion beyond v1
+- Severity UI for symbols
+
+All of those continue to ride on the same `chart_artifacts` table and
+the same `drawing_json` schema — no migration needed when they land.
+
+## Phase 6 — findings → diagram proposals (deterministic, with provider review)
+
+The first AI-assisted clinical workflow on top of the canvas. **No
+external LLM in this PR.** The proposal engine is deterministic and
+rule-based; it lives in `apps/api/app/services/retinal_proposals.py`.
+**Zero schema changes** — proposals never touch the database directly,
+and applied annotations ride on the same `drawing_json` schema with an
+extended (additive, optional) annotation shape.
+
+### Endpoint
 
 ```
-make dev              # boots api on :8000 and web on :5173
-# then visit http://localhost:5173/#/patients/1
+POST /patients/{patient_id}/eye-diagrams/propose-from-findings
 ```
+
+Request:
+
+```jsonc
+{
+  "findings_text": "OD drusen at macula. OS flame hemorrhage superior.",
+  "drawing_json": { ... }   // optional, currently unused by the parser
+}
+```
+
+Response:
+
+```jsonc
+{
+  "clinical_text": "...",
+  "ignored_chatter": [...],
+  "uncertain_phrases": [...],
+  "proposed_annotations": [
+    {
+      "proposal_id": "p_<sha256-16>",
+      "kind": "symbol",
+      "symbol_type": "drusen",
+      "eye": "OD",
+      "x": 0.5, "y": 0.5,
+      "zone": "macula",
+      "text": "OD drusen at macula",
+      "color": "#c1121f",
+      "confidence": 0.85,
+      "confidence_band": "high" | "medium" | "low",
+      "source_phrase": "OD drusen at macula",
+      "source_start": 0, "source_end": 19,
+      "reason": "matched finding=drusen + eye=OD + zone=macula",
+      "missing_flags": [],
+      "source": "ai_proposed"
+    }
+  ],
+  "confidence_summary": { "high": 1, "medium": 0, "low": 0, "needs_review": true },
+  "missing_flags": [
+    { "code": "missing_laterality", "detail": "...", "source_phrase": "...", "source_start": 0, "source_end": 17 }
+  ]
+}
+```
+
+Rules enforced in the engine:
+
+- **No DB writes.** The endpoint is read-only on the data side.
+- **Stable proposal IDs.** `proposal_id = "p_" + sha256(normalized_phrase + finding + eye + zone)[:16]`. Same input ⇒ same id.
+- **Missing laterality ⇒ no auto-placement.** A `missing_laterality` flag is emitted instead so the UI can show the provider what to clarify.
+- **OU / bilateral / both eyes ⇒ two proposals** (OD + OS) with distinct ids.
+- **Chatter is ignored** (greetings, filler) and surfaced separately in `ignored_chatter`.
+- **Unknown clinical-sounding phrases ⇒ `uncertain_phrases`**, never an auto-proposal.
+- **Coordinate convention matches `RetinalDrawingCanvas.tsx`:**
+  - OD: optic disc on the right (x > 0.5); nasal = right, temporal = left.
+  - OS: optic disc on the left (x < 0.5); nasal = left, temporal = right.
+  - Superior is y < 0.5; inferior is y > 0.5; eye-independent.
+
+### Supported v1
+
+- **Findings** (13): drusen, dot/blot hemorrhage, flame hemorrhage,
+  microaneurysm, hard exudates, cotton-wool spot, neovascularization,
+  retinal tear/hole, retinal detachment, laser/scar, disc pallor,
+  RPE change, lattice degeneration.
+- **Laterality**: `OD`, `OS`, `OU`, `right eye`, `left eye`, `bilateral`,
+  `bilaterally`, `both eyes`.
+- **Zones**: macula, optic disc, superior, inferior, nasal, temporal,
+  superior temporal / superotemporal, superior nasal / superonasal,
+  inferior temporal / inferotemporal, inferior nasal / inferonasal,
+  periphery.
+
+### RBAC + org isolation
+
+- **Admin + clinician only.** Reviewers are denied (`role_forbidden`).
+  Even though the data layer is read-only, this endpoint produces
+  clinical suggestions and follows write-like access.
+- **Patient resolved inside the caller's org first.** Cross-org
+  patient ids return **404 `patient_not_found`** (no existence leak).
+
+### Audit safety
+
+A single `eye_diagram_proposed` row is written to
+`security_audit_events` per request. The detail string is
+**metadata-only** — `patient_id`, `proposal_count`, `uncertain_count`,
+`missing_flag_count`. The raw `findings_text` and proposal bodies are
+**never** written to the audit log. Sentinel-token regression test
+asserts neither leaks.
+
+### Apply / reject lifecycle
+
+- The proposal review panel (`apps/web/src/RetinalProposalReview.tsx`)
+  surfaces every proposal with its source phrase, reason, confidence
+  band, and missing flags.
+- "Apply" inserts a fresh annotation into the working
+  `DrawingDocument` with:
+  - `source: "ai_approved"`
+  - `proposal_id` retained for traceability
+  - `source_phrase`, `confidence`, `reason` carried as optional fields
+- "Reject" updates only transient UI state. Rejected proposals never
+  reach `onApply`, never enter `drawing_json`, and never persist on
+  save.
+- "Apply remaining" / "Reject remaining" act only on still-pending
+  proposals — already-applied ones are not re-applied.
+- The **"Generate diagram proposals from findings"** button is
+  disabled when `findings_text` is empty and **hidden** when the
+  artifact is signed (the canvas is read-only there; provider must
+  fork via "Save as new version" first).
+
+### Annotation schema additions (additive, no `schema_version` bump)
+
+The `Annotation` type gains four optional fields and a second source
+value. Existing v1 documents and tests are unaffected:
+
+```ts
+type AnnotationSource = "manual" | "ai_approved";
+
+interface BaseAnnotation {
+  // ...existing fields...
+  source: AnnotationSource;
+  proposal_id?: string;
+  source_phrase?: string;
+  confidence?: number;
+  reason?: string;
+}
+```
+
+### Validation
+
+- **Backend:** 27 new tests in `tests/test_retinal_proposals.py`
+  covering laterality detection, zones, OU expansion, chatter,
+  uncertain phrases, missing flags, stable ids, coordinate convention,
+  RBAC, cross-org 404, no-DB-write, and audit redaction (sentinel
+  tokens absent).
+- **Frontend:** 7 specs for `RetinalProposalReview`, plus 4 new
+  panel-flow specs in `EyeDiagramPanel.test.tsx` covering apply
+  persistence, reject non-persistence, mixed manual + applied save
+  payloads, and signed-artifact behavior.
+
+### Limitations / explicit non-claims
+
+- ❌ Not autonomous diagnosis. Every proposal requires explicit
+  provider apply.
+- ❌ No external LLM. The parser is deterministic regex over a closed
+  vocabulary; phrasing outside that vocabulary lands in
+  `uncertain_phrases`.
+- ❌ No automatic charting. Applied proposals enter the in-memory
+  document; the artifact is persisted only when the provider clicks
+  Save / Save as new version.
+- ❌ No orders, no e-prescribing, no coding side effects.
+- ❌ Parser will miss unfamiliar phrasing. Provider must verify the
+  diagram against their own findings text — that's the job, not a bug.
+
+## Future phases (still deferred)
+
+1. **Clinical speech filter** — filter dictated text into clinical
+   findings before it reaches the artifact.
+2. **External LLM proposal source** — same review-required contract,
+   different producer.
+3. **Severity UI for symbols** (mild / moderate / severe).
+4. **Symbol library v2** — broader ophthalmology coverage.
+5. **Rendered snapshot / PDF export** of signed diagrams.
+
+Each rides on the same `chart_artifacts` table, the same `drawing_json`
+schema (additive), and the same `eye_diagram_*` audit event family.
+
+## Phase 8 — AI scribe session lifecycle
+
+The scribe session lifecycle introduces an explicit unit of work
+between provider source/transcript text and a finalized clinical
+artifact. **Zero retinal-side changes.** Phase 8 lives entirely in
+its own table (`scribe_sessions`), its own routes
+(`/patients/{id}/scribe-sessions/...`), and its own panel
+(`ScribeSessionPanel.tsx`).
+
+**Lifecycle states:** `draft` → `processing` → `ready_for_review` →
+`reviewed` → `finalized`, plus `discarded` reachable from any
+non-terminal state. `finalized` and `discarded` are immutable.
+
+**Provider review is mandatory.** No state can reach `finalized`
+without an explicit `review` action followed by an explicit `finalize`
+action. The processing engine is deterministic regex over a closed
+heading vocabulary; the rendered draft always begins with
+`Draft — provider review required`. Audit detail is metadata-only —
+`source_text`, `transcript_text`, `draft_note_text`,
+`structured_note_json`, and `review_notes` never appear in
+`security_audit_events.detail`. Sentinel-token regression tests
+assert this for every event type.
+
+**Linkage to retinal artifacts** is opt-in via the
+`scribe_sessions.linked_artifact_id` foreign key into
+`chart_artifacts`. Finalizing a scribe session does **not** write into
+`chart_artifacts` — that's a separate explicit action that lives in a
+later phase.
+
+See `docs/chartnav-scribe-session-lifecycle.md` for the full lifecycle
+contract, transition matrix, RBAC, audit safety, and limitations.
+
+## Phase 9 — provider-reviewed patient-friendly summaries
+
+Phase 9 adds a provider-facing surface for drafting plain-language
+summaries that a clinician can review, finalize, or discard. **Zero
+retinal-side changes. Zero scribe-session-side changes.** Phase 9 lives
+entirely in its own table (`patient_summaries`), its own routes
+(`/patients/{id}/patient-summaries/...`), and its own panel
+(`PatientSummaryPanel.tsx`).
+
+**Lifecycle states:** `draft` → `reviewed` → `finalized`, plus
+`discarded` reachable from `draft` or `reviewed`. `finalized` and
+`discarded` are immutable; `update`, `review`, `finalize`, and
+`discard` from a terminal state return `409 patient_summary_immutable`.
+Direct `draft → finalize` is rejected with
+`409 patient_summary_invalid_transition`.
+
+**Provider review is mandatory.** A summary cannot reach `finalized`
+without an explicit `review` step. The v1 generator is deterministic
+— it composes plain-language paragraphs from already-stored structured
+note fields (chief complaint, plan, follow-up) when seeded from a
+finalized scribe session, and falls back to a placeholder draft when
+no source is provided. **It never invents diagnoses, never adds
+treatment recommendations beyond what the source already contains,
+and always includes a limitations notice** that the draft is
+incomplete and requires provider review.
+
+**Patient delivery is explicitly deferred.** The endpoint never sends
+anything to a patient. The panel renders no patient-send action
+(no email, no SMS, no portal push, no PDF export). Banner copy on
+the panel reads: *"Patient summary draft — provider review required.
+Do not send to patient until finalized by the provider."*
+
+**Org isolation:** patient is resolved inside the caller's
+organization first; cross-org returns
+`404 patient_not_found` (no existence leak). A `scribe_session_id`
+that exists but in a different org or for a different patient
+returns `404 scribe_session_not_found` to avoid existence leakage of
+sessions in other orgs.
+
+**RBAC:** `admin` and `clinician` can write (`create`, `update`,
+`review`, `finalize`, `discard`). `reviewer` is read-only on this
+surface (matches the scribe-session contract). Read access still
+requires the caller to be in the same org as the patient.
+
+**Audit:** every mutation emits a `patient_summary_*` event whose
+`detail` is metadata-only — `summary_id`, `patient_id`, `encounter_id`,
+`scribe_session_id`, and `status`. Summary body, key findings,
+next steps, questions, limitations notice, and review notes are
+**never** written to `security_audit_events`. Sentinel-token
+regression tests assert this for every event type.
+
+See `docs/chartnav-patient-friendly-summary.md` for the full
+generator rules, transition matrix, RBAC, audit safety, and the
+list of explicit non-goals.
+
+## Phase 10 — provider-facing pre-visit clinical brief
+
+Phase 10 adds a **provider-facing pre-visit brief**: a deterministic,
+on-demand summary of the existing ChartNav chart for one patient
+that a clinician can review before the visit. **Zero new tables.
+Zero new migrations.** Phase 10 lives entirely in its own service
+(`apps/api/app/services/pre_visit_briefs.py`), its own routes
+(`/patients/{id}/pre-visit-brief...`), and its own panel
+(`PreVisitBriefPanel.tsx`).
+
+**Lifecycle:** none. The brief is computed on each call from the
+existing source tables (encounters, workflow_events, scribe_sessions,
+chart_artifacts, patient_summaries) and never stored. Two routes:
+
+- `POST /patients/{id}/pre-visit-briefs/generate` — explicit, audited
+  generation. Emits `pre_visit_brief_generated` with metadata-only
+  detail (patient_id, source_counts, generated_at).
+- `GET /patients/{id}/pre-visit-brief` — read-only on-demand
+  recompute. Not audited (consistent with read-side of
+  patient_summaries / scribe_sessions).
+
+**Source priority:** finalized patient summaries → reviewed/finalized
+scribe sessions → signed retinal artifacts → recent encounters →
+workflow events.
+
+**Generator is fully deterministic.** No LLM, no autonomous diagnosis,
+no treatment recommendations beyond source content, no orders, no
+coding, no patient-side delivery. Section excerpts are truncated to
+fixed character limits; `active_issues` are pulled verbatim from
+already-finalized chart fields and deduplicated case-insensitively.
+A constant `PROVIDER_REVIEW_NOTICE` is included in every response.
+
+**`data_gaps` is explicit.** Missing or weakly-populated sources are
+listed by name (e.g., "No signed retinal artifacts on file…"). The
+brief tells the provider what is *not* in the chart, not what
+clinically *should* be.
+
+**`source_counts` is metadata only.** The eight integer counts that
+describe the brief's inputs are also encoded into the audit detail
+field — they are the only body-derived information that ever reaches
+the audit log.
+
+**Org isolation:** patient is resolved inside the caller's
+organization first; cross-org returns `404 patient_not_found` (no
+existence leak). Every per-source SELECT re-filters by
+`organization_id` for defense in depth.
+
+**RBAC:** `admin` + `clinician` can both POST and GET. `reviewer` is
+read-only on this surface (GET allowed; POST → `403 role_forbidden`).
+
+**Audit:** every generation emits a `pre_visit_brief_generated`
+event with metadata-only `detail`. `last_visit_summary`,
+`active_issues`, retinal/scribe excerpts, patient summary excerpts,
+`pending_items`, `suggested_review_items`, and `data_gaps` body
+strings are **never** written to `security_audit_events`.
+Sentinel-token regression tests assert this for every section body.
+
+See `docs/chartnav-pre-visit-brief.md` for the full contract,
+including the response shape, generator rules, source priority,
+data-gap behavior, RBAC, audit safety, and the explicit deferred-work
+list.
+
+## Phase 11 — provider action review queue
+
+Phase 11 adds a **persisted, provider-reviewable action queue**.
+ChartNav surfaces deterministic review tasks from existing chart
+records; the provider explicitly Accepts, Dismisses, or Completes
+each one. ChartNav itself **never** creates orders, sends referrals,
+posts billing or coding entries, messages patients, or takes any
+clinical action.
+
+Phase 11 lives in its own table (`provider_action_items`), its own
+service (`apps/api/app/services/provider_action_items.py`), its own
+routes (`/patients/{id}/provider-action-items/...`), and its own
+panel (`ProviderActionItemsPanel.tsx`). Single new migration:
+`b3c4d5e6f7a8`. **Zero changes** to retinal, EyeDiagram,
+chart_artifacts, scribe_sessions, patient_summaries, or pre_visit
+schemas — Phase 11 reads them but never writes.
+
+**Lifecycle states:** `suggested → accepted → completed`, plus
+`dismissed` reachable from `suggested` or `accepted`. `dismissed`
+and `completed` are immutable. Direct `suggested → completed` is
+rejected with `409 provider_action_invalid_transition`.
+
+**Action-type vocabulary is closed.** The service rejects any
+`action_type` outside the explicit set, which keeps the queue in
+review-prompt territory: every type begins with `review_`,
+`finalize_`, `sign_`, or `reconcile_`. There is no order, coding,
+referral, prescribe, or message type, and there cannot be one
+without a code change to the closed enum.
+
+**Generator is deterministic.** No LLM. Inputs in priority order:
+explicit unsigned/unreviewed workflow state, finalized patient
+summaries, reviewed/finalized scribe sessions, signed retinal
+artifacts, recent encounters, and pre-visit data gaps. Clinical-
+language scans run only against finalized chart text (signed
+artifacts, finalized summaries, reviewed/finalized scribe sessions).
+Drafts and unsigned content are not scanned.
+
+**Dedupe** keys on
+`(action_type, source_type, source_id, title)`. Repeated generates
+do not churn while a prior suggestion is still in `suggested` or
+`accepted`. The response reports `generated_count`,
+`created_count`, and `reused_count`.
+
+**Org isolation** is patient-resolved-first; cross-org returns
+`404 patient_not_found`. Every per-source SELECT re-filters by
+`organization_id` for defense in depth.
+
+**RBAC:** `admin` and `clinician` can generate / accept / dismiss /
+complete. `reviewer` is read-only.
+
+**Audit:** four metadata-only event types
+(`provider_action_items_generated`,
+`provider_action_item_accepted`,
+`provider_action_item_dismissed`,
+`provider_action_item_completed`). The `title` and `reason` columns
+and any source clinical body are **never** written to
+`security_audit_events`. Sentinel-token regression tests assert this.
+
+See `docs/chartnav-provider-action-review-queue.md` for the full
+contract, including the closed action-type vocabulary, lifecycle
+matrix, source priority, dedupe rules, audit detail format, and the
+explicit deferred-work list.
+
+## Phase 12 — end-to-end clinical workflow smoke review
+
+Phase 12 is a hardening / verification pass, **not** a new product
+surface. It exercises the existing ChartNav clinical workflow across
+phases 6 / 8 / 9 / 10 / 11 in a single seeded context (org / user /
+patient / encounter) to catch integration cracks, missing wiring,
+audit-leak regressions, and unsafe language across module
+boundaries.
+
+**No new product surface.** Zero new tables, zero new migrations,
+zero new client-facing endpoints, zero new UI panels.
+
+**What Phase 12 adds:**
+
+- 17 backend integration tests in
+  `apps/api/tests/test_end_to_end_clinical_workflow.py` covering
+  route sanity (every Phase 5B/6/8/9/10/11 list-or-generate route
+  registered), the full provider workflow (scribe → propose →
+  retinal → summary → brief → actions), end-to-end audit redaction
+  with sentinel tokens injected at every clinical-body field,
+  end-to-end org isolation, end-to-end safety-language scan over
+  service-emitted strings, and reviewer read-only RBAC.
+- 7 frontend smoke tests in
+  `apps/web/src/test/ClinicalWorkflowSmoke.test.tsx` covering
+  workspace mount of all five clinical panels, panel safety copy,
+  full mocked-API workflow drive, no-forbidden-button assertions,
+  no autonomous-diagnosis or external-LLM language, and
+  safe-error banner behavior.
+- 1 Playwright e2e smoke in
+  `apps/web/tests/e2e/clinical-workflow-smoke.spec.ts` confirming
+  the panels mount on a real seeded encounter and the safety copy
+  renders against the live stack.
+
+**Safety-language scan.** A reproducible grep across every clinical
+panel and every service/route module returned four matches — all
+classified as safe negative assertions (banner copy or module
+docstring saying ChartNav does *not* do the forbidden thing). No
+actionable code uses any of the forbidden tokens.
+
+**Documented limitations and follow-ups** live in
+`docs/chartnav-end-to-end-clinical-workflow-smoke-review.md`. None
+block this phase merging.
+
+See that document for the full coverage map, audit-redaction
+methodology, and follow-up recommendations.
+
+## Phase 13 — demo-ready clinical workflow package
+
+Phase 13 is a **demo-packaging phase**, not a new product surface.
+Its only goal is to make the existing ChartNav clinical workflow
+understandable in five minutes by a buyer, pilot user, advisor, or
+investor — without misrepresenting what the product does.
+
+**No new clinical automation. No new schema. No new API surface.
+No backend changes.** Phase 13 ships:
+
+- a small collapsible in-app guide (`DemoClinicalWorkflowGuide`)
+  mounted at the top of the workspace's panel stack, collapsed by
+  default; expands to a seven-step checklist with safety copy;
+  references the demo script;
+- a 5-minute and 10-minute demo script, an exact click-path doc,
+  and a video shot list under `docs/demo/`;
+- this Phase 13 contract document at
+  `docs/chartnav-demo-ready-clinical-workflow-package.md`;
+- this section.
+
+**Demo data policy.** No backend demo seed is added. The demo
+reuses the existing fake seed (`demo-eye-clinic` org, patient
+`PT-1001` Morgan Lee, encounter 1) which has been demo-flavored
+since Phase 0. No real PHI; no new patient names; no new MRNs;
+no new DOBs.
+
+**Safety / claims rules** are documented in the Phase 13 contract
+doc. The frontend tests assert them against the demo guide; the
+existing Phase 12 backend integration test already enforces them
+across service-emitted text. Forbidden phrasing includes "HIPAA
+compliant," "certified EHR," "autonomous diagnosis," "guaranteed
+accuracy," "automatic orders," "submit referral," "billing
+automation," and "send patient message"; allowed phrasing is the
+narrow safe-phrase list ("provider-reviewed," "documentation
+support," "draft for review," etc.). Negative assertions are
+allowed only when they clearly say ChartNav does *not* do the
+thing.
+
+**No video files or screenshots are checked into this repo.** The
+shot list is editorial only.
+
+See `docs/chartnav-demo-ready-clinical-workflow-package.md` for
+the full demo-ready contract, including the documentation map,
+audience, demo-data policy, the demo guide's behavior contract,
+the safety-language rules, the video clip plan, and the Phase 14
+candidate list.
+
+## Phase 14 — pilot readiness / deployment hardening
+
+Phase 14 is a **pilot-readiness / deployment-hardening phase**.
+Its only goal is to prepare ChartNav for safe pilot conversations
+and controlled-pilot deployment with ophthalmology offices,
+without obvious gaps.
+
+**No new clinical automation. No new schema. No new API surface.
+No backend code changes.** The PR's `git diff` against
+`apps/api/` (excluding `tests/`) is empty.
+
+Phase 14 ships:
+
+- eight new pilot docs under `docs/pilot/` (readiness checklist,
+  deployment guide, admin onboarding, security packet, support
+  runbook, demo-to-pilot transition plan, known limitations,
+  pilot success metrics);
+- this top-level Phase 14 contract at
+  `docs/chartnav-pilot-readiness-deployment-hardening.md`;
+- this section;
+- a vitest readiness suite asserting the docs exist, the required
+  headings exist, and forbidden positive claims appear only in
+  safe contexts (negative assertions, enumerated forbidden-phrase
+  lists, or Q&A question headings whose answers are negatives);
+- `scripts/check_pilot_readiness.sh` — a small shell verifier for
+  pre-pilot dry-runs.
+
+**Safe pilot language** is enforced by the readiness suite and
+documented in the security packet's "BAA / HIPAA language
+caution" section. Forbidden positive claims include "HIPAA
+compliant," "certified EHR," "autonomous diagnosis," "automatic
+orders," "submit referral," "billing automation," "send patient
+message," "replaces a doctor," "production-ready for PHI."
+Approved phrasing includes "provider-reviewed," "documentation
+support," "ophthalmology-specific," "controlled-pilot," "designed
+to support."
+
+**Deployment expectations** are now documented for three modes:
+`local` (fake-data only), `staging` (fake-data only), and
+`controlled-pilot` (real PHI permitted only after BAA + security
+review gating items are signed off).
+
+**Security review gating** items are enumerated in one place,
+identical across the readiness checklist, the security packet, the
+admin onboarding checklist, and the demo-to-pilot transition plan.
+
+**Phase 14 prepares Phase 15** — Phase 15 will package ChartNav as
+a runnable desktop demo (one-click run on a buyer's laptop) and
+finalize commercial-launch readiness, while continuing to obey the
+existing safety contract.
+
+See `docs/chartnav-pilot-readiness-deployment-hardening.md` for
+the full Phase 14 contract, the docs map, the readiness-test
+description, and the Phase 15 recommendation.
+
+## Phase 15 — commercial demo delivery system
+
+Phase 15 converts the existing ChartNav clinical workflow
+foundation into a polished, controllable, sales-demo-ready system.
+Goal: ChartNav should feel like a coherent ophthalmology platform
+during demos instead of a collection of features.
+
+**No new clinical automation. No new schema. No new API surface.
+No backend code changes. Fake demo data only.**
+
+Phase 15 ships:
+
+- a new `GuidedDemoMode` component — a sticky in-workspace
+  orchestrator with a deterministic 8-step stepper, a prominent
+  **DEMO MODE** badge, on-screen presenter cues, and Previous /
+  Next / Reset controls. Gated on the URL query `?demo=1` (or
+  `localStorage.chartnav.demoMode = "1"`); default off so normal
+  providers never see it;
+- `scripts/reset_demo_state.sh` — drops + re-seeds the local dev
+  SQLite DB, prints a DevTools snippet for clearing browser-side
+  demo state, refuses to run if `DATABASE_URL` is anything other
+  than the local `sqlite:///<path>` default;
+- two new docs under `docs/demo/` — an operator guide (recommended
+  flow with Guided Demo Mode, click-by-click sequence, fallback
+  paths, what NOT to claim, talking points) and an environment
+  README (local startup, reset levels, seeded credentials,
+  fake-data structure, troubleshooting, recording recommendations);
+- this top-level Phase 15 contract at
+  `docs/chartnav-commercial-demo-delivery-system.md`;
+- this section;
+- two new test files — a `GuidedDemoMode.test.tsx` component suite
+  and a `DemoCommercialDelivery.test.tsx` package suite that
+  asserts the new docs exist with required headings and that
+  forbidden positive claims appear only in safe contexts.
+
+**Deterministic by design.** Step labels and cues are fixed at
+compile time. Step state lives only in browser `localStorage`.
+There are no animations, no auto-advance, no hidden timers, no API
+calls. The stepper does not click clinical-panel buttons or
+generate artifacts — it is a presenter overlay, not a workflow
+automation surface.
+
+**Fake-data-only boundary.** The demo environment is fake-data
+only by construction. The Phase 15 reset script refuses to run
+against a non-local database URL. The Guided Demo Mode badge
+prominently labels the experience "DEMO MODE · fake data only" so
+it cannot be confused with a real-data session.
+
+**Safety guardrails.** The stepper renders the same
+negative-assertion safety bullets the Phase 13 demo guide and the
+Phase 11 action queue use. Forbidden marketing claims are rejected
+by the Phase 15 docs-claims test unless they appear inside a
+negative-assertion line, an enumerated forbidden-phrase list, or
+a Q&A question heading whose answer is a negative assertion —
+identical heuristic to Phase 13 / 14.
+
+**Phase 15 prepares Phase 16** — desktop demo packaging
+(one-click runner for the buyer's laptop), pre-recorded fallback
+clips, optional sticky workflow progress in normal mode, an
+a11y smoke for the stepper, and a CI summary card. Phase 16 must
+continue to obey the existing safety contract.
+
+See `docs/chartnav-commercial-demo-delivery-system.md` for the
+full Phase 15 contract.
+
+## Phase 16 — website proof upgrade + conversion layer
+
+Phase 16 upgrades the public-facing ChartNav website so it reflects
+the actual product built through Phases 6–15. Goal: a buyer should
+understand the real ChartNav workflow in under 60 seconds — what it
+does, why it is ophthalmology-specific, what the provider controls,
+what ChartNav does *not* do, and how to request a demo or start a
+pilot conversation.
+
+**No new clinical automation. No backend changes. No new schema.
+No external LLM. No real-PHI claim. No unsupported HIPAA / SOC 2 /
+certified-EHR claim. No binary media in the repo.**
+
+There is no separate marketing site (no `apps/web/chartnavmd-site`).
+The public website is the React app at `apps/web/`. Phase 16 adds
+an opt-in route — `/landing` or `?intro=1` — that renders a new
+public landing / proof page (`LandingPage.tsx`); the existing
+authenticated workspace UX is unchanged. The opt-in pattern matches
+Phase 15's Guided Demo Mode (`?demo=1`).
+
+Phase 16 ships:
+
+- a new `LandingPage.tsx` with hero / workflow / ophthalmology /
+  provider-control / modules / before-after / demo-pilot /
+  non-goals / footer sections;
+- two inline SVG diagrams — a 7-stage workflow path and a Draft →
+  Reviewed → Finalized state model. No binary media is committed;
+- a 6-line gate in `main.tsx` and a CSS append in `styles.css`;
+- an 18-test vitest suite asserting required sections, CTAs, SVG
+  diagrams, modules, before/after, non-goals, the safe-claims
+  contract, and the absence of order / coding / referral /
+  patient-message buttons or autonomous-LLM positive claims;
+- `scripts/check_website_claims.sh` — a pre-deploy verifier that
+  confirms required files exist, the router gate is wired,
+  negative-assertion phrasing is present, no forbidden positive
+  claim slips, and no binary media is checked in under
+  `apps/web/public`;
+- the top-level Phase 16 contract at
+  `docs/chartnav-website-proof-upgrade-conversion-layer.md` and an
+  editorial shot list at
+  `docs/website/chartnav-website-shot-list.md`;
+- this section.
+
+**Safe claims** are enforced by the same heuristic Phase 13 / 14 /
+15 use: forbidden marketing claims (HIPAA compliant, certified EHR,
+autonomous diagnosis, automatic orders, submit referral, billing
+automation, send patient message, replaces a doctor,
+production-ready for PHI, real patient data ready) appear only
+inside negative-assertion lines, enumerated forbidden lists, or
+explicit `does not …` statements.
+
+**CTA strategy.** All named CTAs resolve to a single `contactHref`
+prop (default `mailto:hello@chartnavmd.com`) so the deploy host can
+override the destination without touching component code. Phase 16
+does not invent a working intake backend.
+
+**Phase 16 prepares Phase 17** — possible follow-ups include
+flipping the unauthenticated default to the landing page, wiring a
+real intake form, adding the landing page to the axe-core a11y
+sweep, capturing real screenshots into out-of-repo CDN storage, and
+the long-deferred commercial deck library (still out-of-repo).
+
+See `docs/chartnav-website-proof-upgrade-conversion-layer.md` for
+the full Phase 16 contract, the messaging strategy, the per-phase
+proof map, the visual asset strategy, the CTA strategy, the safe
+claims rules, the test contract, and the Phase 17 candidate list.
+
+## Phase 17 — commercial launch package + desktop demo delivery
+
+Phase 17 ships the operator-facing commercial surface that Phases
+6–16 implied but never built: the deck library, the commercial
+support docs, the local demo launcher, and the desktop demo
+delivery package. After Phase 17 a presenter on the operator's
+Mac can open `/Users/jean-maxcharles/Desktop/chartnav decks/`,
+double-click `START_CHARTNAV.command`, run a fake-data demo, and
+double-click `STOP_CHARTNAV.command` and `RESET_DEMO_DATA.command`
+to tear down — without going hunting in the repo.
+
+**No new clinical automation. No backend changes. No new schema.
+No external LLM. No real-PHI claim. No unsupported HIPAA / SOC 2
+/ FDA / certified-EHR claim. No binary media in the repo.**
+
+Phase 17 ships:
+
+- 15 deck Markdown source files under `docs/decks/` covering
+  every recurring sales / investor / partner / onboarding
+  scenario (investor pitch, sales, demo, customer pitch
+  template, company, product roadmap, brand guidelines,
+  educational onboarding, one-page sales, financial fundraising,
+  marketing plan, project proposal, agency partner pitch,
+  elevator pitch, long sales pitch);
+- 6 commercial support docs under `docs/commercial/` (deck
+  master kit, approved-claims language, commercial readiness
+  map, buyer objection handling, pricing-packaging notes, pilot
+  handoff checklist);
+- 4 demo-package docs (local demo startup guide, troubleshooting,
+  demo review checklist, plus the top-level desktop demo
+  delivery contract at
+  `docs/chartnav-desktop-demo-delivery-package.md`);
+- 3 shell scripts —
+  `scripts/export_chartnav_decks_to_desktop.sh` (idempotent
+  exporter that builds the Desktop folder, copies every source
+  doc to the right subfolder, generates README + 3 .command
+  files, marks them executable),
+  `scripts/create_chartnav_desktop_demo_package.sh` (orchestrator
+  that runs the export and verifies every expected file landed +
+  every .command file is executable), and
+  `scripts/check_commercial_claims.sh` (pre-merge sanity check
+  that mirrors the vitest claims contract);
+- a 45-test vitest suite at
+  `apps/web/src/test/CommercialDeckClaims.test.tsx` asserting
+  every required file exists, every deck reaches the safe-claims
+  contract, no forbidden positive claim slips, no deck invents
+  financial numbers, the local-DB safety guard is preserved, no
+  binary media is committed under Phase 17 paths, the pricing
+  constants ($299 / $499 / $5,000 / $10,000) appear consistently,
+  and the Desktop folder is `.gitignore`-d;
+- the top-level Phase 17 contract at
+  `docs/chartnav-commercial-launch-package.md` and the desktop
+  delivery contract at
+  `docs/chartnav-desktop-demo-delivery-package.md`;
+- this section.
+
+**Pricing contract.** $299–$499/provider/month; $5,000/practice/
+month flat; $10,000 pilot fee (firm, not discounted); 2–4
+practices = 10% off, 5–9 = 15% off, 10+ = enterprise terms.
+Pricing is a hypothesis until paid-pilot data validates it; the
+pricing-notes doc enumerates what is firm vs. validation-pending.
+
+**Milestones.** M1 first paid pilot Jul 1 2026; M2 second paid
+pilot Oct 1 2026; M3 first paying customer post-pilot Q4 2026;
+M4 multi-practice deployment Q4 2026. Targets, not committed
+delivery dates.
+
+**SDVOSB / VA past-performance framing** appears on
+`chartnav-investor-pitch-deck.md`, `chartnav-company-deck.md`,
+`chartnav-agency-partner-pitch-deck.md`, and the internal
+marketing plan deck only — the certifications and Mann-Grandstaff
+VA past performance attach to the operating entity (ARCG
+Systems), not to ChartNav clinically. Private-practice clinical
+buyers see the clinical decks without the federal credibility
+slide because federal credentials are not the relevant signal
+for that audience.
+
+**Safe-claims contract** is enforced by the same heuristic Phase
+13 / 14 / 15 / 16 use: forbidden marketing claims (HIPAA-
+compliant, certified EHR, autonomous diagnosis, automatic
+orders, submit referral, billing automation, send patient
+message, replaces a doctor, production-ready for PHI, real
+patient data ready) appear only inside negative-assertion lines,
+enumerated forbidden lists ("Never use" / "Don't say"), Q&A
+question headings whose answers are negative assertions, or
+explicit `does not …` statements. The catalog docs whose entire
+job is to enumerate banned phrases —
+`chartnav-approved-claims-language.md`,
+`chartnav-brand-guidelines-deck.md` slide 5,
+`chartnav-buyer-objection-handling.md` "Don't say" blocks — are
+exempt by path from both the vitest scan and the shell-script
+scan.
+
+**Desktop delivery contract.** The Desktop folder at
+`/Users/jean-maxcharles/Desktop/chartnav decks/` (override via
+`CHARTNAV_DESKTOP_DIR`) is regenerated by the export script,
+never committed back to the repo (paths are in `.gitignore`),
+contains only Markdown / shell / text copies of repo source (no
+binary media), and ships three macOS double-click scripts
+(`START_CHARTNAV.command`, `STOP_CHARTNAV.command`,
+`RESET_DEMO_DATA.command`). The reset script wraps
+`scripts/reset_demo_state.sh`, which refuses to run if
+`DATABASE_URL` is anything other than a local
+`sqlite:///<path>`.
+
+**Phase 17 prepares Phase 18** — first paid pilot or paid
+customer (target M1 = Jul 1 2026). Phase 18 is operations work,
+not new product. The Phase 17 commercial launch package is the
+inventory Phase 18 sells from.
+
+See `docs/chartnav-commercial-launch-package.md` for the full
+Phase 17 contract, the deck audience map, the SDVOSB framing
+contract, the pricing contract, the milestone contract, the
+safe-claims contract, the desktop-folder source-of-truth
+contract, the test contract, and the Phase 18 candidate
+description.
+
+## Phase 17B — A+ deck message tightening + Clinical Signal Filtering upgrade
+
+Phase 17B is a **content quality pass** on top of Phase 17.
+After Phase 17 the deck library exists; after Phase 17B the
+decks are A-level commercial material — clear enough for a real
+buyer, investor, advisor, partner, or practice administrator to
+understand without needing repo context.
+
+**No new clinical automation. No backend changes. No new schema.
+No external LLM. No real-PHI claim. No unsupported HIPAA / SOC 2
+/ FDA / certified-EHR claim. No binary media in the repo.**
+
+What changed:
+
+- **Clinical Signal Filtering positioned as the prime feature**
+  on every buyer-relevant deck, with a canonical three-line
+  cadence ("Filters conversation. Captures findings. Builds the
+  diagram.") and a concrete worked example (the doctor saying
+  *"Okay hold on… OD drusen in the macula… maybe OS flame
+  hemorrhage inferior."* and ChartNav classifying the line into
+  ignored chatter, clinical finding, uncertain phrase, and
+  proposed diagram annotation).
+- **Demo deck split** into two decks. The buyer demo deck
+  (`chartnav-buyer-demo-deck.md`) is what a presenter shows
+  during a live demo — no terminal commands, no repo paths, no
+  `?demo=1` query string, no `make dev` references; only what
+  the buyer sees on screen. The operator demo deck
+  (`chartnav-operator-demo-deck.md`) is **internal-only** —
+  pre-flight checklist, START / STOP / RESET .command files,
+  reset commands, fallback plan if the stack breaks mid-demo.
+  The original `chartnav-demo-deck.md` is now an index that
+  routes the operator to the right deck for the audience.
+- **One-page sales deck rewritten** as a single-page leave-
+  behind with a Clinical Signal Filtering headline and worked
+  example.
+- **Buyer-facing decks scrubbed of repo-leak phrases** —
+  "production code on main," "operator's note," "this version of
+  the deck," `?intro=1`, `?demo=1`, `make dev`, `make reset-db`,
+  raw repo paths, and `Phase N smoke` references no longer
+  appear in any buyer-facing deck.
+- **Audience + Purpose + CTA** declared in the front-matter of
+  every deck so an operator (or a future ChartNav employee) can
+  pick up any deck cold and know who it's for.
+- **Company deck audience-routed.** Slide 8 (federal /
+  government-healthcare credibility — SDVOSB, Mann-Grandstaff
+  VA past performance) is clearly marked as "for federal /
+  government-healthcare conversations" and explicitly skipped
+  for private-practice buyers. Private-practice buyers see the
+  clinical workflow without federal credentials.
+- **Brand guidelines deck** adds a Clinical Signal Filtering
+  approved-phrasing slide and extends the banned-phrase
+  catalogue with "AI draws automatically," "AI decides," "AI
+  diagnosis," "automatic charting," "hands-free diagnosis,"
+  "hands-free charting," "guaranteed documentation accuracy."
+- **Customer pitch template + project proposal template** add
+  practice-specific Clinical Signal Filtering content via
+  `{{DICTATION_PAIN}}`, `{{RETINAL_WORKFLOW_PAIN}}`, and
+  `{{PRACTICE_EXAMPLE_FINDING}}` placeholders so each pilot
+  pitch lands in the practice's own words.
+- **Marketing plan deck** adds a concrete 30/60/90-day GTM
+  execution plan and frames Clinical Signal Filtering as the
+  outreach wedge.
+- **Product roadmap deck** translates engineering phases into
+  business outcomes ("capabilities already working") and adds
+  a 30/60/90-day execution plan.
+- **Master kit + approved-claims language + objection-handling
+  + commercial readiness map** updated to reference the new
+  deck split and the Clinical Signal Filtering language.
+- **Export script + create-package wrapper** updated to include
+  the two new deck files and verify them in post-export checks.
+- **`scripts/check_commercial_claims.sh`** extended with a
+  buyer-facing repo-leak scan plus the new Phase 17B
+  banned-phrase entries.
+- **`apps/web/src/test/CommercialDeckClaims.test.tsx`** grows
+  from 45 assertions to 96 assertions covering the Phase 17B
+  Clinical Signal Filtering presence requirement, the
+  buyer-facing repo-leak scan, the audience / purpose / CTA
+  front-matter requirement, and the operator-demo-stays-internal
+  contract.
+
+**Test contract.** `npx vitest run
+src/test/CommercialDeckClaims.test.tsx` should pass 96/96.
+`bash scripts/check_commercial_claims.sh` should pass 0 fail / 0
+warn. The export script produces 41 source files copied + README
++ 3 .command files generated.
+
+Phase 17B is a content + tooling pass. The Phase 18 candidate
+remains unchanged — first paid pilot or paid customer (target
+M1 = Jul 1, 2026). The Phase 17B-tightened decks are the
+inventory Phase 18 sells from.
+
+See `docs/chartnav-commercial-launch-package.md` for the updated
+deck audience map and the full test contract.
+
+## Phase 17D — presentation conversion system + branded deck exports
+
+Phase 17D bridges the markdown deck library (Phase 17 + 17B) to
+**real, branded PowerPoint presentations** so the operator
+walks into investor / buyer / partner meetings without a
+manual conversion step.
+
+**Tooling + content only. No backend changes. No schema. No
+external LLM. No real-PHI claim. No new clinical features. No
+binary media in the repo.**
+
+What ships:
+
+- `tools/presentations/` — a Node-based PPTX generator. One
+  direct dep (`pptxgenjs`) — pure JS, no native libs. Files:
+  - `theme.js` — palette + typography pulled from
+    `apps/web/src/styles.css` so the slides match the product UI.
+  - `brand/chartnavMark.js` — reproduces the ChartNav mark + logo
+    as PptxGenJS shapes (no raster art committed).
+  - `parseDeck.js` — markdown → structured slide records.
+    Tolerant of canonical `## Slide N — title` AND section-style
+    `##` / `###` decks (for the one-pager + demo-deck index).
+  - `slideLayouts.js` — 10 reusable layouts: Cover, Section,
+    Title+Bullets, Feature Cards, **Clinical Signal Filtering**
+    (the four-classification card pattern), Workflow, Pricing,
+    Safety Dual ("does / does NOT"), CTA, Index.
+  - `renderDeck.js` — heuristic per-slide layout picker + driver.
+  - `generateAll.js` — walks `docs/decks/` and writes 17 PPTX
+    files into the operator's Desktop folder.
+  - `test/parseDeck.test.js` + `test/renderDeck.test.js` —
+    Node-based smoke tests (vitest's Vite root is `apps/web/`
+    and can't reach `tools/presentations/`).
+- `scripts/generate_chartnav_presentations.sh` — standalone
+  wrapper that ensures deps are installed and runs the JS driver.
+- `scripts/export_chartnav_decks_to_desktop.sh` — extended to
+  add `01_Decks/Markdown_Source/`, `01_Decks/PPTX/`,
+  `01_Decks/PDF/`, `02_One_Pagers/Markdown_Source/`,
+  `02_One_Pagers/PPTX/`, `10_Presentation_Assets/` to the
+  Desktop layout, redirect deck Markdown copies to the new
+  `Markdown_Source/` folders, copy
+  `docs/presentations/*.md` into `10_Presentation_Assets/`, and
+  optionally chain the PPTX generator. Skip with
+  `CHARTNAV_SKIP_PPTX=1` for a fast Markdown-only refresh.
+- `scripts/create_chartnav_desktop_demo_package.sh` — verifier
+  list extended to cover the 17 PPTX outputs + 4 presentation-
+  assets docs.
+- `scripts/check_commercial_claims.sh` — extended with a Phase
+  17D section that verifies every generator file exists, the
+  generator is executable, and `theme.js` carries the canonical
+  palette tokens (sync guard against `apps/web/src/styles.css`).
+- `apps/web/src/test/CommercialDeckClaims.test.tsx` — extended
+  from 96 to 112 assertions covering Phase 17D file presence,
+  generator wiring, theme palette sync, export-script Markdown
+  routing, and create-package verifier coverage.
+- `docs/presentations/` — palette / typography / brand-usage
+  notes + the Phase 17D system overview.
+- This section.
+
+**End-to-end output.** From the repo root on the operator's Mac:
+
+```
+bash scripts/export_chartnav_decks_to_desktop.sh
+```
+
+…produces 41 source-file copies (39 Phase 17 + 2 Phase 17B
+buyer/operator demo decks), 1 README, 3 .command launchers,
+**17 branded PPTX presentations** (under `01_Decks/PPTX/` and
+`02_One_Pagers/PPTX/`), and 4 presentation-assets docs (under
+`10_Presentation_Assets/`).
+
+**PDF export is deferred.** Pure-JS PPTX-to-PDF requires a heavy
+LibreOffice headless dependency. The operator opens each PPTX in
+PowerPoint or Keynote and exports PDF manually. The `01_Decks/PDF/`
+folder is created empty so manually-exported PDFs have a stable
+home.
+
+**Safe-claims contract** is preserved end-to-end. The generator
+reads exactly the same Markdown the Phase 17B
+`CommercialDeckClaims` vitest scans, so any banned phrase that
+slips into a source deck is caught before generation. The
+generator never invents text beyond the Markdown source.
+
+**Phase 18 candidate** is unchanged — first paid pilot or paid
+customer (target M1 = July 1, 2026). The Phase 17 + 17B + 17D
+output (markdown decks + branded PPTX + Desktop folder +
+.command launchers) is the inventory Phase 18 sells from.
+
+See `docs/presentations/chartnav-presentation-system.md` for the
+full Phase 17D system overview, layout selection heuristic,
+limitations, and regeneration workflow.

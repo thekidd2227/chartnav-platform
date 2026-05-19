@@ -85,6 +85,14 @@ import {
   segmentAbbreviations,
   type ClinicalShortcut,
 } from "./clinicalShortcuts";
+import { AudioConsentPanel } from "./AudioConsentPanel";
+import { DemoClinicalWorkflowGuide } from "./DemoClinicalWorkflowGuide";
+import { EyeDiagramPanel } from "./EyeDiagramPanel";
+import { GuidedDemoMode } from "./GuidedDemoMode";
+import { PatientSummaryPanel } from "./PatientSummaryPanel";
+import { PreVisitBriefPanel } from "./PreVisitBriefPanel";
+import { ProviderActionItemsPanel } from "./ProviderActionItemsPanel";
+import { ScribeSessionPanel } from "./ScribeSessionPanel";
 
 // ---------------------------------------------------------------------
 // Types
@@ -94,6 +102,13 @@ interface Props {
   identity: string;
   me: Me;
   encounterId: number;
+  /**
+   * Numeric `patients.id` resolved from the encounter row. Null/absent
+   * when the encounter is sourced from an integrated adapter (e.g.
+   * FHIR) where the patient is identified by an external ref instead
+   * of a native row, in which case the eye-diagram panel hides itself.
+   */
+  patientId?: number | null;
   patientDisplay: string;
   providerDisplay: string;
 }
@@ -111,6 +126,7 @@ export function NoteWorkspace({
   identity,
   me,
   encounterId,
+  patientId = null,
   patientDisplay,
   providerDisplay,
 }: Props) {
@@ -149,6 +165,13 @@ export function NoteWorkspace({
     kind: "idle",
   });
   const [recordedElapsedSec, setRecordedElapsedSec] = useState(0);
+  // Phase 25A / GH-001 — patient audio consent gate. Recording stays
+  // disabled until the server confirms `recording_permitted === true`
+  // for this encounter.
+  const [audioConsent, setAudioConsent] =
+    useState<import("./api").AudioConsent | null>(null);
+  const recordingConsentGranted =
+    audioConsent?.recording_permitted === true;
   // Forces the elapsed-time display to tick. We keep the source of
   // truth in the recorder controller; this is just a UI nudge.
   useEffect(() => {
@@ -1158,6 +1181,12 @@ export function NoteWorkspace({
               )}
           </div>
         ))}
+        <AudioConsentPanel
+          identity={identity}
+          encounterId={encounterId}
+          role={me.role}
+          onConsentChange={setAudioConsent}
+        />
         {canEdit && (
           <div
             className="event-form workspace__audio-record"
@@ -1201,8 +1230,16 @@ export function NoteWorkspace({
                   type="button"
                   className="btn btn--primary"
                   onClick={onStartRecording}
-                  disabled={!captureSupport.supported}
+                  disabled={
+                    !captureSupport.supported ||
+                    !recordingConsentGranted
+                  }
                   data-testid="audio-record-start"
+                  title={
+                    !recordingConsentGranted
+                      ? "Capture patient consent above before recording"
+                      : undefined
+                  }
                 >
                   Start recording
                 </button>
@@ -1295,12 +1332,31 @@ export function NoteWorkspace({
               Edit the transcript below after it lands before generating
               a draft.
             </p>
+            {!recordingConsentGranted && (
+              <p
+                className="subtle-note workspace__audio-consent-warn"
+                data-testid="audio-upload-consent-blocked"
+                role="status"
+              >
+                Patient audio consent is required before uploading
+                recorded audio. Capture consent in the panel above.
+              </p>
+            )}
             <div className="row">
               <button
                 type="submit"
                 className="btn btn--primary"
-                disabled={audioUploading || !audioFile}
+                disabled={
+                  audioUploading ||
+                  !audioFile ||
+                  !recordingConsentGranted
+                }
                 data-testid="audio-upload-submit"
+                title={
+                  !recordingConsentGranted
+                    ? "Capture patient consent above before uploading"
+                    : undefined
+                }
               >
                 {audioUploading ? "Uploading…" : "Upload audio"}
               </button>
@@ -2346,6 +2402,77 @@ export function NoteWorkspace({
             </div>
           </div>
         </div>
+      )}
+
+      {patientId !== null && (
+        <section
+          className="section"
+          data-testid="guided-demo-mode-section"
+        >
+          <GuidedDemoMode patientDisplay={patientDisplay} />
+        </section>
+      )}
+
+      {patientId !== null && (
+        <section
+          className="section"
+          data-testid="demo-clinical-workflow-guide-section"
+        >
+          <DemoClinicalWorkflowGuide patientDisplay={patientDisplay} />
+        </section>
+      )}
+
+      {patientId !== null && (
+        <section className="section" data-testid="eye-diagram-section">
+          <EyeDiagramPanel
+            identity={identity}
+            patientId={patientId}
+            encounterId={encounterId}
+          />
+        </section>
+      )}
+
+      {patientId !== null && (
+        <section className="section" data-testid="scribe-session-section">
+          <ScribeSessionPanel
+            identity={identity}
+            patientId={patientId}
+            encounterId={encounterId}
+          />
+        </section>
+      )}
+
+      {patientId !== null && (
+        <section className="section" data-testid="patient-summary-section">
+          <PatientSummaryPanel
+            identity={identity}
+            patientId={patientId}
+            encounterId={encounterId}
+          />
+        </section>
+      )}
+
+      {patientId !== null && (
+        <section className="section" data-testid="pre-visit-brief-section">
+          <PreVisitBriefPanel
+            identity={identity}
+            patientId={patientId}
+            encounterId={encounterId}
+          />
+        </section>
+      )}
+
+      {patientId !== null && (
+        <section
+          className="section"
+          data-testid="provider-action-items-section"
+        >
+          <ProviderActionItemsPanel
+            identity={identity}
+            patientId={patientId}
+            encounterId={encounterId}
+          />
+        </section>
       )}
     </div>
   );

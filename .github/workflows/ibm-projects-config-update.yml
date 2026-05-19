@@ -1,0 +1,156 @@
+# IBM Cloud Projects — Git integration workflow.
+#
+# Purpose:
+#   When a PR is merged into `main`, scan changed files under the
+#   configured CONFIG_FOLDER_PATH and PATCH the matching IBM Cloud
+#   Projects configurations via the IBM Cloud Projects API. Also
+#   exposed as workflow_dispatch for manual runs.
+#
+# Scope clarification (important):
+#   This workflow talks ONLY to the **IBM Cloud Projects API**
+#   (projects.api.cloud.ibm.com). It does NOT call watsonx.ai
+#   inference (us-south.ml.cloud.ibm.com or any
+#   /ml/v1/* endpoint). IBM Cloud Projects and watsonx.ai are
+#   different services with different "project" concepts.
+#   See docs/integrations/ibm-cloud-projects-git-integration.md.
+#
+# Secret + variable contract (configured in GitHub repo settings):
+#   secrets.IBM_CLOUD_API_KEY        — long-lived IAM API key
+#   vars.CONFIG_FOLDER_PATH          — e.g. "configs"
+#   vars.IAM_URL                     — "https://iam.cloud.ibm.com"
+#   vars.PROJECTS_API_BASE_URL       — "https://projects.api.cloud.ibm.com"
+#
+# Safety contract:
+#   - The IAM API key is never echoed.
+#   - The short-lived IAM bearer token is never echoed.
+#   - PATCH requests carry only file contents already committed to
+#     the repo. No PHI, no secrets, no API keys are read from the
+#     config files (the README in configs/ enforces this contract
+#     for repo authors).
+
+name: IBM Projects Git Integration
+
+on:
+  pull_request:
+    branches: [ "main" ]
+    types: [closed]
+  workflow_dispatch:
+
+jobs:
+  update-configs:
+    if: github.event.pull_request.merged == true || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Update IBM Project Configurations
+        shell: bash
+        env:
+          # Bind secret + vars to env so the script body never has
+          # ${{ }} expansion of the secret itself. GitHub still
+          # auto-masks the secret value in any log output.
+          IBM_CLOUD_API_KEY: ${{ secrets.IBM_CLOUD_API_KEY }}
+          CONFIG_FOLDER_PATH: ${{ vars.CONFIG_FOLDER_PATH }}
+          IAM_URL: ${{ vars.IAM_URL }}
+          PROJECTS_API_BASE_URL: ${{ vars.PROJECTS_API_BASE_URL }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${IBM_CLOUD_API_KEY:-}" ]; then
+            echo "::error::secrets.IBM_CLOUD_API_KEY is not configured"
+            exit 1
+          fi
+          if [ -z "${CONFIG_FOLDER_PATH:-}" ] || [ -z "${IAM_URL:-}" ] \
+             || [ -z "${PROJECTS_API_BASE_URL:-}" ]; then
+            echo "::error::Missing required GitHub variables. See docs/integrations/ibm-cloud-projects-git-integration.md"
+            exit 1
+          fi
+
+          # IAM token exchange. Mask the response body in case of error.
+          IAM_RESPONSE="$(curl -sS -X POST "${IAM_URL}/identity/token" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -H "Accept: application/json" \
+            -d "grant_type=urn:ibm:params:oauth:grant-type:apikey&apikey=${IBM_CLOUD_API_KEY}")"
+
+          IAM_TOKEN="$(printf '%s' "$IAM_RESPONSE" | jq -r '.access_token // empty')"
+
+          if [ -z "$IAM_TOKEN" ] || [ "$IAM_TOKEN" = "null" ]; then
+            echo "::error::Failed to obtain IBM IAM token (response body redacted)"
+            exit 1
+          fi
+          # Help GitHub mask the bearer in subsequent log lines.
+          echo "::add-mask::$IAM_TOKEN"
+
+          changed_files="$(git diff --name-only HEAD^ HEAD || true)"
+          echo "Changed files since previous commit:"
+          echo "$changed_files"
+
+          # Iterate only files that live under CONFIG_FOLDER_PATH and
+          # have a non-empty body. README / template files are
+          # skipped by the .json suffix check below.
+          for file in $changed_files; do
+            if [[ "$file" != "$CONFIG_FOLDER_PATH"/* ]]; then
+              continue
+            fi
+            if [ ! -s "$file" ]; then
+              continue
+            fi
+            case "$file" in
+              *.json) ;;
+              *)
+                echo "Skipping non-JSON file under CONFIG_FOLDER_PATH: $file"
+                continue
+                ;;
+            esac
+            # The template file is intentionally a placeholder and
+            # MUST NOT be PATCHed. Suffix-based skip.
+            case "$file" in
+              *.template.json)
+                echo "Skipping template file: $file"
+                continue
+                ;;
+            esac
+
+            echo "Inspecting config file: $file"
+
+            PROJECT_ID="$(jq -r '.project_id // empty' "$file")"
+            CONFIG_ID="$(jq -r '.config_id // empty' "$file")"
+            DEF="$(jq '.definition // empty' "$file")"
+
+            if [ -z "$PROJECT_ID" ]; then
+              echo "::error::Missing project_id in $file"
+              exit 1
+            fi
+            if [ -z "$CONFIG_ID" ]; then
+              echo "::error::Missing config_id in $file"
+              exit 1
+            fi
+            if [ -z "$DEF" ] || [ "$DEF" = "null" ]; then
+              echo "::error::Missing or null definition in $file"
+              exit 1
+            fi
+
+            echo "Project ID: $PROJECT_ID"
+            echo "Config ID:  $CONFIG_ID"
+
+            RESPONSE="$(curl -sS -X PATCH \
+              "${PROJECTS_API_BASE_URL}/v1/projects/${PROJECT_ID}/configs/${CONFIG_ID}" \
+              -H "Authorization: Bearer ${IAM_TOKEN}" \
+              -H "Accept: application/json" \
+              -H "Content-Type: application/json" \
+              --data "{\"definition\": ${DEF}}")"
+
+            echo "$RESPONSE"
+
+            ERR_CODE="$(printf '%s' "$RESPONSE" | jq -r '.code // empty')"
+            if [ -n "$ERR_CODE" ]; then
+              echo "::error::IBM Projects API returned an error (code=$ERR_CODE) for $file"
+              exit 1
+            fi
+          done
+
+          echo "IBM Cloud Projects sync complete."

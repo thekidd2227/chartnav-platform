@@ -7,10 +7,23 @@ backend. All SQL uses portable constructs (`COALESCE`, named binds).
 from __future__ import annotations
 
 import json
+import os
 
 from sqlalchemy import text
 
 from app.db import insert_returning_id, transaction
+
+
+def _wedge_enabled() -> bool:
+    """Phase 24B wedge gate.
+
+    Default ON for direct invocations (demo, Playwright e2e seed).
+    Backend pytest fixtures set ``CHARTNAV_SEED_PHASE_24B_WEDGE=0`` so
+    that Phase 20B / 20C count-based tests continue to see the empty
+    baseline they were written against. The Phase 24B test file
+    re-enables the wedge via its own ``test_db_with_wedge`` fixture.
+    """
+    return os.environ.get("CHARTNAV_SEED_PHASE_24B_WEDGE", "1") != "0"
 
 ORGS = [
     {
@@ -21,6 +34,11 @@ ORGS = [
             ("admin@chartnav.local", "ChartNav Admin", "admin"),
             ("clin@chartnav.local", "Casey Clinician", "clinician"),
             ("rev@chartnav.local", "Riley Reviewer", "reviewer"),
+            # Phase 20C — additive operational roles for the
+            # role-based dashboards. Demo-local synthetic identities;
+            # no real PHI.
+            ("front@chartnav.local", "Frankie Front-Desk", "front_desk"),
+            ("tech@chartnav.local", "Taylor Technician", "technician"),
         ],
         "patients": [
             {
@@ -82,6 +100,9 @@ ORGS = [
         "users": [
             ("admin@northside.local", "Northside Admin", "admin"),
             ("clin@northside.local", "Noa Clinician", "clinician"),
+            # Phase 20C — additive operational roles.
+            ("front@northside.local", "Nora Front-Desk", "front_desk"),
+            ("tech@northside.local", "Nash Technician", "technician"),
         ],
         "patients": [
             {
@@ -311,6 +332,374 @@ def _ensure_events(conn, encounter_id: int, events: list) -> None:
         )
 
 
+# =====================================================================
+# Phase 24B — Morgan Lee retina follow-up wedge.
+#
+# Deterministic fake-data orchestration that exercises every clinic
+# lane (front desk → tech workup → imaging review → MD encounter →
+# documentation → sign-off → internal follow-up) for one patient.
+# Every row is fake by construction; PT-1001 Morgan Lee is the same
+# fake demo identity the rest of the seed uses.
+#
+# All text in this wedge is provider-reviewed workflow-coordination
+# language. None of it claims autonomous diagnosis, automatic image
+# interpretation, OCT/fundus/visual-field interpretation, treatment
+# recommendation, medication selection, automatic orders / referrals
+# / patient messaging / billing / coding / claims submission, EHR
+# replacement, HIPAA certification, real device integration, or real
+# PHI.
+# =====================================================================
+
+
+_WEDGE_QUEUE_LANE = (
+    # (queue_type, status, assigned_role, title for payload, priority)
+    ("check_in", "open", "front_desk", "Front desk readiness — confirm retina follow-up arrival.", "normal"),
+    ("technician_workup", "open", "technician", "Technician workup — VA / IOP / refraction / dilation for retina follow-up.", "normal"),
+    ("imaging_needed", "open", "technician", "Imaging metadata review — OCT macula + fundus photo captured upstream.", "normal"),
+    ("ready_for_doctor", "open", "clinician", "Ready for MD — retina follow-up encounter.", "high"),
+    ("documentation", "open", "clinician", "Provider-reviewed documentation — draft to final note for retina follow-up.", "normal"),
+    ("signoff_needed", "open", "clinician", "Sign-off needed — retina follow-up note pending immutable sign.", "normal"),
+    ("follow_up", "open", "front_desk", "Internal follow-up — confirm retina follow-up window after provider sign-off.", "normal"),
+)
+
+
+def _ensure_wedge_queue_item(
+    conn,
+    *,
+    org_id: int,
+    patient_id: int,
+    encounter_id: int,
+    provider_id: int,
+    location_id: int,
+    queue_type: str,
+    status: str,
+    assigned_role: str,
+    payload_title: str,
+    priority: str,
+    assigned_user_id: int | None = None,
+) -> int:
+    """Idempotent insert keyed on (org, patient, encounter, queue_type)."""
+    row = conn.execute(
+        text(
+            "SELECT id FROM work_queue_items "
+            "WHERE organization_id = :org AND patient_id = :pid "
+            "AND encounter_id = :eid AND queue_type = :qt"
+        ),
+        {"org": org_id, "pid": patient_id, "eid": encounter_id, "qt": queue_type},
+    ).mappings().first()
+    if row:
+        return int(row["id"])
+    # payload_json carries the role-facing title only — Phase 20C's
+    # _compact_queue_item() strips this body before serializing to
+    # the dashboard response. Buyer-visible UI shows the queue type
+    # + status, not this payload.
+    payload = json.dumps(
+        {"title": payload_title, "source": "phase_24b_wedge", "demo": True},
+        sort_keys=True,
+    )
+    return insert_returning_id(
+        conn,
+        "work_queue_items",
+        {
+            "organization_id": org_id,
+            "location_id": location_id,
+            "patient_id": patient_id,
+            "encounter_id": encounter_id,
+            "provider_id": provider_id,
+            "queue_type": queue_type,
+            "priority": priority,
+            "status": status,
+            "assigned_role": assigned_role,
+            "assigned_user_id": assigned_user_id,
+            "source": "phase_24b_wedge",
+            "payload_json": payload,
+        },
+    )
+
+
+def _ensure_retina_tracking_for_wedge(
+    conn, *, org_id: int, patient_id: int, encounter_id: int, user_id: int
+) -> int:
+    row = conn.execute(
+        text(
+            "SELECT id FROM retina_tracking "
+            "WHERE organization_id = :org AND patient_id = :pid "
+            "AND encounter_id = :eid AND condition = :cond"
+        ),
+        {
+            "org": org_id,
+            "pid": patient_id,
+            "eid": encounter_id,
+            "cond": "Diabetic retinopathy / macular edema monitoring",
+        },
+    ).mappings().first()
+    if row:
+        return int(row["id"])
+    return insert_returning_id(
+        conn,
+        "retina_tracking",
+        {
+            "organization_id": org_id,
+            "patient_id": patient_id,
+            "encounter_id": encounter_id,
+            "eye": "OU",
+            "condition": "Diabetic retinopathy / macular edema monitoring",
+            "severity": "moderate (provider-entered)",
+            "follow_up_interval": "4 weeks",
+            "injection_history_summary": "Prior anti-VEGF history captured by provider; no automation by ChartNav.",
+            "provider_assessment": (
+                "Provider-reviewed monitoring note. ChartNav records "
+                "structured fields the provider enters; ChartNav does "
+                "not diagnose, interpret OCTs, grade DR, or select "
+                "anti-VEGF dosing."
+            ),
+            "review_status": "needs_review",
+            "created_by_user_id": user_id,
+        },
+    )
+
+
+def _ensure_imaging_study_for_wedge(
+    conn,
+    *,
+    org_id: int,
+    patient_id: int,
+    encounter_id: int,
+    user_id: int,
+    modality: str,
+    eye: str,
+    notes: str,
+) -> int:
+    row = conn.execute(
+        text(
+            "SELECT id FROM imaging_studies "
+            "WHERE organization_id = :org AND patient_id = :pid "
+            "AND encounter_id = :eid AND modality = :m AND eye = :eye"
+        ),
+        {
+            "org": org_id,
+            "pid": patient_id,
+            "eid": encounter_id,
+            "m": modality,
+            "eye": eye,
+        },
+    ).mappings().first()
+    if row:
+        return int(row["id"])
+    return insert_returning_id(
+        conn,
+        "imaging_studies",
+        {
+            "organization_id": org_id,
+            "patient_id": patient_id,
+            "encounter_id": encounter_id,
+            "modality": modality,
+            "eye": eye,
+            "status": "ready_for_review",
+            "notes": notes,
+            "created_by_user_id": user_id,
+        },
+    )
+
+
+def _ensure_imaging_file_for_wedge(
+    conn,
+    *,
+    org_id: int,
+    study_id: int,
+    user_id: int,
+    file_kind: str,
+    file_name: str,
+    storage_uri: str,
+) -> int:
+    row = conn.execute(
+        text(
+            "SELECT id FROM imaging_files "
+            "WHERE organization_id = :org AND study_id = :sid "
+            "AND file_name = :fn"
+        ),
+        {"org": org_id, "sid": study_id, "fn": file_name},
+    ).mappings().first()
+    if row:
+        return int(row["id"])
+    return insert_returning_id(
+        conn,
+        "imaging_files",
+        {
+            "organization_id": org_id,
+            "study_id": study_id,
+            "file_kind": file_kind,
+            "storage_uri": storage_uri,
+            "file_name": file_name,
+            "content_type": "application/octet-stream",
+            "size_bytes": 0,
+            "created_by_user_id": user_id,
+        },
+    )
+
+
+def _ensure_action_item_for_wedge(
+    conn, *, org_id: int, patient_id: int, encounter_id: int
+) -> int:
+    action_type = "review_retina_followup_window"
+    row = conn.execute(
+        text(
+            "SELECT id FROM provider_action_items "
+            "WHERE organization_id = :org AND patient_id = :pid "
+            "AND encounter_id = :eid AND action_type = :at"
+        ),
+        {"org": org_id, "pid": patient_id, "eid": encounter_id, "at": action_type},
+    ).mappings().first()
+    if row:
+        return int(row["id"])
+    return insert_returning_id(
+        conn,
+        "provider_action_items",
+        {
+            "organization_id": org_id,
+            "patient_id": patient_id,
+            "encounter_id": encounter_id,
+            "source_type": "phase_24b_wedge",
+            "action_type": action_type,
+            "priority": "medium",
+            "title": (
+                "Internal follow-up — confirm retina follow-up window "
+                "after provider sign-off. Review task only; internal "
+                "staff coordination."
+            ),
+            "status": "suggested",
+            "created_by_system": True,
+            "generated_batch_id": "phase_24b_wedge",
+        },
+    )
+
+
+def _seed_phase_24b_retina_wedge(
+    conn,
+    *,
+    org_id: int,
+    location_id: int,
+    patient_id: int,
+    encounter_id: int,
+    provider_id: int,
+    admin_user_id: int,
+) -> dict[str, int]:
+    """Seed the Morgan Lee retina follow-up wedge.
+
+    Idempotent. Returns a summary dict.
+    """
+    counts: dict[str, int] = {"queue_items": 0, "imaging_files": 0}
+
+    assignee_by_role = {
+        "front_desk": _user_id_for_org_role(conn, org_id, "front_desk"),
+        "technician": _user_id_for_org_role(conn, org_id, "technician"),
+        "clinician": _user_id_for_org_role(conn, org_id, "clinician"),
+    }
+
+    for qt, st, role, title, prio in _WEDGE_QUEUE_LANE:
+        _ensure_wedge_queue_item(
+            conn,
+            org_id=org_id,
+            patient_id=patient_id,
+            encounter_id=encounter_id,
+            provider_id=provider_id,
+            location_id=location_id,
+            queue_type=qt,
+            status=st,
+            assigned_role=role,
+            assigned_user_id=assignee_by_role.get(role),
+            payload_title=title,
+            priority=prio,
+        )
+        counts["queue_items"] += 1
+
+    retina_id = _ensure_retina_tracking_for_wedge(
+        conn,
+        org_id=org_id,
+        patient_id=patient_id,
+        encounter_id=encounter_id,
+        user_id=admin_user_id,
+    )
+    counts["retina_tracking_id"] = retina_id
+
+    oct_study_id = _ensure_imaging_study_for_wedge(
+        conn,
+        org_id=org_id,
+        patient_id=patient_id,
+        encounter_id=encounter_id,
+        user_id=admin_user_id,
+        modality="oct_macula",
+        eye="OU",
+        notes=(
+            "OCT macula captured upstream by the practice's existing "
+            "imaging workflow. ChartNav stores metadata only. Provider "
+            "interpretation stays with the clinician. ChartNav does "
+            "not interpret OCT scans."
+        ),
+    )
+    counts["oct_macula_study_id"] = oct_study_id
+    _ensure_imaging_file_for_wedge(
+        conn,
+        org_id=org_id,
+        study_id=oct_study_id,
+        user_id=admin_user_id,
+        file_kind="image",
+        file_name="oct_macula_morgan_lee_demo.dcm",
+        storage_uri="placeholder://demo/oct_macula_morgan_lee_demo.dcm",
+    )
+    counts["imaging_files"] += 1
+
+    fundus_study_id = _ensure_imaging_study_for_wedge(
+        conn,
+        org_id=org_id,
+        patient_id=patient_id,
+        encounter_id=encounter_id,
+        user_id=admin_user_id,
+        modality="fundus_photo",
+        eye="OU",
+        notes=(
+            "Fundus photograph captured upstream by the practice's "
+            "existing imaging workflow. ChartNav stores metadata only. "
+            "ChartNav does not interpret fundus photographs."
+        ),
+    )
+    counts["fundus_photo_study_id"] = fundus_study_id
+    _ensure_imaging_file_for_wedge(
+        conn,
+        org_id=org_id,
+        study_id=fundus_study_id,
+        user_id=admin_user_id,
+        file_kind="image",
+        file_name="fundus_photo_morgan_lee_demo.jpg",
+        storage_uri="placeholder://demo/fundus_photo_morgan_lee_demo.jpg",
+    )
+    counts["imaging_files"] += 1
+
+    counts["action_item_id"] = _ensure_action_item_for_wedge(
+        conn,
+        org_id=org_id,
+        patient_id=patient_id,
+        encounter_id=encounter_id,
+    )
+
+    return counts
+
+
+def _user_id_for_org_role(conn, org_id: int, role: str) -> int | None:
+    row = conn.execute(
+        text(
+            "SELECT id FROM users WHERE organization_id = :org "
+            "AND role = :role ORDER BY id LIMIT 1"
+        ),
+        {"org": org_id, "role": role},
+    ).mappings().first()
+    return int(row["id"]) if row else None
+
+
+def _admin_user_id_for_org(conn, org_id: int) -> int | None:
+    return _user_id_for_org_role(conn, org_id, "admin")
+
+
 def main() -> None:
     summary = []
     with transaction() as conn:
@@ -330,6 +719,8 @@ def main() -> None:
                 pvid = _ensure_provider(conn, org_id, prov_fx)
                 provider_ids[prov_fx["display_name"]] = pvid
 
+            wedge_enc_id: int | None = None
+            wedge_provider_id: int | None = None
             for enc_fx in org_fx["encounters"]:
                 enc_id = _get_or_create_encounter(
                     conn, org_id, loc_id, enc_fx,
@@ -337,11 +728,45 @@ def main() -> None:
                     provider_id=provider_ids.get(enc_fx["provider_name"]),
                 )
                 _ensure_events(conn, enc_id, enc_fx["events"])
+                # Phase 24B — Morgan Lee retina follow-up wedge anchor.
+                if (
+                    org_fx["slug"] == "demo-eye-clinic"
+                    and enc_fx.get("patient_identifier") == "PT-1001"
+                ):
+                    wedge_enc_id = enc_id
+                    wedge_provider_id = provider_ids.get(enc_fx["provider_name"])
+
+            # Phase 24B — seed the Morgan Lee retina follow-up wedge
+            # (work queue items, retina tracking, OCT + fundus imaging
+            # metadata, internal follow-up task). Idempotent. Gated
+            # by `CHARTNAV_SEED_PHASE_24B_WEDGE` so backend tests can
+            # opt out and keep their pre-wedge baseline.
+            if (
+                _wedge_enabled()
+                and org_fx["slug"] == "demo-eye-clinic"
+                and wedge_enc_id is not None
+                and wedge_provider_id is not None
+            ):
+                admin_uid = _admin_user_id_for_org(conn, org_id)
+                wedge_counts = _seed_phase_24b_retina_wedge(
+                    conn,
+                    org_id=org_id,
+                    location_id=loc_id,
+                    patient_id=patient_ids["PT-1001"],
+                    encounter_id=wedge_enc_id,
+                    provider_id=wedge_provider_id,
+                    admin_user_id=admin_uid or 0,
+                )
+                summary.append(("phase_24b_wedge", org_id, wedge_counts))
             summary.append((org_fx["slug"], org_id, loc_id))
 
     print("Seed complete.")
-    for slug, org_id, loc_id in summary:
-        print(f"  {slug}: organization_id={org_id} location_id={loc_id}")
+    for item in summary:
+        if item[0] == "phase_24b_wedge":
+            print(f"  phase_24b_wedge: organization_id={item[1]} {item[2]}")
+        else:
+            slug, org_id, loc_id = item
+            print(f"  {slug}: organization_id={org_id} location_id={loc_id}")
 
 
 if __name__ == "__main__":
