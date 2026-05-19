@@ -170,6 +170,13 @@ FORBIDDEN = [
     # Autonomous / automation overclaims
     r"autonomous diagnosis",
     r"autonomous interpretation",
+    r"fundus image interpretation",
+    r"fundus photo interpretation",
+    r"retinal image interpretation",
+    r"AI[- ]interprets? fundus",
+    r"autonomous fundus interpretation",
+    r"fundus diagnosis",
+    r"AI[- ]generated fundus diagnosis",
     r"auto[- ]interprets? OCT",
     r"auto[- ]grades? DR",
     r"auto[- ]determines? cup[- ]to[- ]disc",
