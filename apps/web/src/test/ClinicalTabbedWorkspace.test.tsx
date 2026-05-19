@@ -75,6 +75,17 @@ vi.mock("../features/ambient/ambientApi", () => ({
   finalizeScribeSession: vi.fn(),
 }));
 
+// Phase 60 — the Clinical tab mounts VitalsWorkupPanel, which calls
+// listVitalsWorkups on mount. Same pattern.
+vi.mock("../features/vitals/vitalsApi", () => ({
+  listVitalsWorkups: vi.fn().mockResolvedValue([]),
+  createVitalsWorkup: vi.fn(),
+  getVitalsWorkup: vi.fn(),
+  updateVitalsWorkup: vi.fn(),
+  reviewVitalsWorkup: vi.fn(),
+  signVitalsWorkup: vi.fn(),
+}));
+
 import * as api from "../api";
 import { ClinicalTabbedWorkspace } from "../ClinicalTabbedWorkspace";
 
@@ -975,5 +986,37 @@ describe("Phase 57 — Ambient Documentation Assist mount", () => {
     expect(banner.textContent).toMatch(/Does not diagnose/i);
     expect(banner.textContent).toMatch(/Does not place orders/i);
     expect(banner.textContent).toMatch(/Not for real PHI/i);
+  });
+});
+
+// ---------------------------------------------------------------
+// Phase 60 — Technician Workup & Vitals mounts in Clinical tab
+// ---------------------------------------------------------------
+
+describe("Phase 60 — Technician Workup & Vitals mount", () => {
+  it("Clinical tab mounts the VitalsWorkupPanel inside a wide card", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(screen.getByTestId("ctw-tab-clinical"));
+    const card = screen.getByTestId("ctw-card-technician-workup-vitals");
+    expect(card).toBeInTheDocument();
+    expect(
+      within(card).getByTestId("vitals-workup-panel"),
+    ).toBeInTheDocument();
+    expect(
+      within(card).getByTestId("vitals-safety-banner"),
+    ).toBeInTheDocument();
+  });
+
+  it("Vitals safety banner names every required disclaimer", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(screen.getByTestId("ctw-tab-clinical"));
+    const banner = screen.getByTestId("vitals-safety-banner");
+    expect(banner.textContent).toMatch(/Does not diagnose/i);
+    expect(banner.textContent).toMatch(/Does not recommend treatment/i);
+    expect(banner.textContent).toMatch(/Does not place orders/i);
+    expect(banner.textContent).toMatch(/Not for real PHI/i);
+    expect(banner.textContent).toMatch(/No device integration/i);
   });
 });
