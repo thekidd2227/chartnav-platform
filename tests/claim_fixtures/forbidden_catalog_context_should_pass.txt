@@ -1,0 +1,7 @@
+# Forbidden phrase catalog
+
+Forbidden phrase catalog: "OpenAI-powered clinical documentation" is banned.
+Forbidden phrase catalog: "ChartNav is HIPAA compliant" is banned.
+Forbidden phrase catalog: "Fundus image interpretation" is banned.
+Forbidden phrase catalog: "Guaranteed ROI" is banned.
+Forbidden phrase catalog: "Better than Cora" is banned.

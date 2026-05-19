@@ -33,6 +33,10 @@
 #   - does not print secrets;
 #   - does not replace human review.
 #
+# This scanner is synchronized with the canonical policy manifest at
+# docs/commercial/claims-policy.json. Run
+# scripts/check_claim_policy_sync.py when adding high-risk phrases.
+#
 # Usage:
 #   bash scripts/check_demo_claims.sh
 # Exit codes:
@@ -103,6 +107,16 @@ FORBIDDEN = [
     r"replaces? (your |an? )?(EHR|EMR|electronic health record|electronic medical record)",
     r"EHR replacement",
     r"EMR replacement",
+    r"beats Cora",
+    r"beat Cora",
+    r"Cora[- ]killer",
+    r"Cora replacement",
+    r"alternative to Cora",
+    r"better than Cora",
+    r"outperforms Cora",
+    r"Cora competitor",
+    r"guaranteed ROI",
+    r"ROI guarantee",
     r"replaces? (a |the )?doctor",
     r"replaces? (a |the )?provider",
     r"replaces? (your |a |the )?scribe",
@@ -131,7 +145,7 @@ FORBIDDEN = [
     # may only be described as candidate vendors under evaluation,
     # never as a shipped capability. Negative phrasings stay exempt
     # via the same negative / catalog context guards used for the
-    # rest of the list.
+    # rest of the list. Sync phrase: OpenAI-powered clinical documentation.
     r"OpenAI[- ]powered clinical documentation",
     r"OpenAI[- ]powered scribe",
     r"GPT[- ]powered clinical documentation",
@@ -212,6 +226,7 @@ FORBIDDEN = [
     r"OCT interpretation",
     # Patient-side overclaims
     r"patient messaging",
+    r"send patient message",
     r"send to patient",
     r"submits? (a )?claims?",
     r"claims? submission",

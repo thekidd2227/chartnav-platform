@@ -17,6 +17,10 @@
 #      beyond the small SVG brand assets that already shipped;
 #   6. prints the current git SHA + a short reminder.
 #
+# This scanner is synchronized with the canonical policy manifest at
+# docs/commercial/claims-policy.json. Run
+# scripts/check_claim_policy_sync.py when adding high-risk phrases.
+#
 # Usage:
 #   bash scripts/check_website_claims.sh
 # Exit codes:
@@ -171,6 +175,8 @@ forbidden_capability_positive=(
   "autonomous diagnosis"
   "automatic diagnosis"
   "guaranteed accuracy"
+  "guaranteed ROI"
+  "ROI guarantee"
   "automatic orders"
   "order OCT"
   "submit referral"
@@ -243,6 +249,8 @@ forbidden_capability_positive=(
   "Claude diagnosis"
   "LLM-powered diagnosis"
   "LLM-powered clinical documentation"
+  "automatic billing"
+  "OCT interpretation"
   "automatic note writing"
   "autonomous documentation"
   "ambient scribe parity"
