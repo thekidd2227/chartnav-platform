@@ -1,7 +1,7 @@
 """fundus_charts table
 
 Revision ID: e1f2a3041508
-Revises: e1f2a3041507
+Revises: a8b9c0d1e2f3
 Create Date: 2026-05-19
 """
 from __future__ import annotations
@@ -9,7 +9,7 @@ from __future__ import annotations
 from alembic import op
 
 revision = "e1f2a3041508"
-down_revision = "e1f2a3041507"
+down_revision = "a8b9c0d1e2f3"
 branch_labels = None
 depends_on = None
 
