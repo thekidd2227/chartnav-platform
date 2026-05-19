@@ -52,7 +52,7 @@ Demo narrators may use these chips during retina-clinic walkthroughs. They are *
 | `Laterality not stated …` | Findings text did not contain `OD` / `OS` / `OU` keywords. The clinician should confirm which eye. |
 | `No clock-hour specified …` | Findings text did not include a clock-position like `10:30` or `5 to 7`. The lesion is drawn at a default position with reduced opacity. |
 | `Unrecognized finding type …` | The rule-based parser did not match a known finding (horseshoe tear, lattice, detachment, etc.). The clinician should clarify. |
-| `Laterality mismatch …` | The clinician's selected eye disagrees with the eye named in the findings text. |
+| `Laterality mismatch …` | The request's laterality field (e.g. the UI selector) disagrees with the laterality the parser found in the findings text. **Findings text wins** (the chart is stored under the parsed laterality); the warning prompts the clinician to confirm before signing. Emitted by `generate_chart_from_findings` (Phase 56). |
 
 ## Review vs Sign
 
@@ -174,3 +174,20 @@ unset CHARTNAV_FUNDUS_DRAFTING_ASSIST
 ```
 
 See `docs/security/chartnav-openai-fake-data-adapter.md` for the full Phase 52B adapter contract.
+
+## Demo operator runbook (Phase 56)
+
+For live demos, follow `docs/demo/phase-56-fundus-demo-runbook.md`. It
+covers the exact click path, demo-safe sample findings, approved /
+forbidden phrases, Q&A for "Is this AI?" / "Does it diagnose?" /
+"Does it read fundus photos?" / "Is OpenAI used?", and a
+troubleshooting table. Use that runbook — not this workflow doc — when
+operating a customer call.
+
+## Correction / versioning (current contract)
+
+Signed charts are immutable. To correct a signed chart, generate or
+create a **new** chart in the same encounter. There is no in-place edit
+path and no fork/new-version endpoint in V1. A future phase may
+introduce a fork-and-supersede flow; until that lands, the demo
+narration must not imply signed charts can be amended.

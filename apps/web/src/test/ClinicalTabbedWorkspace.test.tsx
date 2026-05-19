@@ -52,6 +52,18 @@ vi.mock("../api", async () => {
   };
 });
 
+// Phase 56 — the Imaging tab mounts FundusChartPanel, which calls
+// listFundusCharts on mount. Stub the module so workspace-level tests
+// don't issue a real fetch.
+vi.mock("../features/fundus/fundusApi", () => ({
+  listFundusCharts: vi.fn().mockResolvedValue([]),
+  generateFundusChart: vi.fn(),
+  getFundusChart: vi.fn(),
+  renderFundusChart: vi.fn(),
+  reviewFundusChart: vi.fn(),
+  signFundusChart: vi.fn(),
+}));
+
 import * as api from "../api";
 import { ClinicalTabbedWorkspace } from "../ClinicalTabbedWorkspace";
 
@@ -771,6 +783,11 @@ describe("Phase 19I — Imaging tab card grid", () => {
     expect(
       screen.getByTestId("ctw-card-od-os-retinal-workbench")
     ).toBeInTheDocument();
+    // Phase 55 — Fundus charts wide card is mounted below the
+    // OD/OS retinal workbench.
+    expect(
+      screen.getByTestId("ctw-card-fundus-charts")
+    ).toBeInTheDocument();
   });
 
   it("renders the workspace grid before the OD/OS retinal workbench", async () => {
@@ -869,5 +886,51 @@ describe("Phase 19I — Documentation tab stepper", () => {
       ).toBeInTheDocument();
     }
     expect(screen.getByTestId("ctw-doc-workbench")).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------
+// Phase 56 — Fundus charts workspace integration
+// ---------------------------------------------------------------
+
+describe("Phase 56 — Fundus charts card reachability", () => {
+  it("Fundus charts card mounts the FundusChartPanel (panel reachable from workspace)", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(screen.getByTestId("ctw-tab-imaging"));
+
+    const card = screen.getByTestId("ctw-card-fundus-charts");
+    expect(card).toBeInTheDocument();
+    // The mounted panel exposes its own test hook.
+    expect(
+      within(card).getByTestId("fundus-chart-panel"),
+    ).toBeInTheDocument();
+    expect(
+      within(card).getByTestId("fundus-safety-banner"),
+    ).toBeInTheDocument();
+  });
+
+  it("Fundus charts card renders the OD/OS/OU laterality radio group", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(screen.getByTestId("ctw-tab-imaging"));
+    const card = screen.getByTestId("ctw-card-fundus-charts");
+    expect(
+      within(card).getByTestId("fundus-laterality-group"),
+    ).toBeInTheDocument();
+    expect(within(card).getByTestId("fundus-laterality-OD")).toBeInTheDocument();
+    expect(within(card).getByTestId("fundus-laterality-OS")).toBeInTheDocument();
+    expect(within(card).getByTestId("fundus-laterality-OU")).toBeInTheDocument();
+  });
+
+  it("safety banner inside Fundus charts card shows the four required clauses", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(screen.getByTestId("ctw-tab-imaging"));
+    const banner = screen.getByTestId("fundus-safety-banner");
+    expect(banner.textContent).toMatch(/Draft from clinician-entered findings/i);
+    expect(banner.textContent).toMatch(/Provider review required/i);
+    expect(banner.textContent).toMatch(/Not image interpretation/i);
+    expect(banner.textContent).toMatch(/Does not diagnose/i);
   });
 });
