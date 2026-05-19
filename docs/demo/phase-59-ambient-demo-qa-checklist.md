@@ -212,7 +212,9 @@ following are observed:
 - [ ] Stop the screen-share before any post-demo Q&A that could
       expose internal state.
 - [ ] Reset the local demo database if it received any new sessions
-      (`scripts/reset_demo.sh` or equivalent — adjust path).
+      (`scripts/reset_demo_state.sh`, or the Phase 24B retina-specific
+      `scripts/reset_phase24b_retina_demo.sh`, whichever fits the
+      demo scope).
 - [ ] Unset `CHARTNAV_AMBIENT_DOCUMENTATION_ASSIST` if it was set for
       a fake-data OpenAI assist demo.
 - [ ] Run `python3 scripts/check_runtime_safety.py` once more and

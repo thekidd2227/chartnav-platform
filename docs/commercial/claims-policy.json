@@ -78,6 +78,46 @@
       "scanner_fragments": ["autonomous diagnosis"]
     },
     {
+      "phrase_or_regex": "AI vitals diagnosis|automatic vitals diagnosis|vital[- ]sign diagnosis|vitals diagnosis|AI[- ]diagnoses (?:vitals|blood pressure)",
+      "category": "vitals_diagnosis_overclaims",
+      "severity": "critical",
+      "allowed_contexts": ["negative_assertion", "forbidden_phrase_catalog", "internal_security_doc", "scanner_fixture"],
+      "examples_fail": ["AI vitals diagnosis.", "Vital-sign diagnosis.", "Automatic vitals diagnosis."],
+      "examples_pass": ["Out-of-range values surface as review prompts, not as diagnosis.", "ChartNav does not provide vital-sign diagnosis."],
+      "sync_required": true,
+      "scanner_fragments": ["AI vitals diagnosis", "automatic vitals diagnosis", "sign diagnosis"]
+    },
+    {
+      "phrase_or_regex": "treatment recommendation|treatment recommendations|recommend treatment|AI prescribes|automatic treatment recommendation",
+      "category": "treatment_recommendation_overclaims",
+      "severity": "critical",
+      "allowed_contexts": ["negative_assertion", "forbidden_phrase_catalog", "internal_security_doc", "scanner_fixture"],
+      "examples_fail": ["Treatment recommendation.", "AI prescribes."],
+      "examples_pass": ["ChartNav does not recommend treatment.", "Does not recommend treatment."],
+      "sync_required": true,
+      "scanner_fragments": ["treatment recommendation", "AI prescribes"]
+    },
+    {
+      "phrase_or_regex": "device integration|live device integration|vital[- ]signs device integration|BP cuff integration|pulse[- ]oximeter integration|smart scale integration",
+      "category": "device_integration_overclaims",
+      "severity": "critical",
+      "allowed_contexts": ["negative_assertion", "forbidden_phrase_catalog", "internal_security_doc", "scanner_fixture"],
+      "examples_fail": ["Live device integration.", "Vital-signs device integration."],
+      "examples_pass": ["No device integration.", "ChartNav does not integrate with vital-signs devices."],
+      "sync_required": true,
+      "scanner_fragments": ["live device integration", "signs device integration", "BP cuff integration"]
+    },
+    {
+      "phrase_or_regex": "remote patient monitoring|RPM[- ]ready|continuous patient monitoring",
+      "category": "remote_patient_monitoring_overclaims",
+      "severity": "critical",
+      "allowed_contexts": ["negative_assertion", "forbidden_phrase_catalog", "internal_security_doc", "scanner_fixture"],
+      "examples_fail": ["Remote patient monitoring.", "RPM-ready.", "Continuous patient monitoring."],
+      "examples_pass": ["No remote patient monitoring.", "ChartNav is not remote patient monitoring."],
+      "sync_required": true,
+      "scanner_fragments": ["remote patient monitoring", "continuous patient monitoring"]
+    },
+    {
       "phrase_or_regex": "image interpretation|retinal image interpretation|autonomous interpretation|interpretacion de imagenes",
       "category": "image_interpretation",
       "severity": "critical",

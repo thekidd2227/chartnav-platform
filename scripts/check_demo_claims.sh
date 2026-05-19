@@ -76,6 +76,8 @@ FILES=(
   "docs/demo/phase-57-ambient-documentation-demo-runbook.md"
   # Phase 59 — ambient documentation demo QA lockdown checklist.
   "docs/demo/phase-59-ambient-demo-qa-checklist.md"
+  # Phase 60 — structured vitals & technician workup demo runbook.
+  "docs/demo/phase-60-vitals-workup-demo-runbook.md"
 )
 
 for f in "${FILES[@]}"; do
@@ -173,6 +175,16 @@ FORBIDDEN = [
     r"production LLM documentation",
     r"hands[- ]free scribing",
     r"OpenAI[- ]powered clinical documentation",
+    r"AI vitals diagnosis",
+    r"automatic vitals diagnosis",
+    r"vital[- ]sign diagnosis",
+    r"AI prescribes",
+    r"vital[- ]signs device integration",
+    r"live device integration",
+    r"BP cuff integration",
+    r"remote patient monitoring",
+    r"continuous patient monitoring",
+    r"RPM[- ]ready",
     r"autonomous clinical reasoning",
     r"vendor[- ]approved for PHI",
     r"BAA[- ]ready by default",

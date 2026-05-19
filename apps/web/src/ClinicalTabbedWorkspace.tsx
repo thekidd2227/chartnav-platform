@@ -61,6 +61,7 @@ import { ImagingPipelinePanel } from "./ImagingPipelinePanel";
 import { SpecialtyTrackingPanel } from "./SpecialtyTrackingPanel";
 import { FundusChartPanel } from "./features/fundus/FundusChartPanel";
 import { AmbientDocumentationPanel } from "./features/ambient/AmbientDocumentationPanel";
+import { VitalsWorkupPanel } from "./features/vitals/VitalsWorkupPanel";
 
 // Local fmt — same shape as App.tsx::fmt. Inlined to avoid a
 // shared-utility refactor that would balloon Phase 19's diff.
@@ -750,6 +751,17 @@ function ClinicalTab({
 
   return (
     <div className="ctw-clinical" data-testid="ctw-clinical">
+      {encounterId !== null && (
+        <section
+          className="ctw-card ctw-card--wide"
+          data-testid="ctw-card-technician-workup-vitals"
+        >
+          <h3 className="ctw-card__title">Technician Workup &amp; Vitals</h3>
+          <div className="ctw-card__body">
+            <VitalsWorkupPanel encounterId={encounterId} />
+          </div>
+        </section>
+      )}
       {patientId !== null && (
         <SpecialtyTrackingPanel
           identity={identity}
