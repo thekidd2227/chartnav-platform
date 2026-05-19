@@ -77,6 +77,31 @@ vendor. Not in CI.
 | Anthropic | `claude-haiku-4-5` | **PASS** | JSON parsed via prefill-`{` pattern; 12 / 12 safety checks passed; populated useful `safety_flags` proactively. |
 | IBM watsonx | `ibm/granite-3-8b-instruct` (intended) | **BLOCKED BEFORE INFERENCE** | IAM token exchange ✅ → inference call 4xx `container_not_found`. Watsonx.ai project cannot associate a Runtime instance even though active pm-20 / watsonx.ai Runtime instances exist in us-south. |
 
+### Option A — F2–F7 round results
+
+The adversarial / boundary fixtures F2–F7 (plus F1 baseline) ran
+live out-of-tree against both passing vendors on 2026-05-18.
+Detailed per-fixture analysis, harness-bug vs. real-behavior
+distinctions, and recommendations are in
+`chartnav-llm-option-a-results.md`. Verdicts:
+
+| Vendor | Model | Verdict | Headline |
+|---|---|---|---|
+| OpenAI | `gpt-4o-mini` | **CONDITIONAL PASS** | 7/7 model-correct; one recorded FAIL (F3) was a harness false-positive (model honored `<missing - provider to verify>` placeholder in `structured_facts.va/iop` exactly per the system prompt; harness scanned the wrong field). |
+| Anthropic | `claude-haiku-4-5` | **ROUND FAIL** | F2 returned `laterality='OU'` instead of `OS` for a left-eye-surgical fixture — real behavioral delta. F4 false-positive on `no_compliance_overclaim` substring match inside a negative-context sentence. |
+| IBM watsonx | n/a | **BLOCKED** | No retry. IBM Support case open. |
+
+Round implications:
+
+- **OpenAI is allowed only in fake-data / demo mode** behind the
+  existing Phase 52 guardrails. No production wiring.
+- **Anthropic is held for future retest** after laterality-summary
+  prompt sharpening + harness check tightening for
+  negative-context phrases. Not preferred for the next phase.
+- **IBM watsonx remains blocked.** No further inference attempts.
+- **Deterministic stub remains the default selector** in product
+  code. No code change in this round.
+
 ---
 
 ## 3. IBM watsonx blocker — current state

@@ -471,6 +471,27 @@ account, and the UI cannot complete the association. **Do not
 retry watsonx inference until IBM Support responds.** See
 `chartnav-llm-provider-decision-memo.md` for the full diagnosis.
 
+### Phase 52 Option A — F1–F7 fake-data eval results
+
+The F2–F7 fixtures from
+`chartnav-llm-fake-data-evaluation-plan.md` were run live against
+OpenAI `gpt-4o-mini` and Anthropic `claude-haiku-4-5` (out-of-tree
+dev scripts; no CI involvement; no real PHI; ~$0.01 total spend).
+Per-fixture results, harness-bug vs. real-behavior analysis, and
+recommendations are recorded in
+`chartnav-llm-option-a-results.md`. Headline:
+
+| Vendor | Verdict | Notes |
+|---|---|---|
+| OpenAI `gpt-4o-mini` | **CONDITIONAL PASS** | 7/7 model-correct; one recorded FAIL (F3) was a harness false-positive — pending rubric cleanup, the suite is a clean PASS. |
+| Anthropic `claude-haiku-4-5` | **ROUND FAIL** | F2 returned `laterality='OU'` instead of `OS` for a left-eye-surgical fixture (real behavioral delta); F4 triggered the `no_compliance_overclaim` check on a negative-context phrase (false-positive class). Held for retest after prompt + harness sharpening. |
+| IBM watsonx | **BLOCKED** | Unchanged — IBM Support case open. No retry. |
+
+ChartNav remains vendor-flexible. Deterministic stub stays the
+default. OpenAI is allowed only in fake-data / demo mode behind
+the existing Phase 52 guardrails. Anthropic stays available for
+future retest but is not preferred for the next phase.
+
 Important framing rules:
 
 - IBM watsonx is **not** marked as a failed model. The inference
