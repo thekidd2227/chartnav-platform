@@ -337,6 +337,28 @@ def _check_per_request(request: LLMRequest, provider_key: str) -> None:
         )
 
 
+def assert_live_provider_safe_to_use(
+    provider_key: str, request: LLMRequest
+) -> None:
+    """Phase 54 public guardrail wrapper.
+
+    Combines the Phase 52B env-state check
+    (`_check_fake_data_guardrails`) and the per-request
+    contractual check (`_check_per_request`) into a single call
+    that other services (e.g., `fundus_chart_ai`) can use to
+    short-circuit BEFORE building any vendor-specific payload.
+
+    Raises `ProviderDisabledError` if any guardrail is not in the
+    SAFE state. Returns None on success. Never logs the API key.
+
+    This helper exists so callers outside `llm_provider.py` can
+    enforce the same Phase 52B contract without importing the
+    private underscore-prefixed helpers.
+    """
+    _check_fake_data_guardrails(provider_key)
+    _check_per_request(request, provider_key)
+
+
 # ---------------------------------------------------------------------------
 # OpenAI chat-completions adapter (Phase 52 scaffold)
 # ---------------------------------------------------------------------------
