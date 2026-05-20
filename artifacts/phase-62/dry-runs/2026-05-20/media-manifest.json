@@ -1,0 +1,386 @@
+{
+  "generated_at": "2026-05-20T16:38:00.644Z",
+  "base_url": "http://127.0.0.1:5173",
+  "api_url": "http://127.0.0.1:8000",
+  "identity": "clin@chartnav.local",
+  "entries": [
+    {
+      "filename": "01_workspace_landing.png",
+      "type": "screenshot",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/screenshots/01_workspace_landing.png",
+      "generated_by": "playwright",
+      "scene": "workspace landing",
+      "notes": ""
+    },
+    {
+      "filename": "02_patient_header.png",
+      "type": "screenshot",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/screenshots/02_patient_header.png",
+      "generated_by": "playwright",
+      "scene": "patient header",
+      "notes": "clipped"
+    },
+    {
+      "filename": "03_tab_navigation.png",
+      "type": "screenshot",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/screenshots/03_tab_navigation.png",
+      "generated_by": "playwright",
+      "scene": "tab bar",
+      "notes": "clipped"
+    },
+    {
+      "filename": "01_workspace_orientation.webm",
+      "type": "video",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/video-clips/01_workspace_orientation.webm",
+      "generated_by": "playwright",
+      "scene": "01_workspace_orientation.webm",
+      "notes": ""
+    },
+    {
+      "filename": "04_vitals_empty_form.png",
+      "type": "screenshot",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/screenshots/04_vitals_empty_form.png",
+      "generated_by": "playwright",
+      "scene": "vitals empty form",
+      "notes": ""
+    },
+    {
+      "filename": "05_vitals_loaded.png",
+      "type": "screenshot",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/screenshots/05_vitals_loaded.png",
+      "generated_by": "playwright",
+      "scene": "vitals loaded",
+      "notes": ""
+    },
+    {
+      "filename": "02_vitals_intake.webm",
+      "type": "video",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/video-clips/02_vitals_intake.webm",
+      "generated_by": "playwright",
+      "scene": "02_vitals_intake.webm",
+      "notes": ""
+    },
+    {
+      "filename": "06_vitals_bmi.png",
+      "type": "screenshot",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/screenshots/06_vitals_bmi.png",
+      "generated_by": "playwright",
+      "scene": "vitals BMI",
+      "notes": ""
+    },
+    {
+      "filename": "07_vitals_partial_bp_warning.png",
+      "type": "screenshot",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/screenshots/07_vitals_partial_bp_warning.png",
+      "generated_by": "playwright",
+      "scene": "partial BP warning",
+      "notes": ""
+    },
+    {
+      "filename": "08_vitals_what_chartnav_did_not_do.png",
+      "type": "screenshot",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/screenshots/08_vitals_what_chartnav_did_not_do.png",
+      "generated_by": "playwright",
+      "scene": "vitals safety banner (what NOT done)",
+      "notes": "clipped"
+    },
+    {
+      "filename": "03_vitals_bmi_warning.webm",
+      "type": "video",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/video-clips/03_vitals_bmi_warning.webm",
+      "generated_by": "playwright",
+      "scene": "03_vitals_bmi_warning.webm",
+      "notes": ""
+    },
+    {
+      "filename": "09_vitals_review.png",
+      "type": "screenshot",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/screenshots/09_vitals_review.png",
+      "generated_by": "playwright",
+      "scene": "vitals reviewed state",
+      "notes": ""
+    },
+    {
+      "filename": "10_vitals_signed_lock.png",
+      "type": "screenshot",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/screenshots/10_vitals_signed_lock.png",
+      "generated_by": "playwright",
+      "scene": "vitals signed/locked",
+      "notes": ""
+    },
+    {
+      "filename": "04_vitals_review_sign_lock.webm",
+      "type": "video",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/video-clips/04_vitals_review_sign_lock.webm",
+      "generated_by": "playwright",
+      "scene": "04_vitals_review_sign_lock.webm",
+      "notes": ""
+    },
+    {
+      "filename": "11_visitdraft_empty.png",
+      "type": "screenshot",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/screenshots/11_visitdraft_empty.png",
+      "generated_by": "playwright",
+      "scene": "visitdraft empty",
+      "notes": ""
+    },
+    {
+      "filename": "12_visitdraft_transcript.png",
+      "type": "screenshot",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/screenshots/12_visitdraft_transcript.png",
+      "generated_by": "playwright",
+      "scene": "visitdraft transcript loaded",
+      "notes": ""
+    },
+    {
+      "filename": "13_visitdraft_structured_facts.png",
+      "type": "screenshot",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/screenshots/13_visitdraft_structured_facts.png",
+      "generated_by": "playwright",
+      "scene": "structured facts",
+      "notes": ""
+    },
+    {
+      "filename": "14_visitdraft_draft_note.png",
+      "type": "screenshot",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/screenshots/14_visitdraft_draft_note.png",
+      "generated_by": "playwright",
+      "scene": "draft note text",
+      "notes": ""
+    },
+    {
+      "filename": "05_visitdraft_transcript_to_draft.webm",
+      "type": "video",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/video-clips/05_visitdraft_transcript_to_draft.webm",
+      "generated_by": "playwright",
+      "scene": "05_visitdraft_transcript_to_draft.webm",
+      "notes": ""
+    },
+    {
+      "filename": "15_visitdraft_safety_flags.png",
+      "type": "screenshot",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/screenshots/15_visitdraft_safety_flags.png",
+      "generated_by": "playwright",
+      "scene": "safety flags",
+      "notes": ""
+    },
+    {
+      "filename": "16_visitdraft_what_chartnav_did_not_do.png",
+      "type": "screenshot",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/screenshots/16_visitdraft_what_chartnav_did_not_do.png",
+      "generated_by": "playwright",
+      "scene": "forbidden actions",
+      "notes": "clip fallback: locator.boundingBox: Timeout 3000ms exceeded.\nCall log:\n  - waiting for locator('[data-testid=ambient-forbidden-actions]')\n"
+    },
+    {
+      "filename": "06_visitdraft_safety_did_not_do.webm",
+      "type": "video",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/video-clips/06_visitdraft_safety_did_not_do.webm",
+      "generated_by": "playwright",
+      "scene": "06_visitdraft_safety_did_not_do.webm",
+      "notes": ""
+    },
+    {
+      "filename": "17_visitdraft_reviewed.png",
+      "type": "screenshot",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/screenshots/17_visitdraft_reviewed.png",
+      "generated_by": "playwright",
+      "scene": "visitdraft reviewed",
+      "notes": ""
+    },
+    {
+      "filename": "18_visitdraft_signed_lock.png",
+      "type": "screenshot",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/screenshots/18_visitdraft_signed_lock.png",
+      "generated_by": "playwright",
+      "scene": "visitdraft signed/locked",
+      "notes": ""
+    },
+    {
+      "filename": "07_visitdraft_review_sign_lock.webm",
+      "type": "video",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/video-clips/07_visitdraft_review_sign_lock.webm",
+      "generated_by": "playwright",
+      "scene": "07_visitdraft_review_sign_lock.webm",
+      "notes": ""
+    },
+    {
+      "filename": "19_fundus_empty.png",
+      "type": "screenshot",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/screenshots/19_fundus_empty.png",
+      "generated_by": "playwright",
+      "scene": "fundus empty",
+      "notes": ""
+    },
+    {
+      "filename": "20_fundus_findings.png",
+      "type": "screenshot",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/screenshots/20_fundus_findings.png",
+      "generated_by": "playwright",
+      "scene": "fundus findings populated",
+      "notes": ""
+    },
+    {
+      "filename": "21_fundus_svg.png",
+      "type": "screenshot",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/screenshots/21_fundus_svg.png",
+      "generated_by": "playwright",
+      "scene": "fundus SVG rendered",
+      "notes": ""
+    },
+    {
+      "filename": "22_fundus_legend.png",
+      "type": "screenshot",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/screenshots/22_fundus_legend.png",
+      "generated_by": "playwright",
+      "scene": "fundus legend / editor view",
+      "notes": ""
+    },
+    {
+      "filename": "08_fundus_findings_to_diagram.webm",
+      "type": "video",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/video-clips/08_fundus_findings_to_diagram.webm",
+      "generated_by": "playwright",
+      "scene": "08_fundus_findings_to_diagram.webm",
+      "notes": ""
+    },
+    {
+      "filename": "23_fundus_warning.png",
+      "type": "screenshot",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/screenshots/23_fundus_warning.png",
+      "generated_by": "playwright",
+      "scene": "fundus warning list",
+      "notes": ""
+    },
+    {
+      "filename": "09_fundus_warning.webm",
+      "type": "video",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/video-clips/09_fundus_warning.webm",
+      "generated_by": "playwright",
+      "scene": "09_fundus_warning.webm",
+      "notes": ""
+    },
+    {
+      "filename": "24_fundus_attestation.png",
+      "type": "screenshot",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/screenshots/24_fundus_attestation.png",
+      "generated_by": "playwright",
+      "scene": "fundus attestation block",
+      "notes": ""
+    },
+    {
+      "filename": "25_fundus_signed_lock.png",
+      "type": "screenshot",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/screenshots/25_fundus_signed_lock.png",
+      "generated_by": "playwright",
+      "scene": "fundus signed/locked",
+      "notes": ""
+    },
+    {
+      "filename": "10_fundus_review_sign_lock.webm",
+      "type": "video",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/video-clips/10_fundus_review_sign_lock.webm",
+      "generated_by": "playwright",
+      "scene": "10_fundus_review_sign_lock.webm",
+      "notes": ""
+    },
+    {
+      "filename": "26_runtime_safety_terminal.png",
+      "type": "screenshot",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/screenshots/26_runtime_safety_terminal.png",
+      "generated_by": "playwright",
+      "scene": "runtime safety section",
+      "notes": ""
+    },
+    {
+      "filename": "27_claim_scanners_terminal.png",
+      "type": "screenshot",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/screenshots/27_claim_scanners_terminal.png",
+      "generated_by": "playwright",
+      "scene": "claim scanners section",
+      "notes": ""
+    },
+    {
+      "filename": "28_alembic_safety_terminal.png",
+      "type": "screenshot",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/screenshots/28_alembic_safety_terminal.png",
+      "generated_by": "playwright",
+      "scene": "alembic safety section",
+      "notes": ""
+    },
+    {
+      "filename": "11_safety_terminal.webm",
+      "type": "video",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/video-clips/11_safety_terminal.webm",
+      "generated_by": "playwright",
+      "scene": "11_safety_terminal.webm",
+      "notes": ""
+    },
+    {
+      "filename": "29_release_evidence_checklist.png",
+      "type": "screenshot",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/screenshots/29_release_evidence_checklist.png",
+      "generated_by": "playwright",
+      "scene": "release-evidence-checklist",
+      "notes": ""
+    },
+    {
+      "filename": "30_product_truth_safety_statements.png",
+      "type": "screenshot",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/screenshots/30_product_truth_safety_statements.png",
+      "generated_by": "playwright",
+      "scene": "product truth safety statements",
+      "notes": ""
+    },
+    {
+      "filename": "12_highlight_reel_3min.webm",
+      "type": "video",
+      "exists": true,
+      "path": "/Users/jean-maxcharles/Desktop/ARCG/chartnav-platform/artifacts/phase-62/video-clips/12_highlight_reel_3min.webm",
+      "generated_by": "playwright",
+      "scene": "12_highlight_reel_3min.webm",
+      "notes": ""
+    }
+  ]
+}
