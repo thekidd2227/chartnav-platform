@@ -1,0 +1,19 @@
+# Phase 63A — local demo environment for media capture.
+# Source this file before running the automation:
+#   set -a; source artifacts/phase-62/dry-runs/2026-05-20/.chartnav-demo-env; set +a
+#
+# Safe-local settings only — NO secrets, NO real vendor keys, NO PHI.
+# The capture automation refuses to start if any *_API_KEY var is set.
+
+export CHARTNAV_REPO_PATH="$HOME/Desktop/ARCG/chartnav-platform"
+export CHARTNAV_ENV=local
+export CHARTNAV_LLM_ENABLED=0
+export CHARTNAV_LLM_REAL_PHI_APPROVED=0
+export CHARTNAV_REAL_PHI_ENABLED=0
+export CHARTNAV_LLM_PROVIDER=deterministic_stub
+
+unset CHARTNAV_OPENAI_API_KEY
+unset CHARTNAV_ANTHROPIC_API_KEY
+unset CHARTNAV_WATSONX_API_KEY
+unset CHARTNAV_AMBIENT_DOCUMENTATION_ASSIST
+unset CHARTNAV_FUNDUS_DRAFTING_ASSIST
