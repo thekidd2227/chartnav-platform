@@ -47,3 +47,13 @@ audio_uploads/
 chartnav decks/
 desktop-export/
 **/Desktop/chartnav decks/
+
+# Phase 62 — buyer-demo screenshots + video clips are captured
+# locally by the operator. The shot lists in docs/demo/ define what
+# to capture; the actual PNG / MOV / MP4 files are not committed.
+artifacts/phase-62/screenshots/*.png
+artifacts/phase-62/screenshots/*.jpg
+artifacts/phase-62/video-clips/*.mov
+artifacts/phase-62/video-clips/*.mp4
+artifacts/phase-62/video-clips/*.gif
+artifacts/phase-62/dry-runs/
