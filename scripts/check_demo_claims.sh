@@ -95,6 +95,8 @@ FILES=(
   "artifacts/phase-62/dry-runs/2026-05-20/report.md"
   # Phase 63 — safe demo media + website video plan.
   "docs/demo/phase-63-safe-website-video-plan.md"
+  # Phase 63C — demo-critical functional repair report.
+  "docs/build/phase-63c-demo-critical-functional-repair-report.md"
 )
 
 for f in "${FILES[@]}"; do

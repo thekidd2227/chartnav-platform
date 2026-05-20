@@ -37,6 +37,7 @@ import { AdminPanel } from "./AdminPanel";
 import { NoteWorkspace } from "./NoteWorkspace";
 import { SEEDED_IDENTITIES, loadIdentity, saveIdentity } from "./identity";
 import { isDemoModeEnabled } from "./GuidedDemoMode";
+import { shapeEventData } from "./utils/shapeEventData";
 import { ClinicalTabbedWorkspace } from "./ClinicalTabbedWorkspace";
 import { MultiClinicDashboard } from "./MultiClinicDashboard";
 import { RoleDashboard } from "./RoleDashboard";
@@ -262,15 +263,18 @@ export default function App() {
   const onAddEvent = async (type: string, raw: string) => {
     if (!encounter) return;
     setBanner(null);
-    let data: unknown = undefined;
-    const trimmed = raw.trim();
-    if (trimmed) {
-      try {
-        data = JSON.parse(trimmed);
-      } catch {
-        data = trimmed;
+    // Phase 63C — see apps/web/src/utils/shapeEventData.ts. Backend
+    // requires manual_note.event_data to be a JSON object; the
+    // helper wraps free-text as { note: "..." } and refuses empty
+    // input client-side.
+    const shaped = shapeEventData(type, raw);
+    if ("error" in shaped) {
+      if (shaped.error === "empty") {
+        setBanner({ kind: "error", msg: "Manual note text cannot be empty." });
       }
+      return;
     }
+    const data = shaped.ok;
     try {
       await createEncounterEvent(identity, encounter.id, {
         event_type: type,

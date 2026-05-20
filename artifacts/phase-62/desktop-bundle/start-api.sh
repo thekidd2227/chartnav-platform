@@ -51,6 +51,29 @@ if [[ "${CHARTNAV_REAL_PHI_ENABLED:-0}" == "1" ]]; then
   exit 4
 fi
 
-echo "starting API via 'make boot' in $CHARTNAV_REPO_PATH"
+echo "starting API in $CHARTNAV_REPO_PATH"
 echo "CHARTNAV_ENV=$env_name"
+
+# Phase 63C — auto-bring the demo DB to Alembic head + seed before
+# booting. This is non-destructive: `make migrate` runs
+# `alembic upgrade head` (no rm), and `make seed` is idempotent
+# (it upserts Morgan Lee / PT-1001 / Encounter #1 + the demo org
+# without disturbing existing rows). Operators who want a clean
+# Morgan-only DB run `bash scripts/reset_demo_state.sh` first.
+#
+# Skip the auto-migrate by setting CHARTNAV_DEMO_SKIP_MIGRATE=1.
+if [[ "${CHARTNAV_DEMO_SKIP_MIGRATE:-0}" != "1" ]]; then
+  echo "migrating demo DB to Alembic head…"
+  if ! make -C "$CHARTNAV_REPO_PATH" migrate; then
+    echo "ERROR: 'make migrate' failed. Refusing to boot a buyer-demo API on a stale DB." >&2
+    echo "Recovery: run 'bash $CHARTNAV_REPO_PATH/scripts/reset_demo_state.sh' for a clean reset." >&2
+    exit 5
+  fi
+  echo "seeding demo DB (idempotent)…"
+  if ! make -C "$CHARTNAV_REPO_PATH" seed; then
+    echo "ERROR: 'make seed' failed. Recovery: 'bash $CHARTNAV_REPO_PATH/scripts/reset_demo_state.sh'." >&2
+    exit 5
+  fi
+fi
+
 exec make -C "$CHARTNAV_REPO_PATH" boot
