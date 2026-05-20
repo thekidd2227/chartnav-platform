@@ -152,3 +152,67 @@ def test_smoke_manual_note_object_is_accepted_201(client, seeded_ids) -> None:
     body = r.json()
     assert body["event_type"] == "manual_note"
     assert body["event_data"] == {"note": "smoke ok"}
+
+
+def test_smoke_vitals_full_lifecycle_matches_state_machine(client, seeded_ids) -> None:
+    """Phase 63C-2 — the smoke's vitals lifecycle (create → enter →
+    review → sign) must match the backend state machine. Pins:
+
+      draft  --PATCH advance_to_entered:true-->  entered
+      entered  --POST .../review-->              reviewed
+      reviewed  --POST .../sign attested:true--> signed
+
+    Skipping the `advance_to_entered` PATCH causes review to return
+    409 invalid_transition (this was the Phase 63C-2 smoke bug)."""
+    create = client.post(
+        "/api/v1/encounters/1/vitals-workups",
+        headers=CLINICIAN_HEADERS,
+        json=SMOKE_VITALS_PAYLOAD,
+    )
+    assert create.status_code == 201, create.text
+    wid = create.json()["id"]
+    assert create.json()["status"] == "draft"
+
+    # Pin: review without entering must 409 (this is what bit the
+    # smoke pre-63C-2). If the backend ever loosens this rule, the
+    # smoke can drop the intermediate PATCH — until then it can't.
+    bad = client.post(
+        f"/api/v1/vitals-workups/{wid}/review",
+        headers=CLINICIAN_HEADERS,
+        json={},
+    )
+    assert bad.status_code == 409, bad.text
+    assert bad.json()["detail"]["error_code"] == "invalid_transition"
+
+    # Now drive the correct sequence the smoke uses.
+    enter = client.patch(
+        f"/api/v1/vitals-workups/{wid}",
+        headers=CLINICIAN_HEADERS,
+        json={"advance_to_entered": True},
+    )
+    assert enter.status_code == 200, enter.text
+    assert enter.json()["status"] == "entered"
+
+    review = client.post(
+        f"/api/v1/vitals-workups/{wid}/review",
+        headers=CLINICIAN_HEADERS,
+        json={},
+    )
+    assert review.status_code == 200, review.text
+    assert review.json()["status"] == "reviewed"
+
+    sign = client.post(
+        f"/api/v1/vitals-workups/{wid}/sign",
+        headers=CLINICIAN_HEADERS,
+        json={"attested": True},
+    )
+    assert sign.status_code == 200, sign.text
+    assert sign.json()["status"] == "signed"
+
+    # Pin: signed is terminal — sign cannot be replayed (immutable).
+    replay = client.post(
+        f"/api/v1/vitals-workups/{wid}/sign",
+        headers=CLINICIAN_HEADERS,
+        json={"attested": True},
+    )
+    assert replay.status_code in (409, 422), replay.text

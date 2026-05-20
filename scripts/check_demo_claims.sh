@@ -99,6 +99,8 @@ FILES=(
   "docs/build/phase-63c-demo-critical-functional-repair-report.md"
   # Phase 63C-1 — functional smoke 500 repair report.
   "docs/build/phase-63c1-functional-smoke-500-repair-report.md"
+  # Phase 63C-2 — vitals smoke transition repair report.
+  "docs/build/phase-63c2-vitals-smoke-transition-repair-report.md"
 )
 
 for f in "${FILES[@]}"; do
