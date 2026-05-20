@@ -25,6 +25,22 @@ Use the Phase 24C demo as the anchor. The Phase 24D docs decide
 | [`phase-24d-pilot-objection-cheat-sheet.md`](./phase-24d-pilot-objection-cheat-sheet.md) | 12 buyer-safe responses to the questions that test the safe-claims contract | Open in a side window during every call. |
 | [`phase-24d-pilot-tracker-template.md`](./phase-24d-pilot-tracker-template.md) | Pipeline tracker columns + status values + operating rules (no PHI) | Pipeline hygiene; daily / weekly cadence. |
 
+## Phase 65 — controlled pilot readiness execution
+
+Use these after the Phase 63C fake-data buyer-demo smoke is green
+and a buyer is moving from outreach/demo into security review. These
+docs do not approve real PHI; they organize the gates, handoffs,
+operations, triage, metrics, and exit decision for a controlled pilot.
+
+| File | What it is | When you use it |
+|---|---|---|
+| [`phase-65-controlled-pilot-go-no-go-gate.md`](./phase-65-controlled-pilot-go-no-go-gate.md) | Gate 0-5 decision tool from fake-data demo to expansion decision | Before moving between demo, paid pilot conversation, security review, real-PHI approval, monitored operation, and expansion. |
+| [`phase-65-security-review-handoff-checklist.md`](./phase-65-security-review-handoff-checklist.md) | Buyer security-review handoff checklist and evidence map | When a qualified buyer asks for security review. |
+| [`phase-65-pilot-operator-runbook.md`](./phase-65-pilot-operator-runbook.md) | Operator runbook for a limited monitored pilot after approval | Once Gate 3 is closed and a first session is scheduled. |
+| [`phase-65-issue-incident-triage-template.md`](./phase-65-issue-incident-triage-template.md) | S1-S4 issue template and escalation rules | In the practice-approved private support tracker. |
+| [`phase-65-success-metric-tracker-schema.md`](./phase-65-success-metric-tracker-schema.md) | Operational metric tracker schema | Weekly pilot reviews; no clinical outcome claims. |
+| [`phase-65-pilot-exit-criteria-decision-memo-template.md`](./phase-65-pilot-exit-criteria-decision-memo-template.md) | Exit criteria and expansion decision template | End-of-pilot decision meeting. |
+
 ## Phase 24C — Sales-ready demo package
 
 The reset → demo → recap motion the Phase 24D docs hook into.
