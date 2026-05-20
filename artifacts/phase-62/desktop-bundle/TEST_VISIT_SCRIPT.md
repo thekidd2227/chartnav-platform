@@ -24,8 +24,13 @@ with the browser.
 3. **Ophthalmology intake** (≈ 30 sec, folded into § 2) — VA / IOP /
    dilation section.
 4. **Provider-Reviewed VisitDraft Assist** (≈ 3 min) — Documentation
-   tab, fake demo transcript, structured facts, missing-information,
-   "What ChartNav did NOT do".
+   / EMR/EHR tab, fake demo transcript, structured facts,
+   missing-information, "What ChartNav did NOT do".
+   **Note on the on-screen label:** the card's visible title still
+   reads **"Provider-Reviewed Ambient Documentation Assist"**. The
+   operator narrates it as the **"Provider-Reviewed VisitDraft
+   Assist"**. The UI rename is a separate follow-up phase; nothing
+   in Phase 62A changes the visible card title.
 5. **Provider-Reviewed Fundus Drawing Assist** (≈ 2.5 min) — Imaging
    tab, `Horseshoe tear 10:30 OD` chip, SVG preview, missing-
    laterality warning. **No "What ChartNav did NOT do" card on this

@@ -48,12 +48,19 @@ chartnav decks/
 desktop-export/
 **/Desktop/chartnav decks/
 
-# Phase 62 — buyer-demo screenshots + video clips are captured
+# Phase 62 / 62A — buyer-demo screenshots + video clips are captured
 # locally by the operator. The shot lists in docs/demo/ define what
 # to capture; the actual PNG / MOV / MP4 files are not committed.
+# Phase 62A: the dated dry-run report.md scaffold IS committed (it's
+# part of the demo claims scanner FILES list); only capture binaries
+# inside dry-runs/ are ignored.
 artifacts/phase-62/screenshots/*.png
 artifacts/phase-62/screenshots/*.jpg
 artifacts/phase-62/video-clips/*.mov
 artifacts/phase-62/video-clips/*.mp4
 artifacts/phase-62/video-clips/*.gif
-artifacts/phase-62/dry-runs/
+artifacts/phase-62/dry-runs/**/*.png
+artifacts/phase-62/dry-runs/**/*.jpg
+artifacts/phase-62/dry-runs/**/*.mov
+artifacts/phase-62/dry-runs/**/*.mp4
+artifacts/phase-62/dry-runs/**/*.gif

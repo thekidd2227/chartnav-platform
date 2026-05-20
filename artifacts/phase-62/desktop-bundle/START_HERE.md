@@ -2,6 +2,47 @@
 
 > First thing to read after you copy this bundle to your Desktop.
 
+## A. Create (or refresh) `~/Desktop/ChartNav-Buyer-Demo-Build/`
+
+The bundle lives in the repo under
+`artifacts/phase-62/desktop-bundle/`. Copy it to your Desktop with
+the commands below. **The bundle never carries a real `.env`, a
+real API key, production config, or any local database file.**
+
+```bash
+# 1. Anchor the repo path.
+export CHARTNAV_REPO_PATH="$HOME/Desktop/ARCG/chartnav-platform"
+cd "$CHARTNAV_REPO_PATH"
+
+# 2. Confirm you are on a clean main with the latest Phase 62A.
+git status
+git log --oneline -1
+
+# 3. Refresh the Desktop bundle. -R copies the docs/ subfolder too.
+#    The trailing slash on the source matters: it means "copy the
+#    contents of desktop-bundle into the destination".
+rm -rf "$HOME/Desktop/ChartNav-Buyer-Demo-Build"
+cp -R "$CHARTNAV_REPO_PATH/artifacts/phase-62/desktop-bundle/" \
+      "$HOME/Desktop/ChartNav-Buyer-Demo-Build"
+
+# 4. Sanity-check the result.
+ls "$HOME/Desktop/ChartNav-Buyer-Demo-Build"
+ls "$HOME/Desktop/ChartNav-Buyer-Demo-Build/docs"
+```
+
+After step 4 you should see the wrappers
+(`start-api.sh`, `start-web.sh`, `run-safety-checks.sh`,
+`run-demo-reset.sh`), the top-level markdown
+(`README.md`, `START_HERE.md`, `RUN_LOCAL_DEMO.md`,
+`TEST_VISIT_SCRIPT.md`, `TROUBLESHOOTING.md`), the
+`.env.example` placeholder, and the offline `docs/` folder with 12
+read-only doc copies + a `README.md` index.
+
+If you want to keep a personal `.env` next to the wrappers, copy
+`.env.example` to `.env` **only in this Desktop folder** and edit
+locally. Do not push that `.env` anywhere — it is intentionally
+gitignored.
+
 ## 0. Sanity gates (do these before opening any demo URL)
 
 1. `CHARTNAV_REPO_PATH` is exported and points at your local

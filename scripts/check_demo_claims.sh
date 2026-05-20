@@ -90,6 +90,9 @@ FILES=(
   "docs/demo/phase-62-video-clip-shot-list.md"
   "docs/demo/phase-62-controlled-buyer-demo-evidence-packet.md"
   "docs/demo/phase-62-local-build-delivery.md"
+  # Phase 62A — demo evidence repair + go/no-go status.
+  "docs/demo/phase-62a-buyer-demo-go-no-go-status.md"
+  "artifacts/phase-62/dry-runs/2026-05-20/report.md"
 )
 
 for f in "${FILES[@]}"; do
