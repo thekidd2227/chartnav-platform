@@ -114,6 +114,18 @@ SUPPORT=(
   "docs/commercial/objections/chartnav-buyer-objection-handling.md"
   "docs/commercial/pricing/chartnav-pricing-packaging-notes.md"
   "docs/commercial/pilot/chartnav-pilot-handoff-checklist.md"
+  # Phase 64 — buyer outreach package.
+  "docs/commercial/phase-64-one-page-buyer-brief.md"
+  "docs/commercial/phase-64-outreach-email-v1.md"
+  "docs/commercial/phase-64-follow-up-email-v1.md"
+  "docs/commercial/phase-64-linkedin-dm-script.md"
+  "docs/commercial/phase-64-call-opener.md"
+  "docs/commercial/phase-64-buyer-qualification-checklist.md"
+  "docs/commercial/phase-64-paid-pilot-positioning.md"
+  "docs/commercial/phase-64-pilot-success-metrics.md"
+  "docs/commercial/phase-64-security-review-packet-index.md"
+  "docs/commercial/phase-64-demo-asset-index.md"
+  "docs/commercial/phase-64-outreach-tracker-schema.md"
 )
 
 echo "2. Commercial support docs (expect ${#SUPPORT[@]})"
