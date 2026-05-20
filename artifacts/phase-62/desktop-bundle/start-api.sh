@@ -6,8 +6,17 @@
 
 set -euo pipefail
 
+BUNDLE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -z "${CHARTNAV_REPO_PATH:-}" ]] && [[ -f "$BUNDLE_DIR/.chartnav-demo-env" ]]; then
+  # shellcheck disable=SC1091
+  source "$BUNDLE_DIR/.chartnav-demo-env"
+fi
 if [[ -z "${CHARTNAV_REPO_PATH:-}" ]]; then
-  echo "ERROR: CHARTNAV_REPO_PATH not set. See START_HERE.md." >&2
+  echo "ERROR: CHARTNAV_REPO_PATH not set and $BUNDLE_DIR/.chartnav-demo-env did not provide it." >&2
+  echo "Recovery:" >&2
+  echo "  1. export CHARTNAV_REPO_PATH=\"\$HOME/Desktop/ARCG/chartnav-platform\"" >&2
+  echo "  2. or edit $BUNDLE_DIR/.chartnav-demo-env so CHARTNAV_REPO_PATH points at your local checkout." >&2
+  echo "See START_HERE.md for the full setup walkthrough." >&2
   exit 2
 fi
 
