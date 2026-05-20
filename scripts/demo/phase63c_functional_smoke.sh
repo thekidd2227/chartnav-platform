@@ -283,6 +283,17 @@ else
   dump_failure_body "vitals_create" /tmp/phase63c.vitals_create.json
 fi
 if [[ -n "$WORKUP_ID" ]]; then
+  # Phase 63C-2 — vitals state machine is draft → entered → reviewed
+  # → signed. The smoke must drive the `draft → entered` transition
+  # explicitly via PATCH with advance_to_entered=true before review,
+  # otherwise review returns 409 (invalid_transition). This matches
+  # the canonical sequence used by test_vitals_workup.py.
+  V_ENTER="$(curl -s -m 10 -o /tmp/phase63c.vitals_enter.json -w '%{http_code}' \
+    -X PATCH "$API/api/v1/vitals-workups/$WORKUP_ID" \
+    -H "Content-Type: application/json" -H "X-User-Email: $CLINICIAN" \
+    -d '{"advance_to_entered":true}' || echo "000")"
+  if [[ "$V_ENTER" =~ ^(200|201)$ ]]; then gate "vitals advance draft→entered -> $V_ENTER" 1; else gate "vitals advance draft→entered" 0 "got $V_ENTER"; dump_failure_body "vitals_enter" /tmp/phase63c.vitals_enter.json; fi
+
   V_REV="$(curl -s -m 10 -o /tmp/phase63c.vitals_rev.json -w '%{http_code}' \
     -X POST "$API/api/v1/vitals-workups/$WORKUP_ID/review" \
     -H "Content-Type: application/json" -H "X-User-Email: $CLINICIAN" \
@@ -291,8 +302,8 @@ if [[ -n "$WORKUP_ID" ]]; then
     -X POST "$API/api/v1/vitals-workups/$WORKUP_ID/sign" \
     -H "Content-Type: application/json" -H "X-User-Email: $CLINICIAN" \
     -d '{"attested":true}' || echo "000")"
-  if [[ "$V_REV" =~ ^(200|201)$ ]]; then gate "vitals review -> $V_REV" 1; else gate "vitals review" 0 "got $V_REV"; dump_failure_body "vitals_review" /tmp/phase63c.vitals_rev.json; fi
-  if [[ "$V_SIGN" =~ ^(200|201)$ ]]; then gate "vitals sign -> $V_SIGN" 1; else gate "vitals sign" 0 "got $V_SIGN"; dump_failure_body "vitals_sign" /tmp/phase63c.vitals_sign.json; fi
+  if [[ "$V_REV" =~ ^(200|201)$ ]]; then gate "vitals review -> $V_REV" 1; else gate "vitals review" 0 "got $V_REV (state machine requires entered before review)"; dump_failure_body "vitals_review" /tmp/phase63c.vitals_rev.json; fi
+  if [[ "$V_SIGN" =~ ^(200|201)$ ]]; then gate "vitals sign -> $V_SIGN" 1; else gate "vitals sign" 0 "got $V_SIGN (state machine requires reviewed before sign)"; dump_failure_body "vitals_sign" /tmp/phase63c.vitals_sign.json; fi
 fi
 
 # ── 5. VisitDraft happy path ──────────────────────────────────────────
