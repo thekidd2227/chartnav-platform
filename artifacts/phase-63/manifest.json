@@ -1,0 +1,160 @@
+{
+  "phase": "63",
+  "title": "Safe Demo Media Capture + Website Video Integration",
+  "generated_at": "2026-05-20",
+  "base_url_target": "http://localhost:5173",
+  "viewport_target": { "width": 1440, "height": 900 },
+  "safety": {
+    "chartnav_env": "local",
+    "llm_provider": "deterministic_stub",
+    "llm_enabled": "0",
+    "real_phi_approved": "0",
+    "real_phi_enabled": "0",
+    "fake_data_only": true
+  },
+  "screenshots": [
+    {
+      "filename": "01_workspace_orientation.png",
+      "exists": false,
+      "feature": "workflow_workspace",
+      "safe_title": "Workflow Workspace",
+      "website_ready": false,
+      "notes": "PENDING MANUAL CAPTURE — operator runs the Playwright script or QuickTime/Screenshot on the iMac."
+    },
+    {
+      "filename": "02_vitals_capture.png",
+      "exists": false,
+      "feature": "vitals_workup",
+      "safe_title": "Technician Workup & Vitals",
+      "website_ready": false,
+      "notes": "PENDING MANUAL CAPTURE."
+    },
+    {
+      "filename": "03_visitdraft_transcript_to_draft.png",
+      "exists": false,
+      "feature": "visitdraft_assist",
+      "safe_title": "Provider-Reviewed VisitDraft Assist",
+      "website_ready": false,
+      "notes": "PENDING MANUAL CAPTURE. On-screen card title still reads 'Provider-Reviewed Ambient Documentation Assist'; narration uses 'Provider-Reviewed VisitDraft Assist'."
+    },
+    {
+      "filename": "04_visitdraft_signal_filter.png",
+      "exists": false,
+      "feature": "visitdraft_signal_filter",
+      "safe_title": "VisitDraft Signal Filter",
+      "website_ready": false,
+      "notes": "PENDING MANUAL CAPTURE. Source transcript is clinician-pasted fake text; no live audio capture."
+    },
+    {
+      "filename": "05_fundus_drawing_assist.png",
+      "exists": false,
+      "feature": "fundus_drawing_assist",
+      "safe_title": "Provider-Reviewed Fundus Drawing Assist",
+      "website_ready": false,
+      "notes": "PENDING MANUAL CAPTURE. Clinician-entered findings → structured retinal diagram. No image interpretation."
+    },
+    {
+      "filename": "06_doctor_review_signoff.png",
+      "exists": false,
+      "feature": "doctor_review_signoff",
+      "safe_title": "Doctor Review, Attestation, and Signed Lock",
+      "website_ready": false,
+      "notes": "PENDING MANUAL CAPTURE. Reviewed → attestation tick → Sign & Lock on each surface; no auto-sign."
+    },
+    {
+      "filename": "07_safety_posture.png",
+      "exists": false,
+      "feature": "safety_posture",
+      "safe_title": "What ChartNav Did Not Do",
+      "website_ready": false,
+      "notes": "PENDING MANUAL CAPTURE. 'What ChartNav did NOT do' panel + side-terminal safety scripts PASSED."
+    },
+    {
+      "filename": "08_highlight_reel_thumbnail.png",
+      "exists": false,
+      "feature": "highlight_reel",
+      "safe_title": "ChartNav Controlled Demo Highlight Reel",
+      "website_ready": false,
+      "notes": "PENDING MANUAL CAPTURE. Poster thumbnail for the ~3 min compressed re-walk."
+    }
+  ],
+  "video_clips": [
+    {
+      "filename": "01_workspace_orientation.webm",
+      "exists": false,
+      "feature": "workflow_workspace",
+      "safe_title": "Workflow Workspace",
+      "website_ready": false,
+      "duration_target_sec": [20, 25],
+      "notes": "PENDING MANUAL CAPTURE."
+    },
+    {
+      "filename": "02_vitals_capture.webm",
+      "exists": false,
+      "feature": "vitals_workup",
+      "safe_title": "Technician Workup & Vitals",
+      "website_ready": false,
+      "duration_target_sec": [30, 35],
+      "notes": "PENDING MANUAL CAPTURE."
+    },
+    {
+      "filename": "03_visitdraft_transcript_to_draft.webm",
+      "exists": false,
+      "feature": "visitdraft_assist",
+      "safe_title": "Provider-Reviewed VisitDraft Assist",
+      "website_ready": false,
+      "duration_target_sec": [30, 35],
+      "notes": "PENDING MANUAL CAPTURE. Must NOT narrate 'hands-free scribing' / 'listens to exam room' / 'ambient capture' / 'AI writes the note'."
+    },
+    {
+      "filename": "04_visitdraft_signal_filter.webm",
+      "exists": false,
+      "feature": "visitdraft_signal_filter",
+      "safe_title": "VisitDraft Signal Filter",
+      "website_ready": false,
+      "duration_target_sec": [25, 30],
+      "notes": "PENDING MANUAL CAPTURE. Must NOT narrate 'listens to chatter' / 'ignores chatter from live audio' / 'captures live room audio'."
+    },
+    {
+      "filename": "05_fundus_drawing_assist.webm",
+      "exists": false,
+      "feature": "fundus_drawing_assist",
+      "safe_title": "Provider-Reviewed Fundus Drawing Assist",
+      "website_ready": false,
+      "duration_target_sec": [25, 35],
+      "notes": "PENDING MANUAL CAPTURE. Must NOT narrate 'image interpretation' / 'fundus diagnosis' / 'AI interprets fundus'."
+    },
+    {
+      "filename": "06_doctor_review_signoff.webm",
+      "exists": false,
+      "feature": "doctor_review_signoff",
+      "safe_title": "Doctor Review, Attestation, and Signed Lock",
+      "website_ready": false,
+      "duration_target_sec": [30, 40],
+      "notes": "PENDING MANUAL CAPTURE. Must NOT narrate 'auto-sign' / 'ChartNav signs the chart'."
+    },
+    {
+      "filename": "07_safety_posture.webm",
+      "exists": false,
+      "feature": "safety_posture",
+      "safe_title": "What ChartNav Did Not Do",
+      "website_ready": false,
+      "duration_target_sec": [20, 30],
+      "notes": "PENDING MANUAL CAPTURE. Must NOT narrate 'HIPAA compliant' / 'SOC 2 certified'."
+    },
+    {
+      "filename": "08_three_minute_highlight_reel.webm",
+      "exists": false,
+      "feature": "highlight_reel",
+      "safe_title": "ChartNav Controlled Demo Highlight Reel",
+      "website_ready": false,
+      "duration_target_sec": [165, 195],
+      "notes": "PENDING MANUAL CAPTURE. Compressed re-walk; must not contain any forbidden phrase from clips 1-7."
+    }
+  ],
+  "website_integration": {
+    "status": "BLOCKED",
+    "reason": "No actual video files exist yet. Brief explicitly prohibits adding broken video elements to the website.",
+    "follow_up": "After capture, copy approved clips into apps/web/public/demo-media/ and add the 'Controlled Demo Videos' landing-page section per phase-63-safe-website-video-plan.md § Website integration."
+  }
+}

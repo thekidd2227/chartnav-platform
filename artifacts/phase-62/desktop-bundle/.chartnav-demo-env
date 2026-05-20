@@ -1,0 +1,36 @@
+# ChartNav buyer-demo bootstrap env — sourced by bundle wrappers
+# when CHARTNAV_REPO_PATH is unset (e.g. fresh terminal session).
+#
+# Safe-by-default settings only. NEVER add a real vendor API key
+# here. NEVER set production / staging / controlled-pilot.
+#
+# Usage from a wrapper:
+#   if [[ -z "${CHARTNAV_REPO_PATH:-}" ]]; then
+#     source "$(dirname "${BASH_SOURCE[0]}")/.chartnav-demo-env"
+#   fi
+
+# Edit ONLY this path to match your local checkout location.
+export CHARTNAV_REPO_PATH="${CHARTNAV_REPO_PATH:-$HOME/Desktop/ARCG/chartnav-platform}"
+
+# Buyer-demo environment is always local. The wrappers refuse to
+# run on production / staging / controlled-pilot anyway, but pin
+# the default here for clarity.
+export CHARTNAV_ENV="${CHARTNAV_ENV:-local}"
+
+# Deterministic stub provider only. No production LLM activation.
+# No real PHI processing.
+export CHARTNAV_LLM_PROVIDER="${CHARTNAV_LLM_PROVIDER:-deterministic_stub}"
+export CHARTNAV_LLM_ENABLED=0
+export CHARTNAV_LLM_REAL_PHI_APPROVED=0
+export CHARTNAV_REAL_PHI_ENABLED=0
+
+# Strip any vendor / feature opt-ins that might be lingering in the
+# operator's shell. Buyer-demo always boots in the safest config.
+unset CHARTNAV_OPENAI_API_KEY
+unset CHARTNAV_ANTHROPIC_API_KEY
+unset CHARTNAV_WATSONX_API_KEY
+unset CHARTNAV_AMBIENT_DOCUMENTATION_ASSIST
+unset CHARTNAV_FUNDUS_DRAFTING_ASSIST
+unset CHARTNAV_PILOT_ALLOW_LLM_OPENAI
+unset CHARTNAV_PILOT_ALLOW_LLM_ANTHROPIC
+unset CHARTNAV_PILOT_ALLOW_LLM_WATSONX

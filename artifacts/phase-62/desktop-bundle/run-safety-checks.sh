@@ -9,9 +9,35 @@
 
 set -euo pipefail
 
+BUNDLE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -z "${CHARTNAV_REPO_PATH:-}" ]] && [[ -f "$BUNDLE_DIR/.chartnav-demo-env" ]]; then
+  # shellcheck disable=SC1091
+  source "$BUNDLE_DIR/.chartnav-demo-env"
+fi
 if [[ -z "${CHARTNAV_REPO_PATH:-}" ]]; then
-  echo "ERROR: CHARTNAV_REPO_PATH not set. See START_HERE.md." >&2
+  echo "ERROR: CHARTNAV_REPO_PATH not set and $BUNDLE_DIR/.chartnav-demo-env did not provide it." >&2
+  echo "Recovery:" >&2
+  echo "  1. export CHARTNAV_REPO_PATH=\"\$HOME/Desktop/ARCG/chartnav-platform\"" >&2
+  echo "  2. or edit $BUNDLE_DIR/.chartnav-demo-env so CHARTNAV_REPO_PATH points at your local checkout." >&2
+  echo "See START_HERE.md for the full setup walkthrough." >&2
   exit 2
+fi
+
+env_name="${CHARTNAV_ENV:-local}"
+case "$env_name" in
+  production|staging|controlled-pilot)
+    echo "ERROR: refusing to run safety checks on CHARTNAV_ENV=$env_name." >&2
+    echo "This wrapper is fake-data only. Unset CHARTNAV_ENV or set it to local/dev/demo/test." >&2
+    exit 3
+    ;;
+esac
+if [[ "${CHARTNAV_LLM_ENABLED:-0}" == "1" ]]; then
+  echo "ERROR: CHARTNAV_LLM_ENABLED=1 is not allowed by this wrapper." >&2
+  exit 4
+fi
+if [[ "${CHARTNAV_LLM_REAL_PHI_APPROVED:-0}" == "1" ]] || [[ "${CHARTNAV_REAL_PHI_ENABLED:-0}" == "1" ]]; then
+  echo "ERROR: real-PHI gates are on; refusing to run buyer-demo safety wrapper." >&2
+  exit 4
 fi
 
 cd "$CHARTNAV_REPO_PATH"
