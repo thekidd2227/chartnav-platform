@@ -83,6 +83,13 @@ FILES=(
   "docs/demo/phase-61-buyer-demo-checklist.md"
   "docs/demo/phase-61-buyer-qa-safe-answers.md"
   "docs/demo/phase-61-demo-storyboard.md"
+  # Phase 62 — buyer demo dry-run evidence packet.
+  "docs/demo/phase-62-end-to-end-demo-visit-script.md"
+  "docs/demo/phase-62-demo-dry-run-report.md"
+  "docs/demo/phase-62-screenshot-shot-list.md"
+  "docs/demo/phase-62-video-clip-shot-list.md"
+  "docs/demo/phase-62-controlled-buyer-demo-evidence-packet.md"
+  "docs/demo/phase-62-local-build-delivery.md"
 )
 
 for f in "${FILES[@]}"; do
