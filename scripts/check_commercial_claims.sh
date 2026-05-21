@@ -126,6 +126,11 @@ SUPPORT=(
   "docs/commercial/phase-64-security-review-packet-index.md"
   "docs/commercial/phase-64-demo-asset-index.md"
   "docs/commercial/phase-64-outreach-tracker-schema.md"
+  # Phase 66 — controlled buyer outreach packet.
+  "docs/commercial/phase-66-prospect-targeting-brief.md"
+  "docs/commercial/phase-66-founder-led-outreach-templates.md"
+  "docs/commercial/phase-66-buyer-discovery-questions.md"
+  "docs/commercial/phase-66-what-not-to-promise-cheat-sheet.md"
 )
 
 echo "2. Commercial support docs (expect ${#SUPPORT[@]})"
@@ -346,16 +351,20 @@ for f in "${ALL_DOCS[@]}"; do
   # - approved-claims-language.md (the canonical list)
   # - brand-guidelines-deck.md (slide 5 — "Never use")
   # - buyer-objection-handling.md (each "Don't say:" block)
+  # - phase-66-what-not-to-promise-cheat-sheet.md (Phase 66
+  #   operator cheat sheet; same shape as approved-claims-language)
   # Skip the catalog docs entirely; their job is to list bad
   # phrases.
   case "$f" in
     *"chartnav-approved-claims-language.md"|\
     *"chartnav-brand-guidelines-deck.md"|\
     *"chartnav-buyer-objection-handling.md"|\
-    *"chartnav-ophthalmology-positioning-language-guide.md")
+    *"chartnav-ophthalmology-positioning-language-guide.md"|\
+    *"phase-66-what-not-to-promise-cheat-sheet.md")
       # Phase 21C — language guide enumerates banned phrases as a
       # reference; skip the same way the approved-claims-language
-      # catalog is skipped.
+      # catalog is skipped. Phase 66 cheat sheet has the same
+      # purpose.
       continue
       ;;
   esac
