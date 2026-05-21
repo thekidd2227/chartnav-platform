@@ -138,6 +138,10 @@ SUPPORT=(
   # Phase 68 — first manual outreach cycle review.
   "docs/commercial/phase-68-first-manual-outreach-cycle-review.md"
   "docs/commercial/phase-68-reply-classification-template.md"
+  # Phase 69 — controlled demo booking and qualification handoff.
+  "docs/commercial/phase-69-controlled-demo-booking-checklist.md"
+  "docs/commercial/phase-69-buyer-qualification-handoff-template.md"
+  "docs/commercial/phase-69-demo-scheduling-email-templates.md"
 )
 
 echo "2. Commercial support docs (expect ${#SUPPORT[@]})"
