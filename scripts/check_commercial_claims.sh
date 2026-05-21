@@ -131,6 +131,10 @@ SUPPORT=(
   "docs/commercial/phase-66-founder-led-outreach-templates.md"
   "docs/commercial/phase-66-buyer-discovery-questions.md"
   "docs/commercial/phase-66-what-not-to-promise-cheat-sheet.md"
+  # Phase 67 — first pilot prospect outreach log.
+  "docs/commercial/phase-67-first-pilot-prospect-list-template.md"
+  "docs/commercial/phase-67-outreach-execution-log.md"
+  "docs/commercial/phase-67-first-10-targets-research-guide.md"
 )
 
 echo "2. Commercial support docs (expect ${#SUPPORT[@]})"
