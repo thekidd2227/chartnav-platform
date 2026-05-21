@@ -258,14 +258,20 @@ jobs:
           python-version: "3.11"
           cache: pip
 
-      - name: Install Chromium for PDF rendering
+      - name: Install Chrome for PDF rendering
+        id: setup-chrome
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
+
+      - name: Install reportlab (PDF fallback)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y chromium-browser || sudo apt-get install -y chromium
+          python -m pip install --upgrade pip
+          pip install reportlab
 
       - name: Build final HTML + PDF
         env:
-          CHARTNAV_PDF_BROWSER: chromium-browser
+          CHARTNAV_PDF_BROWSER: ${{ steps.setup-chrome.outputs.chrome-path }}
         run: python scripts/build_docs.py
 
       - name: Upload rebuilt artifacts
