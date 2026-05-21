@@ -135,6 +135,9 @@ SUPPORT=(
   "docs/commercial/phase-67-first-pilot-prospect-list-template.md"
   "docs/commercial/phase-67-outreach-execution-log.md"
   "docs/commercial/phase-67-first-10-targets-research-guide.md"
+  # Phase 68 — first manual outreach cycle review.
+  "docs/commercial/phase-68-first-manual-outreach-cycle-review.md"
+  "docs/commercial/phase-68-reply-classification-template.md"
 )
 
 echo "2. Commercial support docs (expect ${#SUPPORT[@]})"
