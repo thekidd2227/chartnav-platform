@@ -3576,3 +3576,148 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
   background: #0B6E79;
   color: #fff;
 }
+
+/* ============================================================
+   Phase 71 — Retina visit sequence ribbon.
+
+   Sits between the patient/encounter header and the tab bar
+   inside ClinicalTabbedWorkspace. Five-step explanatory
+   sequence (Intake → Fundus Drawing → VisitDraft → Provider
+   Review → Signed Lock). Each step is a click-to-focus-tab
+   button. Role-aware: the Signed Lock step shows an explicit
+   "Requires clinician or admin" affordance for roles that
+   cannot sign.
+
+   The ribbon is provider-controlled, fake-data-only, and does
+   not derive live artifact status. Per-artifact status
+   (draft / entered / reviewed / signed) continues to live
+   inside each panel (Vitals, Fundus, Ambient Documentation).
+   ============================================================ */
+.retina-visit-ribbon {
+  background: var(--cn-surface);
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-md);
+  padding: 12px 14px;
+  margin-top: 10px;
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.retina-visit-ribbon__head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.retina-visit-ribbon__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--cn-fg);
+}
+.retina-visit-ribbon__caption {
+  margin: 0;
+  font-size: 12px;
+  color: var(--cn-muted);
+  line-height: 1.5;
+}
+.retina-visit-ribbon__steps {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+}
+.retina-visit-ribbon__step {
+  flex: 1 1 180px;
+  min-width: 180px;
+  display: flex;
+}
+.retina-visit-ribbon__step-btn {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  grid-template-rows: auto auto auto;
+  gap: 2px 8px;
+  align-items: start;
+  padding: 8px 10px;
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-md);
+  background: var(--cn-bg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: var(--cn-fg);
+  transition: border-color 0.15s var(--cn-ease),
+              background 0.15s var(--cn-ease);
+}
+.retina-visit-ribbon__step-btn:hover,
+.retina-visit-ribbon__step-btn:focus-visible {
+  border-color: var(--cn-primary);
+  background: var(--cn-surface);
+  outline: none;
+}
+.retina-visit-ribbon__step--locked .retina-visit-ribbon__step-btn {
+  border-style: dashed;
+}
+.retina-visit-ribbon__ordinal {
+  grid-row: 1 / span 3;
+  grid-column: 1;
+  align-self: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--cn-surface);
+  border: 1px solid var(--cn-line);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--cn-fg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.retina-visit-ribbon__label {
+  grid-row: 1;
+  grid-column: 2;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cn-fg);
+}
+.retina-visit-ribbon__short {
+  grid-row: 2;
+  grid-column: 2;
+  font-size: 11px;
+  color: var(--cn-muted);
+  line-height: 1.4;
+}
+.retina-visit-ribbon__role-lock {
+  grid-row: 3;
+  grid-column: 2;
+  margin-top: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #9b2c2c;
+}
+.retina-visit-ribbon__footnote {
+  margin: 0;
+  font-size: 11px;
+  color: var(--cn-dim);
+  line-height: 1.5;
+}
+
+/* Clinical tab — intentional-shortcuts note (Phase 71). */
+.ctw-clinical__shortcuts-note {
+  margin: 6px 0 10px 0;
+  padding: 8px 10px;
+  background: var(--cn-surface);
+  border: 1px solid var(--cn-line);
+  border-radius: var(--cn-radius-md);
+  font-size: 12px;
+  color: var(--cn-muted);
+  line-height: 1.5;
+}

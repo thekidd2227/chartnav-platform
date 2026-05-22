@@ -62,6 +62,10 @@ import { SpecialtyTrackingPanel } from "./SpecialtyTrackingPanel";
 import { FundusChartPanel } from "./features/fundus/FundusChartPanel";
 import { AmbientDocumentationPanel } from "./features/ambient/AmbientDocumentationPanel";
 import { VitalsWorkupPanel } from "./features/vitals/VitalsWorkupPanel";
+import {
+  RetinaVisitSequenceRibbon,
+  type RetinaVisitTabId,
+} from "./RetinaVisitSequenceRibbon";
 
 // Local fmt — same shape as App.tsx::fmt. Inlined to avoid a
 // shared-utility refactor that would balloon Phase 19's diff.
@@ -164,6 +168,10 @@ export function ClinicalTabbedWorkspace(
     <div className="ctw" data-testid="clinical-tabbed-workspace">
       <PatientEncounterHeader encounter={encounter} />
       {bannersSlot}
+      <RetinaVisitSequenceRibbon
+        me={me}
+        onJumpToTab={(tabId: RetinaVisitTabId) => setActive(tabId)}
+      />
       <TabBar active={active} onSelect={setActive} />
       <div className="ctw__panel" data-testid={`ctw-panel-${active}`}>
         {active === "overview" && (
@@ -770,6 +778,16 @@ function ClinicalTab({
           encounterId={encounterId}
         />
       )}
+      <p
+        className="ctw-clinical__shortcuts-note"
+        data-testid="ctw-clinical-shortcuts-note"
+      >
+        These shortcuts are provider review prompts — common ophthalmology
+        findings the clinician pins into the active draft from the
+        Documentation tab. ChartNav does not generate diagnoses. Pinning to
+        Favorites is a future enhancement; the pills are intentionally inert
+        today.
+      </p>
       <input
         type="search"
         placeholder="Search clinical shortcuts…"
@@ -877,9 +895,13 @@ function DocumentationTab({
             </li>
           ))}
         </ol>
-        <p className="ctw-doc-stepper__caption">
-          Provider-reviewed at every stage. ChartNav drafts; the
-          clinician signs.
+        <p
+          className="ctw-doc-stepper__caption"
+          data-testid="ctw-doc-stepper-caption"
+        >
+          Provider-reviewed at every stage. ChartNav drafts; the clinician
+          signs. Not a certified EHR. Does not replace your EHR or write
+          back automatically. Fake-data demo only.
         </p>
       </header>
       <div

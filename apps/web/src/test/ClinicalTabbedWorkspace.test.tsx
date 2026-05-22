@@ -909,6 +909,156 @@ describe("Phase 19I — Documentation tab stepper", () => {
     }
     expect(screen.getByTestId("ctw-doc-workbench")).toBeInTheDocument();
   });
+
+  // Phase 71 — strengthened stepper caption with explicit "not a
+  // certified EHR / does not replace your EHR" language.
+  it("Phase 71 — stepper caption includes the no-EHR-replacement safety frame", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(screen.getByTestId("ctw-tab-documentation"));
+    const caption = screen.getByTestId("ctw-doc-stepper-caption");
+    expect(caption).toHaveTextContent(/Provider-reviewed at every stage/i);
+    expect(caption).toHaveTextContent(/the clinician signs/i);
+    expect(caption).toHaveTextContent(/Not a certified EHR/i);
+    expect(caption).toHaveTextContent(/Does not replace your EHR/i);
+    expect(caption).toHaveTextContent(/Fake-data demo only/i);
+  });
+});
+
+// ---------------------------------------------------------------
+// Phase 71 — Retina visit sequence ribbon.
+//
+// A 5-step ribbon (Intake → Fundus Drawing → VisitDraft →
+// Provider Review → Signed Lock) sits between the patient
+// header and the tab bar. Each step is a navigation button that
+// focuses the relevant workspace tab. The Signed Lock step is
+// role-aware.
+// ---------------------------------------------------------------
+
+describe("Phase 71 — Retina visit sequence ribbon", () => {
+  it("mounts inside the workspace shell with title + caption + footnote", () => {
+    renderWorkspace();
+    expect(screen.getByTestId("retina-visit-ribbon")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("retina-visit-ribbon-title")
+    ).toHaveTextContent(/Retina visit sequence/i);
+    expect(
+      screen.getByTestId("retina-visit-ribbon-caption")
+    ).toHaveTextContent(/Fake-data demo/i);
+    expect(
+      screen.getByTestId("retina-visit-ribbon-footnote")
+    ).toBeInTheDocument();
+  });
+
+  it("renders after the patient header and before the tab bar in document order", () => {
+    renderWorkspace();
+    const header = screen.getByTestId("ctw-patient-header");
+    const ribbon = screen.getByTestId("retina-visit-ribbon");
+    const tabbar = screen.getByTestId("ctw-tabbar");
+    expect(
+      header.compareDocumentPosition(ribbon) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      ribbon.compareDocumentPosition(tabbar) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  it("renders all 5 steps", () => {
+    renderWorkspace();
+    for (const id of [
+      "intake",
+      "fundus-drawing",
+      "visit-draft",
+      "provider-review",
+      "signed-lock",
+    ]) {
+      expect(
+        screen.getByTestId(`retina-visit-step-${id}`)
+      ).toBeInTheDocument();
+    }
+  });
+
+  it("clicking step 1 (intake) activates the Clinical tab", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(screen.getByTestId("retina-visit-step-btn-intake"));
+    expect(screen.getByTestId("ctw-tab-clinical")).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    expect(screen.getByTestId("ctw-panel-clinical")).toBeInTheDocument();
+  });
+
+  it("clicking step 2 (fundus drawing) activates the Imaging tab", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(
+      screen.getByTestId("retina-visit-step-btn-fundus-drawing")
+    );
+    expect(screen.getByTestId("ctw-tab-imaging")).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    expect(screen.getByTestId("ctw-panel-imaging")).toBeInTheDocument();
+  });
+
+  it("clicking step 3 (visit-draft) activates the Documentation tab", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(
+      screen.getByTestId("retina-visit-step-btn-visit-draft")
+    );
+    expect(screen.getByTestId("ctw-tab-documentation")).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    expect(screen.getByTestId("ctw-panel-documentation")).toBeInTheDocument();
+  });
+
+  it("admin role (default ME) sees no role-lock on the signed-lock step", () => {
+    renderWorkspace();
+    expect(
+      screen
+        .getByTestId("retina-visit-step-signed-lock")
+        .getAttribute("data-locked")
+    ).toBe("false");
+    expect(
+      screen.queryByTestId("retina-visit-step-role-lock-signed-lock")
+    ).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------
+// Phase 71 — Clinical tab intentional-shortcuts note.
+// The disabled pill grid now leads with an explicit "these are
+// provider review prompts, not generated diagnoses; pinning is a
+// future enhancement" caption so the UI does not read as broken.
+// ---------------------------------------------------------------
+
+describe("Phase 71 — Clinical tab intentional-shortcuts note", () => {
+  it("renders an explanatory note above the shortcuts grid that names the future enhancement", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(screen.getByTestId("ctw-tab-clinical"));
+    const note = screen.getByTestId("ctw-clinical-shortcuts-note");
+    expect(note).toHaveTextContent(/provider review prompts/i);
+    expect(note).toHaveTextContent(/does not generate diagnoses/i);
+    expect(note).toHaveTextContent(/intentionally inert/i);
+  });
+
+  it("the note renders before the shortcuts search input in document order", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(screen.getByTestId("ctw-tab-clinical"));
+    const note = screen.getByTestId("ctw-clinical-shortcuts-note");
+    const search = screen.getByTestId("ctw-clinical-search");
+    expect(
+      note.compareDocumentPosition(search) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
 });
 
 // ---------------------------------------------------------------
