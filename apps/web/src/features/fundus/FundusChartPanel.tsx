@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import type {
   FundusChart,
   FundusChartListItem,
+  FundusChartSourceType,
+  FundusChartStatus,
   Laterality,
 } from "./fundusTypes";
 import {
@@ -9,7 +11,31 @@ import {
   generateFundusChart,
   getFundusChart,
 } from "./fundusApi";
-import { FundusChartEditor } from "./FundusChartEditor";
+import { FundusChartEditor, lateralityLong } from "./FundusChartEditor";
+
+function statusLabel(status: FundusChartStatus): string {
+  return status === "signed"
+    ? "Signed · Locked"
+    : status === "reviewed"
+      ? "Reviewed"
+      : "Draft";
+}
+
+function statusPillStyle(status: FundusChartStatus): React.CSSProperties {
+  if (status === "signed") {
+    return { background: "#c6f6d5", color: "#276749" };
+  }
+  if (status === "reviewed") {
+    return { background: "#bee3f8", color: "#2a4a7f" };
+  }
+  return { background: "#fed7d7", color: "#9b2c2c" };
+}
+
+function sourceLabel(source: FundusChartSourceType): string {
+  if (source === "ai_generated") return "AI-drafted";
+  if (source === "manual") return "Manual";
+  return "Imported";
+}
 
 interface Props {
   encounterId: number;
@@ -374,16 +400,75 @@ export function FundusChartPanel({ encounterId }: Props) {
                   >
                     <div
                       style={{
-                        fontSize: 13,
-                        fontWeight: 600,
-                        color: "#2d3748",
+                        display: "flex",
+                        alignItems: "baseline",
+                        justifyContent: "space-between",
+                        gap: 6,
                       }}
                     >
-                      {c.laterality} — #{c.id}
+                      <span
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: "#2d3748",
+                        }}
+                      >
+                        {lateralityLong(c.laterality)}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          color: "#a0aec0",
+                        }}
+                      >
+                        #{c.id}
+                      </span>
                     </div>
-                    <div style={{ fontSize: 11, color: "#718096" }}>
-                      {c.status} ·{" "}
-                      {new Date(c.created_at).toLocaleDateString()}
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        alignItems: "center",
+                        gap: 6,
+                        marginTop: 4,
+                      }}
+                    >
+                      <span
+                        data-testid={`fundus-list-status-${c.id}`}
+                        style={{
+                          ...statusPillStyle(c.status),
+                          padding: "1px 6px",
+                          borderRadius: 4,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          letterSpacing: 0.3,
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        {statusLabel(c.status)}
+                      </span>
+                      <span
+                        data-testid={`fundus-list-source-${c.id}`}
+                        style={{
+                          fontSize: 10,
+                          color: "#4a5568",
+                          background: "#edf2f7",
+                          padding: "1px 6px",
+                          borderRadius: 4,
+                          fontWeight: 600,
+                          letterSpacing: 0.3,
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        {sourceLabel(c.source_type)}
+                      </span>
+                      <time
+                        dateTime={c.created_at}
+                        title={new Date(c.created_at).toLocaleString()}
+                        style={{ fontSize: 11, color: "#718096" }}
+                      >
+                        {new Date(c.created_at).toLocaleDateString()}
+                      </time>
                     </div>
                   </li>
                 ))}
