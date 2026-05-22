@@ -541,3 +541,253 @@ describe("FundusChartPanel — failure modes", () => {
     expect(generateFundusChart).toHaveBeenCalledTimes(2);
   });
 });
+
+// ---------------------------------------------------------------
+// Phase 72 — Fundus drawing assist usability upgrade
+// ---------------------------------------------------------------
+
+describe("FundusChartPanel — Phase 72 saved-list richness", () => {
+  it("saved list shows laterality long-form, status pill, and source label", async () => {
+    vi.mocked(listFundusCharts).mockResolvedValueOnce([
+      baseListItem({ id: 42, laterality: "OD", status: "draft" }),
+      baseListItem({
+        id: 51,
+        laterality: "OS",
+        status: "signed",
+        source_type: "manual",
+        signed_at: "2026-05-19T07:00:00Z",
+      }),
+      baseListItem({
+        id: 60,
+        laterality: "OU",
+        status: "reviewed",
+        source_type: "imported",
+        reviewed_at: "2026-05-19T07:30:00Z",
+      }),
+    ]);
+    render(<FundusChartPanel encounterId={7} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("fundus-list")).toBeInTheDocument(),
+    );
+
+    expect(screen.getByTestId("fundus-list-item-42").textContent).toMatch(
+      /OD · Right Eye/,
+    );
+    expect(screen.getByTestId("fundus-list-item-51").textContent).toMatch(
+      /OS · Left Eye/,
+    );
+    expect(screen.getByTestId("fundus-list-item-60").textContent).toMatch(
+      /OU · Both Eyes/,
+    );
+
+    expect(screen.getByTestId("fundus-list-status-42").textContent).toMatch(
+      /Draft/,
+    );
+    expect(screen.getByTestId("fundus-list-status-51").textContent).toMatch(
+      /Signed · Locked/,
+    );
+    expect(screen.getByTestId("fundus-list-status-60").textContent).toMatch(
+      /Reviewed/,
+    );
+
+    expect(screen.getByTestId("fundus-list-source-42").textContent).toMatch(
+      /AI-drafted/,
+    );
+    expect(screen.getByTestId("fundus-list-source-51").textContent).toMatch(
+      /Manual/,
+    );
+    expect(screen.getByTestId("fundus-list-source-60").textContent).toMatch(
+      /Imported/,
+    );
+  });
+});
+
+describe("FundusChartEditor — Phase 72 review affordances", () => {
+  it("laterality badge shows the long-form for the eye", () => {
+    render(
+      <FundusChartEditor
+        encounterId={7}
+        chart={baseChart({ laterality: "OS" })}
+        onUpdated={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("fundus-laterality-badge").textContent).toMatch(
+      /OS · Left Eye/,
+    );
+  });
+
+  it("draft chart shows the 'awaiting provider review' callout", () => {
+    render(
+      <FundusChartEditor
+        encounterId={7}
+        chart={baseChart()}
+        onUpdated={vi.fn()}
+      />,
+    );
+    const callout = screen.getByTestId("fundus-awaiting-review");
+    expect(callout.textContent).toMatch(/Awaiting provider review/i);
+    expect(callout.textContent).toMatch(/Not image interpretation/i);
+  });
+
+  it("signed chart does not show the 'awaiting provider review' callout", () => {
+    render(
+      <FundusChartEditor
+        encounterId={7}
+        chart={baseChart({
+          status: "signed",
+          signed_at: "2026-05-19T07:00:00Z",
+        })}
+        onUpdated={vi.fn()}
+      />,
+    );
+    expect(screen.queryByTestId("fundus-awaiting-review")).toBeNull();
+  });
+
+  it("renders the clinician-entered findings provenance panel when findings_json.text exists", () => {
+    render(
+      <FundusChartEditor
+        encounterId={7}
+        chart={baseChart({
+          findings_json: {
+            text: "horseshoe tear at 10:30 OD with surrounding RPE change",
+          },
+        })}
+        onUpdated={vi.fn()}
+      />,
+    );
+    const provenance = screen.getByTestId("fundus-clinician-findings");
+    expect(provenance.textContent).toMatch(
+      /Clinician-entered findings/i,
+    );
+    expect(
+      screen.getByTestId("fundus-clinician-findings-text").textContent,
+    ).toMatch(/horseshoe tear at 10:30 OD/);
+  });
+
+  it("omits the provenance panel when findings_json is null or has no text", () => {
+    render(
+      <FundusChartEditor
+        encounterId={7}
+        chart={baseChart({ findings_json: null })}
+        onUpdated={vi.fn()}
+      />,
+    );
+    expect(screen.queryByTestId("fundus-clinician-findings")).toBeNull();
+  });
+
+  it("renders the 'drafted from findings, not photo interpretation' caption above the SVG", () => {
+    render(
+      <FundusChartEditor
+        encounterId={7}
+        chart={baseChart()}
+        onUpdated={vi.fn()}
+      />,
+    );
+    const cap = screen.getByTestId("fundus-renderer-caption");
+    expect(cap.textContent).toMatch(/Drafted from clinician findings/i);
+    expect(cap.textContent).toMatch(/not interpreted from a fundus photo/i);
+  });
+
+  it("shows the drafted-element count and warning count below the renderer", () => {
+    render(
+      <FundusChartEditor
+        encounterId={7}
+        chart={baseChart({
+          warnings_json: ["Laterality not stated; please confirm."],
+        })}
+        onUpdated={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("fundus-element-count").textContent).toMatch(
+      /1 drafted element/,
+    );
+    expect(screen.getByTestId("fundus-element-count").textContent).toMatch(
+      /1 warning/,
+    );
+  });
+
+  it("Refresh server snapshot button replaces the old 'Render SVG' label", () => {
+    render(
+      <FundusChartEditor
+        encounterId={7}
+        chart={baseChart()}
+        onUpdated={vi.fn()}
+      />,
+    );
+    const btn = screen.getByTestId("fundus-render-btn");
+    expect(btn.textContent).toMatch(/Refresh server snapshot/i);
+    expect(btn.getAttribute("title")).toMatch(/server-side SVG snapshot/i);
+  });
+});
+
+describe("FundusChartEditor — Phase 72 signed snapshot enrichments", () => {
+  it("signed snapshot shows reviewer info when reviewed_at + reviewed_by_user_id are present", () => {
+    render(
+      <FundusChartEditor
+        encounterId={7}
+        chart={baseChart({
+          status: "signed",
+          signed_at: "2026-05-19T07:00:00Z",
+          signed_by_user_id: 3,
+          reviewed_at: "2026-05-19T06:50:00Z",
+          reviewed_by_user_id: 9,
+        })}
+        onUpdated={vi.fn()}
+      />,
+    );
+    const reviewer = screen.getByTestId("fundus-signed-reviewer");
+    expect(reviewer.textContent).toMatch(/Reviewed/);
+    expect(reviewer.textContent).toMatch(/clinician #9/);
+  });
+
+  it("signed snapshot omits reviewer line when reviewed_at is absent", () => {
+    render(
+      <FundusChartEditor
+        encounterId={7}
+        chart={baseChart({
+          status: "signed",
+          signed_at: "2026-05-19T07:00:00Z",
+          signed_by_user_id: 3,
+          reviewed_at: null,
+          reviewed_by_user_id: null,
+        })}
+        onUpdated={vi.fn()}
+      />,
+    );
+    expect(screen.queryByTestId("fundus-signed-reviewer")).toBeNull();
+  });
+
+  it("signed snapshot reports element count and warning count at signing", () => {
+    render(
+      <FundusChartEditor
+        encounterId={7}
+        chart={baseChart({
+          status: "signed",
+          signed_at: "2026-05-19T07:00:00Z",
+          warnings_json: ["Laterality not stated; please confirm."],
+        })}
+        onUpdated={vi.fn()}
+      />,
+    );
+    const summary = screen.getByTestId("fundus-signed-summary");
+    expect(summary.textContent).toMatch(/Locked snapshot/i);
+    expect(summary.textContent).toMatch(/1 drafted element/);
+    expect(summary.textContent).toMatch(/1 warning/);
+  });
+});
+
+describe("FundusChartLegend — Phase 72 attribution", () => {
+  it("shows the 'Drafted by ChartNav · not photo interpretation' attribution below the legend", () => {
+    render(
+      <FundusChartEditor
+        encounterId={7}
+        chart={baseChart()}
+        onUpdated={vi.fn()}
+      />,
+    );
+    const attribution = screen.getByTestId("fundus-legend-attribution");
+    expect(attribution.textContent).toMatch(/Drafted by ChartNav/i);
+    expect(attribution.textContent).toMatch(/provider review required/i);
+    expect(attribution.textContent).toMatch(/not photo interpretation/i);
+  });
+});

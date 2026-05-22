@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import type { FundusChart } from "./fundusTypes";
+import type { FundusChart, Laterality } from "./fundusTypes";
 import {
   renderFundusChart,
   reviewFundusChart,
@@ -15,6 +15,22 @@ interface Props {
 }
 
 type Step = "draft" | "reviewed" | "signed";
+
+export function lateralityLong(l: Laterality): string {
+  return l === "OD"
+    ? "OD · Right Eye"
+    : l === "OS"
+      ? "OS · Left Eye"
+      : "OU · Both Eyes";
+}
+
+function extractFindingsText(chart: FundusChart): string | null {
+  const j = chart.findings_json;
+  if (!j) return null;
+  const t = (j as { text?: unknown }).text;
+  if (typeof t === "string" && t.trim().length > 0) return t.trim();
+  return null;
+}
 
 function btn(bg: string, disabled = false): React.CSSProperties {
   return {
@@ -117,6 +133,9 @@ export function FundusChartEditor({
   const isSigned = chart.signed_at !== null;
   const isReviewed = chart.status === "reviewed";
   const isAiDrafted = chart.source_type === "ai_generated";
+  const findingsText = extractFindingsText(chart);
+  const elementCount = chart.drawing_json?.elements?.length ?? 0;
+  const warningCount = warnings.length;
 
   async function handleRender() {
     setLoading(true);
@@ -182,7 +201,9 @@ export function FundusChartEditor({
         }}
       >
         <span data-testid="fundus-laterality-badge">
-          <strong style={{ color: "#2d3748" }}>{chart.laterality}</strong>{" "}
+          <strong style={{ color: "#2d3748" }}>
+            {lateralityLong(chart.laterality)}
+          </strong>{" "}
           · chart #{chart.id}
         </span>
         {isAiDrafted && (
@@ -200,6 +221,64 @@ export function FundusChartEditor({
           </span>
         )}
       </div>
+
+      {!isSigned && (
+        <div
+          data-testid="fundus-awaiting-review"
+          style={{
+            background: "#ebf8ff",
+            border: "1px solid #bee3f8",
+            borderRadius: 6,
+            padding: 10,
+            marginBottom: 12,
+            fontSize: 12,
+            color: "#2a4a7f",
+            lineHeight: 1.5,
+          }}
+        >
+          <strong>Awaiting provider review.</strong> ChartNav drafted this
+          diagram from clinician-entered findings. The provider reviews,
+          then signs to lock the chart. Not image interpretation.
+        </div>
+      )}
+
+      {findingsText && (
+        <div
+          data-testid="fundus-clinician-findings"
+          style={{
+            background: "#fffaf0",
+            border: "1px solid #feebc8",
+            borderRadius: 6,
+            padding: 10,
+            marginBottom: 12,
+          }}
+        >
+          <p
+            style={{
+              margin: "0 0 4px",
+              fontSize: 11,
+              fontWeight: 700,
+              color: "#7b341e",
+              textTransform: "uppercase",
+              letterSpacing: 0.4,
+            }}
+          >
+            Clinician-entered findings (input to this chart)
+          </p>
+          <p
+            style={{
+              margin: 0,
+              fontSize: 12,
+              color: "#7b341e",
+              lineHeight: 1.5,
+              whiteSpace: "pre-wrap",
+            }}
+            data-testid="fundus-clinician-findings-text"
+          >
+            {findingsText}
+          </p>
+        </div>
+      )}
 
       <div
         data-testid="fundus-warnings"
@@ -250,11 +329,38 @@ export function FundusChartEditor({
         )}
       </div>
 
+      <p
+        data-testid="fundus-renderer-caption"
+        style={{
+          margin: "0 0 6px",
+          fontSize: 11,
+          color: "#718096",
+          lineHeight: 1.5,
+        }}
+      >
+        Drafted from clinician findings · not interpreted from a fundus
+        photo. The provider reviews this drawing before signing.
+      </p>
+
       <FundusChartRenderer
         drawing={chart.drawing_json}
         laterality={chart.laterality}
         size={320}
       />
+
+      <p
+        data-testid="fundus-element-count"
+        style={{
+          margin: "6px 0 0",
+          fontSize: 11,
+          color: "#718096",
+        }}
+      >
+        {elementCount} drafted element{elementCount === 1 ? "" : "s"}
+        {warningCount > 0
+          ? ` · ${warningCount} warning${warningCount === 1 ? "" : "s"}`
+          : ""}
+      </p>
 
       {chart.drawing_json && (
         <FundusChartLegend elements={chart.drawing_json.elements ?? []} />
@@ -316,6 +422,35 @@ export function FundusChartEditor({
             )}
             . Signed charts are immutable.
           </p>
+          {chart.reviewed_at && chart.reviewed_by_user_id !== null && (
+            <p
+              style={{
+                margin: "4px 0 0",
+                fontSize: 12,
+                color: "#22543d",
+                lineHeight: 1.5,
+              }}
+              data-testid="fundus-signed-reviewer"
+            >
+              Reviewed {new Date(chart.reviewed_at).toLocaleString()} by
+              clinician #{chart.reviewed_by_user_id}.
+            </p>
+          )}
+          <p
+            style={{
+              margin: "6px 0 0",
+              fontSize: 11,
+              fontWeight: 600,
+              color: "#276749",
+              textTransform: "uppercase",
+              letterSpacing: 0.4,
+            }}
+            data-testid="fundus-signed-summary"
+          >
+            Locked snapshot · {elementCount} drafted element
+            {elementCount === 1 ? "" : "s"} · {warningCount} warning
+            {warningCount === 1 ? "" : "s"} at signing
+          </p>
         </div>
       ) : (
         <div style={{ marginTop: 16 }}>
@@ -333,8 +468,9 @@ export function FundusChartEditor({
               disabled={loading}
               data-testid="fundus-render-btn"
               style={btn("#3182ce", loading)}
+              title="Refresh the server-side SVG snapshot. The diagram above is always current; this just persists a new copy on the server."
             >
-              {loading ? "…" : "Render SVG"}
+              {loading ? "…" : "Refresh server snapshot"}
             </button>
             <button
               type="button"

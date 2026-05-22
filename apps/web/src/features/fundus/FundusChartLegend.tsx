@@ -25,7 +25,7 @@ export function FundusChartLegend({ elements }: Props) {
   const unique = Array.from(new Map(elements.map((el) => [el.type, el])).values());
 
   return (
-    <div style={{ marginTop: 12 }}>
+    <div style={{ marginTop: 12 }} data-testid="fundus-legend">
       <p style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, color: "#555" }}>Legend</p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
         {unique.map((el) => (
@@ -43,6 +43,18 @@ export function FundusChartLegend({ elements }: Props) {
           </div>
         ))}
       </div>
+      <p
+        data-testid="fundus-legend-attribution"
+        style={{
+          margin: "8px 0 0",
+          fontSize: 11,
+          color: "#718096",
+          lineHeight: 1.5,
+        }}
+      >
+        Drafted by ChartNav from clinician findings · provider review
+        required · not photo interpretation.
+      </p>
     </div>
   );
 }
