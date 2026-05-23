@@ -15,9 +15,12 @@ import {
   vitalsFromWorkup,
 } from "./VitalsWorkupForm";
 import {
+  AwaitingReviewCallout,
   ForbiddenActionsCard,
   SignedLockBanner,
   StatusTimeline,
+  vitalsStatusLabel,
+  vitalsStatusPillStyle,
   WarningsList,
 } from "./VitalsWorkupSummary";
 
@@ -281,18 +284,57 @@ export function VitalsWorkupPanel({ encounterId }: Props) {
                 >
                   <div
                     style={{
-                      fontSize: 13,
-                      fontWeight: 600,
-                      color: "#2d3748",
+                      display: "flex",
+                      alignItems: "baseline",
+                      justifyContent: "space-between",
+                      gap: 6,
                     }}
                   >
-                    Workup #{w.id}
+                    <span
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: "#2d3748",
+                      }}
+                    >
+                      Workup #{w.id}
+                    </span>
+                    <span
+                      data-testid={`vitals-list-status-${w.id}`}
+                      style={{
+                        ...vitalsStatusPillStyle(w.status),
+                        padding: "1px 6px",
+                        borderRadius: 4,
+                        fontSize: 10,
+                        fontWeight: 700,
+                        letterSpacing: 0.3,
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {vitalsStatusLabel(w.status)}
+                    </span>
                   </div>
-                  <div style={{ fontSize: 11, color: "#718096" }}>
-                    {w.status} ·{" "}
-                    {w.created_at
-                      ? new Date(w.created_at).toLocaleString()
-                      : ""}
+                  <div style={{ fontSize: 11, color: "#718096", marginTop: 2 }}>
+                    {w.source_type === "technician_entry"
+                      ? "Technician entry"
+                      : w.source_type === "clinician_entry"
+                        ? "Clinician entry"
+                        : w.source_type === "demo"
+                          ? "Demo"
+                          : "Imported"}{" "}
+                    ·{" "}
+                    <time
+                      dateTime={w.created_at}
+                      title={
+                        w.created_at
+                          ? new Date(w.created_at).toLocaleString()
+                          : ""
+                      }
+                    >
+                      {w.created_at
+                        ? new Date(w.created_at).toLocaleDateString()
+                        : ""}
+                    </time>
                   </div>
                 </li>
               ))}
@@ -322,6 +364,10 @@ export function VitalsWorkupPanel({ encounterId }: Props) {
           )}
 
           {selected && <StatusTimeline status={selected.status} />}
+
+          {selected && !isSigned && !isReviewed && (
+            <AwaitingReviewCallout status={selected.status} />
+          )}
 
           {selected && <WarningsList warnings={selected.warnings} />}
 

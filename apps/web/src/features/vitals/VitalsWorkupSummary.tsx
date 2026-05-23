@@ -1,8 +1,28 @@
 import React from "react";
-import type { VitalsWorkup } from "./vitalsTypes";
+import type { VitalsWorkup, VitalsStatus } from "./vitalsTypes";
 
 interface Props {
   workup: VitalsWorkup;
+}
+
+export function vitalsStatusLabel(status: VitalsStatus): string {
+  if (status === "signed") return "Signed · Locked";
+  if (status === "reviewed") return "Reviewed";
+  if (status === "entered") return "Entered";
+  if (status === "superseded") return "Superseded";
+  return "Draft";
+}
+
+export function vitalsStatusPillStyle(
+  status: VitalsStatus,
+): React.CSSProperties {
+  if (status === "signed")
+    return { background: "#c6f6d5", color: "#276749" };
+  if (status === "reviewed")
+    return { background: "#bee3f8", color: "#2a4a7f" };
+  if (status === "entered")
+    return { background: "#fed7aa", color: "#7c2d12" };
+  return { background: "#fed7d7", color: "#9b2c2c" };
 }
 
 export function StatusTimeline({ status }: { status: VitalsWorkup["status"] }) {
@@ -183,6 +203,7 @@ export function ForbiddenActionsCard({ workup }: Props) {
 
 export function SignedLockBanner({ workup }: Props) {
   if (workup.status !== "signed") return null;
+  const warningCount = workup.warnings.length;
   return (
     <div
       data-testid="vitals-signed-lock"
@@ -211,6 +232,7 @@ export function SignedLockBanner({ workup }: Props) {
           color: "#22543d",
           lineHeight: 1.5,
         }}
+        data-testid="vitals-signed-meta"
       >
         Signed{" "}
         {workup.signed_at
@@ -221,6 +243,74 @@ export function SignedLockBanner({ workup }: Props) {
         )}
         . Signed workups are immutable.
       </p>
+      {workup.reviewed_at && workup.reviewed_by_user_id !== null && (
+        <p
+          style={{
+            margin: "4px 0 0",
+            fontSize: 12,
+            color: "#22543d",
+            lineHeight: 1.5,
+          }}
+          data-testid="vitals-signed-reviewer"
+        >
+          Reviewed {new Date(workup.reviewed_at).toLocaleString()} by
+          clinician #{workup.reviewed_by_user_id}.
+        </p>
+      )}
+      <p
+        style={{
+          margin: "6px 0 0",
+          fontSize: 11,
+          fontWeight: 600,
+          color: "#276749",
+          textTransform: "uppercase",
+          letterSpacing: 0.4,
+        }}
+        data-testid="vitals-signed-summary"
+      >
+        Locked snapshot · {warningCount} warning
+        {warningCount === 1 ? "" : "s"} at signing
+      </p>
+      <p
+        style={{
+          margin: "8px 0 0",
+          fontSize: 11,
+          color: "#38a169",
+          lineHeight: 1.5,
+        }}
+        data-testid="vitals-audit-note"
+      >
+        ChartNav records metadata-only audit events: who created,
+        reviewed, and signed, and when. The audit trail does not store
+        clinical free text.
+      </p>
+    </div>
+  );
+}
+
+export function AwaitingReviewCallout({
+  status,
+}: {
+  status: VitalsStatus;
+}) {
+  if (status === "signed" || status === "reviewed") return null;
+  return (
+    <div
+      data-testid="vitals-awaiting-review"
+      style={{
+        background: "#ebf8ff",
+        border: "1px solid #bee3f8",
+        borderRadius: 6,
+        padding: 10,
+        marginBottom: 12,
+        fontSize: 12,
+        color: "#2a4a7f",
+        lineHeight: 1.5,
+      }}
+    >
+      <strong>Awaiting provider review.</strong> Technician has entered
+      intake data. A provider must review and sign before this workup is
+      finalized. Not a diagnosis. Not a treatment recommendation.
     </div>
   );
 }

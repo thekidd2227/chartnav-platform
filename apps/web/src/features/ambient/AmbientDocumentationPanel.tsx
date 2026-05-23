@@ -3,6 +3,7 @@ import type {
   AmbientDraftPayload,
   ScribeSessionResponse,
   ScribeSessionWithAmbientDraft,
+  ScribeStatus,
 } from "./ambientTypes";
 import {
   createScribeSession,
@@ -16,6 +17,25 @@ import {
 interface Props {
   patientId: number;
   encounterId?: number;
+}
+
+function ambientStatusLabel(status: ScribeStatus): string {
+  if (status === "finalized") return "Signed · Locked";
+  if (status === "reviewed") return "Reviewed";
+  if (status === "ready_for_review") return "Ready for Review";
+  if (status === "processing") return "Processing";
+  if (status === "discarded") return "Discarded";
+  return "Draft";
+}
+
+function ambientStatusPillStyle(status: ScribeStatus): React.CSSProperties {
+  if (status === "finalized")
+    return { background: "#c6f6d5", color: "#276749" };
+  if (status === "reviewed")
+    return { background: "#bee3f8", color: "#2a4a7f" };
+  if (status === "ready_for_review")
+    return { background: "#fed7aa", color: "#7c2d12" };
+  return { background: "#fed7d7", color: "#9b2c2c" };
 }
 
 const DEMO_SAMPLE_TRANSCRIPT =
@@ -436,18 +456,49 @@ export function AmbientDocumentationPanel({
                   >
                     <div
                       style={{
-                        fontSize: 13,
-                        fontWeight: 600,
-                        color: "#2d3748",
+                        display: "flex",
+                        alignItems: "baseline",
+                        justifyContent: "space-between",
+                        gap: 6,
                       }}
                     >
-                      Session #{s.id}
+                      <span
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: "#2d3748",
+                        }}
+                      >
+                        Session #{s.id}
+                      </span>
+                      <span
+                        data-testid={`ambient-list-status-${s.id}`}
+                        style={{
+                          ...ambientStatusPillStyle(s.status),
+                          padding: "1px 6px",
+                          borderRadius: 4,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          letterSpacing: 0.3,
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        {ambientStatusLabel(s.status)}
+                      </span>
                     </div>
-                    <div style={{ fontSize: 11, color: "#718096" }}>
-                      {s.status} ·{" "}
-                      {s.created_at
-                        ? new Date(s.created_at).toLocaleString()
-                        : ""}
+                    <div style={{ fontSize: 11, color: "#718096", marginTop: 2 }}>
+                      <time
+                        dateTime={s.created_at ?? ""}
+                        title={
+                          s.created_at
+                            ? new Date(s.created_at).toLocaleString()
+                            : ""
+                        }
+                      >
+                        {s.created_at
+                          ? new Date(s.created_at).toLocaleDateString()
+                          : ""}
+                      </time>
                     </div>
                   </li>
                 ))}
@@ -479,6 +530,27 @@ export function AmbientDocumentationPanel({
           {selectedSession ? (
             <div data-testid="ambient-draft-editor">
               <StatusTimeline status={selectedSession.status} />
+
+              {!isSigned && (
+                <div
+                  data-testid="ambient-awaiting-review"
+                  style={{
+                    background: "#ebf8ff",
+                    border: "1px solid #bee3f8",
+                    borderRadius: 6,
+                    padding: 10,
+                    marginBottom: 12,
+                    fontSize: 12,
+                    color: "#2a4a7f",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  <strong>Awaiting provider review.</strong> ChartNav
+                  drafted this note from a demo transcript. The provider
+                  reviews, then signs to lock the draft. Not a diagnosis.
+                  Does not produce notes without provider review.
+                </div>
+              )}
 
               {draft && (
                 <>
@@ -728,12 +800,44 @@ export function AmbientDocumentationPanel({
                       color: "#22543d",
                       lineHeight: 1.5,
                     }}
+                    data-testid="ambient-signed-meta"
                   >
                     Signed{" "}
                     {selectedSession.finalized_at
                       ? new Date(selectedSession.finalized_at).toLocaleString()
                       : ""}
                     . Signed drafts are immutable.
+                  </p>
+                  {selectedSession.reviewed_at &&
+                    selectedSession.reviewed_by_user_id !== null && (
+                      <p
+                        style={{
+                          margin: "4px 0 0",
+                          fontSize: 12,
+                          color: "#22543d",
+                          lineHeight: 1.5,
+                        }}
+                        data-testid="ambient-signed-reviewer"
+                      >
+                        Reviewed{" "}
+                        {new Date(
+                          selectedSession.reviewed_at,
+                        ).toLocaleString()}{" "}
+                        by clinician #{selectedSession.reviewed_by_user_id}.
+                      </p>
+                    )}
+                  <p
+                    style={{
+                      margin: "8px 0 0",
+                      fontSize: 11,
+                      color: "#38a169",
+                      lineHeight: 1.5,
+                    }}
+                    data-testid="ambient-audit-note"
+                  >
+                    ChartNav records metadata-only audit events: who
+                    created, reviewed, and signed, and when. The audit
+                    trail does not store clinical free text.
                   </p>
                 </div>
               ) : (

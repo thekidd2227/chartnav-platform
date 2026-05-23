@@ -592,3 +592,131 @@ describe("AmbientDocumentationPanel — Phase 59 safety copy", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------
+// Phase 73 — Provider review / signed lock / audit trail
+// ---------------------------------------------------------------
+
+describe("AmbientDocumentationPanel — Phase 73 audit trail", () => {
+  it("saved list shows status pill with correct label", async () => {
+    vi.mocked(listScribeSessions).mockResolvedValueOnce([
+      baseSession({ id: 7, status: "finalized" }),
+      baseSession({ id: 8, status: "reviewed" }),
+      baseSession({ id: 9, status: "ready_for_review" }),
+      baseSession({ id: 10, status: "draft" }),
+    ]);
+    render(<AmbientDocumentationPanel patientId={42} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("ambient-list")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("ambient-list-status-7").textContent).toMatch(
+      /Signed · Locked/,
+    );
+    expect(screen.getByTestId("ambient-list-status-8").textContent).toMatch(
+      /Reviewed/,
+    );
+    expect(screen.getByTestId("ambient-list-status-9").textContent).toMatch(
+      /Ready for Review/,
+    );
+    expect(screen.getByTestId("ambient-list-status-10").textContent).toMatch(
+      /Draft/,
+    );
+  });
+
+  it("shows awaiting-review callout on non-signed session", async () => {
+    vi.mocked(listScribeSessions).mockResolvedValueOnce([
+      baseSession({ status: "ready_for_review" }),
+    ]);
+    vi.mocked(getScribeSession).mockResolvedValueOnce(
+      baseSessionWithDraft({ status: "ready_for_review" }),
+    );
+    render(<AmbientDocumentationPanel patientId={42} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("ambient-list")).toBeInTheDocument(),
+    );
+    await userEvent.click(screen.getByTestId("ambient-list-item-7"));
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("ambient-awaiting-review"),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      screen.getByTestId("ambient-awaiting-review").textContent,
+    ).toMatch(/Awaiting provider review/i);
+    expect(
+      screen.getByTestId("ambient-awaiting-review").textContent,
+    ).toMatch(/Not a diagnosis/i);
+    expect(
+      screen.getByTestId("ambient-awaiting-review").textContent,
+    ).toMatch(/Does not produce notes without provider review/i);
+  });
+
+  it("hides awaiting-review callout on signed session", async () => {
+    vi.mocked(listScribeSessions).mockResolvedValueOnce([
+      baseSession({ status: "finalized" }),
+    ]);
+    vi.mocked(getScribeSession).mockResolvedValueOnce(
+      baseSessionWithDraft({ status: "finalized", finalized_at: "2026-05-19T07:00:00Z" }),
+    );
+    render(<AmbientDocumentationPanel patientId={42} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("ambient-list")).toBeInTheDocument(),
+    );
+    await userEvent.click(screen.getByTestId("ambient-list-item-7"));
+    await waitFor(() =>
+      expect(screen.getByTestId("ambient-signed-lock")).toBeInTheDocument(),
+    );
+    expect(screen.queryByTestId("ambient-awaiting-review")).toBeNull();
+  });
+
+  it("signed-lock banner shows reviewer info when reviewed_at + reviewed_by_user_id present", async () => {
+    vi.mocked(listScribeSessions).mockResolvedValueOnce([
+      baseSession({ status: "finalized" }),
+    ]);
+    vi.mocked(getScribeSession).mockResolvedValueOnce(
+      baseSessionWithDraft({
+        status: "finalized",
+        finalized_at: "2026-05-19T07:00:00Z",
+        reviewed_at: "2026-05-19T06:50:00Z",
+        reviewed_by_user_id: 9,
+      }),
+    );
+    render(<AmbientDocumentationPanel patientId={42} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("ambient-list")).toBeInTheDocument(),
+    );
+    await userEvent.click(screen.getByTestId("ambient-list-item-7"));
+    await waitFor(() =>
+      expect(screen.getByTestId("ambient-signed-lock")).toBeInTheDocument(),
+    );
+    expect(
+      screen.getByTestId("ambient-signed-reviewer").textContent,
+    ).toMatch(/clinician #9/);
+  });
+
+  it("signed-lock banner includes metadata-only audit note", async () => {
+    vi.mocked(listScribeSessions).mockResolvedValueOnce([
+      baseSession({ status: "finalized" }),
+    ]);
+    vi.mocked(getScribeSession).mockResolvedValueOnce(
+      baseSessionWithDraft({
+        status: "finalized",
+        finalized_at: "2026-05-19T07:00:00Z",
+      }),
+    );
+    render(<AmbientDocumentationPanel patientId={42} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("ambient-list")).toBeInTheDocument(),
+    );
+    await userEvent.click(screen.getByTestId("ambient-list-item-7"));
+    await waitFor(() =>
+      expect(screen.getByTestId("ambient-signed-lock")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("ambient-audit-note").textContent).toMatch(
+      /metadata-only audit events/i,
+    );
+    expect(screen.getByTestId("ambient-audit-note").textContent).toMatch(
+      /does not store clinical free text/i,
+    );
+  });
+});
