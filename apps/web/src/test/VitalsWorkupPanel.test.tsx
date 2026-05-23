@@ -439,3 +439,165 @@ describe("VitalsWorkupPanel — claim safety", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------
+// Phase 73 — Provider review / signed lock / audit trail
+// ---------------------------------------------------------------
+
+describe("VitalsWorkupPanel — Phase 73 audit trail", () => {
+  it("saved list shows status pill with correct label for signed workup", async () => {
+    vi.mocked(listVitalsWorkups).mockResolvedValueOnce([
+      baseWorkup({ id: 10, status: "signed" }),
+      baseWorkup({ id: 11, status: "reviewed" }),
+      baseWorkup({ id: 12, status: "entered" }),
+      baseWorkup({ id: 13, status: "draft" }),
+    ]);
+    render(<VitalsWorkupPanel encounterId={7} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("vitals-list")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("vitals-list-status-10").textContent).toMatch(
+      /Signed · Locked/,
+    );
+    expect(screen.getByTestId("vitals-list-status-11").textContent).toMatch(
+      /Reviewed/,
+    );
+    expect(screen.getByTestId("vitals-list-status-12").textContent).toMatch(
+      /Entered/,
+    );
+    expect(screen.getByTestId("vitals-list-status-13").textContent).toMatch(
+      /Draft/,
+    );
+  });
+
+  it("shows awaiting-review callout on entered workup (before provider review)", async () => {
+    vi.mocked(listVitalsWorkups).mockResolvedValueOnce([
+      baseWorkup({ id: 10, status: "entered" }),
+    ]);
+    vi.mocked(getVitalsWorkup).mockResolvedValueOnce(
+      baseWorkup({ id: 10, status: "entered" }),
+    );
+    render(<VitalsWorkupPanel encounterId={7} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("vitals-list")).toBeInTheDocument(),
+    );
+    await userEvent.click(screen.getByTestId("vitals-list-item-10"));
+    await waitFor(() =>
+      expect(screen.getByTestId("vitals-awaiting-review")).toBeInTheDocument(),
+    );
+    expect(
+      screen.getByTestId("vitals-awaiting-review").textContent,
+    ).toMatch(/Awaiting provider review/i);
+    expect(
+      screen.getByTestId("vitals-awaiting-review").textContent,
+    ).toMatch(/Not a diagnosis/i);
+  });
+
+  it("hides awaiting-review callout on signed workup", async () => {
+    vi.mocked(listVitalsWorkups).mockResolvedValueOnce([
+      baseWorkup({ id: 10, status: "signed", signed_at: "2026-05-19T07:00:00Z" }),
+    ]);
+    vi.mocked(getVitalsWorkup).mockResolvedValueOnce(
+      baseWorkup({ id: 10, status: "signed", signed_at: "2026-05-19T07:00:00Z" }),
+    );
+    render(<VitalsWorkupPanel encounterId={7} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("vitals-list")).toBeInTheDocument(),
+    );
+    await userEvent.click(screen.getByTestId("vitals-list-item-10"));
+    await waitFor(() =>
+      expect(screen.getByTestId("vitals-signed-lock")).toBeInTheDocument(),
+    );
+    expect(screen.queryByTestId("vitals-awaiting-review")).toBeNull();
+  });
+
+  it("signed-lock banner includes reviewer info when reviewed_at + reviewed_by_user_id present", async () => {
+    vi.mocked(listVitalsWorkups).mockResolvedValueOnce([
+      baseWorkup({
+        id: 10,
+        status: "signed",
+        signed_at: "2026-05-19T07:00:00Z",
+        signed_by_user_id: 3,
+        reviewed_at: "2026-05-19T06:50:00Z",
+        reviewed_by_user_id: 9,
+      }),
+    ]);
+    vi.mocked(getVitalsWorkup).mockResolvedValueOnce(
+      baseWorkup({
+        id: 10,
+        status: "signed",
+        signed_at: "2026-05-19T07:00:00Z",
+        signed_by_user_id: 3,
+        reviewed_at: "2026-05-19T06:50:00Z",
+        reviewed_by_user_id: 9,
+      }),
+    );
+    render(<VitalsWorkupPanel encounterId={7} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("vitals-list")).toBeInTheDocument(),
+    );
+    await userEvent.click(screen.getByTestId("vitals-list-item-10"));
+    await waitFor(() =>
+      expect(screen.getByTestId("vitals-signed-lock")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("vitals-signed-reviewer").textContent).toMatch(
+      /clinician #9/,
+    );
+    expect(screen.getByTestId("vitals-signed-meta").textContent).toMatch(
+      /clinician #3/,
+    );
+  });
+
+  it("signed-lock banner includes metadata-only audit note", async () => {
+    vi.mocked(listVitalsWorkups).mockResolvedValueOnce([
+      baseWorkup({ id: 10, status: "signed", signed_at: "2026-05-19T07:00:00Z" }),
+    ]);
+    vi.mocked(getVitalsWorkup).mockResolvedValueOnce(
+      baseWorkup({ id: 10, status: "signed", signed_at: "2026-05-19T07:00:00Z" }),
+    );
+    render(<VitalsWorkupPanel encounterId={7} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("vitals-list")).toBeInTheDocument(),
+    );
+    await userEvent.click(screen.getByTestId("vitals-list-item-10"));
+    await waitFor(() =>
+      expect(screen.getByTestId("vitals-signed-lock")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("vitals-audit-note").textContent).toMatch(
+      /metadata-only audit events/i,
+    );
+    expect(screen.getByTestId("vitals-audit-note").textContent).toMatch(
+      /does not store clinical free text/i,
+    );
+  });
+
+  it("signed-lock banner shows warning count at signing", async () => {
+    vi.mocked(listVitalsWorkups).mockResolvedValueOnce([
+      baseWorkup({
+        id: 10,
+        status: "signed",
+        signed_at: "2026-05-19T07:00:00Z",
+        warnings: ["High BP reading", "BMI > 30"],
+      }),
+    ]);
+    vi.mocked(getVitalsWorkup).mockResolvedValueOnce(
+      baseWorkup({
+        id: 10,
+        status: "signed",
+        signed_at: "2026-05-19T07:00:00Z",
+        warnings: ["High BP reading", "BMI > 30"],
+      }),
+    );
+    render(<VitalsWorkupPanel encounterId={7} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("vitals-list")).toBeInTheDocument(),
+    );
+    await userEvent.click(screen.getByTestId("vitals-list-item-10"));
+    await waitFor(() =>
+      expect(screen.getByTestId("vitals-signed-lock")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("vitals-signed-summary").textContent).toMatch(
+      /2 warnings at signing/,
+    );
+  });
+});
