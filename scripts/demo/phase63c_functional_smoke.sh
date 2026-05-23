@@ -41,15 +41,21 @@ WEB="${PHASE63C_WEB_URL:-http://127.0.0.1:5173}"
 CLINICIAN="${PHASE63C_CLINICIAN:-clin@chartnav.local}"
 
 RESET_FIRST=0
+PREFLIGHT_ONLY=0
 for arg in "$@"; do
   case "$arg" in
     --reset|--reset-first)
       RESET_FIRST=1
       ;;
+    --preflight|--preflight-only)
+      PREFLIGHT_ONLY=1
+      ;;
     --help|-h)
-      echo "Usage: $0 [--reset]"
-      echo "  --reset   Run scripts/reset_demo_state.sh first to wipe"
-      echo "            the local dev DB to a clean Morgan-only seed."
+      echo "Usage: $0 [--reset] [--preflight]"
+      echo "  --reset      Run scripts/reset_demo_state.sh first to wipe"
+      echo "               the local dev DB to a clean Morgan-only seed."
+      echo "  --preflight  Read-only readiness check only (no artifacts created)."
+      echo "               Equivalent to: bash scripts/demo/demo_preflight.sh"
       exit 0
       ;;
     *)
@@ -57,6 +63,10 @@ for arg in "$@"; do
       ;;
   esac
 done
+
+if [[ "$PREFLIGHT_ONLY" == "1" ]]; then
+  exec bash "$REPO/scripts/demo/demo_preflight.sh"
+fi
 
 if [[ ! -d "$REPO" ]]; then
   echo "ERROR: CHARTNAV_REPO_PATH=$REPO does not look like a checkout." >&2
@@ -237,13 +247,13 @@ HEALTH="$(curl -sf -m 5 -o /tmp/phase63c.health.json -w '%{http_code}' "$API/hea
 if [[ "$HEALTH" == "200" ]]; then
   gate "api $API/health 200" 1
 else
-  gate "api $API/health 200" 0 "got $HEALTH (is start-api.sh running?)"
+  gate "api $API/health 200" 0 "got $HEALTH — ensure the API is running. If on a different port, set: PHASE63C_API_URL=http://127.0.0.1:<port> bash scripts/demo/phase63c_functional_smoke.sh"
 fi
 WEB_HEALTH="$(curl -s -m 5 -o /dev/null -w '%{http_code}' "$WEB/" || echo "000")"
 if [[ "$WEB_HEALTH" == "200" ]] || [[ "$WEB_HEALTH" == "304" ]]; then
   gate "frontend $WEB/ reachable" 1
 else
-  gate "frontend $WEB/ reachable" 0 "got $WEB_HEALTH (is start-web.sh running?)"
+  gate "frontend $WEB/ reachable" 0 "got $WEB_HEALTH — ensure the frontend is running. If on a different port, set: PHASE63C_WEB_URL=http://127.0.0.1:<port> bash scripts/demo/phase63c_functional_smoke.sh"
 fi
 
 VITE_404="$(curl -s -m 3 -o /tmp/phase63c.viteprobe.txt -w '%{http_code}' \
@@ -253,6 +263,26 @@ if [[ "$VITE_404" == "200" ]] && head -c 60 /tmp/phase63c.viteprobe.txt 2>/dev/n
     "Vite served HTML for /api/v1/...; feature clients calling relative URLs would mis-route"
 else
   gate "Vite does not silently serve feature paths" 1
+fi
+
+# ── 3b. Artifact accumulation check ──────────────────────────────────
+ARTIFACT_COUNTS="$("$PY" -c "
+import sqlite3
+con = sqlite3.connect('apps/api/chartnav.db')
+def c(tbl, w='1=1'):
+    try: return con.execute(f'SELECT COUNT(*) FROM {tbl} WHERE {w}').fetchone()[0]
+    except: return 0
+print(c('visit_vitals_workups','encounter_id=1'), c('scribe_sessions'), c('fundus_charts','encounter_id=1'))
+" 2>/dev/null || echo "? ? ?")"
+read -r _VC _SC _FC <<< "$ARTIFACT_COUNTS"
+if [[ "$_VC" != "?" ]] && [[ "$_VC" -gt 5 ]]; then
+  echo "  WARN: $_VC vitals workups on encounter 1 — prior smoke runs accumulated data. Consider: bash scripts/reset_demo_state.sh" >&2
+fi
+if [[ "$_SC" != "?" ]] && [[ "$_SC" -gt 5 ]]; then
+  echo "  WARN: $_SC scribe sessions — prior runs accumulated data. Consider: bash scripts/reset_demo_state.sh" >&2
+fi
+if [[ "$_FC" != "?" ]] && [[ "$_FC" -gt 5 ]]; then
+  echo "  WARN: $_FC fundus charts on encounter 1 — prior runs accumulated data. Consider: bash scripts/reset_demo_state.sh" >&2
 fi
 
 # ── 4. Vitals happy path (clinician) ──────────────────────────────────

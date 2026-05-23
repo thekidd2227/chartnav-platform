@@ -54,7 +54,26 @@ fi
 echo "   ok — dev DB is at apps/api/chartnav.db with the seeded fake demo data."
 echo
 
-echo "2. Clearing browser-side demo state."
+echo "2. Verifying seed invariants…"
+PY="$REPO_ROOT/apps/api/.venv/bin/python"
+if [[ ! -x "$PY" ]]; then
+  PY="python3"
+fi
+if "$PY" scripts/verify_seed_invariants.py --db apps/api/chartnav.db; then
+  echo "   ok — Morgan Lee / PT-1001 / encounter 1 / clinician verified."
+else
+  echo "   WARN — seed verification reported failures. The DB was reset"
+  echo "   but the seeded state may not match demo expectations."
+  echo "   Check apps/api/scripts_seed.py for the expected seed shape."
+fi
+echo
+
+echo "3. Cleaning up stale smoke temp files…"
+rm -f /tmp/phase63c.*.json /tmp/phase63c.*.log /tmp/phase63c.*.txt 2>/dev/null
+echo "   ok — /tmp/phase63c.* removed."
+echo
+
+echo "4. Clearing browser-side demo state."
 echo "   Paste the following into the browser DevTools console once:"
 echo
 cat <<'BROWSER'
@@ -70,7 +89,7 @@ echo "   default (admin@chartnav.local), additionally clear:"
 echo "   localStorage.removeItem(\"chartnav.devIdentity\");"
 echo
 
-echo "3. Reminders for the presenter:"
+echo "5. Reminders for the presenter:"
 echo "   - The seeded data is fake by construction (org slug:"
 echo "     demo-eye-clinic, patient PT-1001 'Morgan Lee')."
 echo "   - Do NOT use this script against staging or"
@@ -80,5 +99,15 @@ echo "     environment — those modes are fake-data only."
 echo "   - To enable Phase 15 Guided Demo Mode in the workspace,"
 echo "     append '?demo=1' to the URL or set localStorage"
 echo "     'chartnav.demoMode' to '1'."
+echo
+echo "6. Next steps:"
+echo "   Start the API:   cd apps/api && .venv/bin/uvicorn app.main:app --port 8765"
+echo "   Start the web:   cd apps/web && npm run dev -- --port 5173"
+echo "   Run preflight:   PHASE63C_API_URL=http://127.0.0.1:8765 \\"
+echo "                    PHASE63C_WEB_URL=http://127.0.0.1:5173 \\"
+echo "                    bash scripts/demo/demo_preflight.sh"
+echo "   Run smoke:       PHASE63C_API_URL=http://127.0.0.1:8765 \\"
+echo "                    PHASE63C_WEB_URL=http://127.0.0.1:5173 \\"
+echo "                    bash scripts/demo/phase63c_functional_smoke.sh"
 echo
 echo "Demo reset complete."
