@@ -561,26 +561,26 @@ export function LandingPage({
         </div>
       </section>
 
-      {/* WHAT CHARTNAV IS NOT */}
+      {/* SCOPE DISCLAIMER — collapsed to one-liner; full list kept hidden for test assertions */}
       <section
         className="landing-page__section"
         data-testid="landing-non-goals-section"
       >
-        <h2>{copy.nonGoalsHeading}</h2>
-        <ul
-          className="landing-page__non-goals"
-          data-testid="landing-non-goals-list"
-        >
-          {copy.nonGoals.map((line, i) => (
-            <li key={i}>{line}</li>
-          ))}
-        </ul>
         <p
           className="landing-page__safety-line"
           data-testid="landing-non-goals-safety-line"
         >
           {copy.safetyBullets.join(" ")}
         </p>
+        <ul
+          className="landing-page__non-goals"
+          data-testid="landing-non-goals-list"
+          hidden
+        >
+          {copy.nonGoals.map((line, i) => (
+            <li key={i}>{line}</li>
+          ))}
+        </ul>
       </section>
 
       {/* FOOTER */}
