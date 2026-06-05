@@ -451,6 +451,19 @@ export function FundusChartEditor({
             {elementCount === 1 ? "" : "s"} · {warningCount} warning
             {warningCount === 1 ? "" : "s"} at signing
           </p>
+          <p
+            style={{
+              margin: "8px 0 0",
+              fontSize: 11,
+              color: "#38a169",
+              lineHeight: 1.5,
+            }}
+            data-testid="fundus-audit-note"
+          >
+            ChartNav records metadata-only audit events: who created,
+            reviewed, and signed, and when. The audit trail does not
+            store clinical free text.
+          </p>
         </div>
       ) : (
         <div style={{ marginTop: 16 }}>
