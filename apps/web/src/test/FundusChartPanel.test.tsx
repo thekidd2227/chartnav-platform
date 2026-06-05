@@ -774,6 +774,33 @@ describe("FundusChartEditor — Phase 72 signed snapshot enrichments", () => {
     expect(summary.textContent).toMatch(/1 drafted element/);
     expect(summary.textContent).toMatch(/1 warning/);
   });
+
+  it("signed-lock banner includes metadata-only audit note (Phase 75 parity with vitals + ambient)", () => {
+    render(
+      <FundusChartEditor
+        encounterId={7}
+        chart={baseChart({
+          status: "signed",
+          signed_at: "2026-05-19T07:00:00Z",
+        })}
+        onUpdated={vi.fn()}
+      />,
+    );
+    const note = screen.getByTestId("fundus-audit-note");
+    expect(note.textContent).toMatch(/metadata-only audit events/i);
+    expect(note.textContent).toMatch(/does not store clinical free text/i);
+  });
+
+  it("audit-note does not render on unsigned charts", () => {
+    render(
+      <FundusChartEditor
+        encounterId={7}
+        chart={baseChart()}
+        onUpdated={vi.fn()}
+      />,
+    );
+    expect(screen.queryByTestId("fundus-audit-note")).toBeNull();
+  });
 });
 
 describe("FundusChartLegend — Phase 72 attribution", () => {
