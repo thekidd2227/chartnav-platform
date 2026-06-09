@@ -62,6 +62,7 @@ import { SpecialtyTrackingPanel } from "./SpecialtyTrackingPanel";
 import { FundusChartPanel } from "./features/fundus/FundusChartPanel";
 import { AmbientDocumentationPanel } from "./features/ambient/AmbientDocumentationPanel";
 import { VitalsWorkupPanel } from "./features/vitals/VitalsWorkupPanel";
+import { ProviderActionItemQueue } from "./features/action-queue/ProviderActionItemQueue";
 import { InjectionCommandPanel } from "./features/anti-vegf/InjectionCommandPanel";
 import { CataractSurgicalWorkflowPanel } from "./features/cataract/CataractSurgicalWorkflowPanel";
 import { GlaucomaProgressionCockpit } from "./features/glaucoma/GlaucomaProgressionCockpit";
@@ -506,6 +507,15 @@ function OverviewTab({
           role={role}
         />
       </Card>
+
+      {nativeEncounter && (
+        <section
+          className="ctw-card ctw-card--wide"
+          data-testid="ctw-card-provider-action-queue"
+        >
+          <ProviderActionItemQueue />
+        </section>
+      )}
 
       {nativeEncounter && typeof encounter.id === "number" && (
         <section
