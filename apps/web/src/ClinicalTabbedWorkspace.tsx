@@ -63,6 +63,7 @@ import { FundusChartPanel } from "./features/fundus/FundusChartPanel";
 import { AmbientDocumentationPanel } from "./features/ambient/AmbientDocumentationPanel";
 import { VitalsWorkupPanel } from "./features/vitals/VitalsWorkupPanel";
 import { InjectionCommandPanel } from "./features/anti-vegf/InjectionCommandPanel";
+import { GlaucomaProgressionCockpit } from "./features/glaucoma/GlaucomaProgressionCockpit";
 import { RetinaVisitPacketPanel } from "./features/retina-summary/RetinaVisitPacketPanel";
 import { RetinaVisitSummaryPanel } from "./features/retina-summary/RetinaVisitSummaryPanel";
 import {
@@ -529,6 +530,15 @@ function OverviewTab({
           data-testid="ctw-card-anti-vegf-injection"
         >
           <InjectionCommandPanel patientId={encounter.patient_id} />
+        </section>
+      )}
+
+      {nativeEncounter && typeof encounter.patient_id === "number" && (
+        <section
+          className="ctw-card ctw-card--wide"
+          data-testid="ctw-card-glaucoma-cockpit"
+        >
+          <GlaucomaProgressionCockpit patientId={encounter.patient_id} />
         </section>
       )}
 
