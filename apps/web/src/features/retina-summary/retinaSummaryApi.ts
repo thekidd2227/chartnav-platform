@@ -5,6 +5,7 @@
 // localStorage fallback, no relative URLs against the Vite origin).
 
 import { API_URL } from "../../api";
+import type { RetinaVisitPacket } from "./retinaPacketTypes";
 import type { RetinaVisitSummary } from "./retinaSummaryTypes";
 
 const PATH_PREFIX = "/api/v1";
@@ -52,4 +53,11 @@ export function getRetinaVisitSummary(
   email?: string | null,
 ): Promise<RetinaVisitSummary> {
   return apiFetch(`/encounters/${encounterId}/retina-visit-summary`, { email });
+}
+
+export function getRetinaVisitPacket(
+  encounterId: number,
+  email?: string | null,
+): Promise<RetinaVisitPacket> {
+  return apiFetch(`/encounters/${encounterId}/retina-visit-packet`, { email });
 }
