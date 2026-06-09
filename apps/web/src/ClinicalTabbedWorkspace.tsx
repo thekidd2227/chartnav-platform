@@ -62,6 +62,7 @@ import { SpecialtyTrackingPanel } from "./SpecialtyTrackingPanel";
 import { FundusChartPanel } from "./features/fundus/FundusChartPanel";
 import { AmbientDocumentationPanel } from "./features/ambient/AmbientDocumentationPanel";
 import { VitalsWorkupPanel } from "./features/vitals/VitalsWorkupPanel";
+import { RetinaVisitSummaryPanel } from "./features/retina-summary/RetinaVisitSummaryPanel";
 import {
   RetinaVisitSequenceRibbon,
   type RetinaVisitTabId,
@@ -501,6 +502,15 @@ function OverviewTab({
           role={role}
         />
       </Card>
+
+      {nativeEncounter && typeof encounter.id === "number" && (
+        <section
+          className="ctw-card ctw-card--wide"
+          data-testid="ctw-card-retina-visit-summary"
+        >
+          <RetinaVisitSummaryPanel encounterId={encounter.id} />
+        </section>
+      )}
 
       <Card title="Allowed transitions" wide>
         {nextStatuses.length > 0 ? (
