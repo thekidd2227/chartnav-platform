@@ -163,7 +163,7 @@ export function RetinaVisitPacketPanel({ encounterId }: Props) {
           disabled={loading}
           data-testid="retina-packet-build-btn"
           style={{
-            background: "#3182ce",
+            background: "#2c5282",
             color: "#fff",
             border: "none",
             borderRadius: 6,
