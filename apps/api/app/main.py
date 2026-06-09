@@ -9,6 +9,7 @@ from starlette.responses import JSONResponse
 
 from app.api.admin_security import router as admin_security_router
 from app.api.anti_vegf_injections import router as anti_vegf_injections_router
+from app.api.cataract_workflow import router as cataract_workflow_router
 from app.api.consent import router as consent_router
 from app.api.eye_diagrams import router as eye_diagrams_router
 from app.api.fundus_charts import router as fundus_charts_router
@@ -112,6 +113,7 @@ async def _http_exception_handler(request: Request, exc: HTTPException) -> JSONR
 app.include_router(router)
 app.include_router(admin_security_router)
 app.include_router(anti_vegf_injections_router)
+app.include_router(cataract_workflow_router)
 app.include_router(consent_router)
 app.include_router(eye_diagrams_router)
 app.include_router(fundus_charts_router)
