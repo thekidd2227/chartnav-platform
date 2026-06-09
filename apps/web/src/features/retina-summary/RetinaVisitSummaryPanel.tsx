@@ -29,18 +29,18 @@ interface Props {
 
 function statusPillStyle(status: string | null): React.CSSProperties {
   if (status === "signed" || status === "finalized") {
-    return { background: "#c6f6d5", color: "#276749" };
+    return { background: "#c6f6d5", color: "#1c4532" };
   }
   if (status === "reviewed") {
-    return { background: "#bee3f8", color: "#2a4a7f" };
+    return { background: "#bee3f8", color: "#1a365d" };
   }
   if (status === "entered" || status === "ready_for_review") {
     return { background: "#fed7aa", color: "#7c2d12" };
   }
   if (status === null) {
-    return { background: "#edf2f7", color: "#a0aec0" };
+    return { background: "#edf2f7", color: "#4a5568" };
   }
-  return { background: "#fed7d7", color: "#9b2c2c" };
+  return { background: "#fed7d7", color: "#822727" };
 }
 
 function statusLabel(status: string | null): string {
@@ -131,7 +131,7 @@ function ArtifactCard({
         >
           {statusLabel(status)}
         </span>
-        <span style={{ fontSize: 11, color: "#718096" }}>
+        <span style={{ fontSize: 11, color: "#4a5568" }}>
           {section.count} total
         </span>
       </div>
@@ -275,7 +275,7 @@ function Timeline({ events }: { events: RetinaSummaryEvent[] }) {
           marginTop: 12,
           padding: 10,
           fontSize: 12,
-          color: "#718096",
+          color: "#4a5568",
           textAlign: "center",
           background: "#fafbfc",
           border: "1px dashed #cbd5e0",
@@ -328,7 +328,7 @@ function Timeline({ events }: { events: RetinaSummaryEvent[] }) {
               · <span>{e.laterality}</span>
             </>
           )}
-          <div style={{ fontSize: 11, color: "#718096", marginTop: 2 }}>
+          <div style={{ fontSize: 11, color: "#4a5568", marginTop: 2 }}>
             {fmtTime(e.timestamp)}
             {e.warning_count !== undefined &&
               ` · ${e.warning_count} warning${e.warning_count === 1 ? "" : "s"}`}
@@ -427,7 +427,7 @@ export function RetinaVisitSummaryPanel({ encounterId }: Props) {
       {loading && !summary && (
         <p
           data-testid="retina-summary-loading"
-          style={{ fontSize: 12, color: "#a0aec0" }}
+          style={{ fontSize: 12, color: "#4a5568" }}
         >
           Loading…
         </p>
@@ -510,8 +510,12 @@ export function RetinaVisitSummaryPanel({ encounterId }: Props) {
             data-testid="retina-summary-audit-disclosure"
             style={{
               marginTop: 12,
-              fontSize: 11,
-              color: "#38a169",
+              padding: 10,
+              background: "#f0fff4",
+              border: "1px solid #9ae6b4",
+              borderRadius: 6,
+              fontSize: 12,
+              color: "#1c4532",
               lineHeight: 1.5,
             }}
           >
