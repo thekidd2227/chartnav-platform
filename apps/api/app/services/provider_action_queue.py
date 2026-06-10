@@ -545,6 +545,45 @@ def _staging_items(
     return items
 
 
+def _imaging_metadata_items(
+    caller: Caller, patients: dict[int, dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Phase 88 — informational items for patients with imaging
+    metadata that has not reached ``reviewed`` status. Always
+    'informational' / never tier 1. ChartNav does NOT interpret
+    images and does NOT recommend acting on unreviewed metadata —
+    this surfaces the work, the provider decides whether to act.
+    """
+    from app.services.imaging_metadata import (
+        patients_with_unreviewed_imaging,
+    )
+
+    items: list[dict[str, Any]] = []
+    for entry in patients_with_unreviewed_imaging(caller.organization_id):
+        pid = int(entry["patient_id"])
+        unreviewed = int(entry["unreviewed_count"])
+        items.append(
+            _item(
+                item_id=f"imaging:unreviewed:{pid}",
+                patient_id=pid,
+                patients=patients,
+                specialty_source="imaging",
+                category="imaging_metadata_unreviewed",
+                label="Imaging metadata awaiting provider review",
+                detail=(
+                    f"{unreviewed} imaging metadata row(s) not yet marked "
+                    "reviewed. Informational only — ChartNav does not "
+                    "interpret images and never blocks signing."
+                ),
+                status="warning",
+                priority_bucket="informational",
+                insufficient_data=False,
+                requires_provider_review=True,
+            )
+        )
+    return items
+
+
 def _medication_items(
     caller: Caller, patients: dict[int, dict[str, Any]]
 ) -> list[dict[str, Any]]:
@@ -639,10 +678,11 @@ def build_action_queue(caller: Caller) -> dict[str, Any]:
     staging = _staging_items(caller, patients)
     medication = _medication_items(caller, patients)
     quality = _quality_items(caller, patients)
+    imaging = _imaging_metadata_items(caller, patients)
 
     all_items = (
         anti_vegf + glaucoma + cataract + unsigned
-        + staging + medication + quality
+        + staging + medication + quality + imaging
     )
     buckets: dict[str, list[dict[str, Any]]] = {b: [] for b in PRIORITY_BUCKETS}
     for it in all_items:

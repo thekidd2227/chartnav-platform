@@ -37,8 +37,10 @@ def test_get_returns_comprehensive_profile_by_default(client):
     assert body["encounter_type_label"] == "Comprehensive"
     profile = body["profile"]
     assert profile["code"] == "comprehensive"
-    # comprehensive surfaces all panels in priority — none collapsed.
-    assert profile["collapsed_panels"] == []
+    # Phase 88 — imaging_metadata is collapsed-but-accessible in
+    # comprehensive; every other panel remains prioritized.
+    collapsed_codes = {p["code"] for p in profile["collapsed_panels"]}
+    assert collapsed_codes == {"imaging_metadata"}
 
 
 def test_get_includes_supported_types_matrix(client):
@@ -121,7 +123,10 @@ def test_patch_to_comprehensive_returns_balanced_profile(client):
     body = _get(client).json()
     profile = body["profile"]
     assert profile["code"] == "comprehensive"
-    assert profile["collapsed_panels"] == []
+    # Phase 88 — imaging_metadata is collapsed-but-accessible in
+    # comprehensive (the only panel collapsed in that profile).
+    collapsed_codes = {p["code"] for p in profile["collapsed_panels"]}
+    assert collapsed_codes == {"imaging_metadata"}
     assert profile["visible_panels"] == []
 
 
@@ -159,6 +164,7 @@ _KNOWN_PANELS = {
     "disease_staging",
     "medication_safety",
     "quality_intelligence",
+    "imaging_metadata",
 }
 
 

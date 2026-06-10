@@ -104,6 +104,10 @@ def build_document_reference_resource(
 
     review = packet.get("review_sign_lock", {})
     all_signed = bool(review.get("all_signed"))
+    imaging_block = packet.get("imaging_metadata_summary", {}) or {}
+    imaging_total = int(imaging_block.get("total_count", 0))
+    imaging_reviewed = int(imaging_block.get("reviewed_count", 0))
+    imaging_hash = imaging_block.get("summary_hash") or ""
 
     resource: dict[str, Any] = {
         "resourceType": "DocumentReference",
@@ -204,7 +208,30 @@ def build_document_reference_resource(
                         "valueBoolean": all_signed,
                     },
                 ],
-            }
+            },
+            {
+                "url": (
+                    "https://chartnav.local/fhir/StructureDefinition/imaging-metadata-summary"
+                ),
+                "extension": [
+                    {
+                        "url": "total-count",
+                        "valueInteger": imaging_total,
+                    },
+                    {
+                        "url": "reviewed-count",
+                        "valueInteger": imaging_reviewed,
+                    },
+                    {
+                        "url": "unreviewed-count",
+                        "valueInteger": imaging_total - imaging_reviewed,
+                    },
+                    {
+                        "url": "summary-hash",
+                        "valueString": imaging_hash,
+                    },
+                ],
+            },
         ],
     }
 

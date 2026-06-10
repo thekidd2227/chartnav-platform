@@ -602,6 +602,18 @@ def build_summary(encounter_id: int, caller: Caller) -> dict[str, Any]:
         encounter["id"], encounter["organization_id"]
     )
 
+    # Phase 88 — metadata-only imaging review summary. Counts +
+    # per-modality-group buckets + a deterministic summary hash.
+    # ChartNav does NOT interpret images and does NOT infer
+    # modality / laterality from imaging.
+    from app.services.imaging_metadata import (
+        summary_for_encounter as _imaging_summary,
+    )
+
+    imaging_metadata_summary = _imaging_summary(
+        encounter["id"], encounter["organization_id"]
+    )
+
     return {
         "encounter_id": encounter["id"],
         "patient_id": encounter["patient_id"],
@@ -618,6 +630,7 @@ def build_summary(encounter_id: int, caller: Caller) -> dict[str, Any]:
         "role_capabilities": _role_capabilities(caller.role),
         "evidence_timeline": timeline,
         "disease_staging_summary": disease_staging_summary,
+        "imaging_metadata_summary": imaging_metadata_summary,
         "workspace_profile": workspace_profile,
         "quality_intelligence_summary": quality_intelligence_summary,
         "audit_disclosure": (
@@ -626,12 +639,14 @@ def build_summary(encounter_id: int, caller: Caller) -> dict[str, Any]:
             "trail does not store clinical free text (no transcripts, "
             "BP/IOP/VA values, chief complaint, HPI, or findings text). "
             "Disease staging is provider-entered; ChartNav does not "
-            "stage disease or interpret imaging. The workspace profile "
-            "is a deterministic mapping from the provider-entered "
-            "encounter type; ChartNav does not autonomously classify "
-            "the encounter. Quality intelligence is provider-reviewed "
-            "documentation support; ChartNav does not submit to CMS, "
-            "IRIS, payers, or registries, and does not autonomously "
-            "compute MIPS scoring."
+            "stage disease or interpret imaging. Imaging metadata is "
+            "structured metadata only — ChartNav does not interpret "
+            "images, infer findings, or autonomously classify modality "
+            "or laterality. The workspace profile is a deterministic "
+            "mapping from the provider-entered encounter type; ChartNav "
+            "does not autonomously classify the encounter. Quality "
+            "intelligence is provider-reviewed documentation support; "
+            "ChartNav does not submit to CMS, IRIS, payers, or "
+            "registries, and does not autonomously compute MIPS scoring."
         ),
     }
