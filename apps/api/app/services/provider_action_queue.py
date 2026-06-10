@@ -512,6 +512,39 @@ def _unsigned_artifact_items(
 # ---------------------------------------------------------------------------
 
 
+def _staging_items(
+    caller: Caller, patients: dict[int, dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Phase 84 — informational items for patients with retina/glaucoma
+    activity but no provider-entered disease-staging record. Always
+    'informational' / never tier 1."""
+    from app.services.disease_staging import patients_missing_recent_stage
+
+    items: list[dict[str, Any]] = []
+    for entry in patients_missing_recent_stage(caller.organization_id):
+        pid = int(entry["patient_id"])
+        items.append(
+            _item(
+                item_id=f"staging:missing:{pid}",
+                patient_id=pid,
+                patients=patients,
+                specialty_source="staging",
+                category="staging_missing",
+                label="Disease staging not documented",
+                detail=(
+                    "Patient has retina or glaucoma activity but no "
+                    "provider-entered disease-staging record on file. "
+                    "Informational only — never blocks signing."
+                ),
+                status="missing",
+                priority_bucket="informational",
+                insufficient_data=True,
+                requires_provider_review=True,
+            )
+        )
+    return items
+
+
 def build_action_queue(caller: Caller) -> dict[str, Any]:
     """Build the deterministic cross-specialty action queue for the
     caller's organization."""
@@ -522,8 +555,9 @@ def build_action_queue(caller: Caller) -> dict[str, Any]:
         unsigned = _unsigned_artifact_items(conn, caller, patients)
 
     anti_vegf = _anti_vegf_items(caller, patients)
+    staging = _staging_items(caller, patients)
 
-    all_items = anti_vegf + glaucoma + cataract + unsigned
+    all_items = anti_vegf + glaucoma + cataract + unsigned + staging
     buckets: dict[str, list[dict[str, Any]]] = {b: [] for b in PRIORITY_BUCKETS}
     for it in all_items:
         buckets[it["priority_bucket"]].append(it)

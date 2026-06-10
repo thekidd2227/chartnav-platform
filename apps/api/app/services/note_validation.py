@@ -570,6 +570,43 @@ def _check_specialty_data_present(
             source="cataract",
         )
     )
+
+    # Phase 84 — informational stage-documentation signal. Never blocks
+    # signing; never requires acknowledgement. The provider stages the
+    # disease — ChartNav merely surfaces whether a stage row exists.
+    from app.services.disease_staging import latest_for_patient as _staging_latest
+
+    stage_rows = _staging_latest(pid, org)
+    if stage_rows:
+        systems = ", ".join(sorted({r["staging_system_label"] for r in stage_rows}))
+        out.append(
+            _check(
+                check_id="staging:documented",
+                category="staging",
+                label="Disease staging documented",
+                status="pass",
+                detail=(
+                    f"{len(stage_rows)} provider-entered staging record(s) "
+                    f"on file ({systems})."
+                ),
+                source="visit_draft",
+            )
+        )
+    else:
+        out.append(
+            _check(
+                check_id="staging:missing",
+                category="staging",
+                label="Disease staging not documented",
+                status="missing",
+                detail=(
+                    "No provider-entered disease-staging record on file for "
+                    "this patient. Staging is informational and never blocks "
+                    "signing."
+                ),
+                source="visit_draft",
+            )
+        )
     return out
 
 
