@@ -64,6 +64,7 @@ import { AmbientDocumentationPanel } from "./features/ambient/AmbientDocumentati
 import { VitalsWorkupPanel } from "./features/vitals/VitalsWorkupPanel";
 import { ProviderActionItemQueue } from "./features/action-queue/ProviderActionItemQueue";
 import { InjectionCommandPanel } from "./features/anti-vegf/InjectionCommandPanel";
+import { NoteValidationRail } from "./features/note-validation/NoteValidationRail";
 import { CataractSurgicalWorkflowPanel } from "./features/cataract/CataractSurgicalWorkflowPanel";
 import { GlaucomaProgressionCockpit } from "./features/glaucoma/GlaucomaProgressionCockpit";
 import { RetinaVisitPacketPanel } from "./features/retina-summary/RetinaVisitPacketPanel";
@@ -514,6 +515,15 @@ function OverviewTab({
           data-testid="ctw-card-provider-action-queue"
         >
           <ProviderActionItemQueue />
+        </section>
+      )}
+
+      {nativeEncounter && typeof encounter.id === "number" && (
+        <section
+          className="ctw-card ctw-card--wide"
+          data-testid="ctw-card-note-validation-rail"
+        >
+          <NoteValidationRail encounterId={encounter.id} />
         </section>
       )}
 
