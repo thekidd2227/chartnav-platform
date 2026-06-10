@@ -13,7 +13,8 @@ export type ActionQueueSource =
   | "visit_summary"
   | "signed_lock"
   | "staging"
-  | "medication";
+  | "medication"
+  | "quality";
 
 export interface ActionQueueItem {
   item_id: string;

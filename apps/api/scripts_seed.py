@@ -700,6 +700,97 @@ def _admin_user_id_for_org(conn, org_id: int) -> int | None:
     return _user_id_for_org_role(conn, org_id, "admin")
 
 
+_PHASE_89_QUALITY_SPECS = (
+    {
+        "measure_id": "chartnav_demo_ophth_dr_communication",
+        "measure_name": (
+            "Diabetic Retinopathy: Communication with primary "
+            "care physician (DEMO — internal placeholder, NOT verified for submission)"
+        ),
+        "program_year": 2026,
+        "applicable_icd10_prefixes": ["E10.3", "E11.3"],
+        "required_fields": [
+            "visit_draft_signed",
+            "disease_stage_documented",
+        ],
+        "exception_codes": ["patient_refused", "documentation_other"],
+    },
+    {
+        "measure_id": "chartnav_demo_ophth_poag_iop_documentation",
+        "measure_name": (
+            "Primary Open-Angle Glaucoma: IOP documentation "
+            "(DEMO — internal placeholder, NOT verified for submission)"
+        ),
+        "program_year": 2026,
+        "applicable_icd10_prefixes": ["H40.1"],
+        "required_fields": [
+            "iop_documented",
+            "visit_draft_signed",
+        ],
+        "exception_codes": ["patient_refused", "documentation_other"],
+    },
+    {
+        "measure_id": "chartnav_demo_ophth_dr_screening",
+        "measure_name": (
+            "Diabetic Retinopathy: Documented screening within 12 months "
+            "(DEMO — internal placeholder, NOT verified for submission)"
+        ),
+        "program_year": 2026,
+        "applicable_icd10_prefixes": ["E10.3", "E11.3"],
+        "required_fields": [
+            "fundus_chart_signed",
+            "imaging_reviewed",
+        ],
+        "exception_codes": ["patient_refused", "documentation_other"],
+    },
+)
+
+
+def _ensure_phase_89_quality_specs(conn) -> int:
+    """Phase 89 — idempotent seed of internal demo quality measure specs.
+
+    Specs are global (organization_id IS NULL) and marked as DEMO in the
+    measure_name so they are never confused with verified submission
+    specs. The service layer treats every measure_id in the
+    ``INTERNAL_DEMO_MEASURE_IDS`` set as ``verified_for_submission=false``.
+    """
+    import json as _json
+
+    inserted = 0
+    for spec in _PHASE_89_QUALITY_SPECS:
+        existing = conn.execute(
+            text(
+                "SELECT id FROM quality_measure_specs "
+                "WHERE organization_id IS NULL AND measure_id = :mid "
+                "AND program_year = :py"
+            ),
+            {"mid": spec["measure_id"], "py": spec["program_year"]},
+        ).fetchone()
+        if existing is not None:
+            continue
+        conn.execute(
+            text(
+                "INSERT INTO quality_measure_specs ("
+                "organization_id, measure_id, measure_name, program_year, "
+                "applicable_icd10_prefixes, required_fields, "
+                "exception_codes, status"
+                ") VALUES ("
+                "NULL, :mid, :mname, :py, :icd, :req, :exc, 'active'"
+                ")"
+            ),
+            {
+                "mid": spec["measure_id"],
+                "mname": spec["measure_name"],
+                "py": spec["program_year"],
+                "icd": _json.dumps(spec["applicable_icd10_prefixes"]),
+                "req": _json.dumps(spec["required_fields"]),
+                "exc": _json.dumps(spec["exception_codes"]),
+            },
+        )
+        inserted += 1
+    return inserted
+
+
 def main() -> None:
     summary = []
     with transaction() as conn:
@@ -760,10 +851,19 @@ def main() -> None:
                 summary.append(("phase_24b_wedge", org_id, wedge_counts))
             summary.append((org_fx["slug"], org_id, loc_id))
 
+        # Phase 89 — idempotent seed of internal DEMO quality measure
+        # specs. Global rows (organization_id IS NULL). Marked as DEMO
+        # in measure_name; the service layer flags every internal-demo
+        # measure_id as verified_for_submission=false.
+        phase89_inserted = _ensure_phase_89_quality_specs(conn)
+        summary.append(("phase_89_quality_specs", None, phase89_inserted))
+
     print("Seed complete.")
     for item in summary:
         if item[0] == "phase_24b_wedge":
             print(f"  phase_24b_wedge: organization_id={item[1]} {item[2]}")
+        elif item[0] == "phase_89_quality_specs":
+            print(f"  phase_89_quality_specs: inserted={item[2]}")
         else:
             slug, org_id, loc_id = item
             print(f"  {slug}: organization_id={org_id} location_id={loc_id}")
