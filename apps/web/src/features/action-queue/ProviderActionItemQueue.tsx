@@ -47,6 +47,7 @@ const SOURCE_LABELS: Record<ActionQueueSource, string> = {
   visit_summary: "Visit summary",
   signed_lock: "Signed lock",
   staging: "Disease staging",
+  medication: "Medication safety",
 };
 
 function pill(

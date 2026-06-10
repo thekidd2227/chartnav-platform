@@ -143,6 +143,27 @@ def _hash_artifact(section: dict[str, Any], section_name: str) -> dict[str, Any]
     }
 
 
+def _build_medication_safety_section(summary: dict[str, Any]) -> dict[str, Any]:
+    """Phase 85 — embed the metadata-only medication safety summary in
+    the packet. Pure counts; no clinical narrative; no prescription
+    workflow."""
+    from app.services.medications import medication_safety_summary
+
+    pid = summary.get("patient_id")
+    org = summary.get("organization_id")
+    if not isinstance(pid, int) or not isinstance(org, int):
+        return {
+            "active_medication_count": 0,
+            "preservative_burden": 0,
+            "refill_gap_count": 0,
+            "refill_gap_medication_ids": [],
+            "allergy_count": 0,
+            "medication_classes_present": [],
+            "insufficient_data": True,
+        }
+    return medication_safety_summary(pid, org)
+
+
 def build_packet(encounter_id: int, caller: Caller) -> dict[str, Any]:
     """Build the retina visit packet for one encounter.
 
@@ -226,6 +247,7 @@ def build_packet(encounter_id: int, caller: Caller) -> dict[str, Any]:
                 "insufficient_data": True,
             },
         ),
+        "medication_safety_summary": _build_medication_safety_section(summary),
         "artifact_hashes": [
             _hash_artifact(vitals_sec, "intake"),
             _hash_artifact(visit_sec, "visit_draft"),

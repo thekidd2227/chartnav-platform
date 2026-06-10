@@ -545,6 +545,42 @@ def _staging_items(
     return items
 
 
+def _medication_items(
+    caller: Caller, patients: dict[int, dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Phase 85 — informational items for patients whose active
+    medications carry at least one refill gap. Always 'informational' /
+    never tier 1. ChartNav does NOT refill, does NOT contact the
+    pharmacy, and does NOT recommend medication changes."""
+    from app.services.medications import patients_with_refill_gaps
+
+    items: list[dict[str, Any]] = []
+    for entry in patients_with_refill_gaps(caller.organization_id):
+        pid = int(entry["patient_id"])
+        gap_count = int(entry["gap_count"])
+        max_gap = int(entry["max_gap_days"])
+        items.append(
+            _item(
+                item_id=f"medication:refill_gap:{pid}",
+                patient_id=pid,
+                patients=patients,
+                specialty_source="medication",
+                category="medication_refill_gap",
+                label="Medication refill gap on file",
+                detail=(
+                    f"{gap_count} active medication(s) with refill gap; "
+                    f"longest gap is {max_gap} day(s). Informational only — "
+                    "ChartNav does not refill or contact the pharmacy."
+                ),
+                status="warning",
+                priority_bucket="informational",
+                insufficient_data=False,
+                requires_provider_review=True,
+            )
+        )
+    return items
+
+
 def build_action_queue(caller: Caller) -> dict[str, Any]:
     """Build the deterministic cross-specialty action queue for the
     caller's organization."""
@@ -556,8 +592,9 @@ def build_action_queue(caller: Caller) -> dict[str, Any]:
 
     anti_vegf = _anti_vegf_items(caller, patients)
     staging = _staging_items(caller, patients)
+    medication = _medication_items(caller, patients)
 
-    all_items = anti_vegf + glaucoma + cataract + unsigned + staging
+    all_items = anti_vegf + glaucoma + cataract + unsigned + staging + medication
     buckets: dict[str, list[dict[str, Any]]] = {b: [] for b in PRIORITY_BUCKETS}
     for it in all_items:
         buckets[it["priority_bucket"]].append(it)

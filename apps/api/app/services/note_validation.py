@@ -607,6 +607,58 @@ def _check_specialty_data_present(
                 source="visit_draft",
             )
         )
+
+    # Phase 85 — informational medication-documentation + refill-gap signal.
+    # Never blocks signing; never requires acknowledgement. ChartNav does
+    # NOT prescribe, refill, or recommend medication changes.
+    from app.services.medications import medication_safety_summary as _med_summary
+
+    med_summary = _med_summary(pid, org)
+    if med_summary["active_medication_count"] > 0:
+        if med_summary["refill_gap_count"] > 0:
+            out.append(
+                _check(
+                    check_id="medication:refill_gap",
+                    category="medication",
+                    label="Medication refill gap on file",
+                    status="warning",
+                    detail=(
+                        f"{med_summary['refill_gap_count']} of "
+                        f"{med_summary['active_medication_count']} active "
+                        "medication(s) have a refill gap. Informational "
+                        "only — never blocks signing."
+                    ),
+                    source="visit_draft",
+                )
+            )
+        else:
+            out.append(
+                _check(
+                    check_id="medication:documented",
+                    category="medication",
+                    label="Active medications documented",
+                    status="pass",
+                    detail=(
+                        f"{med_summary['active_medication_count']} active "
+                        "provider-entered medication(s) on file."
+                    ),
+                    source="visit_draft",
+                )
+            )
+    else:
+        out.append(
+            _check(
+                check_id="medication:missing",
+                category="medication",
+                label="No active medications documented",
+                status="missing",
+                detail=(
+                    "No active provider-entered medications on file for "
+                    "this patient. Informational only — never blocks signing."
+                ),
+                source="visit_draft",
+            )
+        )
     return out
 
 
