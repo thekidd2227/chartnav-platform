@@ -19,6 +19,7 @@ from app.api.multi_clinic import router as multi_clinic_router
 from app.api.patient_summaries import router as patient_summaries_router
 from app.api.pre_visit_briefs import router as pre_visit_briefs_router
 from app.api.provider_action_items import router as provider_action_items_router
+from app.api.provider_action_queue import router as provider_action_queue_router
 from app.api.retina_visit_packet import router as retina_visit_packet_router
 from app.api.retina_visit_summary import router as retina_visit_summary_router
 from app.api.role_dashboards import router as role_dashboards_router
@@ -122,6 +123,7 @@ app.include_router(scribe_sessions_router)
 app.include_router(patient_summaries_router)
 app.include_router(pre_visit_briefs_router)
 app.include_router(provider_action_items_router)
+app.include_router(provider_action_queue_router)
 app.include_router(retina_visit_packet_router)
 app.include_router(retina_visit_summary_router)
 app.include_router(structured_data_router)
