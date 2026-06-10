@@ -267,3 +267,33 @@ describe("RetinaVisitSummaryPanel — timeline + interaction", () => {
     expect(screen.getByTestId("retina-summary-refresh-btn")).toBeInTheDocument();
   });
 });
+
+describe("RetinaVisitSummaryPanel — Phase 83 note-validation events", () => {
+  it("renders note_validation/acknowledged events from the evidence timeline", async () => {
+    const s = fullSummary();
+    s.evidence_timeline = [
+      ...s.evidence_timeline,
+      {
+        artifact_type: "note_validation",
+        event_type: "acknowledged",
+        timestamp: "2026-05-19T08:00:00Z",
+        ref_id: 99,
+        actor_display_name: "Casey Clinician",
+        actor_role: "clinician",
+        validation_item_id: "laterality:rollup",
+        validation_category: "laterality",
+        acknowledgement_type: "acknowledged",
+      },
+    ];
+    vi.mocked(getRetinaVisitSummary).mockResolvedValueOnce(s);
+    render(<RetinaVisitSummaryPanel encounterId={1} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("retina-summary-timeline")).toBeInTheDocument(),
+    );
+    const events = screen.getAllByTestId(/^retina-summary-event-\d+$/);
+    const last = events[events.length - 1]!;
+    expect(last.textContent).toMatch(/Note validation/);
+    expect(last.textContent).toMatch(/Acknowledged/);
+    expect(last.textContent).toMatch(/Casey Clinician/);
+  });
+});

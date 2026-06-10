@@ -6,9 +6,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../features/note-validation/noteValidationApi", () => ({
   getNoteValidation: vi.fn(),
+  getNoteValidationAcknowledgements: vi.fn(),
+  postNoteValidationAcknowledgement: vi.fn(),
 }));
 
-import { getNoteValidation } from "../features/note-validation/noteValidationApi";
+import {
+  getNoteValidation,
+  getNoteValidationAcknowledgements,
+  postNoteValidationAcknowledgement,
+} from "../features/note-validation/noteValidationApi";
 import { NoteValidationRail } from "../features/note-validation/NoteValidationRail";
 import type {
   NoteValidationCheck,
@@ -111,6 +117,21 @@ function richResponse(): NoteValidationRailResponse {
 
 beforeEach(() => {
   vi.mocked(getNoteValidation).mockReset();
+  vi.mocked(getNoteValidationAcknowledgements).mockReset();
+  vi.mocked(getNoteValidationAcknowledgements).mockResolvedValue([]);
+  vi.mocked(postNoteValidationAcknowledgement).mockReset();
+  vi.mocked(postNoteValidationAcknowledgement).mockResolvedValue({
+    id: 1,
+    audit_created_at: "2026-06-10T01:00:00Z",
+    encounter_id: 1,
+    actor_id: 2,
+    actor_display_name: "Casey Clinician",
+    actor_role: "clinician",
+    validation_item_id: "stub",
+    validation_category: "stub",
+    acknowledgement_type: "acknowledged",
+    acknowledgement_timestamp: "2026-06-10T01:00:00Z",
+  });
 });
 
 describe("NoteValidationRail — base render", () => {
@@ -342,5 +363,139 @@ describe("NoteValidationRail — interaction + safety", () => {
     ]) {
       expect(body, `forbidden phrase: ${forbidden}`).not.toContain(forbidden);
     }
+  });
+});
+
+describe("NoteValidationRail — Phase 83 persistence", () => {
+  it("hydrates persisted acknowledgements from server on mount", async () => {
+    vi.mocked(getNoteValidation).mockResolvedValueOnce(richResponse());
+    vi.mocked(getNoteValidationAcknowledgements).mockResolvedValueOnce([
+      {
+        id: 42,
+        audit_created_at: "2026-06-10T01:00:00Z",
+        encounter_id: 1,
+        actor_id: 2,
+        actor_display_name: "Casey Clinician",
+        actor_role: "clinician",
+        validation_item_id: "laterality:rollup",
+        validation_category: "laterality",
+        acknowledgement_type: "acknowledged",
+        acknowledgement_timestamp: "2026-06-10T01:00:00Z",
+      },
+    ]);
+    render(<NoteValidationRail encounterId={1} />);
+    await waitFor(() =>
+      expect(
+        screen.getByTestId(
+          "note-validation-check-laterality:rollup-persisted-ack",
+        ),
+      ).toBeInTheDocument(),
+    );
+    const note = screen.getByTestId(
+      "note-validation-check-laterality:rollup-persisted-ack",
+    );
+    expect(note.textContent).toMatch(/Acknowledged by Casey Clinician/);
+    expect(note.textContent).toMatch(/\(clinician\)/);
+    // Seeded checkbox state reflects the persisted ack.
+    expect(
+      (
+        screen.getByTestId(
+          "note-validation-check-laterality:rollup-ack-checkbox",
+        ) as HTMLInputElement
+      ).checked,
+    ).toBe(true);
+  });
+
+  it("POSTs to /acknowledgements when the operator toggles a checkbox", async () => {
+    vi.mocked(getNoteValidation).mockResolvedValueOnce(richResponse());
+    render(<NoteValidationRail encounterId={1} />);
+    await waitFor(() =>
+      expect(
+        screen.getByTestId(
+          "note-validation-check-laterality:rollup-ack-checkbox",
+        ),
+      ).toBeInTheDocument(),
+    );
+    await userEvent.click(
+      screen.getByTestId(
+        "note-validation-check-laterality:rollup-ack-checkbox",
+      ),
+    );
+    await waitFor(() =>
+      expect(postNoteValidationAcknowledgement).toHaveBeenCalled(),
+    );
+    const args = vi
+      .mocked(postNoteValidationAcknowledgement)
+      .mock.calls[0]!;
+    expect(args[0]).toBe(1);
+    expect(args[1].validation_item_id).toBe("laterality:rollup");
+    expect(args[1].validation_category).toBe("laterality");
+    expect(args[1].acknowledgement_type).toBe("acknowledged");
+  });
+
+  it("posts an explicit 'rescinded' record when the operator unticks", async () => {
+    vi.mocked(getNoteValidation).mockResolvedValueOnce(richResponse());
+    vi.mocked(getNoteValidationAcknowledgements).mockResolvedValueOnce([
+      {
+        id: 99,
+        audit_created_at: "2026-06-10T01:00:00Z",
+        encounter_id: 1,
+        actor_id: 2,
+        actor_display_name: "Casey Clinician",
+        actor_role: "clinician",
+        validation_item_id: "laterality:rollup",
+        validation_category: "laterality",
+        acknowledgement_type: "acknowledged",
+        acknowledgement_timestamp: "2026-06-10T01:00:00Z",
+      },
+    ]);
+    render(<NoteValidationRail encounterId={1} />);
+    await waitFor(() =>
+      expect(
+        screen.getByTestId(
+          "note-validation-check-laterality:rollup-persisted-ack",
+        ),
+      ).toBeInTheDocument(),
+    );
+    await userEvent.click(
+      screen.getByTestId(
+        "note-validation-check-laterality:rollup-ack-checkbox",
+      ),
+    );
+    await waitFor(() =>
+      expect(postNoteValidationAcknowledgement).toHaveBeenCalled(),
+    );
+    expect(
+      vi.mocked(postNoteValidationAcknowledgement).mock.calls[0]![1]
+        .acknowledgement_type,
+    ).toBe("rescinded");
+  });
+
+  it("reverts the checkbox and surfaces an ack-error banner on POST failure", async () => {
+    vi.mocked(getNoteValidation).mockResolvedValueOnce(richResponse());
+    vi.mocked(postNoteValidationAcknowledgement).mockRejectedValueOnce(
+      new Error("HTTP 503 ack failed"),
+    );
+    render(<NoteValidationRail encounterId={1} />);
+    await waitFor(() =>
+      expect(
+        screen.getByTestId(
+          "note-validation-check-laterality:rollup-ack-checkbox",
+        ),
+      ).toBeInTheDocument(),
+    );
+    const cb = screen.getByTestId(
+      "note-validation-check-laterality:rollup-ack-checkbox",
+    ) as HTMLInputElement;
+    await userEvent.click(cb);
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("note-validation-ack-error"),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      screen.getByTestId("note-validation-ack-error").textContent,
+    ).toMatch(/HTTP 503/);
+    expect(cb.checked).toBe(false);
   });
 });

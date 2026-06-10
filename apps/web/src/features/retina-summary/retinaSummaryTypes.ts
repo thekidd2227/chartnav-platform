@@ -26,8 +26,16 @@ export interface RetinaSummaryRoleCapabilities {
   explainer: string;
 }
 
-export type RetinaArtifactType = "vitals_workup" | "visit_draft" | "fundus_chart";
-export type RetinaEventType = "created" | "reviewed" | "signed";
+export type RetinaArtifactType =
+  | "vitals_workup"
+  | "visit_draft"
+  | "fundus_chart"
+  | "note_validation";
+export type RetinaEventType =
+  | "created"
+  | "reviewed"
+  | "signed"
+  | "acknowledged";
 
 export interface RetinaSummaryEvent {
   artifact_type: RetinaArtifactType;
@@ -40,6 +48,9 @@ export interface RetinaSummaryEvent {
   element_count?: number;
   laterality?: string;
   source_type?: string;
+  validation_item_id?: string;
+  validation_category?: string;
+  acknowledgement_type?: "acknowledged" | "rescinded";
 }
 
 export interface RetinaVisitSummary {

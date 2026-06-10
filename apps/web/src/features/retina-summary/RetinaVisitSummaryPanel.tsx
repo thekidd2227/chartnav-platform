@@ -56,11 +56,13 @@ function statusLabel(status: string | null): string {
 function artifactLabel(t: RetinaArtifactType): string {
   if (t === "vitals_workup") return "Vitals";
   if (t === "visit_draft") return "VisitDraft";
+  if (t === "note_validation") return "Note validation";
   return "Fundus";
 }
 
 function eventLabel(t: RetinaSummaryEvent["event_type"]): string {
   if (t === "created") return "Created";
+  if (t === "acknowledged") return "Acknowledged";
   if (t === "reviewed") return "Reviewed";
   return "Signed";
 }

@@ -35,3 +35,18 @@ export interface NoteValidationRailResponse {
   acknowledgements_required: number;
   disclosure: string;
 }
+
+export type AcknowledgementType = "acknowledged" | "rescinded";
+
+export interface NoteValidationAcknowledgement {
+  id: number;
+  audit_created_at: string | null;
+  encounter_id: number;
+  actor_id: number | null;
+  actor_display_name: string | null;
+  actor_role: string | null;
+  validation_item_id: string;
+  validation_category: string;
+  acknowledgement_type: AcknowledgementType;
+  acknowledgement_timestamp: string;
+}
