@@ -13,13 +13,64 @@
 // posts to the API in this phase.
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { getNoteValidation } from "./noteValidationApi";
+import {
+  getNoteValidation,
+  getNoteValidationAcknowledgements,
+  postNoteValidationAcknowledgement,
+} from "./noteValidationApi";
 import type {
+  NoteValidationAcknowledgement,
   NoteValidationCheck,
   NoteValidationRailResponse,
   NoteValidationSource,
   NoteValidationStatus,
 } from "./noteValidationTypes";
+
+function fmtTime(iso: string | null | undefined): string {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleString();
+  } catch {
+    return iso;
+  }
+}
+
+interface AckMeta {
+  display_name: string | null;
+  role: string | null;
+  timestamp: string;
+}
+
+function latestAckByItem(
+  rows: NoteValidationAcknowledgement[],
+): Map<string, AckMeta> {
+  // The list is server-ordered newest-first. We map each item_id to its
+  // most recent row whose acknowledgement_type is "acknowledged" (a
+  // "rescinded" row supersedes — it removes the entry).
+  const out = new Map<string, AckMeta>();
+  for (const r of rows) {
+    if (out.has(r.validation_item_id)) continue;
+    if (r.acknowledgement_type === "acknowledged") {
+      out.set(r.validation_item_id, {
+        display_name: r.actor_display_name,
+        role: r.actor_role,
+        timestamp: r.acknowledgement_timestamp,
+      });
+    } else if (r.acknowledgement_type === "rescinded") {
+      // Mark a sentinel; iterating older rows shouldn't reintroduce it.
+      out.set(r.validation_item_id, {
+        display_name: null,
+        role: null,
+        timestamp: "",
+      });
+    }
+  }
+  // Drop sentinel entries with empty timestamp.
+  for (const [k, v] of Array.from(out.entries())) {
+    if (!v.timestamp) out.delete(k);
+  }
+  return out;
+}
 
 interface Props {
   encounterId: number;
@@ -83,10 +134,14 @@ function pill(
 function CheckRow({
   check,
   acknowledged,
+  persistedAck,
+  pending,
   onToggle,
 }: {
   check: NoteValidationCheck;
   acknowledged: boolean;
+  persistedAck: AckMeta | undefined;
+  pending: boolean;
   onToggle: () => void;
 }) {
   const meta = STATUS_META[check.status];
@@ -136,17 +191,39 @@ function CheckRow({
             marginTop: 6,
             fontSize: 12,
             color: "#7c2d12",
-            cursor: "pointer",
+            cursor: pending ? "wait" : "pointer",
+            opacity: pending ? 0.7 : 1,
           }}
         >
           <input
             type="checkbox"
             data-testid={`${tid}-ack-checkbox`}
             checked={acknowledged}
+            disabled={pending}
             onChange={onToggle}
           />
-          Provider acknowledged
+          {pending ? "Saving acknowledgement…" : "Provider acknowledged"}
         </label>
+      )}
+      {persistedAck && (
+        <div
+          data-testid={`${tid}-persisted-ack`}
+          style={{
+            marginTop: 4,
+            padding: "4px 8px",
+            background: "#f0fff4",
+            border: "1px solid #9ae6b4",
+            borderRadius: 4,
+            fontSize: 11,
+            color: "#1c4532",
+          }}
+        >
+          Acknowledged by {persistedAck.display_name ?? "Unknown"}
+          {persistedAck.role && (
+            <> ({persistedAck.role})</>
+          )}{" "}
+          at {fmtTime(persistedAck.timestamp)}
+        </div>
       )}
     </li>
   );
@@ -157,14 +234,30 @@ export function NoteValidationRail({ encounterId }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [acks, setAcks] = useState<Record<string, boolean>>({});
+  const [persistedAcks, setPersistedAcks] = useState<
+    NoteValidationAcknowledgement[]
+  >([]);
+  const [pendingAcks, setPendingAcks] = useState<Record<string, boolean>>({});
+  const [ackError, setAckError] = useState<string | null>(null);
 
   const fetchRail = useCallback(() => {
     setLoading(true);
     setError(null);
-    getNoteValidation(encounterId)
-      .then((r) => {
-        setData(r);
-        setAcks({});
+    Promise.all([
+      getNoteValidation(encounterId),
+      getNoteValidationAcknowledgements(encounterId).catch(() => []),
+    ])
+      .then(([rail, history]) => {
+        setData(rail);
+        setPersistedAcks(history);
+        // Seed in-session acks from server history so the checkbox
+        // reflects persisted state on mount / refresh.
+        const seed: Record<string, boolean> = {};
+        const latest = latestAckByItem(history);
+        latest.forEach((_, k) => {
+          seed[k] = true;
+        });
+        setAcks(seed);
       })
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
@@ -173,6 +266,38 @@ export function NoteValidationRail({ encounterId }: Props) {
   useEffect(() => {
     fetchRail();
   }, [fetchRail]);
+
+  const latestByItem = useMemo(
+    () => latestAckByItem(persistedAcks),
+    [persistedAcks],
+  );
+
+  const persistAck = useCallback(
+    async (check: NoteValidationCheck, nextChecked: boolean) => {
+      setPendingAcks((p) => ({ ...p, [check.check_id]: true }));
+      setAckError(null);
+      try {
+        const row = await postNoteValidationAcknowledgement(encounterId, {
+          validation_item_id: check.check_id,
+          validation_category: check.category,
+          acknowledgement_type: nextChecked ? "acknowledged" : "rescinded",
+        });
+        setPersistedAcks((prev) => [row, ...prev]);
+        setAcks((prev) => ({ ...prev, [check.check_id]: nextChecked }));
+      } catch (e) {
+        setAckError(e instanceof Error ? e.message : "Acknowledgement failed");
+        // Revert local state on failure.
+        setAcks((prev) => ({ ...prev, [check.check_id]: !nextChecked }));
+      } finally {
+        setPendingAcks((p) => {
+          const next = { ...p };
+          delete next[check.check_id];
+          return next;
+        });
+      }
+    },
+    [encounterId],
+  );
 
   const ackRequired = useMemo(
     () =>
@@ -304,18 +429,39 @@ export function NoteValidationRail({ encounterId }: Props) {
             </p>
           )}
 
+          {ackError && (
+            <p
+              data-testid="note-validation-ack-error"
+              style={{
+                color: "#822727",
+                fontSize: 12,
+                marginBottom: 8,
+                background: "#fff5f5",
+                border: "1px solid #fed7d7",
+                borderRadius: 6,
+                padding: 8,
+              }}
+            >
+              {ackError}
+            </p>
+          )}
+
           <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
             {data.checks.map((check) => (
               <CheckRow
                 key={check.check_id}
                 check={check}
                 acknowledged={!!acks[check.check_id]}
-                onToggle={() =>
-                  setAcks((prev) => ({
-                    ...prev,
-                    [check.check_id]: !prev[check.check_id],
-                  }))
-                }
+                persistedAck={latestByItem.get(check.check_id)}
+                pending={!!pendingAcks[check.check_id]}
+                onToggle={() => {
+                  if (pendingAcks[check.check_id]) return;
+                  const next = !acks[check.check_id];
+                  // Optimistically update the checkbox; persistAck will
+                  // revert on failure.
+                  setAcks((prev) => ({ ...prev, [check.check_id]: next }));
+                  void persistAck(check, next);
+                }}
               />
             ))}
           </ul>

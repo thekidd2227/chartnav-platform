@@ -552,6 +552,17 @@ def build_summary(encounter_id: int, caller: Caller) -> dict[str, Any]:
     blockers = _blockers(vitals_summary, scribe_summary, fundus_summary)
     timeline = _build_timeline(vitals, scribes, fundus, users)
 
+    # Phase 83 — fold provider acknowledgement audit events into the
+    # cross-artifact evidence timeline. Imported lazily to keep the
+    # Phase 76 module self-contained.
+    from app.services.note_validation_acknowledgements import (
+        list_for_summary_timeline,
+    )
+
+    ack_events = list_for_summary_timeline(encounter_id, caller.organization_id)
+    timeline.extend(ack_events)
+    timeline.sort(key=lambda e: e["timestamp"])
+
     return {
         "encounter_id": encounter["id"],
         "patient_id": encounter["patient_id"],

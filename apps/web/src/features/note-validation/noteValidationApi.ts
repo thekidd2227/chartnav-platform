@@ -1,7 +1,10 @@
 // Phase 82 — Note Validation Rail API client.
 
 import { API_URL } from "../../api";
-import type { NoteValidationRailResponse } from "./noteValidationTypes";
+import type {
+  NoteValidationAcknowledgement,
+  NoteValidationRailResponse,
+} from "./noteValidationTypes";
 
 const PATH_PREFIX = "/api/v1";
 
@@ -48,4 +51,36 @@ export function getNoteValidation(
   email?: string | null,
 ): Promise<NoteValidationRailResponse> {
   return apiFetch(`/encounters/${encounterId}/note-validation`, { email });
+}
+
+export function getNoteValidationAcknowledgements(
+  encounterId: number,
+  email?: string | null,
+): Promise<NoteValidationAcknowledgement[]> {
+  return apiFetch(
+    `/encounters/${encounterId}/note-validation/acknowledgements`,
+    { email },
+  );
+}
+
+export interface CreateAckPayload {
+  validation_item_id: string;
+  validation_category: string;
+  acknowledgement_type?: "acknowledged" | "rescinded";
+}
+
+export function postNoteValidationAcknowledgement(
+  encounterId: number,
+  body: CreateAckPayload,
+  email?: string | null,
+): Promise<NoteValidationAcknowledgement> {
+  return apiFetch(
+    `/encounters/${encounterId}/note-validation/acknowledgements`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      email,
+    },
+  );
 }
