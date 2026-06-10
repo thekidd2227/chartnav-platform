@@ -14,6 +14,7 @@ from app.api.consent import router as consent_router
 from app.api.disease_staging import router as disease_staging_router
 from app.api.eye_diagrams import router as eye_diagrams_router
 from app.api.fundus_charts import router as fundus_charts_router
+from app.fhir.routes_fhir import router as fhir_router
 from app.api.glaucoma_summary import router as glaucoma_summary_router
 from app.api.imaging_pipeline import router as imaging_pipeline_router
 from app.api.medications import router as medications_router
@@ -122,6 +123,7 @@ app.include_router(cataract_workflow_router)
 app.include_router(consent_router)
 app.include_router(disease_staging_router)
 app.include_router(eye_diagrams_router)
+app.include_router(fhir_router)
 app.include_router(fundus_charts_router)
 app.include_router(glaucoma_summary_router)
 app.include_router(scribe_sessions_router)
