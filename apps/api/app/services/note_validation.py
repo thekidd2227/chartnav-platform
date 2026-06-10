@@ -659,6 +659,61 @@ def _check_specialty_data_present(
                 source="visit_draft",
             )
         )
+
+    # Phase 89 — informational quality intelligence check. Never blocks
+    # signing; never requires acknowledgement. ChartNav does NOT
+    # submit to CMS / IRIS / payers / registries, and does NOT
+    # autonomously decide whether a measure is met — the provider
+    # records the response.
+    from app.services.quality_intelligence import (
+        summary_for_encounter as _quality_summary,
+    )
+
+    qsum = _quality_summary(encounter["id"], encounter["organization_id"])
+    if qsum["applicable_count"] == 0:
+        out.append(
+            _check(
+                check_id="quality:not_applicable",
+                category="quality",
+                label="No applicable quality measures",
+                status="pass",
+                detail=(
+                    "No applicable provider-reviewed quality measure "
+                    "specs match this encounter. Informational only."
+                ),
+                source="visit_draft",
+            )
+        )
+    elif qsum["incomplete_count"] > 0:
+        out.append(
+            _check(
+                check_id="quality:incomplete",
+                category="quality",
+                label="Quality documentation incomplete",
+                status="warning",
+                detail=(
+                    f"{qsum['incomplete_count']} of {qsum['applicable_count']} "
+                    "applicable quality measure(s) not yet recorded by the "
+                    "provider. Informational only — ChartNav does not submit "
+                    "to CMS, IRIS, payers, or registries."
+                ),
+                source="visit_draft",
+            )
+        )
+    else:
+        out.append(
+            _check(
+                check_id="quality:documented",
+                category="quality",
+                label="Quality documentation recorded",
+                status="pass",
+                detail=(
+                    f"{qsum['applicable_count']} applicable quality "
+                    "measure(s) have a provider-recorded response."
+                ),
+                source="visit_draft",
+            )
+        )
     return out
 
 

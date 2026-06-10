@@ -248,6 +248,18 @@ def build_packet(encounter_id: int, caller: Caller) -> dict[str, Any]:
             },
         ),
         "medication_safety_summary": _build_medication_safety_section(summary),
+        "quality_intelligence_summary": summary.get(
+            "quality_intelligence_summary",
+            {
+                "total_count": 0,
+                "applicable_count": 0,
+                "incomplete_count": 0,
+                "completed_count": 0,
+                "internal_demo_specs_present": False,
+                "submission_status": "not_submitted",
+                "insufficient_data": True,
+            },
+        ),
         "artifact_hashes": [
             _hash_artifact(vitals_sec, "intake"),
             _hash_artifact(visit_sec, "visit_draft"),

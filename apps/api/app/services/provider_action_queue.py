@@ -581,6 +581,51 @@ def _medication_items(
     return items
 
 
+def _quality_items(
+    caller: Caller, patients: dict[int, dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Phase 89 — informational items for encounters with at least one
+    applicable quality measure that has not been recorded as met /
+    exception / exclusion. Always 'informational' / never tier 1.
+
+    ChartNav does NOT submit to CMS / IRIS / payers / registries, and
+    does NOT decide whether the org is "passing" — this surface
+    surfaces the open work, the provider decides whether to act.
+    """
+    from app.services.quality_intelligence import (
+        encounters_with_incomplete_measures,
+    )
+
+    items: list[dict[str, Any]] = []
+    for entry in encounters_with_incomplete_measures(caller.organization_id):
+        pid = int(entry["patient_id"])
+        eid = int(entry["encounter_id"])
+        incomplete = int(entry["incomplete_count"])
+        applicable = int(entry["applicable_count"])
+        items.append(
+            _item(
+                item_id=f"quality:incomplete:{eid}:{pid}",
+                patient_id=pid,
+                patients=patients,
+                specialty_source="quality",
+                category="quality_measure_incomplete",
+                label="Quality documentation incomplete",
+                detail=(
+                    f"{incomplete} of {applicable} applicable quality "
+                    "measure(s) not yet recorded by the provider. "
+                    "Informational only — ChartNav does not submit to "
+                    "CMS, IRIS, payers, or registries."
+                ),
+                status="warning",
+                priority_bucket="informational",
+                insufficient_data=False,
+                requires_provider_review=True,
+                encounter_id=eid,
+            )
+        )
+    return items
+
+
 def build_action_queue(caller: Caller) -> dict[str, Any]:
     """Build the deterministic cross-specialty action queue for the
     caller's organization."""
@@ -593,8 +638,12 @@ def build_action_queue(caller: Caller) -> dict[str, Any]:
     anti_vegf = _anti_vegf_items(caller, patients)
     staging = _staging_items(caller, patients)
     medication = _medication_items(caller, patients)
+    quality = _quality_items(caller, patients)
 
-    all_items = anti_vegf + glaucoma + cataract + unsigned + staging + medication
+    all_items = (
+        anti_vegf + glaucoma + cataract + unsigned
+        + staging + medication + quality
+    )
     buckets: dict[str, list[dict[str, Any]]] = {b: [] for b in PRIORITY_BUCKETS}
     for it in all_items:
         buckets[it["priority_bucket"]].append(it)

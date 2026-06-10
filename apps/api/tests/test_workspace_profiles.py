@@ -158,6 +158,7 @@ _KNOWN_PANELS = {
     "cataract_workflow",
     "disease_staging",
     "medication_safety",
+    "quality_intelligence",
 }
 
 

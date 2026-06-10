@@ -591,6 +591,17 @@ def build_summary(encounter_id: int, caller: Caller) -> dict[str, Any]:
         encounter["id"], encounter["organization_id"]
     )
 
+    # Phase 89 — quality intelligence summary (provider-reviewed
+    # quality documentation support). Metadata-only counts; no
+    # submission, no scoring, no autonomous decisions.
+    from app.services.quality_intelligence import (
+        summary_for_encounter as _quality_summary,
+    )
+
+    quality_intelligence_summary = _quality_summary(
+        encounter["id"], encounter["organization_id"]
+    )
+
     return {
         "encounter_id": encounter["id"],
         "patient_id": encounter["patient_id"],
@@ -608,6 +619,7 @@ def build_summary(encounter_id: int, caller: Caller) -> dict[str, Any]:
         "evidence_timeline": timeline,
         "disease_staging_summary": disease_staging_summary,
         "workspace_profile": workspace_profile,
+        "quality_intelligence_summary": quality_intelligence_summary,
         "audit_disclosure": (
             "ChartNav records metadata-only audit events: who created, "
             "reviewed, and signed each artifact, and when. The audit "
@@ -617,6 +629,9 @@ def build_summary(encounter_id: int, caller: Caller) -> dict[str, Any]:
             "stage disease or interpret imaging. The workspace profile "
             "is a deterministic mapping from the provider-entered "
             "encounter type; ChartNav does not autonomously classify "
-            "the encounter."
+            "the encounter. Quality intelligence is provider-reviewed "
+            "documentation support; ChartNav does not submit to CMS, "
+            "IRIS, payers, or registries, and does not autonomously "
+            "compute MIPS scoring."
         ),
     }
