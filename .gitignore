@@ -54,6 +54,12 @@ desktop-export/
 # Phase 62A: the dated dry-run report.md scaffold IS committed (it's
 # part of the demo claims scanner FILES list); only capture binaries
 # inside dry-runs/ are ignored.
+# Phase 88 — release-evidence + live-site snapshot artifact directories
+# are operator-run output, not committed. The scripts that produce them
+# live under scripts/release/.
+artifacts/release-evidence/
+artifacts/live-site-snapshots/
+
 artifacts/phase-62/screenshots/*.png
 artifacts/phase-62/screenshots/*.jpg
 artifacts/phase-62/video-clips/*.mov
