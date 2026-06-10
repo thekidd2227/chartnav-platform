@@ -151,7 +151,7 @@ class NativeChartNavAdapter:
                     "SELECT id, organization_id, location_id, "
                     "patient_identifier, patient_name, provider_name, "
                     "status, patient_id, provider_id, "
-                    "external_ref, external_source, "
+                    "external_ref, external_source, encounter_type, "
                     "scheduled_at, started_at, completed_at, created_at "
                     f"FROM encounters{where} "
                     "ORDER BY id DESC LIMIT :limit OFFSET :offset"
@@ -175,7 +175,7 @@ class NativeChartNavAdapter:
                     "SELECT id, organization_id, location_id, "
                     "patient_identifier, patient_name, provider_name, "
                     "status, patient_id, provider_id, "
-                    "external_ref, external_source, "
+                    "external_ref, external_source, encounter_type, "
                     "scheduled_at, started_at, completed_at, created_at "
                     "FROM encounters WHERE id = :id"
                 ),

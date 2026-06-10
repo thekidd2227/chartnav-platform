@@ -687,6 +687,17 @@ def build_validation(encounter_id: int, caller: Caller) -> dict[str, Any]:
         if c["requires_provider_acknowledgement"]:
             ack_required += 1
 
+    # Phase 86 — embed the encounter's workspace profile so the rail
+    # consumer can colocate the validation surface with its adaptive
+    # workspace context.
+    from app.services.workspace_profiles import (
+        profile_summary_for_encounter as _profile_summary,
+    )
+
+    workspace_profile = _profile_summary(
+        encounter["id"], encounter["organization_id"]
+    )
+
     return {
         "encounter_id": encounter["id"],
         "organization_id": encounter["organization_id"],
@@ -696,6 +707,7 @@ def build_validation(encounter_id: int, caller: Caller) -> dict[str, Any]:
         "checks": checks,
         "totals": totals,
         "acknowledgements_required": ack_required,
+        "workspace_profile": workspace_profile,
         "disclosure": (
             "Validation checks use structured provider-entered workflow "
             "data. ChartNav does not diagnose, interpret images, or "

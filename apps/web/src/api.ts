@@ -144,6 +144,9 @@ export interface Encounter {
   _external_source?: string | null;
   _fhir_status?: string;
   _bridged?: boolean;
+  /** Phase 86 — provider-entered subspecialty type. Drives the
+   *  WorkspaceProfileResolver. Default 'comprehensive' on the server. */
+  encounter_type?: "retina" | "glaucoma" | "cataract" | "comprehensive" | null;
 }
 
 export interface WorkflowEvent {
