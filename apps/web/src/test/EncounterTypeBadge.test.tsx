@@ -25,7 +25,7 @@ import type {
 } from "../features/workspace-profile/workspaceProfileTypes";
 
 function makeProfile(typ: EncounterType): WorkspaceProfileResponse {
-  const panels = (codes: string[]) =>
+  const panels = (codes: readonly string[]) =>
     codes.map((c) => ({ code: c as any, label: c }));
   const matrix = {
     retina: {
