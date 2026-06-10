@@ -218,6 +218,14 @@ def build_packet(encounter_id: int, caller: Caller) -> dict[str, Any]:
             "blockers": summary["blockers"],
         },
         "evidence_timeline": summary["evidence_timeline"],
+        "disease_staging_summary": summary.get(
+            "disease_staging_summary",
+            {
+                "record_count": 0,
+                "latest_by_diagnosis": [],
+                "insufficient_data": True,
+            },
+        ),
         "artifact_hashes": [
             _hash_artifact(vitals_sec, "intake"),
             _hash_artifact(visit_sec, "visit_draft"),

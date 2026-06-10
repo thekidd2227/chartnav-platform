@@ -69,6 +69,7 @@ import { CataractSurgicalWorkflowPanel } from "./features/cataract/CataractSurgi
 import { GlaucomaProgressionCockpit } from "./features/glaucoma/GlaucomaProgressionCockpit";
 import { RetinaVisitPacketPanel } from "./features/retina-summary/RetinaVisitPacketPanel";
 import { RetinaVisitSummaryPanel } from "./features/retina-summary/RetinaVisitSummaryPanel";
+import { DiseaseStagingPanel } from "./features/disease-staging/DiseaseStagingPanel";
 import {
   RetinaVisitSequenceRibbon,
   type RetinaVisitTabId,
@@ -571,6 +572,20 @@ function OverviewTab({
           <CataractSurgicalWorkflowPanel patientId={encounter.patient_id} />
         </section>
       )}
+
+      {nativeEncounter &&
+        typeof encounter.patient_id === "number" &&
+        typeof encounter.id === "number" && (
+          <section
+            className="ctw-card ctw-card--wide"
+            data-testid="ctw-card-disease-staging"
+          >
+            <DiseaseStagingPanel
+              patientId={encounter.patient_id}
+              encounterId={encounter.id}
+            />
+          </section>
+        )}
 
       <Card title="Allowed transitions" wide>
         {nextStatuses.length > 0 ? (

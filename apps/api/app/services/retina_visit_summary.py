@@ -563,6 +563,23 @@ def build_summary(encounter_id: int, caller: Caller) -> dict[str, Any]:
     timeline.extend(ack_events)
     timeline.sort(key=lambda e: e["timestamp"])
 
+    # Phase 84 — surface the latest provider-entered disease-stage per
+    # diagnosis for this patient. Metadata only; no derived clinical
+    # interpretation beyond the deterministic equality check.
+    from app.services.disease_staging import latest_for_patient as _staging_latest
+
+    if encounter["patient_id"] is not None:
+        staging_records = _staging_latest(
+            encounter["patient_id"], caller.organization_id
+        )
+    else:
+        staging_records = []
+    disease_staging_summary = {
+        "record_count": len(staging_records),
+        "latest_by_diagnosis": staging_records,
+        "insufficient_data": len(staging_records) == 0,
+    }
+
     return {
         "encounter_id": encounter["id"],
         "patient_id": encounter["patient_id"],
@@ -578,10 +595,13 @@ def build_summary(encounter_id: int, caller: Caller) -> dict[str, Any]:
         "blockers": blockers,
         "role_capabilities": _role_capabilities(caller.role),
         "evidence_timeline": timeline,
+        "disease_staging_summary": disease_staging_summary,
         "audit_disclosure": (
             "ChartNav records metadata-only audit events: who created, "
             "reviewed, and signed each artifact, and when. The audit "
             "trail does not store clinical free text (no transcripts, "
-            "BP/IOP/VA values, chief complaint, HPI, or findings text)."
+            "BP/IOP/VA values, chief complaint, HPI, or findings text). "
+            "Disease staging is provider-entered; ChartNav does not "
+            "stage disease or interpret imaging."
         ),
     }
