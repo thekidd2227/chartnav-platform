@@ -442,6 +442,7 @@ export function QualityIntelligencePanel({ encounterId }: Props) {
                               }))
                             }
                             data-testid={`quality-intelligence-exception-select-${item.measure_id}`}
+                            aria-label={`Exception code for ${item.measure_name}`}
                             style={{ fontSize: 11 }}
                           >
                             <option value="">— exception code —</option>
