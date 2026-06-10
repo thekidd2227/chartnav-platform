@@ -580,6 +580,17 @@ def build_summary(encounter_id: int, caller: Caller) -> dict[str, Any]:
         "insufficient_data": len(staging_records) == 0,
     }
 
+    # Phase 86 — embed the subspecialty workspace profile so packet
+    # exports + downstream surfaces carry the operator's adaptive-
+    # workspace choice. Never inferred; deterministic mapping only.
+    from app.services.workspace_profiles import (
+        profile_summary_for_encounter as _profile_summary,
+    )
+
+    workspace_profile = _profile_summary(
+        encounter["id"], encounter["organization_id"]
+    )
+
     return {
         "encounter_id": encounter["id"],
         "patient_id": encounter["patient_id"],
@@ -596,12 +607,16 @@ def build_summary(encounter_id: int, caller: Caller) -> dict[str, Any]:
         "role_capabilities": _role_capabilities(caller.role),
         "evidence_timeline": timeline,
         "disease_staging_summary": disease_staging_summary,
+        "workspace_profile": workspace_profile,
         "audit_disclosure": (
             "ChartNav records metadata-only audit events: who created, "
             "reviewed, and signed each artifact, and when. The audit "
             "trail does not store clinical free text (no transcripts, "
             "BP/IOP/VA values, chief complaint, HPI, or findings text). "
             "Disease staging is provider-entered; ChartNav does not "
-            "stage disease or interpret imaging."
+            "stage disease or interpret imaging. The workspace profile "
+            "is a deterministic mapping from the provider-entered "
+            "encounter type; ChartNav does not autonomously classify "
+            "the encounter."
         ),
     }

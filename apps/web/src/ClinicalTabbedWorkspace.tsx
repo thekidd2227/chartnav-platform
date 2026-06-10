@@ -71,6 +71,13 @@ import { RetinaVisitPacketPanel } from "./features/retina-summary/RetinaVisitPac
 import { RetinaVisitSummaryPanel } from "./features/retina-summary/RetinaVisitSummaryPanel";
 import { DiseaseStagingPanel } from "./features/disease-staging/DiseaseStagingPanel";
 import { MedicationSafetyPanel } from "./features/medications/MedicationSafetyPanel";
+import { EncounterTypeBadge } from "./features/workspace-profile/EncounterTypeBadge";
+import {
+  panelDispositionFor,
+  panelOrderIndex,
+  useWorkspaceProfile,
+} from "./features/workspace-profile/WorkspaceProfileResolver";
+import type { PanelCode } from "./features/workspace-profile/workspaceProfileTypes";
 import {
   RetinaVisitSequenceRibbon,
   type RetinaVisitTabId,
@@ -512,95 +519,11 @@ function OverviewTab({
       </Card>
 
       {nativeEncounter && (
-        <section
-          className="ctw-card ctw-card--wide"
-          data-testid="ctw-card-provider-action-queue"
-        >
-          <ProviderActionItemQueue />
-        </section>
+        <AdaptiveOverviewPanels
+          encounter={encounter}
+          canEdit={role === "admin" || role === "clinician"}
+        />
       )}
-
-      {nativeEncounter && typeof encounter.id === "number" && (
-        <section
-          className="ctw-card ctw-card--wide"
-          data-testid="ctw-card-note-validation-rail"
-        >
-          <NoteValidationRail encounterId={encounter.id} />
-        </section>
-      )}
-
-      {nativeEncounter && typeof encounter.id === "number" && (
-        <section
-          className="ctw-card ctw-card--wide"
-          data-testid="ctw-card-retina-visit-summary"
-        >
-          <RetinaVisitSummaryPanel encounterId={encounter.id} />
-        </section>
-      )}
-
-      {nativeEncounter && typeof encounter.id === "number" && (
-        <section
-          className="ctw-card ctw-card--wide"
-          data-testid="ctw-card-retina-visit-packet"
-        >
-          <RetinaVisitPacketPanel encounterId={encounter.id} />
-        </section>
-      )}
-
-      {nativeEncounter && typeof encounter.patient_id === "number" && (
-        <section
-          className="ctw-card ctw-card--wide"
-          data-testid="ctw-card-anti-vegf-injection"
-        >
-          <InjectionCommandPanel patientId={encounter.patient_id} />
-        </section>
-      )}
-
-      {nativeEncounter && typeof encounter.patient_id === "number" && (
-        <section
-          className="ctw-card ctw-card--wide"
-          data-testid="ctw-card-glaucoma-cockpit"
-        >
-          <GlaucomaProgressionCockpit patientId={encounter.patient_id} />
-        </section>
-      )}
-
-      {nativeEncounter && typeof encounter.patient_id === "number" && (
-        <section
-          className="ctw-card ctw-card--wide"
-          data-testid="ctw-card-cataract-workflow"
-        >
-          <CataractSurgicalWorkflowPanel patientId={encounter.patient_id} />
-        </section>
-      )}
-
-      {nativeEncounter &&
-        typeof encounter.patient_id === "number" &&
-        typeof encounter.id === "number" && (
-          <section
-            className="ctw-card ctw-card--wide"
-            data-testid="ctw-card-disease-staging"
-          >
-            <DiseaseStagingPanel
-              patientId={encounter.patient_id}
-              encounterId={encounter.id}
-            />
-          </section>
-        )}
-
-      {nativeEncounter &&
-        typeof encounter.patient_id === "number" &&
-        typeof encounter.id === "number" && (
-          <section
-            className="ctw-card ctw-card--wide"
-            data-testid="ctw-card-medication-safety"
-          >
-            <MedicationSafetyPanel
-              patientId={encounter.patient_id}
-              encounterId={encounter.id}
-            />
-          </section>
-        )}
 
       <Card title="Allowed transitions" wide>
         {nextStatuses.length > 0 ? (
@@ -754,6 +677,196 @@ function renderEventData(ev: WorkflowEvent): string {
       .join("  ·  ");
   }
   return String(d);
+}
+
+// ---------------------------------------------------------------
+// Phase 86 — Adaptive Overview panels.
+//
+// Renders every Phase 78–85 surface in the order chosen by the
+// resolver. Panels in the profile's `prioritized_panels` render
+// expanded at the top, `visible_panels` render expanded mid-grid,
+// and `collapsed_panels` render inside a `<details>` so the
+// operator can still expand them. No panel is ever hidden.
+// ---------------------------------------------------------------
+
+interface AdaptivePanelEntry {
+  code: PanelCode;
+  testid: string;
+  gate: boolean;
+  render: () => ReactNode;
+}
+
+function AdaptiveOverviewPanels({
+  encounter,
+  canEdit,
+}: {
+  encounter: Encounter;
+  canEdit: boolean;
+}): JSX.Element {
+  const encounterId =
+    typeof encounter.id === "number" ? encounter.id : null;
+  const patientId =
+    typeof encounter.patient_id === "number" ? encounter.patient_id : null;
+
+  const state = useWorkspaceProfile(encounterId);
+  const { profile } = state;
+
+  const entries: AdaptivePanelEntry[] = [
+    {
+      code: "provider_action_queue",
+      testid: "ctw-card-provider-action-queue",
+      gate: true,
+      render: () => <ProviderActionItemQueue />,
+    },
+    {
+      code: "note_validation",
+      testid: "ctw-card-note-validation-rail",
+      gate: encounterId !== null,
+      render: () => <NoteValidationRail encounterId={encounterId as number} />,
+    },
+    {
+      code: "retina_visit_summary",
+      testid: "ctw-card-retina-visit-summary",
+      gate: encounterId !== null,
+      render: () => (
+        <RetinaVisitSummaryPanel encounterId={encounterId as number} />
+      ),
+    },
+    {
+      code: "retina_visit_packet",
+      testid: "ctw-card-retina-visit-packet",
+      gate: encounterId !== null,
+      render: () => (
+        <RetinaVisitPacketPanel encounterId={encounterId as number} />
+      ),
+    },
+    {
+      code: "anti_vegf_injection",
+      testid: "ctw-card-anti-vegf-injection",
+      gate: patientId !== null,
+      render: () => (
+        <InjectionCommandPanel patientId={patientId as number} />
+      ),
+    },
+    {
+      code: "glaucoma_cockpit",
+      testid: "ctw-card-glaucoma-cockpit",
+      gate: patientId !== null,
+      render: () => (
+        <GlaucomaProgressionCockpit patientId={patientId as number} />
+      ),
+    },
+    {
+      code: "cataract_workflow",
+      testid: "ctw-card-cataract-workflow",
+      gate: patientId !== null,
+      render: () => (
+        <CataractSurgicalWorkflowPanel patientId={patientId as number} />
+      ),
+    },
+    {
+      code: "disease_staging",
+      testid: "ctw-card-disease-staging",
+      gate: patientId !== null && encounterId !== null,
+      render: () => (
+        <DiseaseStagingPanel
+          patientId={patientId as number}
+          encounterId={encounterId as number}
+        />
+      ),
+    },
+    {
+      code: "medication_safety",
+      testid: "ctw-card-medication-safety",
+      gate: patientId !== null && encounterId !== null,
+      render: () => (
+        <MedicationSafetyPanel
+          patientId={patientId as number}
+          encounterId={encounterId as number}
+        />
+      ),
+    },
+  ];
+
+  const gated = entries.filter((e) => e.gate);
+  // Stable secondary sort: original entries order — preserves the
+  // pre-Phase-86 layout when the resolver has not loaded.
+  const indexInEntries = (code: PanelCode) =>
+    entries.findIndex((e) => e.code === code);
+
+  const sorted = [...gated].sort((a, b) => {
+    const ai = panelOrderIndex(profile, a.code);
+    const bi = panelOrderIndex(profile, b.code);
+    if (ai !== bi) return ai - bi;
+    return indexInEntries(a.code) - indexInEntries(b.code);
+  });
+
+  return (
+    <>
+      <section
+        className="ctw-card ctw-card--wide"
+        data-testid="ctw-card-encounter-type-badge"
+      >
+        <EncounterTypeBadge state={state} canEdit={canEdit} />
+      </section>
+      {sorted.map((entry) => {
+        const disposition = panelDispositionFor(profile, entry.code);
+        if (disposition === "collapsed") {
+          return (
+            <section
+              key={entry.code}
+              className="ctw-card ctw-card--wide ctw-card--collapsed"
+              data-testid={entry.testid}
+              data-panel-code={entry.code}
+              data-panel-disposition="collapsed"
+            >
+              <details data-testid={`${entry.testid}-details`}>
+                <summary
+                  data-testid={`${entry.testid}-summary`}
+                  style={{
+                    cursor: "pointer",
+                    padding: 8,
+                    fontSize: 12,
+                    color: "#2d3748",
+                    fontWeight: 600,
+                  }}
+                >
+                  {labelForPanel(entry.code, profile)} (collapsed by{" "}
+                  workspace profile — click to expand)
+                </summary>
+                {entry.render()}
+              </details>
+            </section>
+          );
+        }
+        return (
+          <section
+            key={entry.code}
+            className="ctw-card ctw-card--wide"
+            data-testid={entry.testid}
+            data-panel-code={entry.code}
+            data-panel-disposition={disposition}
+          >
+            {entry.render()}
+          </section>
+        );
+      })}
+    </>
+  );
+}
+
+function labelForPanel(
+  code: PanelCode,
+  profile: ReturnType<typeof useWorkspaceProfile>["profile"],
+): string {
+  if (!profile) return code;
+  const all = [
+    ...profile.profile.prioritized_panels,
+    ...profile.profile.visible_panels,
+    ...profile.profile.collapsed_panels,
+  ];
+  const match = all.find((p) => p.code === code);
+  return match?.label ?? code;
 }
 
 // ---------------------------------------------------------------
