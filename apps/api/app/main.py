@@ -16,6 +16,7 @@ from app.api.eye_diagrams import router as eye_diagrams_router
 from app.api.fundus_charts import router as fundus_charts_router
 from app.api.glaucoma_summary import router as glaucoma_summary_router
 from app.api.imaging_pipeline import router as imaging_pipeline_router
+from app.api.medications import router as medications_router
 from app.api.multi_clinic import router as multi_clinic_router
 from app.api.note_validation import router as note_validation_router
 from app.api.patient_summaries import router as patient_summaries_router
@@ -133,6 +134,7 @@ app.include_router(structured_data_router)
 app.include_router(role_dashboards_router)
 app.include_router(specialty_tracking_router)
 app.include_router(imaging_pipeline_router)
+app.include_router(medications_router)
 app.include_router(multi_clinic_router)
 app.include_router(note_validation_router)
 app.include_router(vitals_workup_router)

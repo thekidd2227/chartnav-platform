@@ -70,6 +70,7 @@ import { GlaucomaProgressionCockpit } from "./features/glaucoma/GlaucomaProgress
 import { RetinaVisitPacketPanel } from "./features/retina-summary/RetinaVisitPacketPanel";
 import { RetinaVisitSummaryPanel } from "./features/retina-summary/RetinaVisitSummaryPanel";
 import { DiseaseStagingPanel } from "./features/disease-staging/DiseaseStagingPanel";
+import { MedicationSafetyPanel } from "./features/medications/MedicationSafetyPanel";
 import {
   RetinaVisitSequenceRibbon,
   type RetinaVisitTabId,
@@ -581,6 +582,20 @@ function OverviewTab({
             data-testid="ctw-card-disease-staging"
           >
             <DiseaseStagingPanel
+              patientId={encounter.patient_id}
+              encounterId={encounter.id}
+            />
+          </section>
+        )}
+
+      {nativeEncounter &&
+        typeof encounter.patient_id === "number" &&
+        typeof encounter.id === "number" && (
+          <section
+            className="ctw-card ctw-card--wide"
+            data-testid="ctw-card-medication-safety"
+          >
+            <MedicationSafetyPanel
               patientId={encounter.patient_id}
               encounterId={encounter.id}
             />
