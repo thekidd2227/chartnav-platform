@@ -18,6 +18,7 @@ from app.fhir.routes_fhir import router as fhir_router
 from app.api.glaucoma_summary import router as glaucoma_summary_router
 from app.api.imaging_metadata import router as imaging_metadata_router
 from app.api.imaging_pipeline import router as imaging_pipeline_router
+from app.api.medication_safety import router as medication_safety_router
 from app.api.medications import router as medications_router
 from app.api.multi_clinic import router as multi_clinic_router
 from app.api.note_validation import router as note_validation_router
@@ -141,6 +142,7 @@ app.include_router(structured_data_router)
 app.include_router(role_dashboards_router)
 app.include_router(specialty_tracking_router)
 app.include_router(imaging_pipeline_router)
+app.include_router(medication_safety_router)
 app.include_router(medications_router)
 app.include_router(multi_clinic_router)
 app.include_router(note_validation_router)

@@ -665,6 +665,46 @@ def _quality_items(
     return items
 
 
+def _medication_safety_items(
+    caller: Caller, patients: dict[int, dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Phase 90 — informational items for patients with active
+    medication safety events (preservative burden, refill gap,
+    duplicate class, alpha-blocker review, review-missing).
+
+    Always 'informational' priority; never tier 1. ChartNav does NOT
+    recommend a medication change or treatment.
+    """
+    from app.services.medication_safety import (
+        patients_with_active_safety_events,
+    )
+
+    items: list[dict[str, Any]] = []
+    for entry in patients_with_active_safety_events(caller.organization_id):
+        pid = int(entry["patient_id"])
+        active_count = int(entry["active_event_count"])
+        items.append(
+            _item(
+                item_id=f"medication_safety:active:{pid}",
+                patient_id=pid,
+                patients=patients,
+                specialty_source="medication_safety",
+                category="medication_safety_event_active",
+                label="Medication safety advisory",
+                detail=(
+                    f"{active_count} active provider-review medication "
+                    "safety advisor(y/ies) on file. Informational only — "
+                    "ChartNav does not recommend a medication change."
+                ),
+                status="warning",
+                priority_bucket="informational",
+                insufficient_data=False,
+                requires_provider_review=True,
+            )
+        )
+    return items
+
+
 def build_action_queue(caller: Caller) -> dict[str, Any]:
     """Build the deterministic cross-specialty action queue for the
     caller's organization."""
@@ -679,10 +719,11 @@ def build_action_queue(caller: Caller) -> dict[str, Any]:
     medication = _medication_items(caller, patients)
     quality = _quality_items(caller, patients)
     imaging = _imaging_metadata_items(caller, patients)
+    medication_safety = _medication_safety_items(caller, patients)
 
     all_items = (
         anti_vegf + glaucoma + cataract + unsigned
-        + staging + medication + quality + imaging
+        + staging + medication + quality + imaging + medication_safety
     )
     buckets: dict[str, list[dict[str, Any]]] = {b: [] for b in PRIORITY_BUCKETS}
     for it in all_items:

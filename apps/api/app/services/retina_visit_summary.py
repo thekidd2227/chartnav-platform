@@ -614,6 +614,16 @@ def build_summary(encounter_id: int, caller: Caller) -> dict[str, Any]:
         encounter["id"], encounter["organization_id"]
     )
 
+    # Phase 90 — provider-reviewed medication safety summary
+    # (counts + boundary note only; no clinical free text).
+    from app.services.medication_safety import (
+        summary_for_encounter as _medication_safety_summary,
+    )
+
+    medication_safety_summary = _medication_safety_summary(
+        encounter["id"], encounter["organization_id"]
+    )
+
     return {
         "encounter_id": encounter["id"],
         "patient_id": encounter["patient_id"],
@@ -633,6 +643,7 @@ def build_summary(encounter_id: int, caller: Caller) -> dict[str, Any]:
         "imaging_metadata_summary": imaging_metadata_summary,
         "workspace_profile": workspace_profile,
         "quality_intelligence_summary": quality_intelligence_summary,
+        "ophthalmic_medication_safety_summary": medication_safety_summary,
         "audit_disclosure": (
             "ChartNav records metadata-only audit events: who created, "
             "reviewed, and signed each artifact, and when. The audit "
@@ -647,6 +658,9 @@ def build_summary(encounter_id: int, caller: Caller) -> dict[str, Any]:
             "does not autonomously classify the encounter. Quality "
             "intelligence is provider-reviewed documentation support; "
             "ChartNav does not submit to CMS, IRIS, payers, or "
-            "registries, and does not autonomously compute MIPS scoring."
+            "registries, and does not autonomously compute MIPS scoring. "
+            "Medication safety content is provider-reviewed workflow "
+            "support only — ChartNav does not prescribe, recommend a "
+            "medication change, or submit to pharmacies, payers, or EHRs."
         ),
     }

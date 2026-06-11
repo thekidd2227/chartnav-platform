@@ -15,7 +15,8 @@ export type ActionQueueSource =
   | "staging"
   | "medication"
   | "quality"
-  | "imaging";
+  | "imaging"
+  | "medication_safety";
 
 export interface ActionQueueItem {
   item_id: string;

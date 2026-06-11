@@ -272,6 +272,25 @@ def build_packet(encounter_id: int, caller: Caller) -> dict[str, Any]:
                 "insufficient_data": True,
             },
         ),
+        "ophthalmic_medication_safety_summary": summary.get(
+            "ophthalmic_medication_safety_summary",
+            {
+                "active_medication_count": 0,
+                "preservative_burden_count": 0,
+                "refill_gap_count": 0,
+                "active_event_count": 0,
+                "acknowledged_event_count": 0,
+                "resolved_event_count": 0,
+                "total_event_count": 0,
+                "internal_demo_rules_present": False,
+                "submission_status": "not_submitted",
+                "boundary_note": (
+                    "Medication safety content is provider-reviewed "
+                    "workflow support only."
+                ),
+                "insufficient_data": True,
+            },
+        ),
         "artifact_hashes": [
             _hash_artifact(vitals_sec, "intake"),
             _hash_artifact(visit_sec, "visit_draft"),

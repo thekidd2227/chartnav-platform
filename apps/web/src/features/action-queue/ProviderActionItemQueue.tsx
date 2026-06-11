@@ -50,6 +50,7 @@ const SOURCE_LABELS: Record<ActionQueueSource, string> = {
   medication: "Medication safety",
   quality: "Quality documentation",
   imaging: "Imaging metadata",
+  medication_safety: "Medication safety",
 };
 
 function pill(

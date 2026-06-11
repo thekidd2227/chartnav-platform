@@ -714,6 +714,62 @@ def _check_specialty_data_present(
                 source="visit_draft",
             )
         )
+
+    # Phase 90 — informational medication safety check. Never blocks
+    # signing; never requires acknowledgement on the validation rail
+    # (rule-level acknowledgement is handled by the Phase 90 events
+    # endpoint). ChartNav does NOT recommend medication changes.
+    from app.services.medication_safety import (
+        summary_for_encounter as _med_safety_summary,
+    )
+
+    ms_summary = _med_safety_summary(
+        encounter["id"], encounter["organization_id"]
+    )
+    if ms_summary["active_event_count"] > 0:
+        out.append(
+            _check(
+                check_id="medication_safety:active",
+                category="medication_safety",
+                label="Medication safety advisory active",
+                status="warning",
+                detail=(
+                    f"{ms_summary['active_event_count']} active "
+                    "provider-review medication safety advisor(y/ies) on "
+                    "file. Informational only — ChartNav does not "
+                    "recommend a medication change."
+                ),
+                source="visit_draft",
+            )
+        )
+    elif ms_summary["active_medication_count"] > 0:
+        out.append(
+            _check(
+                check_id="medication_safety:clear",
+                category="medication_safety",
+                label="Medication safety: no active advisories",
+                status="pass",
+                detail=(
+                    f"{ms_summary['active_medication_count']} active "
+                    "medication(s) on file; no active medication safety "
+                    "advisories."
+                ),
+                source="visit_draft",
+            )
+        )
+    else:
+        out.append(
+            _check(
+                check_id="medication_safety:no_medications",
+                category="medication_safety",
+                label="No active medications documented",
+                status="pass",
+                detail=(
+                    "No active medications on file. Informational only."
+                ),
+                source="visit_draft",
+            )
+        )
     return out
 
 
