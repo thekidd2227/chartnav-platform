@@ -791,6 +791,129 @@ def _ensure_phase_89_quality_specs(conn) -> int:
     return inserted
 
 
+_PHASE_90_MEDICATION_SAFETY_RULES = (
+    {
+        "rule_key": "ophth_preservative_burden_advisory",
+        "rule_name": (
+            "BAK preservative burden — provider review advisory "
+            "(DEMO — internal placeholder, NOT verified for clinical use)"
+        ),
+        "medication_class": None,
+        "trigger_context": "preservative_burden",
+        "severity": "advisory",
+        "message": (
+            "Provider review advisory: 3+ active BAK-preserved drop(s) "
+            "on file. ChartNav does not recommend a medication change."
+        ),
+        "requires_acknowledgement": False,
+    },
+    {
+        "rule_key": "ophth_refill_gap_advisory",
+        "rule_name": (
+            "Refill gap — provider review advisory "
+            "(DEMO — internal placeholder, NOT verified for clinical use)"
+        ),
+        "medication_class": None,
+        "trigger_context": "refill_gap",
+        "severity": "advisory",
+        "message": (
+            "Provider review advisory: last_fill_date + days_supply is "
+            "past today by the configured threshold. Provider review "
+            "required."
+        ),
+        "requires_acknowledgement": False,
+    },
+    {
+        "rule_key": "ophth_cataract_alpha_blocker_review",
+        "rule_name": (
+            "Cataract workflow + active alpha-blocker — IFIS review reminder "
+            "(DEMO — internal placeholder, NOT verified for clinical use)"
+        ),
+        "medication_class": "alpha_agonist",
+        "trigger_context": "cataract_alpha_blocker",
+        "severity": "advisory",
+        "message": (
+            "Provider review advisory: cataract workflow record on file "
+            "with active alpha-blocker class medication. Provider review "
+            "required; ChartNav does not recommend a medication change "
+            "or surgical decision."
+        ),
+        "requires_acknowledgement": False,
+    },
+    {
+        "rule_key": "ophth_duplicate_class_advisory",
+        "rule_name": (
+            "Duplicate ophthalmic drop class — provider review advisory "
+            "(DEMO — internal placeholder, NOT verified for clinical use)"
+        ),
+        "medication_class": None,
+        "trigger_context": "duplicate_class",
+        "severity": "advisory",
+        "message": (
+            "Provider review advisory: two or more active drops in the "
+            "same medication_class on file. Provider review required."
+        ),
+        "requires_acknowledgement": False,
+    },
+    {
+        "rule_key": "ophth_medication_review_missing_advisory",
+        "rule_name": (
+            "Medication review missing — provider review advisory "
+            "(DEMO — internal placeholder, NOT verified for clinical use)"
+        ),
+        "medication_class": None,
+        "trigger_context": "review_missing",
+        "severity": "advisory",
+        "message": (
+            "Provider review advisory: one or more active medications "
+            "without a recorded review in the configured window. "
+            "Provider review required."
+        ),
+        "requires_acknowledgement": False,
+    },
+)
+
+
+def _ensure_phase_90_medication_safety_rules(conn) -> int:
+    """Phase 90 — idempotent seed of internal DEMO medication safety
+    rules. Global rows (organization_id IS NULL). The service layer
+    flags every seeded rule_key as internal_demo_only=True."""
+    inserted = 0
+    for rule in _PHASE_90_MEDICATION_SAFETY_RULES:
+        existing = conn.execute(
+            text(
+                "SELECT id FROM medication_safety_rules "
+                "WHERE organization_id IS NULL AND rule_key = :key"
+            ),
+            {"key": rule["rule_key"]},
+        ).fetchone()
+        if existing is not None:
+            continue
+        conn.execute(
+            text(
+                "INSERT INTO medication_safety_rules ("
+                "organization_id, rule_key, rule_name, medication_class, "
+                "trigger_context, severity, message, "
+                "requires_acknowledgement, status"
+                ") VALUES ("
+                "NULL, :key, :name, :klass, :ctx, :sev, :msg, "
+                ":ack, 'active'"
+                ")"
+            ),
+            {
+                "key": rule["rule_key"],
+                "name": rule["rule_name"],
+                "klass": rule["medication_class"],
+                "ctx": rule["trigger_context"],
+                "sev": rule["severity"],
+                "msg": rule["message"],
+                "ack": rule["requires_acknowledgement"],
+            },
+        )
+        inserted += 1
+    return inserted
+
+
 def main() -> None:
     summary = []
     with transaction() as conn:
@@ -858,12 +981,26 @@ def main() -> None:
         phase89_inserted = _ensure_phase_89_quality_specs(conn)
         summary.append(("phase_89_quality_specs", None, phase89_inserted))
 
+        # Phase 90 — idempotent seed of internal DEMO medication safety
+        # rules. Global rows (organization_id IS NULL). Every seeded
+        # rule_key is flagged internal_demo_only=True at the service
+        # layer; a qualified operator must verify before any real-
+        # program use.
+        phase90_inserted = _ensure_phase_90_medication_safety_rules(conn)
+        summary.append(
+            ("phase_90_medication_safety_rules", None, phase90_inserted)
+        )
+
     print("Seed complete.")
     for item in summary:
         if item[0] == "phase_24b_wedge":
             print(f"  phase_24b_wedge: organization_id={item[1]} {item[2]}")
         elif item[0] == "phase_89_quality_specs":
             print(f"  phase_89_quality_specs: inserted={item[2]}")
+        elif item[0] == "phase_90_medication_safety_rules":
+            print(
+                f"  phase_90_medication_safety_rules: inserted={item[2]}"
+            )
         else:
             slug, org_id, loc_id = item
             print(f"  {slug}: organization_id={org_id} location_id={loc_id}")

@@ -73,6 +73,7 @@ import { DiseaseStagingPanel } from "./features/disease-staging/DiseaseStagingPa
 import { MedicationSafetyPanel } from "./features/medications/MedicationSafetyPanel";
 import { QualityIntelligencePanel } from "./features/quality-intelligence/QualityIntelligencePanel";
 import { ImagingMetadataPanel } from "./features/imaging-metadata/ImagingMetadataPanel";
+import { MedicationSafetyPanel as OphthalmicMedicationSafetyPanel } from "./features/medication-safety/MedicationSafetyPanel";
 import { EncounterTypeBadge } from "./features/workspace-profile/EncounterTypeBadge";
 import {
   panelDispositionFor,
@@ -802,6 +803,17 @@ function AdaptiveOverviewPanels({
       gate: encounterId !== null,
       render: () => (
         <ImagingMetadataPanel encounterId={encounterId as number} />
+      ),
+    },
+    {
+      code: "ophthalmic_medication_safety",
+      testid: "ctw-card-ophthalmic-medication-safety",
+      gate: patientId !== null && encounterId !== null,
+      render: () => (
+        <OphthalmicMedicationSafetyPanel
+          patientId={patientId as number}
+          encounterId={encounterId as number}
+        />
       ),
     },
   ];
