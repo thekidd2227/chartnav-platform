@@ -72,6 +72,7 @@ import { RetinaVisitSummaryPanel } from "./features/retina-summary/RetinaVisitSu
 import { DiseaseStagingPanel } from "./features/disease-staging/DiseaseStagingPanel";
 import { MedicationSafetyPanel } from "./features/medications/MedicationSafetyPanel";
 import { QualityIntelligencePanel } from "./features/quality-intelligence/QualityIntelligencePanel";
+import { ImagingMetadataPanel } from "./features/imaging-metadata/ImagingMetadataPanel";
 import { EncounterTypeBadge } from "./features/workspace-profile/EncounterTypeBadge";
 import {
   panelDispositionFor,
@@ -793,6 +794,14 @@ function AdaptiveOverviewPanels({
       gate: encounterId !== null,
       render: () => (
         <QualityIntelligencePanel encounterId={encounterId as number} />
+      ),
+    },
+    {
+      code: "imaging_metadata",
+      testid: "ctw-card-imaging-metadata",
+      gate: encounterId !== null,
+      render: () => (
+        <ImagingMetadataPanel encounterId={encounterId as number} />
       ),
     },
   ];

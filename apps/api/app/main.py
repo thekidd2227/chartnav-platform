@@ -16,6 +16,7 @@ from app.api.eye_diagrams import router as eye_diagrams_router
 from app.api.fundus_charts import router as fundus_charts_router
 from app.fhir.routes_fhir import router as fhir_router
 from app.api.glaucoma_summary import router as glaucoma_summary_router
+from app.api.imaging_metadata import router as imaging_metadata_router
 from app.api.imaging_pipeline import router as imaging_pipeline_router
 from app.api.medications import router as medications_router
 from app.api.multi_clinic import router as multi_clinic_router
@@ -127,6 +128,7 @@ app.include_router(eye_diagrams_router)
 app.include_router(fhir_router)
 app.include_router(fundus_charts_router)
 app.include_router(glaucoma_summary_router)
+app.include_router(imaging_metadata_router)
 app.include_router(scribe_sessions_router)
 app.include_router(patient_summaries_router)
 app.include_router(pre_visit_briefs_router)

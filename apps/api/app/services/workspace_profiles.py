@@ -58,6 +58,7 @@ PANEL_CODES: tuple[str, ...] = (
     "disease_staging",
     "medication_safety",
     "quality_intelligence",
+    "imaging_metadata",
 )
 
 PANEL_LABELS: dict[str, str] = {
@@ -71,6 +72,7 @@ PANEL_LABELS: dict[str, str] = {
     "disease_staging": "Disease Staging",
     "medication_safety": "Medication Safety & Adherence",
     "quality_intelligence": "Quality Documentation Support",
+    "imaging_metadata": "Imaging Metadata",
 }
 
 
@@ -100,6 +102,7 @@ PROFILES: dict[str, WorkspaceProfile] = {
             "anti_vegf_injection",
             "retina_visit_summary",
             "retina_visit_packet",
+            "imaging_metadata",
         ),
         visible=(
             "disease_staging",
@@ -117,6 +120,7 @@ PROFILES: dict[str, WorkspaceProfile] = {
         prioritized=(
             *_UNIVERSAL,
             "glaucoma_cockpit",
+            "imaging_metadata",
             "medication_safety",
         ),
         visible=(
@@ -136,6 +140,7 @@ PROFILES: dict[str, WorkspaceProfile] = {
         prioritized=(
             *_UNIVERSAL,
             "cataract_workflow",
+            "imaging_metadata",
             "medication_safety",
         ),
         visible=(
@@ -164,7 +169,7 @@ PROFILES: dict[str, WorkspaceProfile] = {
             "quality_intelligence",
         ),
         visible=(),
-        collapsed=(),
+        collapsed=("imaging_metadata",),
     ),
 }
 

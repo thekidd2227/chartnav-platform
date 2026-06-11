@@ -260,6 +260,18 @@ def build_packet(encounter_id: int, caller: Caller) -> dict[str, Any]:
                 "insufficient_data": True,
             },
         ),
+        "imaging_metadata_summary": summary.get(
+            "imaging_metadata_summary",
+            {
+                "total_count": 0,
+                "reviewed_count": 0,
+                "unreviewed_count": 0,
+                "by_modality_group": {},
+                "modality_groups_present": [],
+                "summary_hash": "",
+                "insufficient_data": True,
+            },
+        ),
         "artifact_hashes": [
             _hash_artifact(vitals_sec, "intake"),
             _hash_artifact(visit_sec, "visit_draft"),

@@ -12,7 +12,8 @@ export type PanelCode =
   | "cataract_workflow"
   | "disease_staging"
   | "medication_safety"
-  | "quality_intelligence";
+  | "quality_intelligence"
+  | "imaging_metadata";
 
 export interface PanelRef {
   code: PanelCode;
