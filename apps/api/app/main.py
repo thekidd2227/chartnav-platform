@@ -36,6 +36,7 @@ from app.api.specialty_tracking import router as specialty_tracking_router
 from app.api.structured_data import router as structured_data_router
 from app.api.vitals_workup import router as vitals_workup_router
 from app.api.workspace_profiles import router as workspace_profiles_router
+from app.api.workspace_state import router as workspace_state_router
 from app.audit import record as audit_record, should_audit
 from app.config import settings
 from app.logging_config import configure_logging
@@ -148,3 +149,4 @@ app.include_router(multi_clinic_router)
 app.include_router(note_validation_router)
 app.include_router(vitals_workup_router)
 app.include_router(workspace_profiles_router)
+app.include_router(workspace_state_router)
