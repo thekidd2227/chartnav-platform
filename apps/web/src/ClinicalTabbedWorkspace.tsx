@@ -75,6 +75,9 @@ import { QualityIntelligencePanel } from "./features/quality-intelligence/Qualit
 import { ImagingMetadataPanel } from "./features/imaging-metadata/ImagingMetadataPanel";
 import { MedicationSafetyPanel as OphthalmicMedicationSafetyPanel } from "./features/medication-safety/MedicationSafetyPanel";
 import { EncounterTypeBadge } from "./features/workspace-profile/EncounterTypeBadge";
+import { WorkspaceStateProvider } from "./features/workspace-state/WorkspaceStateProvider";
+import { VisitModeRibbon } from "./features/workspace-state/VisitModeRibbon";
+import { LateralitySwitcher } from "./features/workspace-state/LateralitySwitcher";
 import {
   panelDispositionFor,
   panelOrderIndex,
@@ -832,12 +835,24 @@ function AdaptiveOverviewPanels({
   });
 
   return (
-    <>
+    <WorkspaceStateProvider encounterId={encounterId}>
       <section
         className="ctw-card ctw-card--wide"
         data-testid="ctw-card-encounter-type-badge"
       >
         <EncounterTypeBadge state={state} canEdit={canEdit} />
+      </section>
+      <section
+        className="ctw-card ctw-card--wide"
+        data-testid="ctw-card-visit-mode-ribbon"
+      >
+        <VisitModeRibbon canEdit={canEdit} />
+      </section>
+      <section
+        className="ctw-card ctw-card--wide"
+        data-testid="ctw-card-laterality-switcher"
+      >
+        <LateralitySwitcher canEdit={canEdit} />
       </section>
       {sorted.map((entry) => {
         const disposition = panelDispositionFor(profile, entry.code);
@@ -881,7 +896,7 @@ function AdaptiveOverviewPanels({
           </section>
         );
       })}
-    </>
+    </WorkspaceStateProvider>
   );
 }
 
