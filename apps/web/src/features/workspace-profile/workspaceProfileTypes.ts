@@ -14,7 +14,8 @@ export type PanelCode =
   | "medication_safety"
   | "quality_intelligence"
   | "imaging_metadata"
-  | "ophthalmic_medication_safety";
+  | "ophthalmic_medication_safety"
+  | "advanced_clinical_intelligence";
 
 export interface PanelRef {
   code: PanelCode;

@@ -166,6 +166,7 @@ _KNOWN_PANELS = {
     "quality_intelligence",
     "imaging_metadata",
     "ophthalmic_medication_safety",
+    "advanced_clinical_intelligence",
 }
 
 
