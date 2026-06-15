@@ -74,6 +74,7 @@ import { MedicationSafetyPanel } from "./features/medications/MedicationSafetyPa
 import { QualityIntelligencePanel } from "./features/quality-intelligence/QualityIntelligencePanel";
 import { ImagingMetadataPanel } from "./features/imaging-metadata/ImagingMetadataPanel";
 import { MedicationSafetyPanel as OphthalmicMedicationSafetyPanel } from "./features/medication-safety/MedicationSafetyPanel";
+import { AdvancedClinicalIntelligencePanel } from "./features/advanced-clinical-intelligence/AdvancedClinicalIntelligencePanel";
 import { EncounterTypeBadge } from "./features/workspace-profile/EncounterTypeBadge";
 import { WorkspaceStateProvider } from "./features/workspace-state/WorkspaceStateProvider";
 import { VisitModeRibbon } from "./features/workspace-state/VisitModeRibbon";
@@ -815,6 +816,16 @@ function AdaptiveOverviewPanels({
       render: () => (
         <OphthalmicMedicationSafetyPanel
           patientId={patientId as number}
+          encounterId={encounterId as number}
+        />
+      ),
+    },
+    {
+      code: "advanced_clinical_intelligence",
+      testid: "ctw-card-advanced-clinical-intelligence",
+      gate: encounterId !== null,
+      render: () => (
+        <AdvancedClinicalIntelligencePanel
           encounterId={encounterId as number}
         />
       ),

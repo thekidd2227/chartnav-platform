@@ -8,6 +8,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
 
 from app.api.admin_security import router as admin_security_router
+from app.api.advanced_clinical_intelligence import (
+    router as advanced_clinical_intelligence_router,
+)
 from app.api.anti_vegf_injections import router as anti_vegf_injections_router
 from app.api.cataract_workflow import router as cataract_workflow_router
 from app.api.consent import router as consent_router
@@ -122,6 +125,7 @@ async def _http_exception_handler(request: Request, exc: HTTPException) -> JSONR
 
 app.include_router(router)
 app.include_router(admin_security_router)
+app.include_router(advanced_clinical_intelligence_router)
 app.include_router(anti_vegf_injections_router)
 app.include_router(cataract_workflow_router)
 app.include_router(consent_router)

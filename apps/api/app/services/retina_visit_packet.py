@@ -164,6 +164,32 @@ def _build_medication_safety_section(summary: dict[str, Any]) -> dict[str, Any]:
     return medication_safety_summary(pid, org)
 
 
+def _build_advanced_clinical_intelligence_section(
+    summary: dict[str, Any],
+) -> dict[str, Any]:
+    """Phase 92 — embed the metadata-only advanced clinical intelligence
+    summary in the packet. Counts only; no clinical narrative; no
+    autonomous conclusion."""
+    from app.services.advanced_clinical_intelligence import summary_for_packet
+
+    eid = summary.get("encounter_id")
+    org = summary.get("organization_id")
+    if not isinstance(eid, int) or not isinstance(org, int):
+        return {
+            "retina_present": False,
+            "glaucoma_present": False,
+            "cataract_present": False,
+            "fhir_export_renderable": False,
+            "submission_status": "not_submitted",
+            "boundary_note": (
+                "Advanced clinical intelligence section is metadata only — "
+                "no clinical narrative, no autonomous conclusion."
+            ),
+            "insufficient_data": True,
+        }
+    return summary_for_packet(eid, org)
+
+
 def build_packet(encounter_id: int, caller: Caller) -> dict[str, Any]:
     """Build the retina visit packet for one encounter.
 
@@ -290,6 +316,9 @@ def build_packet(encounter_id: int, caller: Caller) -> dict[str, Any]:
                 ),
                 "insufficient_data": True,
             },
+        ),
+        "advanced_clinical_intelligence_summary": _build_advanced_clinical_intelligence_section(
+            summary
         ),
         "artifact_hashes": [
             _hash_artifact(vitals_sec, "intake"),
