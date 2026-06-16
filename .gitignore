@@ -61,6 +61,7 @@ artifacts/release-evidence/
 artifacts/live-site-snapshots/
 artifacts/phase-93-pilot-launch/
 artifacts/phase-100-controlled-pilot-launch/
+artifacts/buyer-demo/
 
 artifacts/phase-62/screenshots/*.png
 artifacts/phase-62/screenshots/*.jpg
