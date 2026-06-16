@@ -129,13 +129,26 @@ stack, the smoke is **skipped** and logged under
 
 Conditional. The Phase 101 capture script runs the existing
 Playwright capture (`scripts/demo/phase63a_capture_demo_media.mjs`)
-**only** when all three are true:
+**only** when all four are true:
 
 1. `apps/web/node_modules/@playwright/test/package.json` exists
    (`npm ci` has been run in `apps/web/`).
 2. The local stack is reachable (the Phase 63C reachability
    probe in the script succeeded).
 3. The capture script exists at the expected path.
+4. Chromium is installed under `$HOME/.cache/ms-playwright`
+   (run `cd apps/web && npx playwright install --with-deps chromium`
+   once per workstation). Chromium absence is now a clean SKIP, not
+   a FAIL — the capture log records the SKIP reason verbatim so a
+   later capture on the same SHA can fill the row.
+
+When the local stack runs at non-default ports (the user's
+verified setup uses 8765/5173 — not the historical 8000/5173 the
+capture script's defaults baked in), the Phase 101 capture script
+plumbs `PHASE63C_API_URL` and `PHASE63C_WEB_URL` through to the
+Playwright capture as `E2E_API_URL` and `E2E_BASE_URL` so the
+capture targets the right host without the operator editing the
+script.
 
 Otherwise the script falls back to O3 (collect any existing
 Phase 62 media) and skips O2 cleanly.
@@ -156,10 +169,36 @@ Phase 62 media) and skips O2 cleanly.
 
 ## Next recommended action
 
-1. **Run the Phase 101 capture script** on the launch SHA:
+1. **Boot the local stack** at the documented ports (8765 / 5173):
    ```bash
+   # one-time seed (venv-free; works on workstations without
+   # apps/api/.venv)
+   bash scripts/demo/phase101_local_seed_sqlite.sh
+
+   # API on 8765
+   cd apps/api
+   DATABASE_URL="sqlite:///./chartnav.db" \
+     CHARTNAV_ENV=local CHARTNAV_LLM_ENABLED=0 \
+     CHARTNAV_RATE_LIMIT_PER_MINUTE=0 \
+     uvicorn app.main:app --host 127.0.0.1 --port 8765 --log-level warning &
+
+   # Web on 5173
+   cd ../web
+   VITE_API_URL="http://127.0.0.1:8765" \
+     npx vite --host 127.0.0.1 --port 5173 &
+   ```
+2. **Run the Phase 101 capture script** on the launch SHA — with
+   `PHASE101_SMOKE_RESET=0` when the workstation lacks
+   `apps/api/.venv`:
+   ```bash
+   PHASE101_SMOKE_RESET=0 \
+   PHASE63C_API_URL="http://127.0.0.1:8765" \
+   PHASE63C_WEB_URL="http://127.0.0.1:5173" \
    bash scripts/demo/phase101_mcp_independent_demo_capture.sh
    ```
+   On a workstation that does ship the venv, omit
+   `PHASE101_SMOKE_RESET=0` and the smoke runs with `--reset` per
+   the repo-default posture.
 2. **Open the dated artifact dir** and confirm:
    - `summary.txt` shows `OVERALL: PASS` and
      `BUYER-DEMO RECOMMENDATION: CONDITIONAL GO`.
