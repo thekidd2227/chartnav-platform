@@ -47,6 +47,21 @@
 #   bash scripts/demo/phase101_mcp_independent_demo_capture.sh --skip-web
 #   bash scripts/demo/phase101_mcp_independent_demo_capture.sh --no-vitest
 #
+# OPT-IN env vars:
+#   PHASE63C_API_URL  / PHASE63C_WEB_URL
+#       Local stack URLs. When both answer, O1 (Phase 63C smoke) and
+#       O2 (Playwright capture) run. The Phase 63C URLs are also
+#       plumbed to the Playwright capture as E2E_API_URL /
+#       E2E_BASE_URL so the existing capture script picks them up
+#       instead of its historical port-8000 default.
+#
+#   PHASE101_SMOKE_RESET=0   (alias: PHASE101_SKIP_RESET=1)
+#       Run the Phase 63C smoke without --reset. Use when the
+#       operator has already seeded the local SQLite DB via
+#       scripts/demo/phase101_local_seed_sqlite.sh and the workstation
+#       does not ship apps/api/.venv (which `make reset-db` requires).
+#       Default: run with --reset, matching repo-default posture.
+#
 # OUTPUT
 #   artifacts/buyer-demo/YYYYMMDD-HHMMSS/
 #     ├── summary.txt
@@ -260,15 +275,43 @@ if [[ -n "$phase63c_api" && -n "$phase63c_web" ]] \
   fi
 fi
 
+# Default: run the Phase 63C smoke with --reset, matching the
+# repo-default "fresh DB on every gate" posture. Operators on a
+# workstation without apps/api/.venv (where `make reset-db` fails)
+# can opt out via PHASE101_SMOKE_RESET=0 (or PHASE101_SKIP_RESET=1)
+# after running scripts/demo/phase101_local_seed_sqlite.sh.
+smoke_reset=1
+if [[ "${PHASE101_SMOKE_RESET:-1}" == "0" ]] \
+   || [[ "${PHASE101_SKIP_RESET:-0}" == "1" ]]; then
+  smoke_reset=0
+fi
+
 if [[ "$phase63c_reachable" -eq 1 && -x "$REPO_ROOT/scripts/demo/phase63c_functional_smoke.sh" ]]; then
-  run_stage "O1" "Phase 63C functional smoke" 0 \
-    "O1-phase63c-smoke.log" \
-    "rerun with --verbose to localize the failing step" \
-    -- env PHASE63C_API_URL="$phase63c_api" PHASE63C_WEB_URL="$phase63c_web" \
-       bash "$REPO_ROOT/scripts/demo/phase63c_functional_smoke.sh" --reset
+  if [[ "$smoke_reset" -eq 1 ]]; then
+    o1_label="Phase 63C functional smoke (--reset)"
+    o1_recovery="if --reset failed because apps/api/.venv/bin/alembic is missing, run bash scripts/demo/phase101_local_seed_sqlite.sh then re-run capture with PHASE101_SMOKE_RESET=0"
+    run_stage "O1" "$o1_label" 0 \
+      "O1-phase63c-smoke.log" \
+      "$o1_recovery" \
+      -- env PHASE63C_API_URL="$phase63c_api" PHASE63C_WEB_URL="$phase63c_web" \
+         bash "$REPO_ROOT/scripts/demo/phase63c_functional_smoke.sh" --reset
+  else
+    o1_label="Phase 63C functional smoke (no-reset; operator pre-seeded)"
+    o1_recovery="confirm operator ran bash scripts/demo/phase101_local_seed_sqlite.sh OR another reset path before capture"
+    run_stage "O1" "$o1_label" 0 \
+      "O1-phase63c-smoke.log" \
+      "$o1_recovery" \
+      -- env PHASE63C_API_URL="$phase63c_api" PHASE63C_WEB_URL="$phase63c_web" \
+         bash "$REPO_ROOT/scripts/demo/phase63c_functional_smoke.sh"
+  fi
 else
-  skip_stage "O1" "Phase 63C functional smoke" \
-    "PHASE63C_API_URL/WEB_URL not set or unreachable (local stack required)"
+  if [[ -z "$phase63c_api" || -z "$phase63c_web" ]]; then
+    skip_stage "O1" "Phase 63C functional smoke" \
+      "PHASE63C_API_URL/WEB_URL not set (local stack required)"
+  else
+    skip_stage "O1" "Phase 63C functional smoke" \
+      "PHASE63C_API_URL/WEB_URL set to $phase63c_api / $phase63c_web but neither /health nor /healthz answered (start local stack first)"
+  fi
 fi
 
 # -----------------------------------------------------------------
@@ -283,19 +326,41 @@ if [[ -f "$REPO_ROOT/apps/web/node_modules/@playwright/test/package.json" ]] \
   playwright_ready=1
 fi
 
+# Chromium presence probe — chromium absence is a clean SKIP, not a
+# FAIL, because installing chromium is an out-of-band step
+# (npx playwright install --with-deps chromium) the operator
+# explicitly opts in to. The Playwright capture script reads
+# E2E_BASE_URL / E2E_API_URL from env, so plumb the Phase 63C URLs
+# through to avoid the historical port-8000 hardcode.
+chromium_present=0
 if [[ "$playwright_ready" -eq 1 ]]; then
+  if [[ -d "$HOME/.cache/ms-playwright" ]] \
+     && ls "$HOME/.cache/ms-playwright"/chromium*/chrome-linux/chrome \
+            "$HOME/.cache/ms-playwright"/chromium*/chrome-mac/Chromium.app/Contents/MacOS/Chromium \
+            "$HOME/.cache/ms-playwright"/chromium*/chrome-win/chrome.exe \
+            2>/dev/null | head -n1 | grep -q . ; then
+    chromium_present=1
+  fi
+fi
+
+if [[ "$playwright_ready" -eq 1 && "$chromium_present" -eq 1 ]]; then
   run_stage "O2" "Playwright demo media capture" 0 \
     "O2-playwright-capture.log" \
     "rerun: npx playwright install --with-deps chromium; then re-run capture" \
-    -- bash -c "cd '$REPO_ROOT' && node '$playwright_capture_script'"
+    -- env E2E_BASE_URL="$phase63c_web" E2E_API_URL="$phase63c_api" \
+       bash -c "cd '$REPO_ROOT' && node '$playwright_capture_script'"
 else
   reason=""
   if [[ ! -f "$REPO_ROOT/apps/web/node_modules/@playwright/test/package.json" ]]; then
     reason="@playwright/test not installed (cd apps/web && npm ci)"
   elif [[ ! -f "$playwright_capture_script" ]]; then
     reason="capture script missing at $playwright_capture_script"
-  else
+  elif [[ "$phase63c_reachable" -ne 1 ]]; then
     reason="local stack not reachable (PHASE63C_API_URL/WEB_URL must answer)"
+  elif [[ "$chromium_present" -ne 1 ]]; then
+    reason="chromium not installed under \$HOME/.cache/ms-playwright (run: cd apps/web && npx playwright install --with-deps chromium)"
+  else
+    reason="prerequisites incomplete (see capture log)"
   fi
   skip_stage "O2" "Playwright demo media capture" "$reason"
 fi

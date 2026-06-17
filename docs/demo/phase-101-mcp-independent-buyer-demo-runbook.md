@@ -68,6 +68,13 @@ gate artifact is reproducible.
 
 ## 2. Demo reset
 
+Use **either** of the two reset paths. The first works on
+workstations that have `apps/api/.venv/bin/alembic` installed;
+the second is the fallback for workstations without the venv
+(fresh clones, CI sandboxes, the user's verified local stack).
+
+### 2.a `make reset-db` path (requires `apps/api/.venv`)
+
 ```bash
 bash scripts/reset_demo_state.sh
 ```
@@ -75,7 +82,29 @@ bash scripts/reset_demo_state.sh
 Expected: exit 0; refuses any non-loopback `DATABASE_URL`. If the
 reset refuses to run, confirm `DATABASE_URL` is
 `sqlite:///./chartnav.db` or `postgres://…@127.0.0.1`. **Do not**
-override.
+override. If the script fails with `.venv/bin/alembic: not found`,
+use the venv-free path in §2.b instead.
+
+### 2.b Venv-free SQLite seed helper
+
+```bash
+bash scripts/demo/phase101_local_seed_sqlite.sh
+```
+
+Uses whichever `alembic` and `python3` are on PATH. Deletes
+`apps/api/chartnav.db` and re-runs the canonical
+`alembic upgrade head` + `python3 scripts_seed.py` sequence
+against the same DB file the repo's defaults use. Refuses to run
+if `DATABASE_URL` is set to anything other than the local SQLite
+default.
+
+Equivalent verbose commands (what the helper runs internally):
+
+```bash
+cd apps/api
+DATABASE_URL="sqlite:///./chartnav.db" CHARTNAV_ENV=local CHARTNAV_LLM_ENABLED=0 alembic upgrade head
+DATABASE_URL="sqlite:///./chartnav.db" CHARTNAV_ENV=local CHARTNAV_LLM_ENABLED=0 python3 scripts_seed.py
+```
 
 ## 3. Backend + frontend startup
 
@@ -207,10 +236,38 @@ Steps:
 
 ## 8. Run the Phase 101 capture script
 
+### 8.a Default (`--reset` path; requires `apps/api/.venv`)
+
 ```bash
 cd "$CHARTNAV_REPO_PATH"
+PHASE63C_API_URL="http://127.0.0.1:8765" \
+PHASE63C_WEB_URL="http://127.0.0.1:5173" \
 bash scripts/demo/phase101_mcp_independent_demo_capture.sh
 ```
+
+The script's Phase 63C smoke stage (O1) runs with `--reset`. That
+path invokes `make reset-db` which requires
+`apps/api/.venv/bin/alembic`. Use this on workstations that ship
+the repo's standard venv.
+
+### 8.b Venv-free path (recommended for fresh workstations)
+
+After running the venv-free seed helper from §2.b:
+
+```bash
+cd "$CHARTNAV_REPO_PATH"
+PHASE101_SMOKE_RESET=0 \
+PHASE63C_API_URL="http://127.0.0.1:8765" \
+PHASE63C_WEB_URL="http://127.0.0.1:5173" \
+bash scripts/demo/phase101_mcp_independent_demo_capture.sh
+```
+
+`PHASE101_SMOKE_RESET=0` (or its alias `PHASE101_SKIP_RESET=1`)
+tells the capture script to call the Phase 63C smoke **without**
+`--reset` — the operator has already seeded the DB. The capture
+log labels this stage `Phase 63C functional smoke (no-reset;
+operator pre-seeded)` so the buyer-facing artifact is unambiguous
+about which reset path produced the evidence.
 
 This script:
 
