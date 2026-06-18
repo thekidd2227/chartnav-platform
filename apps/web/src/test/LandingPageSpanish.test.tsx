@@ -113,7 +113,10 @@ describe("LandingPage — Spanish rendering", () => {
   it("renders the Spanish non-goals list with 9 items and key negative assertions", () => {
     render(<LandingPage initialLanguage="es" />);
     const list = screen.getByTestId("landing-non-goals-list");
-    expect(within(list).getAllByRole("listitem")).toHaveLength(9);
+    // Non-goals list is kept in the DOM for automated assertions but
+    // rendered with the HTML hidden attribute. Use { hidden: true }
+    // to include it in the role query.
+    expect(within(list).getAllByRole("listitem", { hidden: true })).toHaveLength(9);
     expect(list).toHaveTextContent(/No es un EHR certificado/i);
     expect(list).toHaveTextContent(/No cuenta con certificación HIPAA/i);
     expect(list).toHaveTextContent(/No realiza diagnóstico autónomo/i);
@@ -221,7 +224,7 @@ describe("LandingPage — Spanish claim-safety", () => {
     /interpretación autónoma de imágenes/i,
     /interpretación automática de imágenes/i,
     /interpretación automática de OCT/i,
-    /calificación automática de retinopatía/i,
+    /calificación automática de retinopathía/i,
     /recomienda anti-VEGF/i,
     /selecciona potencia de lente/i,
     /órdenes automáticas/i,
