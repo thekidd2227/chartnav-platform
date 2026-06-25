@@ -702,6 +702,69 @@ export interface Patient {
   sex_at_birth: string | null;
   is_active: number | boolean;
   created_at: string;
+  // Phase 2A — extended demographics. All optional; pre-Phase-2A
+  // patients return null for these fields.
+  middle_name?: string | null;
+  preferred_name?: string | null;
+  display_name?: string | null;
+  pronouns?: string | null;
+  gender_identity?: string | null;
+  preferred_language?: string | null;
+  race?: string | null;
+  ethnicity?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  address_line1?: string | null;
+  address_line2?: string | null;
+  address_city?: string | null;
+  address_state?: string | null;
+  address_postal_code?: string | null;
+  address_country?: string | null;
+  emergency_contact_name?: string | null;
+  emergency_contact_phone?: string | null;
+  emergency_contact_relationship?: string | null;
+  insurance_metadata?: Record<string, unknown> | unknown[] | null;
+  updated_at?: string | null;
+}
+
+export type PatientPatchBody = Partial<
+  Pick<
+    Patient,
+    | "first_name"
+    | "last_name"
+    | "middle_name"
+    | "preferred_name"
+    | "display_name"
+    | "date_of_birth"
+    | "sex_at_birth"
+    | "pronouns"
+    | "gender_identity"
+    | "preferred_language"
+    | "race"
+    | "ethnicity"
+    | "email"
+    | "phone"
+    | "address_line1"
+    | "address_line2"
+    | "address_city"
+    | "address_state"
+    | "address_postal_code"
+    | "address_country"
+    | "emergency_contact_name"
+    | "emergency_contact_phone"
+    | "emergency_contact_relationship"
+    | "insurance_metadata"
+  >
+> & { is_active?: boolean };
+
+export interface ChartSection {
+  key: string;
+  label: string;
+  status: "active" | "placeholder" | "unavailable";
+  description: string;
+  api_path?: string | null;
+  required_role?: string | null;
+  future_module?: string | null;
 }
 
 export interface Provider {
@@ -752,6 +815,38 @@ export function createPatient(
     method: "POST",
     body: JSON.stringify(body),
   });
+}
+
+// ---------- Patient chart foundation (phase 2A) ----------
+
+export function getPatient(email: string, id: number): Promise<Patient> {
+  return request(`/patients/${id}`, { email });
+}
+
+export function patchPatient(
+  email: string,
+  id: number,
+  body: PatientPatchBody
+): Promise<Patient> {
+  return request(`/patients/${id}`, {
+    email,
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export function listPatientEncounters(
+  email: string,
+  id: number
+): Promise<Encounter[]> {
+  return request(`/patients/${id}/encounters`, { email });
+}
+
+export function listPatientChartSections(
+  email: string,
+  id: number
+): Promise<{ patient_id: number; sections: ChartSection[] }> {
+  return request(`/patients/${id}/chart-sections`, { email });
 }
 
 export function listProviders(

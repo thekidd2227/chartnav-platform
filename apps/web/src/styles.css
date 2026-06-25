@@ -1347,7 +1347,6 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
   }
 }
 
-
 /* ---------------------------------------------------------------- */
 /* Phase 16 — public landing / proof page (gated on /landing or ?intro=1) */
 /* ---------------------------------------------------------------- */
@@ -2786,6 +2785,52 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
   flex-direction: column;
   gap: 4px;
 }
+/* ---------------------------------------------------------------------
+   Patient chart shell (Phase 2A) + retinal diagram workspace (Phase 5)
+   --------------------------------------------------------------------- */
+
+.patient-chart {
+  padding: 24px;
+}
+.patient-chart__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+}
+.patient-chart__heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.patient-chart__heading h1 {
+  margin: 0;
+  font-size: 22px;
+}
+.patient-chart__sub {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  align-items: center;
+}
+.patient-chart__layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+.patient-chart__nav ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
 .imaging-pipeline__study-row {
   display: grid;
   grid-template-columns: 1fr auto auto auto;
@@ -3575,4 +3620,271 @@ h1, h2, h3, h4 { letter-spacing: -0.01em; }
 .app-lang-switcher__option--active:focus-visible {
   background: #0B6E79;
   color: #fff;
+}
+.chart-tab {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--cn-radius-md);
+  padding: 8px 10px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--fg);
+}
+.chart-tab:hover {
+  background: var(--cn-surface-alt);
+}
+.chart-tab.is-active {
+  background: var(--cn-primary-soft);
+  border-color: var(--cn-primary-tint);
+  color: var(--cn-primary);
+  font-weight: 600;
+}
+.chart-tab__badge {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: var(--cn-radius-pill);
+  background: var(--cn-line);
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.chart-tab[data-status="placeholder"] .chart-tab__badge {
+  background: var(--cn-warning-tint);
+  color: var(--cn-warning);
+}
+.patient-chart__panel {
+  background: var(--cn-surface);
+  border: 1px solid var(--line);
+  border-radius: var(--cn-radius-md);
+  padding: 18px;
+  min-height: 420px;
+}
+.patient-chart__section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  gap: 12px;
+}
+.patient-chart__section-head h2 {
+  margin: 0;
+}
+.overview-editor__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.overview-editor__grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.overview-editor__grid input {
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--cn-radius-sm);
+  background: var(--cn-surface);
+  color: var(--fg);
+  font: inherit;
+}
+
+.enc-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.enc-table th,
+.enc-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  font-size: 13px;
+}
+.enc-table th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.diagram-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.retinal-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.retinal-workspace__meta {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 12px;
+}
+.retinal-workspace__meta label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.retinal-workspace__meta input,
+.retinal-workspace__meta textarea {
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--cn-radius-sm);
+  background: var(--cn-surface);
+  font: inherit;
+  color: var(--fg);
+}
+.retinal-toolbar {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 8px;
+  background: var(--cn-surface-alt);
+  border: 1px solid var(--line);
+  border-radius: var(--cn-radius-md);
+}
+.retinal-toolbar__sep {
+  color: var(--dim);
+}
+.retinal-color-picker {
+  display: inline-flex;
+  gap: 4px;
+}
+.retinal-color {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+}
+.retinal-color.is-selected {
+  border-color: var(--cn-fg);
+}
+.retinal-width {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.retinal-canvases {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  justify-items: center;
+}
+.eye-canvas {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.eye-canvas figcaption {
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.eye-canvas__svg {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--cn-radius-md);
+  touch-action: none;
+}
+.retinal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* AI scribe review panel (Phase 5A.1) */
+.scribe-collapsed {
+  display: flex;
+  justify-content: flex-end;
+}
+.scribe-panel {
+  background: var(--cn-primary-soft);
+  border: 1px solid var(--cn-primary-tint);
+  border-radius: var(--cn-radius-md);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.scribe-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.scribe-panel textarea {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--cn-radius-sm);
+  font: inherit;
+  background: var(--cn-surface);
+}
+.scribe-review {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.scribe-review__summary {
+  display: inline-flex;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.scribe-review__triage h4 {
+  margin: 8px 0 4px;
+  font-size: 13px;
+}
+.scribe-review__triage ul {
+  margin: 0 0 8px 16px;
+  padding: 0;
+}
+.scribe-proposal-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.scribe-proposal-list li {
+  background: var(--cn-surface);
+  border: 1px solid var(--line);
+  border-radius: var(--cn-radius-sm);
+  padding: 8px 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.scribe-proposal-list li[data-applied="true"] {
+  opacity: 0.7;
+  background: var(--cn-success-tint);
+}
+.scribe-proposal-list li[data-rejected="true"] {
+  opacity: 0.6;
+  background: var(--cn-warning-tint);
+  text-decoration: line-through;
+}
+.scribe-proposal-list__main {
+  flex: 1;
+}
+.scribe-proposal-list__actions {
+  display: inline-flex;
+  gap: 6px;
 }

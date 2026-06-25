@@ -4200,3 +4200,494 @@ def capability_manifest_public() -> dict:
         capability_card, card_to_dict,
     )
     return card_to_dict(capability_card())
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Patient chart foundation + retinal eye-diagram artifacts (reconciled)
+#
+# mainline-wins reconciliation of the stale patient-chart/retina stash.
+#   - patient detail / encounters / chart-section endpoints back the
+#     PatientChart UI (#/patients/{id}); mainline lacked them.
+#   - eye-diagram endpoints implement the contract that mainline's
+#     committed EyeDiagramPanel + api client + tests/test_eye_diagrams.py
+#     already expect, on the committed chart_artifacts table
+#     (drawing_json). No vector_json / rendered_snapshot; no AI proposal /
+#     autonomous interpretation. Patient lookup is org-scoped and yields a
+#     non-disclosing 404 so existence never leaks across organizations.
+# See docs/engineering/patient-chart-retina-reconciliation-matrix.md.
+# ══════════════════════════════════════════════════════════════════════
+
+_PATIENT_DETAIL_COLUMNS = (
+    "id, organization_id, external_ref, patient_identifier, first_name, "
+    "last_name, date_of_birth, sex_at_birth, is_active, created_at, "
+    "middle_name, preferred_name, display_name, pronouns, gender_identity, "
+    "preferred_language, race, ethnicity, email, phone, address_line1, "
+    "address_line2, address_city, address_state, address_postal_code, "
+    "address_country, emergency_contact_name, emergency_contact_phone, "
+    "emergency_contact_relationship, insurance_metadata, updated_at"
+)
+
+# Whitelist of patient fields a PATCH may modify. id / organization_id /
+# patient_identifier (MRN) / external_ref / created_at are intentionally
+# excluded so a client can never re-key a row or cross an org boundary.
+_PATIENT_PATCH_FIELDS = (
+    "first_name", "last_name", "date_of_birth", "sex_at_birth",
+    "middle_name", "preferred_name", "display_name", "pronouns",
+    "gender_identity", "preferred_language", "race", "ethnicity",
+    "email", "phone", "address_line1", "address_line2", "address_city",
+    "address_state", "address_postal_code", "address_country",
+    "emergency_contact_name", "emergency_contact_phone",
+    "emergency_contact_relationship", "insurance_metadata", "is_active",
+)
+
+_RETINAL_DIAGRAM = "retinal_diagram"
+_EYE_ARTIFACT_COLUMNS = (
+    "id, organization_id, patient_id, encounter_id, created_by_user_id, "
+    "artifact_type, title, findings_text, drawing_json, version_number, "
+    "parent_artifact_id, created_at, updated_at, signed_at, signed_by_user_id"
+)
+
+
+def _record_audit(**kwargs) -> None:
+    """Lazy import keeps routes.py free of an import-time dependency on
+    app.audit (matches the pattern used elsewhere in this module)."""
+    from app import audit as _audit
+    _audit.record(**kwargs)
+
+
+def _audit_request_id(request: Request) -> Optional[str]:
+    return getattr(request.state, "request_id", None)
+
+
+def _hydrate_patient_row(row: Optional[dict]) -> Optional[dict]:
+    if row is None:
+        return None
+    raw = row.get("insurance_metadata")
+    if isinstance(raw, str) and raw:
+        try:
+            row["insurance_metadata"] = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return row
+
+
+def _load_patient_for_caller(patient_id: int, caller: Caller) -> dict:
+    """Fetch a patient scoped to the caller's org. Missing and cross-org
+    both yield the same non-disclosing 404 so existence never leaks."""
+    row = fetch_one(
+        f"SELECT {_PATIENT_DETAIL_COLUMNS} FROM patients WHERE id = :id",
+        {"id": patient_id},
+    )
+    if not row or row["organization_id"] != caller.organization_id:
+        raise _err("patient_not_found", "no such patient in your organization", 404)
+    return row
+
+
+@router.get("/patients/{patient_id:int}")
+def get_patient(
+    patient_id: int,
+    request: Request,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    row = _load_patient_for_caller(patient_id, caller)
+    _record_audit(
+        event_type="patient_viewed",
+        request_id=_audit_request_id(request),
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path=f"/patients/{patient_id}",
+        method="GET",
+        detail=f"patient_id={patient_id}",
+    )
+    return _hydrate_patient_row(row)
+
+
+class PatientPatch(BaseModel):
+    first_name: Optional[str] = Field(default=None, max_length=128)
+    last_name: Optional[str] = Field(default=None, max_length=128)
+    date_of_birth: Optional[str] = Field(default=None, max_length=32)
+    sex_at_birth: Optional[str] = Field(default=None, max_length=16)
+    middle_name: Optional[str] = Field(default=None, max_length=128)
+    preferred_name: Optional[str] = Field(default=None, max_length=128)
+    display_name: Optional[str] = Field(default=None, max_length=255)
+    pronouns: Optional[str] = Field(default=None, max_length=64)
+    gender_identity: Optional[str] = Field(default=None, max_length=64)
+    preferred_language: Optional[str] = Field(default=None, max_length=64)
+    race: Optional[str] = Field(default=None, max_length=128)
+    ethnicity: Optional[str] = Field(default=None, max_length=128)
+    email: Optional[str] = Field(default=None, max_length=255)
+    phone: Optional[str] = Field(default=None, max_length=64)
+    address_line1: Optional[str] = Field(default=None, max_length=255)
+    address_line2: Optional[str] = Field(default=None, max_length=255)
+    address_city: Optional[str] = Field(default=None, max_length=128)
+    address_state: Optional[str] = Field(default=None, max_length=64)
+    address_postal_code: Optional[str] = Field(default=None, max_length=32)
+    address_country: Optional[str] = Field(default=None, max_length=64)
+    emergency_contact_name: Optional[str] = Field(default=None, max_length=255)
+    emergency_contact_phone: Optional[str] = Field(default=None, max_length=64)
+    emergency_contact_relationship: Optional[str] = Field(default=None, max_length=64)
+    insurance_metadata: Optional[Any] = None
+    is_active: Optional[bool] = None
+
+
+@router.patch("/patients/{patient_id:int}")
+def patch_patient(
+    patient_id: int,
+    payload: PatientPatch,
+    request: Request,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    if caller.role not in {"admin", "clinician"}:
+        raise _err("role_forbidden", "admin or clinician only for patient edits", 403)
+    # Confirm existence + org scope BEFORE writing (non-disclosing 404).
+    _load_patient_for_caller(patient_id, caller)
+
+    provided = payload.model_dump(exclude_unset=True)
+    updates: dict[str, Any] = {
+        k: v for k, v in provided.items() if k in _PATIENT_PATCH_FIELDS
+    }
+
+    if "insurance_metadata" in updates:
+        meta = updates["insurance_metadata"]
+        if meta is not None and not isinstance(meta, dict):
+            raise _err(
+                "invalid_insurance_metadata",
+                "insurance_metadata must be a JSON object",
+                400,
+            )
+        updates["insurance_metadata"] = json.dumps(meta) if meta is not None else None
+
+    updates["updated_at"] = _now_iso()
+    set_clause = ", ".join(f"{k} = :{k}" for k in updates)
+    params = dict(updates)
+    params["id"] = patient_id
+    with transaction() as conn:
+        conn.execute(
+            text(f"UPDATE patients SET {set_clause} WHERE id = :id"), params
+        )
+
+    row = fetch_one(
+        f"SELECT {_PATIENT_DETAIL_COLUMNS} FROM patients WHERE id = :id",
+        {"id": patient_id},
+    )
+    _record_audit(
+        event_type="patient_updated",
+        request_id=_audit_request_id(request),
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path=f"/patients/{patient_id}",
+        method="PATCH",
+        # Field NAMES only — never values (no PHI in audit detail).
+        detail="patient_id={} fields={}".format(
+            patient_id, sorted(k for k in updates if k != "updated_at")
+        ),
+    )
+    return _hydrate_patient_row(row)
+
+
+@router.get("/patients/{patient_id:int}/encounters")
+def list_patient_encounters(
+    patient_id: int,
+    response: Response,
+    caller: Caller = Depends(require_caller),
+) -> list[dict]:
+    _load_patient_for_caller(patient_id, caller)
+    rows = fetch_all(
+        f"SELECT {ENCOUNTER_COLUMNS} FROM encounters "
+        "WHERE patient_id = :pid AND organization_id = :org "
+        "ORDER BY COALESCE(started_at, scheduled_at, created_at) DESC, id DESC",
+        {"pid": patient_id, "org": caller.organization_id},
+    )
+    response.headers["X-Total-Count"] = str(len(rows))
+    return rows
+
+
+@router.get("/patients/{patient_id:int}/chart-sections")
+def get_patient_chart_sections(
+    patient_id: int,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    _load_patient_for_caller(patient_id, caller)
+    from app.chart_sections import SECTIONS as _CHART_SECTIONS
+    return {
+        "patient_id": patient_id,
+        "sections": [s.to_dict() for s in _CHART_SECTIONS],
+    }
+
+
+# ── Retinal eye-diagram artifacts (chart_artifacts, drawing_json) ──────
+
+
+def _eye_artifact_dict(row: dict) -> dict:
+    drawing = row.get("drawing_json")
+    if isinstance(drawing, str):
+        try:
+            drawing = json.loads(drawing) if drawing else {}
+        except (json.JSONDecodeError, TypeError):
+            drawing = {}
+    elif drawing is None:
+        drawing = {}
+    return {
+        "id": row["id"],
+        "organization_id": row["organization_id"],
+        "patient_id": row["patient_id"],
+        "encounter_id": row["encounter_id"],
+        "created_by_user_id": row["created_by_user_id"],
+        "artifact_type": row["artifact_type"],
+        "title": row["title"] or "",
+        "findings_text": row["findings_text"] or "",
+        "drawing_json": drawing,
+        "version_number": row["version_number"],
+        "parent_artifact_id": row["parent_artifact_id"],
+        "signed_at": row["signed_at"],
+        "signed_by_user_id": row["signed_by_user_id"],
+        "is_signed": row["signed_at"] is not None,
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def _load_eye_artifact(patient_id: int, artifact_id: int, caller: Caller) -> dict:
+    # Patient lookup first → cross-org becomes patient_not_found (404).
+    _load_patient_for_caller(patient_id, caller)
+    row = fetch_one(
+        f"SELECT {_EYE_ARTIFACT_COLUMNS} FROM chart_artifacts "
+        "WHERE id = :aid AND patient_id = :pid AND organization_id = :org "
+        "AND artifact_type = :atype",
+        {
+            "aid": artifact_id, "pid": patient_id,
+            "org": caller.organization_id, "atype": _RETINAL_DIAGRAM,
+        },
+    )
+    if not row:
+        raise _err("artifact_not_found", "no such eye diagram for this patient", 404)
+    return row
+
+
+def _require_clinical_writer(caller: Caller) -> None:
+    if caller.role not in {"admin", "clinician"}:
+        raise _err("role_forbidden", "admin or clinician only", 403)
+
+
+def _eye_audit(request, caller, event_type, patient_id, artifact_id, method, path):
+    # Metadata only — never findings_text or drawing_json content.
+    _record_audit(
+        event_type=event_type,
+        request_id=_audit_request_id(request),
+        actor_email=caller.email,
+        actor_user_id=caller.user_id,
+        organization_id=caller.organization_id,
+        path=path,
+        method=method,
+        detail=f"patient_id={patient_id} artifact_id={artifact_id}",
+    )
+
+
+class EyeDiagramCreate(BaseModel):
+    title: Optional[str] = Field(default=None, max_length=255)
+    findings_text: Optional[str] = Field(default=None)
+    drawing_json: Optional[Any] = None
+    encounter_id: Optional[int] = None
+
+
+class EyeDiagramUpdate(BaseModel):
+    title: Optional[str] = Field(default=None, max_length=255)
+    findings_text: Optional[str] = Field(default=None)
+    drawing_json: Optional[Any] = None
+
+
+@router.get("/patients/{patient_id:int}/eye-diagrams")
+def list_patient_eye_diagrams(
+    patient_id: int,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    _load_patient_for_caller(patient_id, caller)
+    rows = fetch_all(
+        f"SELECT {_EYE_ARTIFACT_COLUMNS} FROM chart_artifacts "
+        "WHERE patient_id = :pid AND organization_id = :org "
+        "AND artifact_type = :atype ORDER BY id DESC",
+        {"pid": patient_id, "org": caller.organization_id, "atype": _RETINAL_DIAGRAM},
+    )
+    items = [_eye_artifact_dict(r) for r in rows]
+    return {"items": items, "total": len(items)}
+
+
+@router.get("/patients/{patient_id:int}/eye-diagrams/{artifact_id:int}")
+def get_patient_eye_diagram(
+    patient_id: int,
+    artifact_id: int,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    return _eye_artifact_dict(_load_eye_artifact(patient_id, artifact_id, caller))
+
+
+@router.post(
+    "/patients/{patient_id:int}/eye-diagrams",
+    status_code=status.HTTP_201_CREATED,
+)
+def create_patient_eye_diagram(
+    patient_id: int,
+    payload: EyeDiagramCreate,
+    request: Request,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    _load_patient_for_caller(patient_id, caller)
+    _require_clinical_writer(caller)
+
+    encounter_id = payload.encounter_id
+    if encounter_id is not None:
+        enc = fetch_one(
+            "SELECT id FROM encounters WHERE id = :id AND organization_id = :org",
+            {"id": encounter_id, "org": caller.organization_id},
+        )
+        if not enc:
+            raise _err(
+                "encounter_not_found", "no such encounter in your organization", 404
+            )
+
+    drawing = payload.drawing_json if payload.drawing_json is not None else {}
+    with transaction() as conn:
+        new_id = insert_returning_id(
+            conn,
+            "chart_artifacts",
+            {
+                "organization_id": caller.organization_id,
+                "patient_id": patient_id,
+                "encounter_id": encounter_id,
+                "created_by_user_id": caller.user_id,
+                "artifact_type": _RETINAL_DIAGRAM,
+                "title": payload.title or "",
+                "findings_text": payload.findings_text or "",
+                "drawing_json": json.dumps(drawing),
+                "version_number": 1,
+                "parent_artifact_id": None,
+            },
+        )
+    _eye_audit(
+        request, caller, "eye_diagram_created", patient_id, new_id, "POST",
+        f"/patients/{patient_id}/eye-diagrams",
+    )
+    row = fetch_one(
+        f"SELECT {_EYE_ARTIFACT_COLUMNS} FROM chart_artifacts WHERE id = :id",
+        {"id": new_id},
+    )
+    return _eye_artifact_dict(row)
+
+
+@router.patch("/patients/{patient_id:int}/eye-diagrams/{artifact_id:int}")
+def update_patient_eye_diagram(
+    patient_id: int,
+    artifact_id: int,
+    payload: EyeDiagramUpdate,
+    request: Request,
+    caller: Caller = Depends(require_caller),
+    fork: bool = Query(default=False),
+) -> dict:
+    existing = _load_eye_artifact(patient_id, artifact_id, caller)
+    _require_clinical_writer(caller)
+    provided = payload.model_dump(exclude_unset=True)
+
+    def _drawing_text(value) -> str:
+        return json.dumps(value if value is not None else {})
+
+    if existing["signed_at"] is not None:
+        if not fork:
+            raise _err(
+                "artifact_signed_immutable",
+                "signed artifact is immutable; use ?fork=true to amend",
+                409,
+            )
+        # Fork: a new unsigned version that inherits unspecified fields.
+        new_title = provided.get("title", existing["title"]) or ""
+        new_findings = provided.get("findings_text", existing["findings_text"]) or ""
+        if "drawing_json" in provided:
+            new_drawing = _drawing_text(provided["drawing_json"])
+        elif isinstance(existing["drawing_json"], str):
+            new_drawing = existing["drawing_json"]
+        else:
+            new_drawing = _drawing_text(existing.get("drawing_json"))
+        with transaction() as conn:
+            new_id = insert_returning_id(
+                conn,
+                "chart_artifacts",
+                {
+                    "organization_id": existing["organization_id"],
+                    "patient_id": existing["patient_id"],
+                    "encounter_id": existing["encounter_id"],
+                    "created_by_user_id": caller.user_id,
+                    "artifact_type": _RETINAL_DIAGRAM,
+                    "title": new_title,
+                    "findings_text": new_findings,
+                    "drawing_json": new_drawing,
+                    "version_number": (existing["version_number"] or 1) + 1,
+                    "parent_artifact_id": existing["id"],
+                },
+            )
+        _eye_audit(
+            request, caller, "eye_diagram_updated", patient_id, new_id, "PATCH",
+            f"/patients/{patient_id}/eye-diagrams/{artifact_id}",
+        )
+        row = fetch_one(
+            f"SELECT {_EYE_ARTIFACT_COLUMNS} FROM chart_artifacts WHERE id = :id",
+            {"id": new_id},
+        )
+        return _eye_artifact_dict(row)
+
+    # Unsigned: in-place update of provided fields only.
+    updates: dict[str, Any] = {}
+    if "title" in provided:
+        updates["title"] = provided["title"] or ""
+    if "findings_text" in provided:
+        updates["findings_text"] = provided["findings_text"] or ""
+    if "drawing_json" in provided:
+        updates["drawing_json"] = _drawing_text(provided["drawing_json"])
+    updates["updated_at"] = _now_iso()
+    set_clause = ", ".join(f"{k} = :{k}" for k in updates)
+    params = dict(updates)
+    params["id"] = artifact_id
+    with transaction() as conn:
+        conn.execute(
+            text(f"UPDATE chart_artifacts SET {set_clause} WHERE id = :id"), params
+        )
+    _eye_audit(
+        request, caller, "eye_diagram_updated", patient_id, artifact_id, "PATCH",
+        f"/patients/{patient_id}/eye-diagrams/{artifact_id}",
+    )
+    row = fetch_one(
+        f"SELECT {_EYE_ARTIFACT_COLUMNS} FROM chart_artifacts WHERE id = :id",
+        {"id": artifact_id},
+    )
+    return _eye_artifact_dict(row)
+
+
+@router.post("/patients/{patient_id:int}/eye-diagrams/{artifact_id:int}/sign")
+def sign_patient_eye_diagram(
+    patient_id: int,
+    artifact_id: int,
+    request: Request,
+    caller: Caller = Depends(require_caller),
+) -> dict:
+    existing = _load_eye_artifact(patient_id, artifact_id, caller)
+    _require_clinical_writer(caller)
+    if existing["signed_at"] is not None:
+        raise _err("artifact_already_signed", "artifact is already signed", 409)
+    now = _now_iso()
+    with transaction() as conn:
+        conn.execute(
+            text(
+                "UPDATE chart_artifacts SET signed_at = :now, "
+                "signed_by_user_id = :uid, updated_at = :now WHERE id = :id"
+            ),
+            {"now": now, "uid": caller.user_id, "id": artifact_id},
+        )
+    _eye_audit(
+        request, caller, "eye_diagram_signed", patient_id, artifact_id, "POST",
+        f"/patients/{patient_id}/eye-diagrams/{artifact_id}/sign",
+    )
+    row = fetch_one(
+        f"SELECT {_EYE_ARTIFACT_COLUMNS} FROM chart_artifacts WHERE id = :id",
+        {"id": artifact_id},
+    )
+    return _eye_artifact_dict(row)

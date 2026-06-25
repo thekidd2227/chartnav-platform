@@ -35,6 +35,7 @@ import {
 } from "./api";
 import { AdminPanel } from "./AdminPanel";
 import { NoteWorkspace } from "./NoteWorkspace";
+import { PatientChart } from "./PatientChart";
 import { SEEDED_IDENTITIES, loadIdentity, saveIdentity } from "./identity";
 import { isDemoModeEnabled } from "./GuidedDemoMode";
 import { ClinicalTabbedWorkspace } from "./ClinicalTabbedWorkspace";
@@ -62,6 +63,25 @@ type TopView =
   | "security-readiness"
   | "production-readiness";
 
+// Hash route helpers — keeps the patient chart deep-linkable without
+// adding a router library. Format: `#/patients/{id}`.
+function patientIdFromHash(): number | null {
+  const m = window.location.hash.match(/^#\/patients\/(\d+)$/);
+  if (!m) return null;
+  const n = parseInt(m[1], 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+function navigateToPatient(id: number): void {
+  window.location.hash = `#/patients/${id}`;
+}
+
+function navigateToWorkflow(): void {
+  if (window.location.hash) {
+    history.pushState("", document.title, window.location.pathname + window.location.search);
+  }
+}
+
 type Banner =
   | { kind: "ok"; msg: string }
   | { kind: "error"; msg: string }
@@ -73,6 +93,15 @@ export default function App() {
   const [me, setMe] = useState<Me | null>(null);
   const [meLoading, setMeLoading] = useState(true);
   const [meError, setMeError] = useState<string | null>(null);
+  const [patientChartId, setPatientChartId] = useState<number | null>(
+    () => patientIdFromHash()
+  );
+
+  useEffect(() => {
+    const onHash = () => setPatientChartId(patientIdFromHash());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
 
   const [filters, setFilters] = useState<EncounterFilters>({});
   const [encounters, setEncounters] = useState<Encounter[]>([]);
@@ -305,6 +334,39 @@ export default function App() {
 
   const canCreate = me ? canCreateEncounter(me.role) : false;
   const canAdmin = me ? isAdmin(me.role) : false;
+
+  if (patientChartId !== null) {
+    return (
+      <>
+        <header className="app-header">
+          <div className="brand">
+            <img
+              className="brand__logo"
+              src="/brand/chartnav-logo.svg"
+              alt="ChartNav"
+              width="140"
+              height="32"
+            />
+            <span className="sub">Patient chart</span>
+          </div>
+          <div className="header-meta">
+            <IdentityBadge me={me} meError={meError} meLoading={meLoading} copy={copy} />
+            <span className="chip">API {API_URL}</span>
+            <IdentityPicker value={identity} onChange={onIdentityChange} copy={copy} />
+          </div>
+        </header>
+        <PatientChart
+          identity={identity}
+          me={me}
+          patientId={patientChartId}
+          onClose={() => {
+            setPatientChartId(null);
+            navigateToWorkflow();
+          }}
+        />
+      </>
+    );
+  }
 
   return (
     <>

@@ -406,6 +406,24 @@ function OverviewTab({
           {encounter.patient_name ?? encounter.patient_identifier}
         </Field>
         <Field label="MRN">{encounter.patient_identifier}</Field>
+        {/*
+         * Patient chart entry point. Only rendered for native ChartNav
+         * patients with a numeric internal patient_id — never for null,
+         * string, bridged, or external identifiers. Uses the verified
+         * hash route (`#/patients/{id}`, matched by patientIdFromHash in
+         * App.tsx) directly rather than importing App's navigate helper,
+         * which would create a circular import (App imports this file).
+         */}
+        {typeof encounter.patient_id === "number" && (
+          <Field label="Patient chart">
+            <a
+              href={`#/patients/${encounter.patient_id}`}
+              data-testid="open-patient-chart"
+            >
+              Open chart
+            </a>
+          </Field>
+        )}
         <Field label="Provider">
           {encounter.provider_name ?? "Not assigned"}
         </Field>

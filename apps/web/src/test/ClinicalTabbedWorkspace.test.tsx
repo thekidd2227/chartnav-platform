@@ -977,3 +977,29 @@ describe("Phase 57 — Ambient Documentation Assist mount", () => {
     expect(banner.textContent).toMatch(/Not for real PHI/i);
   });
 });
+
+// ---------------------------------------------------------------
+// Overview "Open chart" entry point (patient chart routing).
+// Only rendered for a native, numeric internal patient_id — never for
+// null, string, bridged, or external identifiers.
+// ---------------------------------------------------------------
+
+describe("Overview — Open chart entry point", () => {
+  it("renders Open chart with href #/patients/{id} for a numeric patient_id", () => {
+    renderWorkspace({ patient_id: 42 });
+    const link = screen.getByTestId("open-patient-chart");
+    expect(link).toBeInTheDocument();
+    expect(link).toHaveTextContent("Open chart");
+    expect(link).toHaveAttribute("href", "#/patients/42");
+  });
+
+  it("does NOT render Open chart when patient_id is null", () => {
+    renderWorkspace({ patient_id: null });
+    expect(screen.queryByTestId("open-patient-chart")).not.toBeInTheDocument();
+  });
+
+  it("does NOT render Open chart when patient_id is a string (bridged/external)", () => {
+    renderWorkspace({ patient_id: "EXT-9001" });
+    expect(screen.queryByTestId("open-patient-chart")).not.toBeInTheDocument();
+  });
+});
