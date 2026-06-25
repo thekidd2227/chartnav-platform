@@ -1,0 +1,119 @@
+name: deploy-staging
+
+# Build + push the API image, build + upload the frontend, run a one-off DB
+# migration task, roll the ECS service, and verify health. Staging only.
+# Triggered on the `staging` branch or manual dispatch. OIDC to AWS — no
+# long-lived keys. No automatic production deploy from an unreviewed branch.
+
+on:
+  push:
+    branches: ["staging"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+env:
+  ENVIRONMENT: staging
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build + push API image
+        id: image
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          REPO: chartnav/api
+        run: |
+          TAG="${GITHUB_SHA}"
+          IMAGE="$REGISTRY/$REPO:$TAG"
+          docker build -t "$IMAGE" apps/api
+          docker push "$IMAGE"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Build frontend
+        run: |
+          cd apps/web
+          npm ci
+          VITE_API_URL="https://${{ vars.API_HOSTNAME }}" npm run build
+
+      - name: Upload frontend to S3 + invalidate CloudFront
+        run: |
+          aws s3 sync apps/web/dist "s3://${{ vars.FRONTEND_BUCKET }}/" --delete
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}" --paths "/*"
+
+      - name: Register new task definition revision
+        id: taskdef
+        run: |
+          # Render a new revision from the current one with the new image.
+          aws ecs describe-task-definition --task-definition "${{ vars.ECS_TASK_FAMILY }}" \
+            --query 'taskDefinition' > taskdef.json
+          python - <<'PY'
+          import json
+          td = json.load(open("taskdef.json"))
+          for c in td["containerDefinitions"]:
+              if c["name"] == "api":
+                  c["image"] = "${{ steps.image.outputs.image }}"
+          for k in ("taskDefinitionArn","revision","status","requiresAttributes",
+                    "compatibilities","registeredAt","registeredBy"):
+              td.pop(k, None)
+          json.dump(td, open("taskdef.new.json","w"))
+          PY
+          ARN=$(aws ecs register-task-definition --cli-input-json file://taskdef.new.json \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "arn=$ARN" >> "$GITHUB_OUTPUT"
+
+      - name: Run one-off migration task
+        run: |
+          TASK_ARN=$(aws ecs run-task \
+            --cluster "${{ vars.ECS_CLUSTER }}" \
+            --task-definition "${{ steps.taskdef.outputs.arn }}" \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[${{ vars.PRIVATE_SUBNET_IDS }}],securityGroups=[${{ vars.API_SECURITY_GROUP_ID }}],assignPublicIp=DISABLED}" \
+            --overrides '{"containerOverrides":[{"name":"api","command":["./entrypoint.sh","migrate"]}]}' \
+            --query 'tasks[0].taskArn' --output text)
+          aws ecs wait tasks-stopped --cluster "${{ vars.ECS_CLUSTER }}" --tasks "$TASK_ARN"
+          CODE=$(aws ecs describe-tasks --cluster "${{ vars.ECS_CLUSTER }}" --tasks "$TASK_ARN" \
+            --query 'tasks[0].containers[0].exitCode' --output text)
+          echo "migration exit code: $CODE"; test "$CODE" = "0"
+
+      - name: Roll the ECS service
+        run: |
+          aws ecs update-service --cluster "${{ vars.ECS_CLUSTER }}" \
+            --service "${{ vars.ECS_SERVICE }}" \
+            --task-definition "${{ steps.taskdef.outputs.arn }}"
+          aws ecs wait services-stable --cluster "${{ vars.ECS_CLUSTER }}" \
+            --services "${{ vars.ECS_SERVICE }}"
+
+      - name: Verify health
+        run: |
+          for i in $(seq 1 20); do
+            if curl -fsS "https://${{ vars.API_HOSTNAME }}/readyz"; then echo "ready"; exit 0; fi
+            sleep 10
+          done
+          echo "service did not become ready"; exit 1
+
+      # Rollback: re-run with the previous known-good image tag, or
+      # `aws ecs update-service --task-definition <previous-revision>`.
+      # See docs/deployment/release-and-rollback.md.

@@ -247,6 +247,33 @@ def _load() -> Settings:
     # Settings object records the config without instantiating the
     # adapter so bootstrapping doesn't require a live FHIR server.
 
+    # ── Production hardening (startup refusal) ──────────────────────────
+    # When CHARTNAV_ENV=prod, refuse insecure dev defaults outright so a
+    # misconfigured production process fails fast at import time instead of
+    # serving traffic with dev auth or a dev database. Broader, operational
+    # gates live in scripts/production/production_readiness_check.py.
+    if env == "prod":
+        prod_errors = []
+        if auth_mode != "bearer":
+            prod_errors.append(
+                "CHARTNAV_AUTH_MODE must be 'bearer' in production "
+                "(X-User-Email header auth is dev-only)"
+            )
+        if database_url.strip().lower().startswith("sqlite"):
+            prod_errors.append(
+                "DATABASE_URL must be PostgreSQL in production "
+                "(SQLite is not a supported production database)"
+            )
+        if any(o == "*" for o in cors_allow_origins):
+            prod_errors.append(
+                "CHARTNAV_CORS_ALLOW_ORIGINS must not contain '*' in production"
+            )
+        if prod_errors:
+            raise RuntimeError(
+                "Invalid production configuration (CHARTNAV_ENV=prod):\n  - "
+                + "\n  - ".join(prod_errors)
+            )
+
     return Settings(
         env=env,
         database_url=database_url,

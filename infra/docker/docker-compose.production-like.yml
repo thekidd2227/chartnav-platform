@@ -1,0 +1,76 @@
+# Production-LIKE local stack for pre-deploy verification. NOT production and
+# NOT a substitute for the AWS infrastructure (infra/terraform/aws). It mirrors
+# the production *shape*: migrations run as a SEPARATE one-shot step, the API
+# serves with no reload + no demo seed, and config is hardened.
+#
+# Auth: bearer mode requires a real IdP; for a self-contained local run set the
+# CHARTNAV_JWT_* vars to a test IdP/JWKS. CHARTNAV_ENV is left as 'staging' so
+# the prod-only SQLite/header refusals still apply without requiring a live IdP
+# at boot. Do NOT use these secret values anywhere real.
+#
+#   docker compose -f infra/docker/docker-compose.production-like.yml up --build
+
+services:
+  db:
+    image: postgres:16-alpine
+    command: ["postgres", "-c", "ssl=off"]   # local only; real RDS forces TLS
+    environment:
+      POSTGRES_USER: chartnav
+      POSTGRES_PASSWORD: prod-like-local-only-not-a-real-secret
+      POSTGRES_DB: chartnav
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chartnav"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - chartnav_pg:/var/lib/postgresql/data
+
+  migrate:
+    build:
+      context: ../../apps/api
+    environment:
+      CHARTNAV_ENV: staging
+      DATABASE_URL: postgresql+psycopg://chartnav:prod-like-local-only-not-a-real-secret@db:5432/chartnav
+    command: ["./entrypoint.sh", "migrate"]   # one-shot; exits when done
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: ../../apps/api
+    environment:
+      CHARTNAV_ENV: staging
+      CHARTNAV_AUTH_MODE: bearer
+      CHARTNAV_JWT_ISSUER: ${CHARTNAV_JWT_ISSUER:-https://idp.local/}
+      CHARTNAV_JWT_AUDIENCE: ${CHARTNAV_JWT_AUDIENCE:-chartnav-api}
+      CHARTNAV_JWT_JWKS_URL: ${CHARTNAV_JWT_JWKS_URL:-https://idp.local/.well-known/jwks.json}
+      DATABASE_URL: postgresql+psycopg://chartnav:prod-like-local-only-not-a-real-secret@db:5432/chartnav?sslmode=disable
+      CHARTNAV_CORS_ALLOW_ORIGINS: http://localhost:8080
+      CHARTNAV_SEED_DEMO: "false"
+      WEB_CONCURRENCY: "3"
+    command: ["./entrypoint.sh", "serve"]     # no migrate, no reload, no seed
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    read_only: true
+    tmpfs:
+      - /tmp
+    ports:
+      - "8000:8000"
+
+  web:
+    build:
+      context: ../../apps/web
+      dockerfile: Dockerfile.production
+      args:
+        VITE_API_URL: http://localhost:8000
+    depends_on:
+      - api
+    ports:
+      - "8080:8080"
+
+volumes:
+  chartnav_pg:

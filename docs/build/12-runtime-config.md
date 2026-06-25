@@ -100,3 +100,31 @@ selected inside the app and stored in `localStorage`.
 - No per-request feature flags / remote config.
 
 Those are safe to layer on top of this contract without reshaping it.
+
+## Environment separation (local / test / staging / production)
+
+| Concern | local / test | staging | production |
+|---|---|---|---|
+| `CHARTNAV_ENV` | `dev` / `test` | `staging` | `prod` |
+| `CHARTNAV_AUTH_MODE` | `header` | `bearer` | `bearer` (header **refused**) |
+| `DATABASE_URL` | SQLite ok | PostgreSQL+TLS | PostgreSQL+TLS (SQLite **refused**) |
+| CORS | localhost list | explicit https | explicit https (`*` **refused**) |
+| Object storage | `local` | `s3` | `s3` + KMS (`local` **refused**) |
+| Demo seed | optional | off | off (`seed` **refused**) |
+| Audit retention | 0 ok | multi-year | multi-year (gate fails if ≤0) |
+
+Production hardening is enforced two ways:
+1. **Startup refusal** in `app/config.py` when `CHARTNAV_ENV=prod` (header auth,
+   SQLite, wildcard CORS) — the process fails to import rather than serve
+   insecurely. Tested in `apps/api/tests/test_production_config.py`.
+2. **Production-readiness gate** `scripts/production/production_readiness_check.py`
+   (run with `--env-file`) — covers secrets, debug, demo seed, HTTPS hostnames,
+   storage encryption, DB TLS, backups, audit retention, single Alembic head,
+   and marketing-asset governance. See `docs/deployment/hosted-saas-deployment.md`.
+
+New production knobs (see `apps/api/.env.example`): `CHARTNAV_APP_URL`,
+`CHARTNAV_API_URL`, `CHARTNAV_SECRET_KEY`, `CHARTNAV_SESSION_SECRET`,
+`CHARTNAV_STORAGE_BACKEND` (+ `CHARTNAV_S3_BUCKET`, `CHARTNAV_S3_KMS_KEY_ID`,
+`AWS_REGION`), `CHARTNAV_BACKUPS_CONFIGURED`, `WEB_CONCURRENCY`. Real secret
+values come from AWS Secrets Manager (`infra/terraform/aws/secrets.tf`), never
+from committed `.env`.

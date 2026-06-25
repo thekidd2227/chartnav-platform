@@ -1,0 +1,21 @@
+# Copy to production.tfvars and fill in. NEVER commit real values / secrets.
+environment = "production"
+aws_region  = "us-east-1"
+
+route53_zone_id = "Z0000000000000000000"
+app_hostname    = "app.chartnavmd.com"
+api_hostname    = "api.chartnavmd.com"
+
+api_image         = "000000000000.dkr.ecr.us-east-1.amazonaws.com/chartnav/api:bootstrap"
+api_desired_count = 2
+api_cpu           = 1024
+api_memory        = 2048
+
+db_instance_class        = "db.r6g.large"
+db_multi_az              = true   # Multi-AZ in production
+db_deletion_protection   = true   # protect the production database
+db_backup_retention_days = 35
+
+log_retention_days = 365
+alarm_email        = "ops@chartnavmd.com"
+github_repo        = "thekidd2227/chartnav-platform"

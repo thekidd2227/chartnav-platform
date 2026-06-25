@@ -1,0 +1,21 @@
+# Copy to staging.tfvars and fill in. NEVER commit real values / secrets.
+environment = "staging"
+aws_region  = "us-east-1"
+
+route53_zone_id = "Z0000000000000000000"   # hosted zone for chartnavmd.com
+app_hostname    = "app.staging.chartnavmd.com"
+api_hostname    = "api.staging.chartnavmd.com"
+
+# Built + pushed by the deploy pipeline; placeholder for first apply.
+api_image         = "000000000000.dkr.ecr.us-east-1.amazonaws.com/chartnav/api:bootstrap"
+api_desired_count = 1
+api_cpu           = 512
+api_memory        = 1024
+
+db_instance_class      = "db.t4g.medium"
+db_multi_az            = false
+db_deletion_protection = false
+
+log_retention_days = 90
+alarm_email        = ""              # set to receive alarm emails
+github_repo        = "thekidd2227/chartnav-platform"

@@ -1,0 +1,50 @@
+# Review / preview environment — NOT production.
+#
+# Brings up Postgres + the API (dev header auth, auto-migrate) + the built web
+# app for ephemeral PR-review/demo use. Synthetic seed is ON. Do not expose
+# this to real PHI.
+#
+#   docker compose -f infra/docker/docker-compose.review.yml up --build
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: chartnav
+      POSTGRES_PASSWORD: review-only-not-a-real-secret
+      POSTGRES_DB: chartnav
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chartnav"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    tmpfs:
+      - /var/lib/postgresql/data  # ephemeral; review data is disposable
+
+  api:
+    build:
+      context: ../../apps/api
+    environment:
+      CHARTNAV_ENV: dev
+      CHARTNAV_AUTH_MODE: header        # dev-only auth, fine for review
+      CHARTNAV_RUN_SEED: "1"            # synthetic demo data
+      DATABASE_URL: postgresql+psycopg://chartnav:review-only-not-a-real-secret@db:5432/chartnav
+      CHARTNAV_CORS_ALLOW_ORIGINS: http://localhost:8080
+      WEB_CONCURRENCY: "2"
+    command: ["./entrypoint.sh"]        # legacy path: migrate + seed + serve
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  web:
+    build:
+      context: ../../apps/web
+      dockerfile: Dockerfile.production
+      args:
+        VITE_API_URL: http://localhost:8000
+    depends_on:
+      - api
+    ports:
+      - "8080:8080"

@@ -118,3 +118,24 @@ app.include_router(role_dashboards_router)
 app.include_router(specialty_tracking_router)
 app.include_router(imaging_pipeline_router)
 app.include_router(multi_clinic_router)
+
+
+# ── Health / readiness probes (unauthenticated; no tenant data) ────────
+# /healthz  — liveness: the process is up. Used by the ALB target group.
+# /readyz   — readiness: the process can reach its database. Used by the
+#             ECS container health check + deploy verification.
+@app.get("/healthz", include_in_schema=False)
+def healthz() -> dict:
+    return {"status": "ok", "version": app.version}
+
+
+@app.get("/readyz", include_in_schema=False)
+def readyz() -> JSONResponse:
+    from sqlalchemy import text as _text
+    from app.db import engine as _engine
+    try:
+        with _engine.connect() as conn:
+            conn.execute(_text("SELECT 1"))
+    except Exception:  # noqa: BLE001 - report not-ready without leaking detail
+        return JSONResponse(status_code=503, content={"status": "not_ready"})
+    return JSONResponse(status_code=200, content={"status": "ready"})

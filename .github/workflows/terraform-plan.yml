@@ -1,0 +1,62 @@
+name: terraform-plan
+
+# Format-check, validate, and plan the AWS infrastructure. Plans only — never
+# applies. Apply is a deliberate, human-run step by the account owner.
+# Authenticates to AWS via GitHub OIDC (no long-lived keys).
+
+on:
+  pull_request:
+    paths:
+      - "infra/terraform/aws/**"
+      - ".github/workflows/terraform-plan.yml"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to plan"
+        type: choice
+        options: [staging, production]
+        default: staging
+
+permissions:
+  contents: read
+  id-token: write   # OIDC
+  pull-requests: write
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/terraform/aws
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.5"
+
+      - name: Format check
+        run: terraform fmt -check -recursive
+
+      - name: Configure AWS credentials (OIDC)
+        if: ${{ vars.AWS_DEPLOY_ROLE_ARN != '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Init
+        if: ${{ vars.AWS_DEPLOY_ROLE_ARN != '' }}
+        run: terraform init -backend-config=environments/${{ inputs.environment || 'staging' }}.backend.hcl
+
+      - name: Validate
+        if: ${{ vars.AWS_DEPLOY_ROLE_ARN != '' }}
+        run: terraform validate
+
+      - name: Plan
+        if: ${{ vars.AWS_DEPLOY_ROLE_ARN != '' }}
+        run: terraform plan -input=false -var-file=environments/${{ inputs.environment || 'staging' }}.tfvars
+
+      - name: Note (no AWS configured)
+        if: ${{ vars.AWS_DEPLOY_ROLE_ARN == '' }}
+        run: echo "AWS_DEPLOY_ROLE_ARN not set — ran fmt-check only. Configure OIDC vars to enable validate/plan."
