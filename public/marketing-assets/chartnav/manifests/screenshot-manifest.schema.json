@@ -1,0 +1,95 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://chartnavmd.com/schemas/screenshot-manifest.schema.json",
+  "title": "ChartNav marketing screenshot manifest",
+  "description": "Canonical, governed registry of ChartNav marketing screenshots. Only entries with status 'approved' may be used by the marketing agent. Approval gates (no PHI/localhost/debug-UI, synthetic-only, real-app provenance with a 40-char commit SHA) apply to approved assets; archived assets honestly record why they failed.",
+  "type": "object",
+  "required": ["version", "generated_at", "assets"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "type": "integer", "minimum": 1 },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "assets": { "type": "array", "items": { "$ref": "#/definitions/asset" } }
+  },
+  "definitions": {
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "filename", "feature", "category", "status",
+        "captured_from", "captured_at", "app_version", "sha256",
+        "width", "height", "contains_phi", "contains_localhost",
+        "contains_debug_ui", "synthetic_demo_data_only", "reviewed_by",
+        "approved_at", "allowed_channels", "caption_guidance", "alt_text",
+        "prohibited_claims"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 3, "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "filename": {
+          "type": "string",
+          "description": "Path relative to public/marketing-assets/chartnav/",
+          "pattern": "^approved/[a-z0-9-]+/[a-z0-9-]+\\.(png|jpg|jpeg|webp)$|^archive/[a-z0-9-]+\\.(png|jpg|jpeg|webp)$"
+        },
+        "feature": { "type": "string", "minLength": 2 },
+        "category": {
+          "type": "string",
+          "enum": [
+            "dashboard", "retina-workflow", "technician-workflow",
+            "provider-review", "note-lifecycle", "imaging", "security",
+            "administration"
+          ]
+        },
+        "status": { "type": "string", "enum": ["approved", "archived-not-approved"] },
+        "captured_from": { "type": "string" },
+        "captured_at": { "type": "string" },
+        "app_version": { "type": "string" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 },
+        "contains_phi": { "type": "boolean" },
+        "contains_localhost": { "type": "boolean" },
+        "contains_debug_ui": { "type": "boolean" },
+        "synthetic_demo_data_only": { "type": "boolean" },
+        "reviewed_by": { "type": "string", "minLength": 2 },
+        "approved_at": { "type": ["string", "null"] },
+        "allowed_channels": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["LinkedIn", "Instagram", "Facebook", "website", "X", "YouTube"] }
+        },
+        "caption_guidance": { "type": "string", "minLength": 3 },
+        "alt_text": { "type": "string", "minLength": 3 },
+        "prohibited_claims": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "approved" } } },
+          "then": {
+            "properties": {
+              "filename": { "pattern": "^approved/[a-z0-9-]+/[a-z0-9-]+\\.(png|jpg|jpeg|webp)$" },
+              "captured_from": { "const": "real running application" },
+              "captured_at": { "format": "date-time" },
+              "app_version": { "pattern": "^[0-9a-f]{40}$" },
+              "width": { "minimum": 320 },
+              "height": { "minimum": 240 },
+              "contains_phi": { "const": false },
+              "contains_localhost": { "const": false },
+              "contains_debug_ui": { "const": false },
+              "synthetic_demo_data_only": { "const": true },
+              "approved_at": { "type": "string", "format": "date-time" },
+              "allowed_channels": { "minItems": 1 }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "archived-not-approved" } } },
+          "then": {
+            "properties": {
+              "filename": { "pattern": "^archive/" },
+              "approved_at": { "const": null }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

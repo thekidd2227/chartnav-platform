@@ -1,0 +1,60 @@
+name: marketing-assets-validation
+
+# Focused gate for the governed ChartNav marketing asset bank. Runs ONLY when
+# the marketing assets, their manifests, or their scripts change. Does not run
+# or modify any unrelated audit/CI workflow.
+
+on:
+  push:
+    paths:
+      - "public/marketing-assets/chartnav/**"
+      - "scripts/marketing/**"
+      - ".github/workflows/marketing-assets-validation.yml"
+  pull_request:
+    paths:
+      - "public/marketing-assets/chartnav/**"
+      - "scripts/marketing/**"
+      - ".github/workflows/marketing-assets-validation.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install schema validator (optional, enables full JSON Schema check)
+        run: python -m pip install --quiet jsonschema
+
+      - name: Validate asset bank (schema, integrity, orphans, dup hashes, approval metadata)
+        run: python scripts/marketing/validate_chartnav_assets.py
+
+      - name: Manifest is deterministic + up to date (no drift)
+        run: python scripts/marketing/generate_chartnav_manifest.py --check
+
+      - name: approved-assets.json matches the manifest (approved-only index)
+        run: |
+          python - <<'PY'
+          import json, pathlib, sys
+          root = pathlib.Path("public/marketing-assets/chartnav")
+          manifest = json.loads((root / "manifests" / "screenshot-manifest.json").read_text())
+          approved_ids = sorted(a["id"] for a in manifest["assets"] if a["status"] == "approved")
+          index = json.loads((root / "approved-assets.json").read_text())
+          index_ids = sorted(a["id"] for a in index["approved_assets"])
+          if approved_ids != index_ids:
+              print(f"❌ approved-assets.json drift: manifest={approved_ids} index={index_ids}")
+              sys.exit(1)
+          # Defense in depth: the public index must never leak a non-approved asset.
+          archived = {a["id"] for a in manifest["assets"] if a["status"] != "approved"}
+          leaked = archived.intersection(index_ids)
+          if leaked:
+              print(f"❌ approved-assets.json exposes archived assets: {sorted(leaked)}")
+              sys.exit(1)
+          print(f"✅ approved-assets.json matches manifest ({len(index_ids)} approved)")
+          PY
