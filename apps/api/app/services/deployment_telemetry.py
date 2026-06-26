@@ -282,7 +282,7 @@ def _location_rollup(organization_id: int, *, hours: int) -> list[dict[str, Any]
 def _user_summary(organization_id: int) -> dict[str, Any]:
     rows = fetch_all(
         "SELECT role, COUNT(*) AS n FROM users "
-        "WHERE organization_id = :org AND is_active = 1 "
+        "WHERE organization_id = :org AND is_active = true "
         "GROUP BY role",
         {"org": organization_id},
     )

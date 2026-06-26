@@ -432,7 +432,7 @@ def list_locations(
     clauses = ["organization_id = :org"]
     params: dict[str, Any] = {"org": caller.organization_id}
     if not include_inactive:
-        clauses.append("is_active = 1")
+        clauses.append("is_active = true")
     if q:
         clauses.append("name LIKE :q")
         params["q"] = f"%{q}%"
@@ -465,7 +465,7 @@ def list_users(
     clauses = ["organization_id = :org"]
     params: dict[str, Any] = {"org": caller.organization_id}
     if not include_inactive:
-        clauses.append("is_active = 1")
+        clauses.append("is_active = true")
     if q:
         clauses.append("(email LIKE :q OR full_name LIKE :q)")
         params["q"] = f"%{q}%"
@@ -1056,7 +1056,7 @@ def admin_update_user(
 def admin_deactivate_user(
     user_id: int, caller: Caller = Depends(require_admin)
 ) -> dict:
-    """Soft-delete — sets is_active = 0. Preserves audit/history FKs."""
+    """Soft-delete — sets is_active = false. Preserves audit/history FKs."""
     if user_id == caller.user_id:
         raise _err(
             "cannot_deactivate_self",
@@ -1072,7 +1072,7 @@ def admin_deactivate_user(
             raise _err("user_not_found", "no such user in your organization", 404)
 
         conn.execute(
-            text("UPDATE users SET is_active = 0 WHERE id = :id"),
+            text("UPDATE users SET is_active = false WHERE id = :id"),
             {"id": user_id},
         )
         updated = conn.execute(
@@ -1150,7 +1150,7 @@ def admin_deactivate_location(
                 404,
             )
         conn.execute(
-            text("UPDATE locations SET is_active = 0 WHERE id = :id"),
+            text("UPDATE locations SET is_active = false WHERE id = :id"),
             {"id": location_id},
         )
         updated = conn.execute(
@@ -1622,7 +1622,7 @@ def list_patients(
     clauses = ["organization_id = :org"]
     params: dict[str, Any] = {"org": caller.organization_id}
     if not include_inactive:
-        clauses.append("is_active = 1")
+        clauses.append("is_active = true")
     if q:
         clauses.append(
             "(patient_identifier LIKE :q OR first_name LIKE :q OR last_name LIKE :q)"
@@ -1704,7 +1704,7 @@ def list_providers(
     clauses = ["organization_id = :org"]
     params: dict[str, Any] = {"org": caller.organization_id}
     if not include_inactive:
-        clauses.append("is_active = 1")
+        clauses.append("is_active = true")
     if q:
         clauses.append(
             "(display_name LIKE :q OR specialty LIKE :q OR npi LIKE :q)"

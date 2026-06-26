@@ -109,7 +109,7 @@ class NativeChartNavAdapter:
                     "SELECT id, organization_id, external_ref, "
                     "patient_identifier, first_name, last_name, "
                     "date_of_birth, sex_at_birth, is_active, created_at "
-                    "FROM patients WHERE is_active = 1 AND ("
+                    "FROM patients WHERE is_active = true AND ("
                     "patient_identifier LIKE :q OR first_name LIKE :q OR last_name LIKE :q"
                     ") ORDER BY id LIMIT :lim"
                 ),

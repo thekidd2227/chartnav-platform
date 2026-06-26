@@ -553,7 +553,7 @@ def list_segments(
     clauses = ["organization_id = :org"]
     params: dict[str, Any] = {"org": caller.organization_id}
     if not include_inactive:
-        clauses.append("is_active = 1")
+        clauses.append("is_active = true")
     if q:
         clauses.append("name LIKE :q")
         params["q"] = f"%{q}%"
@@ -1076,7 +1076,7 @@ def list_workflow_templates(
     clauses = ["organization_id = :org"]
     params: dict[str, Any] = {"org": caller.organization_id}
     if not include_inactive:
-        clauses.append("is_active = 1")
+        clauses.append("is_active = true")
     if specialty:
         clauses.append("specialty = :sp")
         params["sp"] = specialty
@@ -1599,7 +1599,7 @@ def list_role_views(
         clauses.append("role = :ro")
         params["ro"] = role
     if not include_non_default:
-        clauses.append("is_default = 1")
+        clauses.append("is_default = true")
     where = " WHERE " + " AND ".join(clauses)
     rows = fetch_all(
         f"SELECT * FROM role_view_presets{where} "
@@ -1636,9 +1636,9 @@ def create_role_view(
             if payload.is_default:
                 conn.execute(
                     _t(
-                        "UPDATE role_view_presets SET is_default = 0 "
+                        "UPDATE role_view_presets SET is_default = false "
                         "WHERE organization_id = :org AND role = :ro "
-                        "AND is_default = 1"
+                        "AND is_default = true"
                     ),
                     {"org": caller.organization_id, "ro": payload.role},
                 )
@@ -1719,9 +1719,9 @@ def update_role_view(
         if updates.get("is_default") is True:
             conn.execute(
                 _t(
-                    "UPDATE role_view_presets SET is_default = 0 "
+                    "UPDATE role_view_presets SET is_default = false "
                     "WHERE organization_id = :org AND role = :ro "
-                    "AND id != :id AND is_default = 1"
+                    "AND id != :id AND is_default = true"
                 ),
                 {
                     "org": caller.organization_id,

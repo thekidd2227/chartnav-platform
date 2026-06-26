@@ -54,7 +54,7 @@ def _pick_default_location(conn, organization_id: int) -> int:
     row = conn.execute(
         sa.text(
             "SELECT id FROM locations "
-            "WHERE organization_id = :org AND is_active = 1 "
+            "WHERE organization_id = :org AND is_active = true "
             "ORDER BY id LIMIT 1"
         ),
         {"org": organization_id},

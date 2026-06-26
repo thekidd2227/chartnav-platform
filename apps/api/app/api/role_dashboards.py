@@ -561,7 +561,7 @@ def admin_dashboard(
             (
                 fetch_one(
                     "SELECT COUNT(*) AS n FROM locations "
-                    "WHERE organization_id = :org AND is_active = 1",
+                    "WHERE organization_id = :org AND is_active = true",
                     {"org": org},
                 )
                 or {"n": 0}
