@@ -25,18 +25,18 @@ docker compose version >/dev/null 2>&1 || die "'docker compose' (v2) is not avai
 docker info >/dev/null 2>&1 || die "Docker is installed but the daemon is not running. Start Docker Desktop, then re-run."
 ok "Docker is running ($(docker version --format '{{.Server.Version}}' 2>/dev/null))"
 
-# 3. Required host ports free (or already ours)
-for p in 5173 8000 9000 9001; do
-  if lsof -nP -iTCP:"$p" -sTCP:LISTEN >/dev/null 2>&1; then
-    # Allow if it's our own compose project already holding it.
-    if "${COMPOSE[@]}" ps --format '{{.Publishers}}' 2>/dev/null | grep -q ":$p->"; then
-      ok "port $p already held by this review stack (will reuse)"
-    else
+# 3. Required host ports free — UNLESS our own review stack already holds them
+#    (re-running the launcher should reconcile the existing stack, not abort).
+if [ -n "$("${COMPOSE[@]}" ps -q 2>/dev/null)" ]; then
+  ok "review stack already running — reusing it (up -d will reconcile)"
+else
+  for p in 5173 8000 9000 9001; do
+    if lsof -nP -iTCP:"$p" -sTCP:LISTEN >/dev/null 2>&1; then
       die "port $p is in use by another process. Free it (lsof -iTCP:$p) or stop the conflicting app, then re-run."
     fi
-  fi
-done
-ok "required ports 5173 / 8000 / 9000 / 9001 are available"
+  done
+  ok "required ports 5173 / 8000 / 9000 / 9001 are available"
+fi
 
 # 4-8. Build + start (migrate → seed → api → web are ordered via depends_on).
 say "Building images + starting containers (first run can take a few minutes)…"
