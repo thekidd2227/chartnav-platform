@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 #
 # Phase 19G — media-review folder + screenshot capture runner.
+# Phase 19J extension — optional `--with-clips` flag chains into
+# the website-clip recorder after screenshots finish.
 #
 # WHAT THIS DOES (operator's Mac):
 #   1. Recreates the review folder at the supplied path (default
@@ -18,12 +20,15 @@
 #      19F review screenshots into 01_Screenshots/. The capture
 #      spec is gated on CAPTURE_OUT_DIR so a normal CI run never
 #      triggers it.
+#   4. (Optional, with --with-clips) After screenshots finish,
+#      hands off to capture_phase19i_clips.sh to record the 7
+#      Phase 19I website video clips into
+#      03_Website_Video_Clips/{MP4,WEBM,GIF_or_Preview_Frames}/.
+#      Requires ffmpeg (brew install ffmpeg).
 #
 # WHAT THIS DOES NOT DO:
-#   - It does NOT capture the 6 website video clips. Video clip
-#     capture needs a screen recorder + a real visible cursor —
-#     that's the operator's job, with the manual instructions
-#     written into 03_Website_Video_Clips/CLIP_CAPTURE_INSTRUCTIONS.
+#   - Without --with-clips, video clips are NOT captured. Use
+#     the manual instructions or pass --with-clips.
 #   - It does NOT push to chartnavmd.com.
 #   - It does NOT modify any final-delivery folder.
 #   - It does NOT commit screenshots/videos to the repo.
@@ -31,14 +36,29 @@
 # Usage:
 #   bash tools/media-review/capture_phase19g_media.sh
 #   bash tools/media-review/capture_phase19g_media.sh /path/to/folder
+#   bash tools/media-review/capture_phase19g_media.sh --with-clips
+#   bash tools/media-review/capture_phase19g_media.sh /path/to/folder --with-clips
 #
 # Env knobs:
 #   PLAYWRIGHT_PORT  override the frontend port the spec hits
 #                    (default 5174, matches playwright.config.ts).
+#   HEADED=1         (passed through to the clip recorder when
+#                    --with-clips is set) record clips with a
+#                    visible browser window + cursor.
 
 set -euo pipefail
 
-# ----- arg + path resolution ------------------------------------------------
+# ----- arg parsing ----------------------------------------------------------
+
+WITH_CLIPS=0
+POSITIONAL_ARGS=()
+for arg in "$@"; do
+  case "$arg" in
+    --with-clips) WITH_CLIPS=1 ;;
+    *)            POSITIONAL_ARGS+=("$arg") ;;
+  esac
+done
+set -- "${POSITIONAL_ARGS[@]}"
 
 DEFAULT_OUT="$HOME/Desktop/Chartnav/ChartNav_Media_Review_Final_UI"
 OUT_DIR="${1:-$DEFAULT_OUT}"
@@ -137,6 +157,15 @@ CAPTURE_OUT_DIR="$OUT_DIR" \
   npx playwright test tests/e2e/phase19g-capture.spec.ts \
     --reporter=list
 
+# ----- optional Phase 19J chain: website clip capture ----------------------
+
+if [ "$WITH_CLIPS" = "1" ]; then
+  echo
+  echo "Phase 19J chain — recording website clips…"
+  echo
+  bash "$SCRIPT_DIR/capture_phase19i_clips.sh" "$OUT_DIR"
+fi
+
 # ----- final summary --------------------------------------------------------
 
 echo
@@ -151,4 +180,13 @@ echo "  $OUT_DIR/06_Manifest/media_manifest.md"
 echo "  $OUT_DIR/04_Demo_Clip_Instructions/CLIP_CAPTURE_INSTRUCTIONS.md"
 echo "  $OUT_DIR/03_Website_Video_Clips/CLIP_CAPTURE_INSTRUCTIONS/WEBSITE_CLIP_CAPTURE_INSTRUCTIONS.md"
 echo "  $OUT_DIR/07_Ready_For_ChartNavMD_After_Approval/instructions/CHARTNAVMD_WEBSITE_MEDIA_REPLACEMENT_PLAN.md"
+if [ "$WITH_CLIPS" = "1" ]; then
+  echo "  $OUT_DIR/03_Website_Video_Clips/MP4/     (7 MP4 website clips)"
+  echo "  $OUT_DIR/03_Website_Video_Clips/WEBM/    (7 VP9 WEBM mirrors)"
+  echo "  $OUT_DIR/03_Website_Video_Clips/GIF_or_Preview_Frames/   (7 PNG posters)"
+else
+  echo
+  echo "Tip: re-run with --with-clips to also capture the 7 website"
+  echo "video clips automatically. Requires ffmpeg (brew install ffmpeg)."
+fi
 echo
